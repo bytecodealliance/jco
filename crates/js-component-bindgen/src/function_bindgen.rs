@@ -732,7 +732,7 @@ impl FunctionBindgen<'_> {
             ComponentIntrinsic::GetOrCreateAsyncState,
         ));
         let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::CreateNewCurrentTask,
+            AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
         ));
         let current_task_may_block = self.intrinsic(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CurrentTaskMayBlock,
@@ -757,7 +757,7 @@ impl FunctionBindgen<'_> {
               const hostProvided = false;
               {get_component_state}({component_idx_expr}).throwIfTrapped();
 
-              const [task, _wasm_call_currentTaskID] = {start_current_task_fn}({{
+              const {{ task, threadID }} = {start_current_task_fn}({{
                   componentIdx: {component_idx_expr},
                   isAsync: {is_async},
                   isManualAsync: {is_manual_async},
@@ -870,9 +870,9 @@ impl FunctionBindgen<'_> {
         }
         let is_async = self.is_async || self.requires_async_porcelain;
         let wrapper = if is_async {
-            self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync)
+            self.intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync)
         } else {
-            self.intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn)
+            self.intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn)
         };
         if self.is_async {
             // The caller of an async-lifted export gets the task's result as
@@ -908,6 +908,7 @@ impl FunctionBindgen<'_> {
                   }};
                   const body = {wrapper}({{
                       taskID: task.id(),
+                      threadID,
                       componentIdx: task.componentIdx(),
                       fn: async () => {{
                           try {{
@@ -921,6 +922,7 @@ impl FunctionBindgen<'_> {
                 r#"
                   return {await_}{wrapper}({{
                       taskID: task.id(),
+                      threadID,
                       componentIdx: task.componentIdx(),
                       fn: {async_}() => {{
                           try {{
@@ -2214,7 +2216,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Argument lowering can await realloc and allow another task
                 // to run. Reinstall this task immediately before entering Wasm.
-                let call_wrapper = self.task_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
+                let call_wrapper = self.task_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                let get_global_current_thread_meta_fn =
+                    self.task_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 if task_managed {
                     uwriteln!(
                         self.src,
@@ -2223,6 +2227,7 @@ impl Bindgen for FunctionBindgen<'_> {
                       try {{
                            {assignment_lhs} {call_prefix}{call_wrapper}({{
                                taskID: task.id(),
+                               threadID: {get_global_current_thread_meta_fn}(task.componentIdx()).threadID,
                                componentIdx: task.componentIdx(),
                                fn: () => {callee_invoke},
                            }});
@@ -2272,15 +2277,15 @@ impl Bindgen for FunctionBindgen<'_> {
                 let track_host_operation = self
                     .task_intrinsic(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
                 let start_current_task_fn = self.task_intrinsic(Intrinsic::AsyncTask(
-                    AsyncTaskIntrinsic::CreateNewCurrentTask,
+                    AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
                 ));
                 let current_task_get_fn =
                     self.task_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
-                // At first, use the global current task metadata, in case we are executing from
-                // inside a with-global-current-task wrapper
-                let get_global_current_task_meta_fn =
-                    self.task_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                // At first, use the global current thread metadata, in case we are executing from
+                // inside a with-global-current-thread wrapper
+                let get_global_current_thread_meta_fn =
+                    self.task_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 uwriteln!(
                     self.src,
@@ -2337,10 +2342,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         r#"
                     let parentTask;
                     let task;
+                    let threadID;
                     let subtask;
 
                     const createTask = () => {{
-                        const results = {start_current_task_fn}({{
+                        ({{ task, threadID }} = {start_current_task_fn}({{
                             componentIdx: -1,
                             isAsync: {is_async},
                             entryFnName: '{fn_name}',
@@ -2348,14 +2354,13 @@ impl Bindgen for FunctionBindgen<'_> {
                             callbackFnName: {callback_fn_name_expr},
                             errHandling: '{err_handling}',
                             callingWasmExport: false,
-                        }});
-                        task = results[0];
+                        }}));
                     }};
 
                     taskCreation: {{
                         parentTask = {current_task_get_fn}(
                             {component_idx_expr},
-                            {get_global_current_task_meta_fn}({component_idx_expr})?.taskID,
+                            {get_global_current_thread_meta_fn}({component_idx_expr})?.taskID,
                         )?.task;
 
                         if (!parentTask) {{
@@ -2420,7 +2425,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 {
                     (
                         "await ",
-                        self.task_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync),
+                        self.task_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync),
                         format!(
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during async call', {{
@@ -2439,7 +2444,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     (
                         "",
-                        self.task_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn),
+                        self.task_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn),
                         format!(
                             r#"
                               {debug_log_fn}('[Instruction::CallInterface] error during sync call', {{
@@ -2464,6 +2469,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         r#"{call_prefix} {call_wrapper}({{
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
+                              threadID,
                               fn: () => {track_host_operation}(() => {{
                                   const hostRet = {callee_fn_js}({callee_args_js});
                                   subtask?.setHostPendingResult(hostRet);
@@ -2477,6 +2483,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         r#"{call_prefix} {call_wrapper}({{
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
+                                                            threadID,
                               fn: () => {track_host_operation}(() => {callee_fn_js}({callee_args_js})),
                           }})
                         "#,

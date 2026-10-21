@@ -1,27 +1,40 @@
-import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { suite, test, assert } from "vitest";
 
-import { exec, jcoPath, fileExists, getTmpDir } from "../helpers.js";
+import { exec, jcoPath, fileExists, setupTestWithLocalShims } from "../helpers.js";
 import { EXTENDED_TEST_COMPONENTS_DIR } from "../common.js";
 
-suite("posix-pthread-mutex-lock", () => {
-    // TODO(unskip): Restore when jco-transpile supports cooperative threading intrinsics
-    // and wasi-sdk's thread-local context slot; the current release rejects context.set 1.
-    test.skip("1-1", async () => {
-        const componentPath = join(EXTENDED_TEST_COMPONENTS_DIR, "posix/pthread-mutex-lock/1-1/component.wasm");
-        assert(await fileExists(componentPath), "built posix-pthread-mutex-lock-1-1 component must be in place");
+async function runPosixPthreadTest(testPath) {
+    const componentPath = join(EXTENDED_TEST_COMPONENTS_DIR, "posix", testPath, "component.wasm");
+    assert(await fileExists(componentPath), `built POSIX pthread component ${testPath} must be in place`);
 
-        const outputDir = await getTmpDir();
-        try {
-            await exec(jcoPath, "transpile", componentPath, "-o", outputDir, "--name", "out");
-            const instance = await import(pathToFileURL(join(outputDir, "out.js")));
-            // 0 == PTS_PASS
-            assert.strictEqual(instance.run(), 0);
-        } finally {
-            await rm(outputDir, { recursive: true, force: true });
-        }
+    const { outDir, cleanup } = await setupTestWithLocalShims();
+    try {
+        await exec(jcoPath, "transpile", componentPath, "-o", outDir, "--name", "out");
+        const instance = await import(pathToFileURL(join(outDir, "out.js")));
+        return await instance.run();
+    } finally {
+        await cleanup();
+    }
+}
+
+// TODO(unskip): When jco-transpile is updated
+suite.skip("posix-pthread", () => {
+    test("mutex lock: 1-1", async () => {
+        assert.strictEqual(await runPosixPthreadTest("pthread-mutex-lock/1-1"), 0);
+    });
+
+    test("create and join", async () => {
+        assert.strictEqual(await runPosixPthreadTest("pthread-create-join/1-1"), 0);
+    });
+
+    test("condition wait and signal", async () => {
+        assert.strictEqual(await runPosixPthreadTest("pthread-cond-wait/1-1"), 0);
+    });
+
+    test("thread-specific storage", async () => {
+        assert.strictEqual(await runPosixPthreadTest("pthread-setspecific/1-1"), 0);
     });
 });

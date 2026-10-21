@@ -3,6 +3,7 @@ import { createServer as createHttpServer } from "node:http";
 import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from "node:path";
 import { cp, mkdtemp, writeFile, stat, mkdir, readFile, realpath, rm, symlink } from "node:fs/promises";
 import { spawn } from "node:child_process";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 
@@ -697,6 +698,28 @@ export async function fileExists(p) {
         .catch(() => false);
 }
 
+async function resolvePackageRoot(specifier) {
+    const jcoTranspileEntry = fileURLToPath(import.meta.resolve("@bytecodealliance/jco-transpile"));
+    const entry = createRequire(jcoTranspileEntry).resolve(specifier);
+
+    let dir = dirname(entry);
+    for (;;) {
+        try {
+            const pkg = JSON.parse(await readFile(resolve(dir, "package.json"), "utf8"));
+            if (pkg.name === specifier) {
+                return dir;
+            }
+        } catch {
+            // Not a package root (or unreadable) -- keep walking up.
+        }
+        const parent = dirname(dir);
+        if (parent === dir) {
+            throw new Error(`could not locate the package root for [${specifier}] above [${entry}]`);
+        }
+        dir = parent;
+    }
+}
+
 // NOTE: we can only use asyncDispose once Node24 becomes the oldest supported version under test
 export async function setupTestWithLocalShims() {
     const tmpDir = await getTmpDir();
@@ -705,11 +728,9 @@ export async function setupTestWithLocalShims() {
 
     const modulesDir = resolve(tmpDir, "node_modules", "@bytecodealliance");
     await mkdir(modulesDir, { recursive: true });
-    await symlink(
-        fileURLToPath(new URL("../packages/preview2-shim", import.meta.url)),
-        resolve(modulesDir, "preview2-shim"),
-        "dir",
-    );
+    for (const shim of ["preview2-shim", "preview3-shim"]) {
+        await symlink(await resolvePackageRoot(`@bytecodealliance/${shim}`), resolve(modulesDir, shim), "dir");
+    }
 
     const cleanup = async () => {
         await rm(tmpDir, { recursive: true }).catch(() => {});
