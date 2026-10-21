@@ -22,6 +22,9 @@ build:
     {{just}} build-jco-issue-1887-resource-drop
     {{just}} build-jco-issue-2178
     {{just}} build-posix-pthread-mutex-lock-1-1
+    {{just}} build-posix-pthread-create-join-1-1
+    {{just}} build-posix-pthread-cond-wait-1-1
+    {{just}} build-posix-pthread-setspecific-1-1
 
 # Build the wstd P2 HTTP client required to test jco issue #577
 [group('build')]
@@ -76,6 +79,30 @@ build:
     mkdir -p output/posix/pthread-mutex-lock/1-1
     {{just}} -f c/posix/pthread-mutex-lock/1-1/justfile build
     mv c/posix/pthread-mutex-lock/1-1/component.wasm output/posix/pthread-mutex-lock/1-1/component.wasm
+
+# Build the cooperative-thread reactor for pthread_create and pthread_join.
+[group('build')]
+@build-posix-pthread-create-join-1-1:
+    echo "==> building posix-pthread-create-join-1-1 reactor (c)..."
+    mkdir -p output/posix/pthread-create-join/1-1
+    {{just}} -f c/posix/justfile build pthread-create-join/1-1
+    mv c/posix/pthread-create-join/1-1/component.wasm output/posix/pthread-create-join/1-1/component.wasm
+
+# Build the cooperative-thread reactor for condition-variable wait and signal.
+[group('build')]
+@build-posix-pthread-cond-wait-1-1:
+    echo "==> building posix-pthread-cond-wait-1-1 reactor (c)..."
+    mkdir -p output/posix/pthread-cond-wait/1-1
+    {{just}} -f c/posix/justfile build pthread-cond-wait/1-1
+    mv c/posix/pthread-cond-wait/1-1/component.wasm output/posix/pthread-cond-wait/1-1/component.wasm
+
+# Build the cooperative-thread reactor for thread-specific storage.
+[group('build')]
+@build-posix-pthread-setspecific-1-1:
+    echo "==> building posix-pthread-setspecific-1-1 reactor (c)..."
+    mkdir -p output/posix/pthread-setspecific/1-1
+    {{just}} -f c/posix/justfile build pthread-setspecific/1-1
+    mv c/posix/pthread-setspecific/1-1/component.wasm output/posix/pthread-setspecific/1-1/component.wasm
 
 # Build the components required to test jco issue #1380
 [group('build')]

@@ -319,8 +319,8 @@ impl ComponentIntrinsic {
                 let record_trap_fn = render_args.require_intrinsic(Self::RecordTrap);
                 let get_or_create_async_state_fn =
                     render_args.require_intrinsic(Self::GetOrCreateAsyncState);
-                let global_current_task_meta_obj =
-                    render_args.require_intrinsic(Intrinsic::GlobalCurrentTaskMeta);
+                let global_current_thread_meta_obj =
+                    render_args.require_intrinsic(Intrinsic::GlobalCurrentThreadMeta);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(
@@ -334,7 +334,7 @@ impl ComponentIntrinsic {
                         if (err instanceof {runtime_error_class}) {{
                             // (a trampoline without a static instance records against the
                             // component whose guest code is running)
-                            const idx = componentIdx ?? {global_current_task_meta_obj}.current?.componentIdx;
+                            const idx = componentIdx ?? {global_current_thread_meta_obj}.current?.componentIdx;
                             if (idx !== undefined && idx !== null) {{
                                 {get_or_create_async_state_fn}(idx).markTrapped(err);
                             }}
@@ -446,6 +446,8 @@ impl ComponentIntrinsic {
                         #parkedTasks = new Map();
                         #suspendedTasksByTaskID = new Map();
                         #suspendedTaskIDs = [];
+                        #suspendedThreadsByRef = new Map();
+                        #suspendedThreadRefs = [];
                         #errored = null;
                         #trapped = false;
                         #trapError = null;
@@ -464,6 +466,7 @@ impl ComponentIntrinsic {
 
                         handles;
                         subtasks;
+                        threads;
 
                         constructor(args) {{
                             this.#componentIdx = args.componentIdx;
@@ -472,6 +475,7 @@ impl ComponentIntrinsic {
                                 space: {get_handle_index_space_fn}(this.#componentIdx),
                             }});
                             this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
+                            this.threads = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] threads` }});
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
@@ -841,7 +845,11 @@ impl ComponentIntrinsic {
                             }}
                         }}
 
-                        // TODO(threads): readyFn is normally on the thread
+                        // Task-level waits/callback continuations still enter through this
+                        // task-keyed queue; explicit `thread.*` suspensions use the
+                        // thread-keyed queue below.
+                        // TODO(threads) Consolidate these only after task-level
+                        // continuations are registered against their owning thread.
                         suspendTask(args) {{
                             const {{ task, readyFn, cancellable, onResume }} = args;
                             const taskID = task.id();
@@ -931,6 +939,83 @@ impl ComponentIntrinsic {
                             return this.#suspendedTasksByTaskID.values();
                         }}
 
+                        #removeSuspendedThreadMeta(thread) {{
+                            const idx = this.#suspendedThreadRefs.findIndex(t => t === thread);
+                            const meta = this.#suspendedThreadsByRef.get(thread);
+                            if (idx !== -1) {{ this.#suspendedThreadRefs[idx] = null; }}
+                            this.#suspendedThreadsByRef.delete(thread);
+                            return meta;
+                        }}
+
+                        suspendThread(args) {{
+                            const {{ thread, readyFn, cancellable, onResume, suspended = false }} = args;
+                            {debug_log_fn}('[{component_async_state_class}#suspendThread()]', {{
+                                threadID: thread.id(),
+                                taskID: thread.taskID(),
+                                componentIdx: this.#componentIdx,
+                            }});
+
+                            if (thread.componentIdx() !== this.#componentIdx) {{
+                                throw new Error('assert: thread component idx should match async state');
+                            }}
+                            if (this.#suspendedThreadsByRef.has(thread)) {{
+                                throw new Error(`thread [${{thread.id()}}] already suspended`);
+                            }}
+
+                            let promise;
+                            let resume;
+                            if (onResume) {{
+                                resume = () => onResume(!thread.isCancelled());
+                            }} else {{
+                                const resolvers = {promise_with_resolvers_fn}();
+                                promise = resolvers.promise;
+                                resume = () => resolvers.resolve(!thread.isCancelled());
+                            }}
+                            this.#suspendedThreadsByRef.set(thread, {{ thread, cancellable, readyFn, resume, suspended }});
+                            this.#suspendedThreadRefs.push(thread);
+
+                            thread.notifyProgress();
+
+                            this.runTickLoop();
+                            {check_for_deadlock_fn}();
+
+                            return promise;
+                        }}
+
+                        resumeThread(thread) {{
+                            const meta = this.#removeSuspendedThreadMeta(thread);
+                            if (!meta) {{ return false; }}
+                            meta.resume();
+                            return true;
+                        }}
+
+                        markThreadReady(thread) {{
+                            const meta = this.#suspendedThreadsByRef.get(thread);
+                            if (!meta || !meta.suspended) {{ return false; }}
+                            meta.suspended = false;
+                            meta.readyFn = () => true;
+                            this.runTickLoop();
+                            return true;
+                        }}
+
+                        isThreadSuspended(thread) {{
+                            return this.#suspendedThreadsByRef.get(thread)?.suspended ?? false;
+                        }}
+
+                        isThreadReady(thread) {{
+                            const meta = this.#suspendedThreadsByRef.get(thread);
+                            return !!meta && !meta.suspended && (meta.thread.isRejected() || meta.readyFn());
+                        }}
+
+                        suspendedThreadReady(thread) {{
+                            const meta = this.#suspendedThreadsByRef.get(thread);
+                            if (!meta) {{ return false; }}
+                            if (!meta.readyFn) {{
+                                throw new Error(`suspended thread [${{thread.id()}}] is missing a readiness function`);
+                            }}
+                            return meta.thread.isRejected() || meta.readyFn();
+                        }}
+
                         addPendingTaskStart() {{ this.#pendingTaskStarts++; }}
                         removePendingTaskStart() {{ this.#pendingTaskStarts--; }}
 
@@ -939,6 +1024,9 @@ impl ComponentIntrinsic {
                             if (this.#lockHandoffScheduled) {{ return true; }}
                             for (const meta of this.#suspendedTasksByTaskID.values()) {{
                                 if (meta.task.isRejected() || meta.readyFn()) {{ return true; }}
+                            }}
+                            for (const meta of this.#suspendedThreadsByRef.values()) {{
+                                if (meta.thread.isRejected() || meta.readyFn()) {{ return true; }}
                             }}
                             return false;
                         }}
@@ -1007,7 +1095,34 @@ impl ComponentIntrinsic {
                                 return {component_async_state_class}.TickResult.RESUMED;
                             }}
 
-                            const idle = this.#suspendedTaskIDs.filter(t => t !== null).length > 0;
+                            const resumableThreads = this.#suspendedThreadRefs.filter(t => t !== null);
+                            for (const thread of resumableThreads) {{
+                                const meta = this.#suspendedThreadsByRef.get(thread);
+                                if (!meta || !meta.readyFn) {{
+                                    throw new Error(`missing/invalid thread meta despite thread [${{thread.id()}}] being present`);
+                                }}
+
+                                if (meta.thread.isRejected()) {{
+                                    {debug_log_fn}('[{component_async_state_class}#tick()] detected thread rejection, leaving early', {{ meta }});
+                                    this.resumeThread(thread);
+                                    return {component_async_state_class}.TickResult.RESUMED;
+                                }}
+
+                                if (!meta.readyFn()) {{ continue; }}
+
+                                {debug_log_fn}('[{component_async_state_class}#tick()] resuming thread via tick', {{
+                                    threadID: thread.id(),
+                                    componentIdx: this.#componentIdx,
+                                }});
+                                this.resumeThread(thread);
+
+                                // See the matching note above `resumeTaskByID` -- resume at
+                                // most one suspended thread per tick for the same reason.
+                                return {component_async_state_class}.TickResult.RESUMED;
+                            }}
+
+                            const idle = this.#suspendedTaskIDs.filter(t => t !== null).length > 0
+                                || this.#suspendedThreadRefs.filter(t => t !== null).length > 0;
                             return idle
                                 ? {component_async_state_class}.TickResult.IDLE
                                 : {component_async_state_class}.TickResult.DONE;

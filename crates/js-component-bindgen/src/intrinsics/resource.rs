@@ -127,10 +127,10 @@ impl ResourceIntrinsic {
         match self {
             Self::ResourceDestructorCall => {
                 let create_current_task = render_args.require_intrinsic(Intrinsic::AsyncTask(
-                    AsyncTaskIntrinsic::CreateNewCurrentTask,
+                    AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
                 ));
                 let with_current_task =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
                 let name = self.name();
                 uwriteln!(
                     output,
@@ -143,7 +143,7 @@ impl ResourceIntrinsic {
                           // empty: SDK task hooks allocate and free a stack through them.
                           // The enclosing task's register is restored after the call.
 
-                          const [task] = {create_current_task}({{
+                          const {{ task, threadID }} = {create_current_task}({{
                               componentIdx,
                               isAsync: false,
                               callingWasmExport: true,
@@ -153,6 +153,7 @@ impl ResourceIntrinsic {
 
                           return {with_current_task}({{
                               taskID: task.id(),
+                              threadID,
                               componentIdx,
                               fn: () => {{
                                   try {{
@@ -332,8 +333,8 @@ impl ResourceIntrinsic {
                     render_args.require_intrinsic(Self::ResourceTableCreateBorrow);
                 let scope_id = render_args.require_intrinsic(Intrinsic::ScopeId);
                 let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
-                let get_global_current_task_meta =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                let get_global_current_thread_meta =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 let get_current_task = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
 
@@ -354,7 +355,7 @@ impl ResourceIntrinsic {
                         const componentIdx = toTable._componentIdx;
                         const currentTaskMeta = componentIdx === undefined
                             ? undefined
-                            : {get_global_current_task_meta}(componentIdx);
+                            : {get_global_current_thread_meta}(componentIdx);
                         const borrowTask = currentTaskMeta
                             ? {get_current_task}(componentIdx, currentTaskMeta.taskID)?.task
                             : undefined;
