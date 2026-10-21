@@ -1,76 +1,66 @@
-import { copyFile, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { env } from 'node:process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import puppeteer, { type Browser } from 'puppeteer';
-import { afterAll, assert, beforeAll, expect, suite, test } from 'vitest';
+import { assert, test } from 'vitest';
 
 import { transpile, writeFiles } from '../../../src/index.js';
 import { parse } from '../../../src/wasm-tools.js';
 import { getTmpDir, runBrowserCase, startTestWebServer } from '../../helpers.js';
 
 const CASE_MODULE = '/jco-transpile/test/external-runtime/browser/cases.js';
-const CUSTOM_PROVIDER = new URL('../../fixtures/custom-runtime-provider.js', import.meta.url);
+const CUSTOM_RUNTIME = new URL('../../fixtures/custom-runtime/', import.meta.url);
 const RESOURCE_COMPONENT = new URL(
     '../../fixtures/components/runtime/external-runtime-resource.component.wat',
     import.meta.url,
 );
 
-suite('External Component Model runtime in the browser', () => {
-    let browser: Browser;
-    let serverPort: number;
+async function withBrowser(run: (browser: Browser, serverPort: number, outDir: string) => Promise<void>) {
+    const outDir = await getTmpDir();
+    let browser: Browser | undefined;
     let closeServer: (() => Promise<void>) | undefined;
-    let tmpDir: string;
-
-    beforeAll(async () => {
-        tmpDir = await getTmpDir();
+    try {
         const server = await startTestWebServer({
             routes: [
-                { urlPrefix: '/tmpdir/', basePathURL: pathToFileURL(`${tmpDir}/`) },
+                { urlPrefix: '/tmpdir/', basePathURL: pathToFileURL(`${outDir}/`) },
                 { basePathURL: new URL('../../../../', import.meta.url) },
             ],
         });
-        serverPort = server.serverPort;
         closeServer = server.cleanup;
-        browser = await puppeteer.launch({
-            executablePath: env.PUPPETEER_PATH,
-            args: [
-                '--enable-experimental-webassembly-jspi',
-                '--flag-switches-begin',
-                '--enable-features=WebAssemblyExperimentalJSPI',
-                '--flag-switches-end',
-            ],
-        });
-    });
-
-    afterAll(async () => {
+        browser = await puppeteer.launch({ executablePath: env.PUPPETEER_PATH });
+        await run(browser, server.serverPort, outDir);
+    } finally {
         await browser?.close();
         await closeServer?.();
-        if (tmpDir) {
-            await rm(tmpDir, { recursive: true, force: true });
-        }
-    });
+        await rm(outDir, { recursive: true, force: true });
+    }
+}
 
-    for (const provider of ['default', 'custom'] as const) {
-        for (const instantiation of ['sync', 'async', undefined] as const) {
-            test.each([false, true])(
-                `runs with the ${provider} provider (${instantiation ?? 'direct'}, minify=%s)`,
-                async (minify) => {
-                    const name = `${provider}-${instantiation ?? 'direct'}-${minify}`;
-                    const outDir = join(tmpDir, name);
+for (const provider of ['default', 'custom', 'url'] as const) {
+    for (const instantiation of ['sync', 'async', undefined] as const) {
+        test.concurrent.each([false, true])(
+            `browser loads ${provider} named exports (${instantiation ?? 'direct'}, minify=%s)`,
+            async (minify) => {
+                await withBrowser(async (browser, serverPort, outDir) => {
+                    const cmRuntimeEsModule =
+                        provider === 'default'
+                            ? '@bytecodealliance/jco-cm-runtime'
+                            : provider === 'custom'
+                              ? './runtime/'
+                              : `http://localhost:${serverPort}/jco-cm-runtime/dist/`;
                     const { files } = await transpile(fileURLToPath(RESOURCE_COMPONENT), {
                         name: 'component',
                         instantiation,
                         minify,
                         nodejsCompat: false,
                         base64Cutoff: 0,
-                        cmRuntimeEsModule:
-                            provider === 'default' ? '@bytecodealliance/jco-cm-runtime' : './provider.js',
+                        cmRuntimeEsModule,
                     });
                     await writeFiles(files, { baseDir: outDir });
                     if (provider === 'custom') {
-                        await copyFile(CUSTOM_PROVIDER, join(outDir, 'provider.js'));
+                        await cp(CUSTOM_RUNTIME, join(outDir, 'runtime'), { recursive: true });
                     }
                     const result = await runBrowserCase({
                         browser,
@@ -79,21 +69,25 @@ suite('External Component Model runtime in the browser', () => {
                         exportName: 'runComponent',
                         args: [
                             {
-                                componentPath: `/tmpdir/${name}/component.js`,
+                                componentPath: '/tmpdir/component.js',
                                 corePaths: Object.keys(files).filter((path) => path.endsWith('.wasm')),
                                 instantiation,
-                                providerPath: provider === 'custom' ? `/tmpdir/${name}/provider.js` : undefined,
+                                providerPath:
+                                    provider === 'custom' ? '/tmpdir/runtime/intrinsics/resource.js' : undefined,
                             },
                         ],
                     });
-                    assert.deepEqual(result, expectedResult(provider, !!instantiation));
-                },
-            );
-        }
+                    assert.deepEqual(result, expectedResult(provider === 'custom', !!instantiation));
+                });
+            },
+        );
+    }
+}
 
-        test(`transpiles and runs with the ${provider} provider entirely in the browser`, async () => {
-            const componentPath = `/tmpdir/${provider}.wasm`;
-            await writeFile(join(tmpDir, `${provider}.wasm`), await parse(await readFile(RESOURCE_COMPONENT, 'utf8')));
+for (const provider of ['default', 'custom'] as const) {
+    test.concurrent(`transpiles and loads ${provider} named exports entirely in the browser`, async () => {
+        await withBrowser(async (browser, serverPort, outDir) => {
+            await writeFile(join(outDir, 'component.wasm'), await parse(await readFile(RESOURCE_COMPONENT, 'utf8')));
             const result = await runBrowserCase({
                 browser,
                 serverPort,
@@ -101,62 +95,30 @@ suite('External Component Model runtime in the browser', () => {
                 exportName: 'transpileInBrowser',
                 args: [
                     {
-                        componentPath,
+                        componentPath: '/tmpdir/component.wasm',
                         cmRuntimeEsModule:
                             provider === 'default'
                                 ? '@bytecodealliance/jco-cm-runtime'
-                                : '/jco-transpile/test/fixtures/custom-runtime-provider.js',
+                                : '/jco-transpile/test/fixtures/custom-runtime/',
                         providerPath:
                             provider === 'custom'
-                                ? '/jco-transpile/test/fixtures/custom-runtime-provider.js'
+                                ? '/jco-transpile/test/fixtures/custom-runtime/intrinsics/resource.js'
                                 : undefined,
                     },
                 ],
             });
-            assert.deepEqual(result, expectedResult(provider, true));
+            assert.deepEqual(result, expectedResult(provider === 'custom', true));
         });
-    }
-
-    test.each([
-        {
-            kind: 'provider',
-            provider: '{ apiVersion: 1, create() { throw new Error("factory must not run"); } }',
-            error: 'runtime API: requested 2, supported 1',
-        },
-        {
-            kind: 'instance',
-            provider: '{ apiVersion: 2, create() { return { apiVersion: 1 }; } }',
-            error: 'runtime API instance: requested 2, received 1',
-        },
-    ])('rejects an incompatible $kind API version', async ({ kind, provider, error }) => {
-        const name = `invalid-${kind}`;
-        const outDir = join(tmpDir, name);
-        const { files } = await transpile(fileURLToPath(RESOURCE_COMPONENT), {
-            name: 'component',
-            nodejsCompat: false,
-            cmRuntimeEsModule: './provider.js',
-        });
-        await writeFiles(files, { baseDir: outDir });
-        await writeFile(join(outDir, 'provider.js'), `export const runtime = ${provider};`);
-        await expect(
-            runBrowserCase({
-                browser,
-                serverPort,
-                module: CASE_MODULE,
-                exportName: 'runComponent',
-                args: [{ componentPath: `/tmpdir/${name}/component.js` }],
-            }),
-        ).rejects.toThrow(error);
     });
-});
+}
 
-function expectedResult(provider: 'default' | 'custom', explicitInstantiation: boolean) {
+function expectedResult(custom: boolean, explicit: boolean) {
     return {
         values: [42, 24],
         invalidHandle: { runtimeError: true, message: 'unknown handle index 0' },
         afterTrap: { runtimeError: true, message: 'wasm trap: cannot enter component instance' },
-        siblingValue: explicitInstantiation ? 7 : null,
-        runtimeCreates: provider === 'custom' ? (explicitInstantiation ? 2 : 1) : null,
-        tableGets: provider === 'custom' ? 2 : null,
+        siblingValue: explicit ? 7 : null,
+        contexts: custom ? (explicit ? 2 : 1) : null,
+        tableGets: custom ? 2 : null,
     };
 }

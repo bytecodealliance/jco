@@ -1,0 +1,8 @@
+{
+    "name": "test-runtime-provider",
+    "type": "module",
+    "exports": {
+        "./runtime": "./runtime.js",
+        "./intrinsics/resource": "./intrinsics/resource.js"
+    }
+}

@@ -49,8 +49,7 @@ use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{
-    AsyncDeterminismProfile, CM_RUNTIME_PROVIDER_LOCAL_NAME, Intrinsic, RenderIntrinsicsArgs,
-    render_intrinsics, uses_external_runtime,
+    AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs, render_intrinsics, runtime,
 };
 use crate::names::{
     LocalNames, is_js_reserved_word, js_string_literal, maybe_quote_id, maybe_quote_member,
@@ -684,14 +683,8 @@ impl JsBindgen<'_> {
         #[cfg(feature = "external-runtime")]
         let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
         let js_intrinsics = render_intrinsics(render_args.build());
-        if let Some(module) = self.cm_runtime_es_module
-            && uses_external_runtime(&self.all_intrinsics, true)
-        {
-            uwriteln!(
-                output,
-                "import {{ runtime as {CM_RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
-                js_string_literal(module),
-            );
+        if let Some(base) = self.cm_runtime_es_module {
+            runtime::render_imports(&mut output, &self.all_intrinsics, base);
         }
 
         // Write out instantiation
@@ -903,7 +896,17 @@ impl JsBindgen<'_> {
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
-        intrinsic.name().to_string()
+        intrinsic
+            .binding(self.cm_runtime_es_module.is_some())
+            .local_name()
+            .to_string()
+    }
+
+    fn intrinsic_call(&mut self, intrinsic: Intrinsic, operands: &str) -> String {
+        self.all_intrinsics.insert(intrinsic);
+        intrinsic
+            .binding(self.cm_runtime_es_module.is_some())
+            .call(operands)
     }
 
     /// Write out utility helpers/objects (available via esModule._util)
@@ -3508,13 +3511,14 @@ impl<'a> Instantiator<'a, '_> {
             } => {
                 self.ensure_resource_table(*resource_ty_idx);
                 let rid = resource_ty_idx.as_u32();
-                let rsc_table_get = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet));
+                let table_get_call = self.bindgen.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                    &format!("handleTable{rid}, handle"),
+                );
                 uwriteln!(
                     self.src.js,
                     "function trampoline{i} (handle) {{
-                        return {rsc_table_get}(handleTable{rid}, handle).rep;
+                        return {table_get_call}.rep;
                     }}"
                 );
             }
