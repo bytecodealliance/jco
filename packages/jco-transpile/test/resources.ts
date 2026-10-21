@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -7,8 +7,8 @@ import { assert, suite, test } from 'vitest';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 import { transpileBytes } from '../src/index.js';
-import { componentEmbed, componentNew } from '../src/wasm-tools.js';
-import { setupAsyncTest } from './helpers.js';
+import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
+import { getTmpDir, setupAsyncTest } from './helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
 suite('resources', () => {
@@ -162,6 +162,65 @@ suite('resources', () => {
             /callResourceDestructor/,
             'a component without context intrinsics should retain lightweight destructor calls',
         );
+    });
+
+    // A rep is any u32 the guest chooses, for C and C++ guests the address of the object in linear
+    // memory, so every bit must survive the handle table.
+    // see: https://github.com/bytecodealliance/jco/issues/2293
+    test('component-defined resource reps keep every bit', async () => {
+        // The rep of each thing is the number passed to its constructor, and its method returns
+        // the rep the guest is given for it
+        const coreModule = await parse(`
+            (module
+                (import "[export]test:resource-rep/api" "[resource-new]thing" (func $new (param i32) (result i32)))
+                (memory (export "memory") 0)
+                (func (export "test:resource-rep/api#[constructor]thing") (param i32) (result i32)
+                    (call $new (local.get 0)))
+                (func (export "test:resource-rep/api#[method]thing.rep") (param i32) (result i32)
+                    (local.get 0))
+                (func (export "test:resource-rep/api#[dtor]thing") (param i32))
+            )
+        `);
+        const component = await componentNew(
+            await componentEmbed({
+                binary: coreModule,
+                witSource: `
+                    package test:resource-rep;
+
+                    interface api {
+                        resource thing {
+                            constructor(rep: u32);
+                            rep: func() -> u32;
+                        }
+                    }
+
+                    world test {
+                        export api;
+                    }
+                `,
+            }),
+        );
+
+        const componentDir = await getTmpDir();
+        const componentPath = join(componentDir, 'resource-rep.wasm');
+        await writeFile(componentPath, component);
+        const { instance, cleanup } = await setupAsyncTest({ component: { path: componentPath } });
+
+        try {
+            const { Thing } = instance['test:resource-rep/api'];
+            // Below, at and above bit 30, and with bit 31 set too
+            for (const rep of [
+                0x10, 0x3fffffff, 0x40000000, 0x40000010, 0x7ffffff0, 0x80000010, 0xc0000010, 0xfffffff0,
+            ]) {
+                const thing = new Thing(rep);
+                assert.strictEqual(thing.rep(), rep, `rep 0x${rep.toString(16)}`);
+                thing[Symbol.dispose]();
+                assert.throws(() => thing.rep(), /not a valid/i, `rep 0x${rep.toString(16)} after disposal`);
+            }
+        } finally {
+            await cleanup();
+            await rm(componentDir, { recursive: true, force: true });
+        }
     });
 
     test('component-defined resource without a destructor still releases its handle', async () => {

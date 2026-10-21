@@ -120,13 +120,13 @@ suite('External Component Model runtime in the browser', () => {
     test.each([
         {
             kind: 'provider',
-            provider: '{ apiVersion: 2, create() { throw new Error("factory must not run"); } }',
-            error: 'runtime API: requested 1, supported 2',
+            provider: '{ apiVersion: 1, create() { throw new Error("factory must not run"); } }',
+            error: 'runtime API: requested 2, supported 1',
         },
         {
             kind: 'instance',
-            provider: '{ apiVersion: 1, create() { return { apiVersion: 2 }; } }',
-            error: 'runtime API instance: requested 1, received 2',
+            provider: '{ apiVersion: 2, create() { return { apiVersion: 1 }; } }',
+            error: 'runtime API instance: requested 2, received 1',
         },
     ])('rejects an incompatible $kind API version', async ({ kind, provider, error }) => {
         const name = `invalid-${kind}`;

@@ -30,12 +30,12 @@ bindings are loaded. The runtime package can be released independently of Jco.
 This package is currently experimental. Its JavaScript Component Model runtime
 API is versioned independently from the npm package version.
 
-## JavaScript Component Model runtime API version 1
+## JavaScript Component Model runtime API version 2
 
-The selected module exports a `runtime` object with `apiVersion: 1` and a
+The selected module exports a `runtime` object with `apiVersion: 2` and a
 synchronous `create(options)` method. The method returns a runtime instance
-with `apiVersion: 1` and `intrinsics.resource.tableGet`. Generated bindings
-pass `requestedApiVersion: 1` to `create`, check both API versions, and verify
+with `apiVersion: 2` and `intrinsics.resource.tableGet`. Generated bindings
+pass `requestedApiVersion: 2` to `create`, check both API versions, and verify
 that the required intrinsic is callable. Other runtime intrinsics continue to
 be generated inline.
 
@@ -64,8 +64,10 @@ CM runtime API:
   are allocated from a space shared by every handle kind of a component instance,
   so a table may have holes for indices that belong to other kinds.
 - Slot `handle << 1` contains the scope. Bit 30 marks a freed entry.
-- Slot `(handle << 1) + 1` contains the representation, with bit 30 indicating
-  ownership. Clear that bit to obtain `rep`. A freed entry stores zero.
+- Slot `(handle << 1) + 1` contains the representation, an unsigned 32-bit
+  value. An owned entry stores it plus `2 ** 32`: the entry is owned if it is at
+  least `2 ** 32`, and `rep` is the entry modulo `2 ** 32`. A freed entry stores
+  zero.
 - A representation of zero is valid for both owned and borrowed entries. Only
   handle index zero is reserved.
 - A slot past the end of the table, a hole or a freed entry must trap with
@@ -74,3 +76,8 @@ CM runtime API:
 
 Incompatible changes to this table encoding or these method contracts require
 a new JavaScript CM runtime API version, independently of the npm package version.
+
+Version 1 marked ownership with bit 30 of the representation, so a
+representation with that bit set could not be stored
+([#2293](https://github.com/bytecodealliance/jco/issues/2293)). Version 2
+stores ownership above the 32 bits of the representation.

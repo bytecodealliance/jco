@@ -9,7 +9,7 @@ use wasmtime_environ::Trap;
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
-pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
+pub(crate) const CM_RUNTIME_API_VERSION: u32 = 2;
 pub(crate) const CM_RUNTIME_PROVIDER_LOCAL_NAME: &str = "_jcoRuntimeProvider";
 const CM_RUNTIME_LOCAL_NAME: &str = "_jcoRuntime";
 const CM_RUNTIME_INTRINSICS_LOCAL_NAME: &str = "_jcoIntrinsics";
@@ -2754,6 +2754,7 @@ impl Intrinsic {
                 "symbolRscHandle",
                 "symbolRscRep",
                 "T_FLAG",
+                "T_OWN",
                 "throwInvalidBool",
                 "throwUninitialized",
                 // JS Globals / non intrinsic names

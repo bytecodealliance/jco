@@ -10,24 +10,25 @@ export function resetRuntimeCreateCallCount() {
 }
 
 export const runtime = {
-    apiVersion: 1,
+    apiVersion: 2,
     create(options) {
-        if (options.requestedApiVersion !== 1) {
+        if (options.requestedApiVersion !== 2) {
             throw new Error(`unsupported JavaScript CM runtime API ${options.requestedApiVersion}`);
         }
         runtimeCreateCallCount++;
         const RuntimeError = options.platform?.WebAssembly?.RuntimeError ?? WebAssembly.RuntimeError;
         return {
-            apiVersion: 1,
+            apiVersion: 2,
             intrinsics: {
                 resource: {
                     tableFlag: 1 << 30,
+                    tableOwn: 2 ** 32,
                     tableGet(table, handle) {
                         tableGetCallCount++;
                         const scope = table[handle << 1];
                         const value = table[(handle << 1) + 1];
-                        const own = (value & this.tableFlag) !== 0;
-                        const rep = value & ~this.tableFlag;
+                        const own = value >= this.tableOwn;
+                        const rep = own ? value - this.tableOwn : value;
                         if (value === undefined || (scope & this.tableFlag) !== 0) {
                             throw new RuntimeError(`unknown handle index ${handle}`);
                         }

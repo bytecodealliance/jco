@@ -12,14 +12,11 @@ use crate::uwriteln;
 pub enum ResourceIntrinsic {
     /// # Resource table slab implementation
     ///
-    /// Resource table slab implementation on top of a fixed "SMI" array in JS engines,
-    /// a fixed contiguous array of u32s, for performance. We don't use a typed array because
-    /// we need resizability without reserving a large buffer.
+    /// Resource table slab implementation on top of a plain JS array of numbers, for
+    /// performance. We don't use a typed array because we need resizability without reserving
+    /// a large buffer.
     ///
-    /// The flag bit for all data values is 1 << 30. We avoid the use of the highest bit
-    /// entirely to not trigger SMI deoptimization.
-    ///
-    /// Each entry consists of a pair of u32s, either a free list entry, or a data entry.
+    /// Each entry consists of a pair of values, either a free list entry, or a data entry.
     ///
     /// ## Free List Entries:
     ///
@@ -27,34 +24,41 @@ pub enum ResourceIntrinsic {
     ///  |------ 32 bits ------|------ 32 bits ------|
     ///  | 01xxxxxxxxxxxxxxxxx | ################### |
     ///
-    /// Free list entries use only the first value in the pair, with the high bit always set
-    /// to indicate that the pair is part of the free list. The first pair of entries at
+    /// Free list entries use only the first value in the pair, with bit 30 (`T_FLAG`) always
+    /// set to indicate that the pair is part of the free list. The first pair of entries at
     /// indices 0 and 1 is the free list head, with the initial values of 1 << 30 and 0
     /// respectively. Removing the 1 << 30 flag gives 0, which indicates the end of the free
     /// list.
     ///
     /// ## Data Entries:
     ///
-    ///  |    scope (x, u30)   | own(o), rep(x, u30) |
-    ///  |------ 32 bits ------|------ 32 bits ------|
-    ///  | 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
+    ///  |    scope (x, u30)   |  own(o) + rep (x, u32)   |
+    ///  |------ 32 bits ------|-------- 33 bits ---------|
+    ///  | 00xxxxxxxxxxxxxxxxx | oxxxxxxxxxxxxxxxxxxxxxxx |
     ///
     /// Data entry pairs consist of a first u30 scope entry and a second rep entry. The field
     /// is only called the scope for interface shape consistency, but is actually used for the
-    /// ref count for own handles and the scope id for borrow handles. The high bit is never
-    /// set for this first entry to distinguish the pair from the free list. The second item
-    /// in the pair is the rep for  the resource, with the high bit in this entry indicating
-    /// if it is an own handle.
+    /// ref count for own handles and the scope id for borrow handles. Bit 30 is never set for
+    /// this first entry to distinguish the pair from the free list.
+    ///
+    /// The second item in the pair is the rep for the resource, as an unsigned 32-bit value,
+    /// plus `T_OWN` (2 ** 32) if it is an own handle. A rep is any u32 the guest chooses (for
+    /// example the address of an object in linear memory), so ownership is kept above its 32
+    /// bits rather than in one of them: an entry is owned if it is at least `T_OWN`, and its rep
+    /// is the entry modulo `T_OWN`.
     ///
     /// The free list numbering and the handle numbering are the same, indexing by pair, so to
     /// get from a handle or free list numbering to an index, we multiply by two.
     ///
     /// For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
-    /// the array to get the context and rep respectively. If the high bit is set on the
-    /// context, we throw for an invalid handle. The rep value is masked out from the
-    /// ownership high bit. A zero rep is valid; only handle index zero is reserved.
+    /// the array to get the context and rep respectively. If bit 30 is set on the context, we
+    /// throw for an invalid handle. The rep value is taken without the ownership offset.
+    /// A zero rep is valid; only handle index zero is reserved.
     ///
     ResourceTableFlag,
+
+    /// Offset added to the rep of an own handle in a resource table, see `ResourceTableFlag`
+    ResourceTableOwnFlag,
 
     /// Global map from a component instance index (or a table without one) to its handle
     /// index space, which all handle kinds of the instance share
@@ -83,6 +87,7 @@ impl ResourceIntrinsic {
         [
             Self::ResourceCallBorrows.name(),
             Self::ResourceTableFlag.name(),
+            Self::ResourceTableOwnFlag.name(),
             Self::HandleIndexSpaces.name(),
             Self::GetHandleIndexSpace.name(),
             Self::ResourceTableCreateBorrow.name(),
@@ -107,6 +112,7 @@ impl ResourceIntrinsic {
             Self::ResourceScopeCounter => "RESOURCE_SCOPE_ID",
             Self::ResourceScopeTasks => "RESOURCE_SCOPE_TASKS",
             Self::ResourceTableFlag => "T_FLAG",
+            Self::ResourceTableOwnFlag => "T_OWN",
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::GetHandleIndexSpace => "getHandleIndexSpace",
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
@@ -188,6 +194,11 @@ impl ResourceIntrinsic {
                 uwriteln!(output, "const {table_flag} = 1 << 30;");
             }
 
+            Self::ResourceTableOwnFlag => {
+                let own_flag = self.name();
+                uwriteln!(output, "const {own_flag} = 2 ** 32;");
+            }
+
             Self::HandleIndexSpaces => {
                 let name = self.name();
                 uwriteln!(output, "const {name} = new Map();");
@@ -232,7 +243,7 @@ impl ResourceIntrinsic {
                           // its handle kinds; a table without an instance keeps its own)
                           const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
                           table[handle << 1] = scopeId;
-                          table[(handle << 1) + 1] = rep;
+                          table[(handle << 1) + 1] = rep >>> 0;
                           return handle;
                       }}
                     "#,
@@ -240,17 +251,19 @@ impl ResourceIntrinsic {
             }
 
             Self::ResourceTableCreateOwn => {
-                let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
+                let own_flag = render_args.require_intrinsic(Self::ResourceTableOwnFlag);
                 let get_handle_index_space_fn =
                     render_args.require_intrinsic(Self::GetHandleIndexSpace);
                 uwriteln!(
                     output,
                     r#"
                 function rscTableCreateOwn(table, rep) {{
+                    // Reps are u32: one from a core function arrives as a signed i32
+                    rep >>>= 0;
                     table._createdReps.add(rep);
                     const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
                     table[handle << 1] = 0;
-                    table[(handle << 1) + 1] = rep | {table_flag};
+                    table[(handle << 1) + 1] = rep + {own_flag};
                     return handle;
                 }}
             "#
@@ -259,6 +272,7 @@ impl ResourceIntrinsic {
 
             Self::ResourceTableGet => {
                 let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
+                let own_flag = render_args.require_intrinsic(Self::ResourceTableOwnFlag);
                 let runtime_error =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 uwriteln!(
@@ -267,8 +281,8 @@ impl ResourceIntrinsic {
                 function rscTableGet(table, handle) {{
                     const scope = table[handle << 1];
                     const val = table[(handle << 1) + 1];
-                    const own = (val & {table_flag}) !== 0;
-                    const rep = val & ~{table_flag};
+                    const own = val >= {own_flag};
+                    const rep = own ? val - {own_flag} : val;
                     // (a freed or never allocated index has no entry in this table: its
                     // index may belong to another handle kind of the instance)
                     // Zero reps are valid; freed entries are identified by the scope flag.
@@ -293,6 +307,7 @@ impl ResourceIntrinsic {
 
             Self::ResourceTableRemove => {
                 let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
+                let own_flag = render_args.require_intrinsic(Self::ResourceTableOwnFlag);
                 let runtime_error =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let resource_scope_tasks = render_args.require_intrinsic(Self::ResourceScopeTasks);
@@ -304,8 +319,8 @@ impl ResourceIntrinsic {
                 function rscTableRemove(table, handle) {{
                     const scope = table[handle << 1];
                     const val = table[(handle << 1) + 1];
-                    const own = (val & {table_flag}) !== 0;
-                    const rep = val & ~{table_flag};
+                    const own = val >= {own_flag};
+                    const rep = own ? val - {own_flag} : val;
                     // A borrowed entry can store zero without being freed.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
