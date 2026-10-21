@@ -147,7 +147,8 @@ pub fn transpile(component: &[u8], mut opts: TranspileOpts) -> Result<Transpiled
         | WasmFeatures::CM_ERROR_CONTEXT
         | WasmFeatures::CM_FIXED_LENGTH_LISTS
         | WasmFeatures::CM_MAP
-        | WasmFeatures::CM_IMPLEMENTS;
+        | WasmFeatures::CM_IMPLEMENTS
+        | WasmFeatures::CM_THREADING;
 
     // Unless the target engine is known to support the exception handling
     // proposal, mask exception handling off: with the feature enabled,

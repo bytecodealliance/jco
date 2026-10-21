@@ -159,8 +159,8 @@ importers:
         specifier: ^0.5.0
         version: 0.5.0(@bytecodealliance/preview2-shim@0.25.0)
       hono:
-        specifier: ^4.13.11
-        version: 4.13.11
+        specifier: ^4.13.7
+        version: 4.13.9
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.31.0
@@ -181,8 +181,8 @@ importers:
         specifier: ^0.5.0
         version: 0.5.0(@bytecodealliance/preview2-shim@0.25.0)
       hono:
-        specifier: ^4.13.11
-        version: 4.13.11
+        specifier: ^4.13.7
+        version: 4.13.9
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.31.0
@@ -405,7 +405,7 @@ importers:
         version: 16.0.3(rollup@4.62.3)
       '@rollup/plugin-typescript':
         specifier: ^12.1.4
-        version: 12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@7.0.2)
+        version: 12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@6.0.3)
       rollup:
         specifier: ^4.61.1
         version: 4.62.3
@@ -601,8 +601,8 @@ importers:
         specifier: ^3.0.4
         version: 3.0.4
       hono:
-        specifier: ^4.13.11
-        version: 4.13.11
+        specifier: ^4.13.7
+        version: 4.13.9
       rolldown:
         specifier: ^1.0.0-beta.46
         version: 1.2.0
@@ -4422,8 +4422,8 @@ packages:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
     engines: {node: '>= 0.4'}
 
-  hono@4.13.11:
-    resolution: {integrity: sha512-/SMX/RQNJn7oNmFwH6DtwDqcrzZU2otm1FD6OJe2cWF6cfy/F8hq0XVBv7xW3FTJshRQwuBnXHDq2kNsdZnshg==}
+  hono@4.13.9:
+    resolution: {integrity: sha512-7dMkQmZoC4E6F7AtaQSPhlWAdnBti+j7rreMZl8QB4jFiEhP9TWbGWUMi8WYzBCgmgulxuvLQupKqo+Co6Omyg==}
     engines: {node: '>=16.9.0'}
 
   hosted-git-info@9.0.3:
@@ -7554,11 +7554,11 @@ snapshots:
       rollup: 4.62.3
       tslib: 2.8.1
 
-  '@rollup/plugin-typescript@12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@7.0.2)':
+  '@rollup/plugin-typescript@12.3.0(rollup@4.62.3)(tslib@2.8.1)(typescript@6.0.3)':
     dependencies:
       '@rollup/pluginutils': 5.4.0(rollup@4.62.3)
       resolve: 1.22.12
-      typescript: 7.0.2
+      typescript: 6.0.3
     optionalDependencies:
       rollup: 4.62.3
       tslib: 2.8.1
@@ -8539,7 +8539,7 @@ snapshots:
     dependencies:
       function-bind: 1.1.2
 
-  hono@4.13.11: {}
+  hono@4.13.9: {}
 
   hosted-git-info@9.0.3:
     dependencies:
