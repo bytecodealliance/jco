@@ -12,7 +12,8 @@ export function createResourceIntrinsics(RuntimeError: RuntimeErrorConstructor):
             // A freed or never allocated index has no entry in this table: its index may
             // belong to another handle kind of the instance, and `value` is undefined
             // past the end of the table.
-            if (value === undefined || rep === 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) {
+            // Zero reps are valid; freed entries are identified by the scope flag.
+            if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
                 throw new RuntimeError(`unknown handle index ${handle}`);
             }
             return { rep, scope, own };

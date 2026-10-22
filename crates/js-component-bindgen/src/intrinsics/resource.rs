@@ -52,7 +52,7 @@ pub enum ResourceIntrinsic {
     /// For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
     /// the array to get the context and rep respectively. If the high bit is set on the
     /// context, we throw for an invalid handle. The rep value is masked out from the
-    /// ownership high bit, also throwing for an invalid zero rep.
+    /// ownership high bit. A zero rep is valid; only handle index zero is reserved.
     ///
     ResourceTableFlag,
 
@@ -271,7 +271,8 @@ impl ResourceIntrinsic {
                     const rep = val & ~{table_flag};
                     // (a freed or never allocated index has no entry in this table: its
                     // index may belong to another handle kind of the instance)
-                    if (val === undefined || rep === 0 || (scope & {table_flag}) !== 0) {{
+                    // Zero reps are valid; freed entries are identified by the scope flag.
+                    if (val === undefined || (scope & {table_flag}) !== 0) {{
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
                     }}
                     return {{ rep, scope, own }};
@@ -305,7 +306,8 @@ impl ResourceIntrinsic {
                     const val = table[(handle << 1) + 1];
                     const own = (val & {table_flag}) !== 0;
                     const rep = val & ~{table_flag};
-                    if (val === undefined || val === 0 || (scope & {table_flag}) !== 0) {{
+                    // A borrowed entry can store zero without being freed.
+                    if (val === undefined || (scope & {table_flag}) !== 0) {{
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
                     }}
                     if (own && scope !== 0) {{
