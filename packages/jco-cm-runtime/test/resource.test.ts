@@ -23,10 +23,22 @@ describe('resource.tableGet', () => {
         expect(tableGet(table, 2)).toEqual({ rep: 24, scope: 11, own: false });
     });
 
+    test('accepts zero representations for owned and borrowed resources', () => {
+        const { tableGet } = createRuntime().intrinsics.resource;
+        const table = [TABLE_FLAG, 0, 0, TABLE_FLAG, 3, 0];
+
+        expect(tableGet(table, 1)).toEqual({ rep: 0, scope: 0, own: true });
+        expect(tableGet(table, 2)).toEqual({ rep: 0, scope: 3, own: false });
+    });
+
     test.each([
         { name: 'the sentinel at index 0', table: [TABLE_FLAG, 0], handle: 0 },
         { name: 'a freed entry', table: [TABLE_FLAG, 0, TABLE_FLAG, 0], handle: 1 },
-        { name: 'a zero rep', table: [TABLE_FLAG, 0, 0, 0], handle: 1 },
+        {
+            name: 'a hole belonging to another handle kind',
+            table: Object.assign([TABLE_FLAG, 0], { 4: 0, 5: TABLE_FLAG }),
+            handle: 1,
+        },
         { name: 'an index past the end of the table', table: [TABLE_FLAG, 0], handle: 4 },
     ])('traps for $name', ({ table, handle }) => {
         const { tableGet } = createRuntime().intrinsics.resource;

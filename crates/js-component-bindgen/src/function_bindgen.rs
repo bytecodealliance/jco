@@ -3125,7 +3125,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                       }}
                                       var {handle} = {op}[{symbol_resource_handle}];
                                       if (!{handle}) {{
-                                          const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                          const rep = {op}[{symbol_resource_rep}] ?? ++captureCnt{rid};
                                           captureTable{rid}.set(rep, {op});
                                           {handle} = {create_own_fn}(handleTable{tid}, rep);
                                       }}
@@ -3158,7 +3158,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                       }}
                                       var {handle} = {op}[{symbol_resource_handle}];
                                       if (!{handle}) {{
-                                          const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
+                                          const rep = {op}[{symbol_resource_rep}] ?? ++captureCnt{rid};
                                           captureTable{rid}.set(rep, {op});
                                           {handle} = {create_borrow_fn}(handleTable{tid}, rep, {scope_id});
                                       }}
