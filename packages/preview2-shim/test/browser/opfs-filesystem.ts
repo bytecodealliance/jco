@@ -79,7 +79,104 @@ class FakeDirectoryHandle {
     }
 }
 
+function holdFirstWrite(file: FakeFileHandle) {
+    const opened = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const createWritable = file.createWritable.bind(file);
+    let writes = 0;
+    let active = 0;
+    let maxActive = 0;
+    file.createWritable = async () => {
+        const writable = await createWritable();
+        const first = writes++ === 0;
+        maxActive = Math.max(maxActive, ++active);
+        opened.resolve();
+        return {
+            write: writable.write,
+            close: async () => {
+                if (first) {
+                    await release.promise;
+                }
+                await writable.close();
+                active--;
+            },
+        };
+    };
+    return {
+        opened: opened.promise,
+        release: release.resolve,
+        active: () => active,
+        maxActive: () => maxActive,
+    };
+}
+
 suite("Browser OPFS filesystem adapter", () => {
+    test("an explicit flush waits for an automatic write to close", async () => {
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
+        const root = new FakeDirectoryHandle();
+        const file = new FakeFileHandle();
+        root.entriesMap.set("note.txt", file);
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const adapter = new OpfsFilesystemAdapter();
+        const descriptor = adapter.getRoot(capability);
+        const held = holdFirstWrite(file);
+        const stream = descriptor.openAt({}, "note.txt", {}, { write: true }).writeViaStream(0n);
+        stream.checkWrite();
+        stream.write(new TextEncoder().encode("persisted"));
+        await held.opened;
+
+        let flushed = false;
+        const flushing = adapter.flush().then(() => {
+            flushed = true;
+        });
+        try {
+            // Drain the fake handles' microtasks while the first writable remains open.
+            await new Promise(setImmediate);
+            assert.isFalse(flushed, "flush returned with an earlier writable still open");
+            assert.strictEqual(held.maxActive(), 1, "flushes opened overlapping writables");
+        } finally {
+            held.release();
+            await flushing;
+            await adapter.dispose();
+        }
+        assert.strictEqual(held.active(), 0);
+    });
+
+    test("disposal waits for writes and cancels a queued automatic flush", async () => {
+        const { createFilesystem } = await import("../../src/browser/filesystem.js");
+        const { loadOpfsCapability, OpfsFilesystemAdapter } =
+            await import("../../src/browser/opfs-filesystem.js");
+        const root = new FakeDirectoryHandle();
+        const file = new FakeFileHandle();
+        root.entriesMap.set("note.txt", file);
+        const capability = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
+        const adapter = new OpfsFilesystemAdapter();
+        const filesystem = createFilesystem({ adapter, preopens: { "/": capability } });
+        const [[descriptor]] = filesystem.preopens.getDirectories();
+        const held = holdFirstWrite(file);
+        const stream = descriptor.openAt({}, "note.txt", {}, { write: true }).writeViaStream(0n);
+        stream.checkWrite();
+        stream.write(new TextEncoder().encode("persisted"));
+
+        let disposed = false;
+        const disposal = filesystem.dispose();
+        assert.strictEqual(filesystem.dispose(), disposal);
+        const disposing = Promise.resolve(disposal).then(() => {
+            disposed = true;
+        });
+        try {
+            await held.opened;
+            await new Promise(setImmediate);
+            assert.isFalse(disposed, "dispose returned with a writable still open");
+        } finally {
+            held.release();
+            await disposing;
+        }
+        assert.strictEqual(held.active(), 0);
+        assert.strictEqual(held.maxActive(), 1, "the queued flush ran alongside disposal");
+    });
+
     test.concurrent("loads OPFS content into a synchronous in-memory tree", async () => {
         const { loadOpfsCapability, OpfsFilesystemAdapter } =
             await import("../../src/browser/opfs-filesystem.js");
@@ -131,6 +228,7 @@ suite("Browser OPFS filesystem adapter", () => {
 
         // The sidecar file isn't surfaced as a regular guest-visible entry.
         await root.getFileHandle(".__wasi_symlinks__.json");
+        await adapter.dispose();
         const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
         const reloadedAdapter = new OpfsFilesystemAdapter();
         const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
@@ -177,6 +275,7 @@ suite("Browser OPFS filesystem adapter", () => {
 
         await adapter.flush();
 
+        await adapter.dispose();
         const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
         const reloadedAdapter = new OpfsFilesystemAdapter();
         const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
@@ -207,6 +306,7 @@ suite("Browser OPFS filesystem adapter", () => {
         descriptor.symlinkAt("target.txt", "link.txt");
         await adapter.flush();
 
+        await adapter.dispose();
         const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
         const reloadedAdapter = new OpfsFilesystemAdapter();
         const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);
@@ -239,6 +339,7 @@ suite("Browser OPFS filesystem adapter", () => {
         const recorded = JSON.parse(await (await sidecar.getFile()).text());
         assert.deepStrictEqual(recorded, { "nested/link.txt": "../target.txt" });
 
+        await adapter.dispose();
         const reloaded = await loadOpfsCapability(root as unknown as FileSystemDirectoryHandle);
         const reloadedAdapter = new OpfsFilesystemAdapter();
         const reloadedDescriptor = reloadedAdapter.getRoot(reloaded);

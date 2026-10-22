@@ -44,8 +44,6 @@ const actions = {
     await withOpfsScratch(async (directory) => {
       const adapter = await configureOpfs(directory);
       await runComponent(component);
-      // Component mutations schedule an automatic flush; let it settle before forcing one.
-      await new Promise((resolve) => setTimeout(resolve, 0));
       await adapter.flush();
       console.log("OPFS component run completed");
     });
@@ -68,7 +66,6 @@ const actions = {
       assert(writeResult.tag === "ok", `file write failed: ${JSON.stringify(writeResult)}`);
       await root.symlinkAt("notes/todo.txt", "todo-link.txt");
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
       await adapter.flush();
 
       await configureOpfs(directory);

@@ -15,12 +15,22 @@ export async function runComponent(component) {
 }
 
 export async function configureOpfs(directory) {
+  await disposeOpfs();
   filesystem._clearPreopens();
   const capability = await filesystem.loadOpfsCapability(directory);
   const adapter = new filesystem.OpfsFilesystemAdapter();
   filesystem._addPreopenWithAdapter("/", adapter, capability);
   filesystem._setCwd("/");
+  opfsAdapter = adapter;
   return adapter;
+}
+
+let opfsAdapter;
+
+async function disposeOpfs() {
+  const adapter = opfsAdapter;
+  opfsAdapter = undefined;
+  await adapter?.dispose();
 }
 
 export async function withOpfsScratch(callback) {
@@ -30,8 +40,12 @@ export async function withOpfsScratch(callback) {
   try {
     return await callback(directory);
   } finally {
-    filesystem._clearPreopens();
-    await opfsRoot.removeEntry(scratchName, { recursive: true });
+    try {
+      await disposeOpfs();
+    } finally {
+      filesystem._clearPreopens();
+      await opfsRoot.removeEntry(scratchName, { recursive: true });
+    }
   }
 }
 
