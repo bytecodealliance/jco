@@ -54,7 +54,7 @@ export interface BrowserFilesystemDescriptor extends Omit<
 
 export interface BrowserFilesystemAdapter<Capability = unknown> {
     getRoot(capability: Capability): BrowserFilesystemDescriptor;
-    dispose?(): void;
+    dispose?(): void | Promise<void>;
 }
 
 export interface BrowserFilesystemConfig<Capability> {
@@ -281,6 +281,7 @@ export function createFilesystem<Capability>({
         ([guestPath, capability]) => [descriptorCreate(adapter.getRoot(capability)), guestPath],
     );
     let disposed = false;
+    let disposal: void | Promise<void>;
     return {
         types,
         preopens: {
@@ -293,10 +294,11 @@ export function createFilesystem<Capability>({
         } as typeof PreopensNamespace,
         dispose() {
             if (disposed) {
-                return;
+                return disposal;
             }
             disposed = true;
-            adapter.dispose?.();
+            disposal = adapter.dispose?.();
+            return disposal;
         },
     };
 }

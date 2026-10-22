@@ -284,6 +284,8 @@ export class OpfsFilesystemAdapter implements BrowserFilesystemAdapter<OpfsCapab
     #roots: OpfsCapability[] = [];
     #lockManager: BrowserLockManager | undefined;
     #flushScheduled = false;
+    #flushPromise: Promise<void> = Promise.resolve();
+    #disposal: Promise<void> | undefined;
     #unsubscribeTouch: () => void;
 
     constructor(options: OpfsFilesystemAdapterOptions = {}) {
@@ -305,26 +307,41 @@ export class OpfsFilesystemAdapter implements BrowserFilesystemAdapter<OpfsCapab
         }
         this.#flushScheduled = true;
         queueMicrotask(() => {
+            if (!this.#flushScheduled) {
+                return;
+            }
             this.#flushScheduled = false;
             void this.flush();
         });
     }
 
-    /** Persist every loaded root's current in-memory state back to OPFS. */
-    async flush(): Promise<void> {
-        await Promise.all(
-            this.#roots.map(async (root) => {
-                const dir = root.data.dir ?? {};
-                await writeEntries(root.handle, dir);
-                const symlinks: Record<string, string> = {};
-                collectSymlinks(dir, "", symlinks);
-                await writeSymlinksFile(root.handle, symlinks);
-            }),
-        );
+    /** Persist every loaded root, waiting for earlier automatic and explicit writes to close. */
+    flush(): Promise<void> {
+        // This flush includes queued mutations; don't start another automatic pass for them.
+        this.#flushScheduled = false;
+        const flushed = this.#flushPromise
+            .catch(() => {})
+            .then(async () => {
+                await Promise.all(
+                    this.#roots.map(async (root) => {
+                        const dir = root.data.dir ?? {};
+                        await writeEntries(root.handle, dir);
+                        const symlinks: Record<string, string> = {};
+                        collectSymlinks(dir, "", symlinks);
+                        await writeSymlinksFile(root.handle, symlinks);
+                    }),
+                );
+            });
+        this.#flushPromise = flushed;
+        return flushed;
     }
 
-    dispose(): void {
-        this.#unsubscribeTouch();
-        void this.flush();
+    /** Stop automatic persistence and wait for the final flush before releasing the backing store. */
+    dispose(): Promise<void> {
+        if (!this.#disposal) {
+            this.#unsubscribeTouch();
+            this.#disposal = this.flush();
+        }
+        return this.#disposal;
     }
 }
