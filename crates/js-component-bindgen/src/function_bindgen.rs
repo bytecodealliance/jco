@@ -2659,7 +2659,18 @@ impl Bindgen for FunctionBindgen<'_> {
                             r#"
                         let cstate = {get_or_create_async_state_fn}({component_idx_expr});
                         cstate.mayLeave = false;
-                        {post_return_call}
+                        try {{
+                            {post_return_call}
+                        }} catch (err) {{
+                            // Record a WebAssembly trap so subsequent entry is rejected.
+                            cstate.markTrapped(err);
+
+                            // The task may already hold a result, but caller completion
+                            // is still pending. Preserve the post-return failure before
+                            // that completion is settled.
+                            task.reject(err);
+                            throw err;
+                        }}
                         cstate.mayLeave = true;
                         task.exit();
                         {ret_stmt}

@@ -395,6 +395,16 @@ world async-return-imported-resource {
   export return-imported-resource-fns;
 }
 
+world post-return-trap {
+  export return-with-cleanup: func(value: u32) -> u32;
+  export ok: func() -> u32;
+}
+
+world async-post-return-trap {
+  export return-with-cleanup: async func(value: u32) -> u32;
+  export ok: func() -> u32;
+}
+
 interface sleep-post-return {
   run: async func(sleep-time-millis: u64);
 }
