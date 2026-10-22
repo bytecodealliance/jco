@@ -209,6 +209,61 @@ the same component fails with the default shim settings.
   world and supports a subset of Node-style APIs. Generated guest declarations
   do not add custom-interface support or full Node.js compatibility.
 
+## Comparing component size and execution speed
+
+After completing the prerequisites, compare Perry, componentize-js
+(StarlingMonkey), and componentize-qjs (QuickJS) from this example directory:
+
+```sh
+pnpm run compare
+```
+
+The [comparison script](./scripts/compare-backends.mjs) builds and transpiles all
+three components, checks that they read the same host file and produce the same
+output, and prints a table. It records the raw samples, tool versions, input hash,
+and host details in `dist/comparison/results.json`.
+
+Example results measured on 2026-10-22 on a shared Linux x86_64 development host
+(Intel Xeon at 2.60 GHz, Node.js 24.21.0), using the bundled 26-byte input file:
+
+| Backend                          | Component bytes | Run (median ms) | Load + run (median ms) | Node process (median ms) |
+| -------------------------------- | --------------: | --------------: | ---------------------: | -----------------------: |
+| Perry                            |      11,970,129 |          218.97 |                 500.85 |                   896.72 |
+| componentize-js (StarlingMonkey) |      16,771,476 |          182.43 |                 615.88 |                 1,253.86 |
+| componentize-qjs (QuickJS)       |       7,122,397 |          120.39 |                 430.48 |                 1,140.64 |
+
+Tool versions: Jco `7b296602` (package version 1.39.0), componentize-js 0.23.0,
+componentize-qjs 0.4.5, and
+Perry 0.5.1659 built at commit `3945beb23ebeca54846a30d89cb4971de59b0c6c`
+with LLVM 22.1.8 and wasi-sdk 34. These are example measurements from one host;
+rerun the comparison for results on your machine.
+
+- **Component bytes:** the uncompressed `.wasm` component, before transpilation.
+- **Run:** the first command call on a fresh instance, including file read, stat, and output.
+- **Load + run:** importing and instantiating the transpiled component, then running it.
+- **Node process:** elapsed time from launching a fresh Node process until it exits,
+  including host setup, component loading, and execution.
+
+All three use explicit asynchronous instantiation with the same host setup.
+Each backend runs in a fresh process for every sample. The default is 20 measured
+samples per backend after three warmup rounds, rotating backend order between
+rounds. File and OS caches are not cleared. Builds and transpilation are excluded
+from the timing. To repeat measurements without rebuilding unchanged components:
+
+```sh
+pnpm run compare --skip-build --samples 50 --warmup 5
+```
+
+The JavaScript backends wrap the guest's statements in the WASI command export
+so StarlingMonkey's build-time preinitialization cannot read the input file.
+Their components include Jco's Node filesystem adapter, mapped to the same host
+file through the Node filesystem capability. Perry lowers those calls directly
+to WASI filesystem operations. QuickJS uses synchronous bindings for this
+synchronous workload; StarlingMonkey uses its default build without Weval AOT.
+These measurements compare this example's complete backend paths. The tiny file
+and console output make them sensitive to host overhead; they do not establish
+general JavaScript throughput or performance under sustained load.
+
 ## Installer details
 
 The example-local [installer](./scripts/install-perry.mjs):
