@@ -4,7 +4,7 @@
     "description": "Read host files through WASI P2 using a Perry-compiled component and Jco",
     "type": "module",
     "scripts": {
-        "install:perry": "node scripts/install-perry.mjs",
+        "setup:perry": "node scripts/install-perry.mjs",
         "gen:types": "node scripts/gen-types.mjs",
         "build:component": "node scripts/build-component.mjs",
         "build": "pnpm run gen:types && pnpm run build:component",
