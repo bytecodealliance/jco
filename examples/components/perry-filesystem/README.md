@@ -218,27 +218,41 @@ After completing the prerequisites, compare Perry, componentize-js
 pnpm run compare
 ```
 
-The [comparison script](./scripts/compare-backends.mjs) builds and transpiles all
-three components, checks that they read the same host file and produce the same
-output, and prints a table. It records the raw samples, tool versions, input hash,
-and host details in `dist/comparison/results.json`.
+The [comparison script](./scripts/compare-backends.mjs) builds all three components,
+applies the same `jco opt` size-optimization pass, and transpiles the optimized
+components. It checks that they read the same host file and produce the same
+output, then prints sizes in KiB/MiB and timings in milliseconds. It records exact
+byte counts, raw samples, tool versions, input hash, and host details in
+`dist/comparison/results.json`.
 
 Example results measured on 2026-10-22 on a shared Linux x86_64 development host
 (Intel Xeon at 2.60 GHz, Node.js 24.21.0), using the bundled 26-byte input file:
 
-| Backend                          | Component bytes | Run (median ms) | Load + run (median ms) | Node process (median ms) |
-| -------------------------------- | --------------: | --------------: | ---------------------: | -----------------------: |
-| Perry                            |      11,970,129 |          218.97 |                 500.85 |                   896.72 |
-| componentize-js (StarlingMonkey) |      16,771,476 |          182.43 |                 615.88 |                 1,253.86 |
-| componentize-qjs (QuickJS)       |       7,122,397 |          120.39 |                 430.48 |                 1,140.64 |
+| Backend | As-built size | Optimized size |
+| --- | ---: | ---: |
+| Perry | 11.42 MiB | 7.40 MiB |
+| componentize-js (StarlingMonkey) | 15.99 MiB | 15.42 MiB |
+| componentize-qjs (QuickJS) | 6.79 MiB | 6.66 MiB |
 
-Tool versions: Jco `7b296602` (package version 1.39.0), componentize-js 0.23.0,
+Timings for the optimized components:
+
+| Backend | Run (median ms) | Load + run (median ms) | Node process (median ms) |
+| --- | ---: | ---: | ---: |
+| Perry | 103.88 | 184.59 | 343.00 |
+| componentize-js (StarlingMonkey) | 69.28 | 253.92 | 504.15 |
+| componentize-qjs (QuickJS) | 43.70 | 166.15 | 441.41 |
+
+Tool versions: Jco `d5ae42df` (package version 1.39.0), componentize-js 0.23.0,
 componentize-qjs 0.4.5, and
 Perry 0.5.1659 built at commit `3945beb23ebeca54846a30d89cb4971de59b0c6c`
-with LLVM 22.1.8 and wasi-sdk 34. These are example measurements from one host;
-rerun the comparison for results on your machine.
+with LLVM 22.1.8 and wasi-sdk 34. All three components were optimized with
+Binaryen 132 using `-Oz --low-memory-unused --enable-bulk-memory
+--enable-reference-types --strip-debug`. These are example measurements from one
+host; rerun the comparison for results on your machine.
 
-- **Component bytes:** the uncompressed `.wasm` component, before transpilation.
+- **Component size:** the uncompressed `.wasm` component before transpilation,
+  reported both as built and after optimization. MiB means 1,048,576 bytes.
+  All timings use the optimized components.
 - **Run:** the first command call on a fresh instance, including file read, stat, and output.
 - **Load + run:** importing and instantiating the transpiled component, then running it.
 - **Node process:** elapsed time from launching a fresh Node process until it exits,
@@ -263,6 +277,35 @@ synchronous workload; StarlingMonkey uses its default build without Weval AOT.
 These measurements compare this example's complete backend paths. The tiny file
 and console output make them sensitive to host overhead; they do not establish
 general JavaScript throughput or performance under sustained load.
+
+### Why is the Perry component still large?
+
+AoT compilation removes the need to interpret this guest's TypeScript, but its
+JavaScript semantics still require runtime support: object layouts, strings,
+closures, exceptions, built-ins, and garbage collection. This pinned Perry build
+links a broad runtime. Its [WASI link path][perry-wasi-link] explicitly skips the
+app-specific runtime rebuild used by native targets, and the
+[WASI runtime build script][perry-wasi-runtime] enables almost all default runtime
+features.
+
+Inspecting the unoptimized core module found 9,630 defined functions and about
+8.12 MiB of Wasm instructions, including broad object/built-in support, GC,
+streams, regular expressions, and filesystem helpers. It also contained about
+1.63 MiB of DWARF debug information and 0.75 MiB of function names. The optimized
+size above removes debug information and runs size optimization and dead-code
+elimination; the remaining payload is mostly runtime code.
+
+The emitted function names contain no SWC parser or dynamic-evaluation
+interpreter functions. Perry supports an optional interpreter for runtime-created
+code, but the evidence here does not attribute the size to that interpreter.
+Instead, general runtime dispatch and built-in registries retain helpers that a
+small statically known guest should ideally avoid. Once helpers are reachable
+through those registries, ordinary linker/Binaryen dead-code elimination cannot
+assume they will never be called. Further reductions would require specializing
+the WASI runtime to the program's needs, then measuring the resulting component.
+
+[perry-wasi-link]: https://github.com/PerryTS/perry/blob/3945beb23ebeca54846a30d89cb4971de59b0c6c/crates/perry/src/commands/compile/link/wasi.rs
+[perry-wasi-runtime]: https://github.com/PerryTS/perry/blob/3945beb23ebeca54846a30d89cb4971de59b0c6c/scripts/wasi_build_runtime.py
 
 ## Installer details
 
