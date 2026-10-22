@@ -49,12 +49,6 @@ must already be available:
   architecture so that `cl.exe` and the linker are on `PATH`. Install Git for
   Windows and Python with their command-line tools on `PATH`.
 
-These are development prerequisites; the installer does not invoke `sudo`, request
-administrator access, modify package repositories, or install system packages.
-LLVM itself is built into the example directory, so LLVM development packages from
-apt, Homebrew, or Chocolatey are not required. CMake and Ninja can also be installed
-in a user-owned Python environment if they are not already available.
-
 You need a **WASI-enabled Perry compiler**, its matching runtime archive, and
 wasi-sdk. The published `@perryts/perry@0.5.1520` package predates the WASI target.
 The local installer builds the compiler and runtime from source at a pinned Git
