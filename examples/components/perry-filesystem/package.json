@@ -5,7 +5,6 @@
     "type": "module",
     "scripts": {
         "setup:perry": "node scripts/install-perry.mjs",
-        "compare": "node scripts/compare-backends.mjs",
         "gen:types": "node scripts/gen-types.mjs",
         "build:component": "node scripts/build-component.mjs",
         "build": "pnpm run gen:types && pnpm run build:component",
