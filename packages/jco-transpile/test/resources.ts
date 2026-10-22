@@ -12,6 +12,84 @@ import { setupAsyncTest } from './helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
 suite('resources', () => {
+    test.each([
+        { name: 'inline', cmRuntimeEsModule: undefined },
+        {
+            name: 'external',
+            cmRuntimeEsModule: new URL('../../jco-cm-runtime/dist/index.js', import.meta.url).href,
+        },
+        {
+            name: 'custom',
+            cmRuntimeEsModule: new URL('./fixtures/custom-runtime-provider.js', import.meta.url).href,
+        },
+    ])('zero resource reps survive ownership and borrow transfers ($name runtime)', async ({ cmRuntimeEsModule }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name: 'zero-resource-rep',
+                path: fileURLToPath(
+                    new URL('./fixtures/components/runtime/zero-resource-rep.component.wat', import.meta.url),
+                ),
+            },
+            jco: { transpile: { extraArgs: { cmRuntimeEsModule } } },
+        });
+
+        try {
+            for (const [index, rep] of [0, 0, 7].entries()) {
+                assert.strictEqual(instance.run(rep), rep);
+                assert.strictEqual(instance.last(), rep, 'the destructor receives the original rep');
+                assert.strictEqual(instance.count(), index + 1, 'only dropping the owned handle runs the destructor');
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('zero host resource reps preserve captured identity and disposal', async () => {
+        class Thing {
+            #value: number;
+            disposed = 0;
+
+            constructor(rep: number, value: number) {
+                this[Symbol.for('cabiRep')] = rep;
+                this.#value = value;
+            }
+
+            getValue() {
+                return this.#value;
+            }
+
+            [Symbol.dispose]() {
+                this.disposed++;
+            }
+        }
+
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name: 'zero-host-resource-rep',
+                path: fileURLToPath(
+                    new URL('./fixtures/components/runtime/zero-host-resource-rep.component.wat', import.meta.url),
+                ),
+                imports: {
+                    'test:zero-rep/api': { Thing },
+                    observe: { default: (thing: Thing) => thing.getValue() },
+                },
+            },
+        });
+
+        try {
+            const zero = new Thing(0, 42);
+            const one = new Thing(1, 99);
+            assert.strictEqual(instance.inspect(zero, one), 42);
+            assert.strictEqual(instance.roundtrip(zero, one), zero);
+            assert.strictEqual(one.disposed, 1);
+            assert.strictEqual(zero.disposed, 0);
+            instance.drop(zero);
+            assert.strictEqual(zero.disposed, 1);
+        } finally {
+            await cleanup();
+        }
+    });
+
     // Ensure trampoline code is called on external object with relevant `this`.
     // see: https://github.com/bytecodealliance/jco/issues/1313
     test('simple imported resource call', async () => {
