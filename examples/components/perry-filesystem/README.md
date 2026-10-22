@@ -36,7 +36,8 @@ For background on components and WASI, see the [Component Model Book][cm-book].
 
 Complete the repository's [normal build/setup][contributing] first.
 
-The local installer targets Linux (glibc), macOS, and Windows on x86_64 and ARM64.
+The local installer, [`scripts/install-perry.mjs`](./scripts/install-perry.mjs),
+targets Linux (glibc), macOS, and Windows on x86_64 and ARM64.
 Use Node.js 24+, pnpm 11, Git, `curl`, CMake 3.20+, Ninja, Python 3.10+, and
 Rust installed through `rustup`. A native C/C++ compiler and the platform SDK
 must already be available:
