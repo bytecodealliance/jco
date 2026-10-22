@@ -70,10 +70,10 @@ The implementation here is based on a JS array of integers. This is done instead
 arrays because we need resizability without reserving a large buffer like resizable typed arrays
 might for the same use case (and unless that changes in future).
 
-The number bits are the lowest 29 bits, while the flag bit for all data values is 1 << 30. We avoid
-the use of the highest bit entirely to not trigger SMI deoptimization.
-
-Each entry consists of a pair of u32s, with each pair either a free list entry, or a data entry.
+Each entry consists of a pair of JavaScript numbers, with each pair either a free list entry
+or a data entry. Resource representations use all 32 bits of a u32, so ownership is stored
+above those bits as an offset of `2 ** 32` (`T_OWN`). Bit 30 (`T_FLAG = 1 << 30`) is used only
+in the scope slot to mark free entries.
 
 #### Free List Entries:
 
@@ -82,32 +82,32 @@ Each entry consists of a pair of u32s, with each pair either a free list entry, 
 |       32 bits       | 32 bits             |
 | 01xxxxxxxxxxxxxxxxx | ################### |
 
-Free list entries use only the first value in the pair, with the high bit always set
+Free list entries use only the first value in the pair, with bit 30 always set
 to indicate that the pair is part of the free list. The first entry pair at indices
 0 and 1 is the free list head, with the initial values of 1 << 30 and 0 respectively.
 Removing the 1 << 30 flag gives 0, which indicates the end of the free list.
 
 #### Data Entries:
 
-|    scope (x, u30)   | own(o), rep(x, u30) |
+|    scope (x, u30)   | own(o) + rep(x, u32) |
 |:-------------------:|:-------------------:|
-|       32 bits       | 32 bits             |
-| 00xxxxxxxxxxxxxxxxx | 0oxxxxxxxxxxxxxxxxx |
+|       32 bits       | 33 bits             |
+| 00xxxxxxxxxxxxxxxxx | oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx |
 
 Data entry pairs consist of a first u30 scope value and a second rep value. The field
 is only called the scope for interface shape consistency, but is actually used for the
-ref count for own handles and the scope id for borrow handles. The high bit is never
+ref count for own handles and the scope id for borrow handles. Bit 30 is never
 set for this first entry to distinguish the pair from the free list. The second value
-in the pair is the rep for the resource, with the high bit in this entry indicating
-if it is an own handle.
+in the pair is the unsigned rep for the resource, plus `T_OWN` for an own handle.
+An entry is owned if this value is at least `T_OWN`; its rep is the value modulo `T_OWN`.
 
 The free list numbering and the handle numbering are the same, indexing by pair, so to
 get from a handle or free list numbering to an index, we multiply by two.
 
 For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
-the array to get the context and rep respectively. If the high bit is set on the
-context, we throw for an invalid handle. The rep value is masked out from the
-ownership high bit. A zero rep is valid for both owned and borrowed resources;
+the array to get the context and rep respectively. If bit 30 is set on the
+context, we throw for an invalid handle. The rep value is taken without the
+ownership offset. A zero rep is valid for both owned and borrowed resources;
 only handle index zero is reserved.
 
 ### `resourceInstance[Symbol.for('cabiRep')]`
@@ -123,6 +123,9 @@ component attached to that optimized low-level import bindgen.
 As a result, when using low-level bindgen, any high-level resource instances MUST define a
 `Symbol.for('cabiRep')` symbol in order for these resources to correctly interact with low-level
 bindgen functions referring to those same resources.
+
+Representations are normalized to unsigned 32-bit values, including capture-table keys.
+A signed JavaScript i32 and the corresponding u32 therefore identify the same representation.
 
 ### `ResourceClass[Symbol.for('cabiDispose')](rep) -> void`
 
