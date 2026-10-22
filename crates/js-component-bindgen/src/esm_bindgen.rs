@@ -4,7 +4,7 @@ use std::fmt::Write;
 use heck::ToLowerCamelCase;
 
 use crate::intrinsics::webidl::WebIdlIntrinsic;
-use crate::names::{LocalNames, maybe_quote_id, maybe_quote_member};
+use crate::names::{LocalNames, js_string_literal, maybe_quote_id, maybe_quote_member};
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
@@ -346,11 +346,19 @@ impl EsmBindgen {
                                 ImportBinding::Interface(iface) => {
                                     let iface_local_name = local_names.create_once(specifier);
                                     iface_imports.push((iface_local_name.to_string(), iface));
-                                    uwriteln!(output, "{iface_local_name} from '{specifier}';");
+                                    uwriteln!(
+                                        output,
+                                        "{iface_local_name} from {};",
+                                        js_string_literal(specifier)
+                                    );
                                 }
                                 ImportBinding::Local(local_names) => {
                                     let local_name = &local_names[0];
-                                    uwriteln!(output, "{local_name} from '{specifier}';");
+                                    uwriteln!(
+                                        output,
+                                        "{local_name} from {};",
+                                        js_string_literal(specifier)
+                                    );
                                     for other_local_name in &local_names[1..] {
                                         uwriteln!(
                                             output,
@@ -430,11 +438,14 @@ impl EsmBindgen {
                             maybe_quote_member(specifier)
                         );
                         for (external_name, local_name) in bound_external_names {
+                            let message = js_string_literal(&format!(
+                                "unexpectedly undefined instance import '{local_name}', was '{external_name}' available at instantiation?"
+                            ));
                             uwriteln!(
                                 output,
                                 r#"
                                 if ({local_name} === undefined) {{
-                                    const err = new Error("unexpectedly undefined instance import '{local_name}', was '{external_name}' available at instantiation?");
+                                    const err = new Error({message});
                                     console.error("ERROR:", err.toString());
                                     throw err;
                                 }}
@@ -454,7 +465,7 @@ impl EsmBindgen {
                         }
                         uwrite!(output, ";\n");
                     } else {
-                        uwriteln!(output, "}} from '{specifier}';");
+                        uwriteln!(output, "}} from {};", js_string_literal(specifier));
                     }
                 }
 
@@ -468,7 +479,11 @@ impl EsmBindgen {
                             maybe_quote_member(specifier)
                         );
                     } else {
-                        uwriteln!(output, "{local_name} from '{specifier}';");
+                        uwriteln!(
+                            output,
+                            "{local_name} from {};",
+                            js_string_literal(specifier)
+                        );
                     }
 
                     for other_local_name in &binding_local_names[1..] {
@@ -512,11 +527,14 @@ impl EsmBindgen {
             for (member_name, local_name) in generated_member_names {
                 // Ensure that the imports we destructured were defined
                 // (if they were not, the user is likely missing an import @ instantiation time)
+                let message = js_string_literal(&format!(
+                    "unexpectedly undefined local import '{local_name}', was '{member_name}' available at instantiation?"
+                ));
                 uwriteln!(
                     output,
                     r#"
                     if ({local_name} === undefined) {{
-                        const err = new Error("unexpectedly undefined local import '{local_name}', was '{member_name}' available at instantiation?");
+                        const err = new Error({message});
                         console.error("ERROR:", err.toString());
                         throw err;
                     }}

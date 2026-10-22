@@ -12,7 +12,9 @@ use wit_bindgen_core::wit_parser::{
 
 use crate::files::Files;
 use crate::function_bindgen::{as_nullable, js_array_ty, maybe_null};
-use crate::names::{LocalNames, RESERVED_KEYWORDS, is_valid_js_identifier, maybe_quote_id};
+use crate::names::{
+    LocalNames, RESERVED_KEYWORDS, is_valid_js_identifier, js_string_literal, maybe_quote_id,
+};
 use crate::source::Source;
 use crate::transpile_bindgen::{AsyncMode, InstantiationMode, TranspileOpts, parse_world_key};
 use crate::{
@@ -1234,7 +1236,7 @@ impl<'a> TsInterface<'a> {
         let escaped_name = if is_valid_js_identifier(&out_name) {
             out_name.to_string()
         } else {
-            format!("'{out_name}'")
+            js_string_literal(&out_name)
         };
 
         if declaration {
@@ -1565,7 +1567,7 @@ impl<'a> TsInterface<'a> {
             }
             let case_name =
                 crate::enum_case_name(&case.name, self.enum_values_screaming_snake_case);
-            self.src.push_str(&format!("'{case_name}'"));
+            self.src.push_str(&js_string_literal(&case_name));
         }
         self.src.push_str(";\n");
         self.type_enum_namespace(name, enum_);

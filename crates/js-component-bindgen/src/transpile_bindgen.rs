@@ -6740,7 +6740,8 @@ pub fn gen_flat_lift_fn_js_expr(
                     };
 
                 lift_metas_expr.push_str(&format!(
-                    "['{name}', {lift_fn_js}, {case_size32}, {case_align32}, {case_flat_count}, {case_flat_types}],",
+                    "[{}, {lift_fn_js}, {case_size32}, {case_align32}, {case_flat_count}, {case_flat_types}],",
+                    js_string_literal(name),
                 ));
             }
             lift_metas_expr.push(']');
@@ -6869,7 +6870,8 @@ pub fn gen_flat_lift_fn_js_expr(
                     instantiator.bindgen.opts.enum_values_screaming_snake_case,
                 );
                 elem_lifts_expr.push_str(&format!(
-                    "['{name}', null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],"
+                    "[{}, null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],",
+                    js_string_literal(&name),
                 ));
             }
             elem_lifts_expr.push(']');
@@ -7407,7 +7409,8 @@ pub fn gen_flat_lower_fn_js_expr(
                 };
 
                 lower_metas_expr.push_str(&format!(
-                    "[ '{name}', {}, {case_size32}, {case_align32}, {case_flat_count} ],",
+                    "[ {}, {}, {case_size32}, {case_align32}, {case_flat_count} ],",
+                    js_string_literal(name),
                     maybe_ty
                         .map(|ty| gen_flat_lower_fn_js_expr(instantiator, &ty, &None))
                         .unwrap_or_else(|| "null".into()),
@@ -7538,7 +7541,8 @@ pub fn gen_flat_lower_fn_js_expr(
                     instantiator.bindgen.opts.enum_values_screaming_snake_case,
                 );
                 elem_lowers_expr.push_str(&format!(
-                    "['{name}', null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],"
+                    "[{}, null, {enum_size32}, {enum_align32}, {enum_payload_offset32}],",
+                    js_string_literal(&name),
                 ));
             }
             elem_lowers_expr.push(']');
