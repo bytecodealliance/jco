@@ -53,6 +53,7 @@
         "build:ts": "tsc -p tsconfig.json",
         "build:types:preview2-shim": "pnpm run build:types:preview2-shim --include-workspace-root",
         "build:test:components": "cargo xtask build-test-components",
+        "bench:componentize-backends": "node test/bench/componentize-backends.mjs",
         "bench:serve-isolation": "node test/bench/serve-request-isolation.js",
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",

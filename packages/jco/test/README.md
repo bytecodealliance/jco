@@ -2,6 +2,11 @@
 
 This folder contains tests for Jco.
 
+## Benchmarks
+
+Opt-in performance benchmarks, run instructions, and recent results are in
+[`bench/README.md`](./bench/README.md).
+
 ## Dependencies
 
 You'll need the following binaries installed in your path or specificed explicitly:
