@@ -4,14 +4,19 @@
     "description": "Read host files through WASI P2 using a Perry-compiled component and Jco",
     "type": "module",
     "scripts": {
+        "install:perry": "node scripts/install-perry.mjs",
+        "test:installer": "node --test scripts/install-perry.test.mjs",
         "gen:types": "node scripts/gen-types.mjs",
         "build:component": "node scripts/build-component.mjs",
         "build": "pnpm run gen:types && pnpm run build:component",
-        "transpile": "node ../../../packages/jco/dist/jco.js transpile dist/component.wasm --bindgen-enable-wasm-exnref -o dist/transpiled",
+        "transpile": "jco transpile dist/component.wasm --bindgen-enable-wasm-exnref -o dist/transpiled",
         "demo": "node scripts/demo.mjs",
         "all": "pnpm run build && pnpm run transpile && pnpm run demo"
     },
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.30.0"
+    },
+    "devDependencies": {
+        "@bytecodealliance/jco": "workspace:*"
     }
 }

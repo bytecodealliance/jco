@@ -328,6 +328,10 @@ importers:
       '@bytecodealliance/preview2-shim':
         specifier: ^0.30.0
         version: 0.30.0
+    devDependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
 
   examples/components/string-reverse:
     dependencies:
