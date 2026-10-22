@@ -34,11 +34,7 @@ For background on components and WASI, see the [Component Model Book][cm-book].
 
 ## Prerequisites
 
-This example declares `@bytecodealliance/jco` as `workspace:*` to use the current
-checkout's CLI until the required Perry flags are available in a published
-release. Package scripts use its `jco` command; Node helpers resolve that same
-workspace package without hard-coded repository paths. Complete the repository's
-[normal build/setup][contributing] first.
+Complete the repository's [normal build/setup][contributing] first.
 
 The local installer targets Linux (glibc), macOS, and Windows on x86_64 and ARM64.
 Use Node.js 24+, pnpm 11, Git, `curl`, CMake 3.20+, Ninja, Python 3.10+, and
