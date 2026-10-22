@@ -54,28 +54,26 @@ and WASI support is a recent addition that is not included in
 `@perryts/perry@0.5.1520`. The local installer builds the compiler and matching
 runtime from a pinned Git commit and installs wasi-sdk to link the component.
 
-## Quickstart
-
-After completing the repository build/setup, run from the repository root.
-These commands work in a POSIX shell or Windows Developer PowerShell:
+Install Perry from this example directory:
 
 ```sh
-pnpm install --frozen-lockfile
-pnpm run build
-cd examples/components/perry-filesystem
 pnpm run setup:perry
-pnpm run all
 ```
 
 For source build details, setup options, and pin updates, see
 [Installer details](#installer-details).
 
-The `all` script will:
+## Quickstart
 
-- Copy the bundled WASI P2 reference world and generate guest declarations.
-- Compile the TypeScript guest with the selected Perry executable.
-- Transpile the component into `dist/transpiled/`.
-- Run the Node.js demo against `data/input.txt`.
+After completing the prerequisites, run from the repository root:
+
+```sh
+cd examples/components/perry-filesystem
+pnpm run all
+```
+
+This generates guest declarations, builds and transpiles the component, and runs
+the demo against `data/input.txt`.
 
 <details>
 <summary><h4>Expected output</h4></summary>
@@ -89,24 +87,19 @@ Perry read: hello from the filesystem
 
 </details>
 
-If a WASI-enabled `@perryts/perry` package is installed in this project and there
-is no example-local toolchain, leave `JCO_PERRY_CLI_PATH` unset and run `pnpm run all`. The environment variable is
-a convenience provided by this example's build script; the Jco CLI's direct
-selection option is `--backend-perry-cli-path`.
-
 ## Step-by-step
 
 ### Install dependencies and select the compiler
 
-From this example directory, install the Preview 2 shim:
+From this example directory, install the package dependencies and Perry:
 
 ```console
 pnpm install
+pnpm run setup:perry
 ```
 
-If you followed the quickstart, the example selects the local toolchain
-automatically. To use a project-installed compiler instead, install your chosen
-WASI-enabled package explicitly, for example
+The example selects the local toolchain automatically. To use a project-installed
+compiler instead, install your chosen WASI-enabled package explicitly, for example
 `pnpm add --save-dev /path/to/perry-cli-package`.
 Its manifest must expose a `perry` executable as described in the
 [backend guide][perry-guide]. A source-built executable can instead be selected
