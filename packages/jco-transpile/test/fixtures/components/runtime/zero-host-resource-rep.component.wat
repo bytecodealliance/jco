@@ -1,0 +1,25 @@
+(component
+  (import "test:zero-rep/api" (instance $api
+    (export "thing" (type (sub resource)))))
+  (alias export $api "thing" (type $thing))
+  (import "observe" (func $observe (param "thing" (borrow $thing)) (result u32)))
+  (core func $observe (canon lower (func $observe)))
+  (core func $drop (canon resource.drop $thing))
+  (core module $m
+    (import "" "observe" (func $observe (param i32) (result i32)))
+    (import "" "drop" (func $drop (param i32)))
+    (func (export "roundtrip") (param i32 i32) (result i32)
+      (call $drop (local.get 1))
+      (local.get 0))
+    (func (export "inspect") (param i32 i32) (result i32)
+      (call $observe (local.get 0)))
+    (func (export "drop") (param i32) (call $drop (local.get 0))))
+  (core instance $i (instantiate $m (with "" (instance
+    (export "observe" (func $observe))
+    (export "drop" (func $drop))))))
+  (func (export "roundtrip") (param "first" (own $thing)) (param "second" (own $thing)) (result (own $thing))
+    (canon lift (core func $i "roundtrip")))
+  (func (export "inspect") (param "first" (borrow $thing)) (param "second" (borrow $thing)) (result u32)
+    (canon lift (core func $i "inspect")))
+  (func (export "drop") (param "thing" (own $thing))
+    (canon lift (core func $i "drop"))))

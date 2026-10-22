@@ -74,7 +74,8 @@ suite('External Component Model runtime', () => {
 
                     assert.strictEqual(instance.run(42), 42);
                     assert.strictEqual(instance.run(24), 24);
-                    assert.strictEqual(tableGetCallCount, 2);
+                    assert.strictEqual(instance.run(0), 0);
+                    assert.strictEqual(tableGetCallCount, 3);
                     assert.throws(() => instance.invalid(0), WebAssembly.RuntimeError, 'unknown handle index 0');
                     assert.throws(() => instance.run(42), WebAssembly.RuntimeError, 'cannot enter component instance');
                 } finally {
