@@ -72,7 +72,7 @@ These commands work in a POSIX shell or Windows Developer PowerShell:
 pnpm install --frozen-lockfile
 pnpm run build
 cd examples/components/perry-filesystem
-pnpm run install:perry
+pnpm run setup:perry
 pnpm run all
 ```
 
@@ -101,7 +101,7 @@ tens of gigabytes of free disk space, and potentially hours on a slower machine.
 The default is at most two parallel jobs to limit memory use. To adjust it:
 
 ```sh
-pnpm run install:perry --jobs 4
+pnpm run setup:perry --jobs 4
 ```
 
 Build files are retained after a failure; rerun the same command to resume.
@@ -110,7 +110,7 @@ with development headers, static libraries on Linux/macOS, and the three target
 backends, you can skip the LLVM source build:
 
 ```sh
-pnpm run install:perry --llvm-prefix /path/to/llvm-22
+pnpm run setup:perry --llvm-prefix /path/to/llvm-22
 ```
 
 On Windows, quote paths containing spaces and use a development installation
@@ -126,7 +126,7 @@ is no need to rebuild Perry for each run.
 ### Updating the pinned version
 
 The manually maintained pins live in [`scripts/perry-toolchain.json`](./scripts/perry-toolchain.json).
-Change `perryRef` to a full, tested Git commit SHA, then rerun `pnpm run install:perry`.
+Change `perryRef` to a full, tested Git commit SHA, then rerun `pnpm run setup:perry`.
 Both the compiler and runtime are built from this ref; the script never follows
 `main` or a moving latest release. Update the Rust/LLVM/SDK pins and SHA-256 values
 in that file as needed when adopting a new Perry revision. A stale local install
@@ -258,7 +258,7 @@ the same component fails with the default shim settings.
 - **Installer cannot find a command:** check the prerequisites above and ensure
   their executables are on `PATH`. On Windows, use Developer PowerShell with
   the C++ build environment configured for the host architecture.
-- **Source build runs out of memory:** rerun `pnpm run install:perry --jobs 1`;
+- **Source build runs out of memory:** rerun `pnpm run setup:perry --jobs 1`;
   the build cache is retained. Ensure there is enough disk space as well.
 - **Compiler lacks WASI support:** `--target wasm` is a different Perry target.
   Select a compiler built with `target-wasi`, not the older npm release.

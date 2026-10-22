@@ -57,7 +57,7 @@ export async function localCompiler(options, env = process.env, directory = tool
                 }
                 throw directoryError;
             }
-            throw new Error('The local Perry toolchain is incomplete. Run pnpm run install:perry.');
+            throw new Error('The local Perry toolchain is incomplete. Run pnpm run setup:perry.');
         }
         throw error;
     }
@@ -67,7 +67,7 @@ export async function localCompiler(options, env = process.env, directory = tool
         installed.arch !== process.arch ||
         JSON.stringify(installed.recipe) !== JSON.stringify(pins)
     ) {
-        throw new Error('The local Perry toolchain does not match this example or host. Run pnpm run install:perry.');
+        throw new Error('The local Perry toolchain does not match this example or host. Run pnpm run setup:perry.');
     }
     const compilerEnv = compilerEnvironment(installed, env);
     // Explicit runtime/SDK overrides remain available for an externally configured toolchain.
