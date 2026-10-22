@@ -67,61 +67,8 @@ pnpm run setup:perry
 pnpm run all
 ```
 
-The example-local [installer](./scripts/install-perry.mjs):
-
-1. Downloads and verifies the LLVM 22.1.8 source archive, then builds its
-   development headers and libraries with the X86, AArch64, and WebAssembly
-   backends. On Windows it also builds the `LLVM-C.dll`/`LLVM-C.lib` pair that
-   Perry requires.
-2. Downloads and verifies the wasi-sdk 34 archive for the current OS and CPU.
-3. Installs the host-specific Rust `nightly-2026-10-08` toolchain and its `wasm32-wasip2` target through
-   `rustup`, without changing the default Rust toolchain.
-4. Fetches Perry commit `3945beb23ebeca54846a30d89cb4971de59b0c6c` and builds
-   the WASI-enabled compiler and runtime from that same checkout, using its
-   Cargo lockfile and portable runtime build script.
-5. Links a small WASI component to check the complete toolchain before recording
-   the successful installation.
-
-Downloads, sources, build caches, and installed tools stay in this example's
-ignored `.perry-toolchain/` directory. Rust toolchains and Cargo dependencies
-also use rustup's and Cargo's normal user-owned caches. The installer does not
-use the repository's Linux-only CI provisioning script.
-
-**The first LLVM source build is substantial:** allow several gigabytes of memory,
-tens of gigabytes of free disk space, and potentially hours on a slower machine.
-The default is at most two parallel jobs to limit memory use. To adjust it:
-
-```sh
-pnpm run setup:perry --jobs 4
-```
-
-Build files are retained after a failure; rerun the same command to resume.
-Downloaded archives are checked again before reuse. If you already have LLVM 22
-with development headers, static libraries on Linux/macOS, and the three target
-backends, you can skip the LLVM source build:
-
-```sh
-pnpm run setup:perry --llvm-prefix /path/to/llvm-22
-```
-
-On Windows, quote paths containing spaces and use a development installation
-containing `bin/LLVM-C.dll` and `lib/LLVM-C.lib`; the installer checks these files.
-A Clang-only installation or wasi-sdk alone is insufficient.
-
-The example automatically reads `.perry-toolchain/install.json` when building.
-It selects the local compiler, runtime and SDK and supplies the LLVM DLL search
-path on Windows. No shell-specific `export` or `$env:` commands are needed.
-In a new shell, return to this example directory and run `pnpm run all`; there
-is no need to rebuild Perry for each run.
-
-### Updating the pinned version
-
-The manually maintained pins live in [`scripts/perry-toolchain.json`](./scripts/perry-toolchain.json).
-Change `perryRef` to a full, tested Git commit SHA, then rerun `pnpm run setup:perry`.
-Both the compiler and runtime are built from this ref; the script never follows
-`main` or a moving latest release. Update the Rust/LLVM/SDK pins and SHA-256 values
-in that file as needed when adopting a new Perry revision. A stale local install
-is rejected until it has been rebuilt with the new pins.
+For source build details, setup options, and pin updates, see
+[Installer details](#installer-details).
 
 The `all` script will:
 
@@ -265,6 +212,64 @@ the same component fails with the default shim settings.
 - **Custom interfaces or Node.js APIs:** Perry supplies its own WASI command
   world and supports a subset of Node-style APIs. Generated guest declarations
   do not add custom-interface support or full Node.js compatibility.
+
+## Installer details
+
+The example-local [installer](./scripts/install-perry.mjs):
+
+1. Downloads and verifies the LLVM 22.1.8 source archive, then builds its
+   development headers and libraries with the X86, AArch64, and WebAssembly
+   backends. On Windows it also builds the `LLVM-C.dll`/`LLVM-C.lib` pair that
+   Perry requires.
+2. Downloads and verifies the wasi-sdk 34 archive for the current OS and CPU.
+3. Installs the host-specific Rust `nightly-2026-10-08` toolchain and its `wasm32-wasip2` target through
+   `rustup`, without changing the default Rust toolchain.
+4. Fetches Perry commit `3945beb23ebeca54846a30d89cb4971de59b0c6c` and builds
+   the WASI-enabled compiler and runtime from that same checkout, using its
+   Cargo lockfile and portable runtime build script.
+5. Links a small WASI component to check the complete toolchain before recording
+   the successful installation.
+
+Downloads, sources, build caches, and installed tools stay in this example's
+ignored `.perry-toolchain/` directory. Rust toolchains and Cargo dependencies
+also use rustup's and Cargo's normal user-owned caches. The installer does not
+use the repository's Linux-only CI provisioning script.
+
+**The first LLVM source build is substantial:** allow several gigabytes of memory,
+tens of gigabytes of free disk space, and potentially hours on a slower machine.
+The default is at most two parallel jobs to limit memory use. To adjust it:
+
+```sh
+pnpm run setup:perry --jobs 4
+```
+
+Build files are retained after a failure; rerun the same command to resume.
+Downloaded archives are checked again before reuse. If you already have LLVM 22
+with development headers, static libraries on Linux/macOS, and the three target
+backends, you can skip the LLVM source build:
+
+```sh
+pnpm run setup:perry --llvm-prefix /path/to/llvm-22
+```
+
+On Windows, quote paths containing spaces and use a development installation
+containing `bin/LLVM-C.dll` and `lib/LLVM-C.lib`; the installer checks these files.
+A Clang-only installation or wasi-sdk alone is insufficient.
+
+The example automatically reads `.perry-toolchain/install.json` when building.
+It selects the local compiler, runtime and SDK and supplies the LLVM DLL search
+path on Windows. No shell-specific `export` or `$env:` commands are needed.
+In a new shell, return to this example directory and run `pnpm run all`; there
+is no need to rebuild Perry for each run.
+
+### Updating the pinned version
+
+The manually maintained pins live in [`scripts/perry-toolchain.json`](./scripts/perry-toolchain.json).
+Change `perryRef` to a full, tested Git commit SHA, then rerun `pnpm run setup:perry`.
+Both the compiler and runtime are built from this ref; the script never follows
+`main` or a moving latest release. Update the Rust/LLVM/SDK pins and SHA-256 values
+in that file as needed when adopting a new Perry revision. A stale local install
+is rejected until it has been rebuilt with the new pins.
 
 [perry-guide]: ../../../docs/src/perry.md
 [contributing]: ../../../docs/src/contributing.md
