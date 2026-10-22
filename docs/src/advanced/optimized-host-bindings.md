@@ -107,7 +107,8 @@ get from a handle or free list numbering to an index, we multiply by two.
 For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
 the array to get the context and rep respectively. If the high bit is set on the
 context, we throw for an invalid handle. The rep value is masked out from the
-ownership high bit, also throwing for an invalid zero rep.
+ownership high bit. A zero rep is valid for both owned and borrowed resources;
+only handle index zero is reserved.
 
 ### `resourceInstance[Symbol.for('cabiRep')]`
 

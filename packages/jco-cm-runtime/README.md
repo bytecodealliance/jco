@@ -66,9 +66,11 @@ CM runtime API:
 - Slot `handle << 1` contains the scope. Bit 30 marks a freed entry.
 - Slot `(handle << 1) + 1` contains the representation, with bit 30 indicating
   ownership. Clear that bit to obtain `rep`. A freed entry stores zero.
-- A slot past the end of the table, a decoded representation of zero or a freed
-  entry must trap with `unknown handle index <handle>` using the selected
-  `WebAssembly.RuntimeError` constructor.
+- A representation of zero is valid for both owned and borrowed entries. Only
+  handle index zero is reserved.
+- A slot past the end of the table, a hole or a freed entry must trap with
+  `unknown handle index <handle>` using the selected `WebAssembly.RuntimeError`
+  constructor.
 
 Incompatible changes to this table encoding or these method contracts require
 a new JavaScript CM runtime API version, independently of the npm package version.
