@@ -49,10 +49,10 @@ must already be available:
   architecture so that `cl.exe` and the linker are on `PATH`. Install Git for
   Windows and Python with their command-line tools on `PATH`.
 
-You need a **WASI-enabled Perry compiler**, its matching runtime archive, and
-wasi-sdk. The published `@perryts/perry@0.5.1520` package predates the WASI target.
-The local installer builds the compiler and runtime from source at a pinned Git
-commit; `pnpm install` alone does not install them.
+This example builds Perry from source because it needs a WASI-enabled compiler,
+and WASI support is a recent addition that is not included in
+`@perryts/perry@0.5.1520`. The local installer builds the compiler and matching
+runtime from a pinned Git commit and installs wasi-sdk to link the component.
 
 ## Quickstart
 
