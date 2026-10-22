@@ -15,11 +15,19 @@ const output = join(root, 'dist', 'comparison');
 const jco = fileURLToPath(new URL('jco.js', import.meta.resolve('@bytecodealliance/jco')));
 const requireJco = createRequire(jco);
 const backends = ['perry', 'starlingmonkey', 'quickjs'];
+const optimizationArgs = [
+    '-Oz',
+    '--low-memory-unused',
+    '--enable-bulk-memory',
+    '--enable-reference-types',
+    '--strip-debug',
+];
 const { values } = parseArgs({
     options: {
         samples: { type: 'string', default: '20' },
         warmup: { type: 'string', default: '3' },
         'skip-build': { type: 'boolean', default: false },
+        'wasm-opt-bin': { type: 'string' },
     },
 });
 const samples = Number(values.samples);
@@ -55,6 +63,16 @@ function median(numbers) {
     const sorted = [...numbers].sort((a, b) => a - b);
     const middle = Math.floor(sorted.length / 2);
     return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function componentSize(bytes) {
+    if (bytes < 1024) {
+        return `${bytes} B`;
+    }
+    if (bytes < 1024 ** 2) {
+        return `${(bytes / 1024).toFixed(2)} KiB`;
+    }
+    return `${(bytes / 1024 ** 2).toFixed(2)} MiB`;
 }
 
 await mkdir(output, { recursive: true });
@@ -110,9 +128,21 @@ ${statements.map((statement) => statement.getFullText(source)).join('\n')}
                 ...(backend === 'quickjs' ? ['--backend-qjs-disable-async'] : []),
             ]);
         }
+        const optimized = join(directory, 'component.opt.wasm');
+        command(jco, [
+            'opt',
+            component,
+            '-o',
+            optimized,
+            ...(values['wasm-opt-bin'] ? ['--wasm-opt-bin', values['wasm-opt-bin']] : []),
+            '--',
+            ...optimizationArgs,
+        ]);
         command(jco, [
             'transpile',
-            component,
+            optimized,
+            '--name',
+            'component',
             '--bindgen-enable-wasm-exnref',
             '--instantiation',
             'async',
@@ -142,6 +172,16 @@ ${statements.map((statement) => statement.getFullText(source)).join('\n')}
                 jco: await packageVersion('@bytecodealliance/jco'),
                 componentizeJs: await packageVersion('@bytecodealliance/componentize-js'),
                 componentizeQjs: await packageVersion('componentize-qjs'),
+                optimizationArgs,
+                wasmOptVersion: execFileSync(
+                    process.execPath,
+                    [values['wasm-opt-bin'] || requireJco.resolve('binaryen/bin/wasm-opt'), '--version'],
+                    {
+                        cwd: root,
+                        encoding: 'utf8',
+                    },
+                ).trim(),
+                wasmOptLauncher: values['wasm-opt-bin'] ?? null,
                 perryRef: !process.env.JCO_PERRY_CLI_PATH && perryCliPath ? pins.perryRef : null,
                 perryCliPath,
                 perryVersion,
@@ -154,6 +194,7 @@ ${statements.map((statement) => statement.getFullText(source)).join('\n')}
 
 const build = JSON.parse(await readFile(join(output, 'build.json'), 'utf8'));
 assert.equal(build.guestSha256, guestSha256, 'Guest changed; rerun without --skip-build');
+assert.deepEqual(build.optimizationArgs, optimizationArgs, 'Optimization changed; rerun without --skip-build');
 const input = await readFile(join(root, 'data', 'input.txt'));
 const expected = `Perry size: ${input.length}\nPerry read: ${input.toString('utf8')}\n`.replaceAll('\r\n', '\n');
 const measurements = Object.fromEntries(backends.map((backend) => [backend, []]));
@@ -186,6 +227,7 @@ const rows = await Promise.all(
     backends.map(async (backend) => ({
         backend,
         componentBytes: (await stat(join(output, backend, 'component.wasm'))).size,
+        optimizedComponentBytes: (await stat(join(output, backend, 'component.opt.wasm'))).size,
         runMs: median(measurements[backend].map((sample) => sample.runMs)),
         loadAndRunMs: median(measurements[backend].map((sample) => sample.loadAndRunMs)),
         processMs: median(measurements[backend].map((sample) => sample.processMs)),
@@ -207,11 +249,15 @@ const report = {
     results: rows,
 };
 await writeFile(join(output, 'results.json'), `${JSON.stringify(report, null, 2)}\n`);
-console.log('\n| Backend | Component bytes | Run (median ms) | Load + run (median ms) | Node process (median ms) |');
-console.log('| --- | ---: | ---: | ---: | ---: |');
+console.log(
+    '\n| Backend | As-built size | Optimized size | Run (median ms) | Load + run (median ms) | Node process (median ms) |',
+);
+console.log('| --- | ---: | ---: | ---: | ---: | ---: |');
 for (const row of rows) {
     console.log(
-        `| ${row.backend} | ${row.componentBytes} | ${row.runMs.toFixed(2)} | ${row.loadAndRunMs.toFixed(2)} | ${row.processMs.toFixed(2)} |`,
+        `| ${row.backend} | ${componentSize(row.componentBytes)} | ${componentSize(row.optimizedComponentBytes)} | ${row.runMs.toFixed(2)} | ${row.loadAndRunMs.toFixed(2)} | ${row.processMs.toFixed(2)} |`,
     );
 }
-console.log(`\n${samples} samples/backend after ${warmup} warmups; details: dist/comparison/results.json`);
+console.log(
+    `\nOptimized components: ${samples} samples/backend after ${warmup} warmups; details: dist/comparison/results.json`,
+);
