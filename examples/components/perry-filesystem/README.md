@@ -132,11 +132,6 @@ Both the compiler and runtime are built from this ref; the script never follows
 in that file as needed when adopting a new Perry revision. A stale local install
 is rejected until it has been rebuilt with the new pins.
 
-Run `pnpm run test:installer` to check platform selection, download verification,
-process arguments, and toolchain selection. The installer tests simulate native
-build tools for the six host combinations; they do not compile LLVM or establish
-that builds have been run on all six hosts.
-
 The `all` script will:
 
 - Copy the bundled WASI P2 reference world and generate guest declarations.
