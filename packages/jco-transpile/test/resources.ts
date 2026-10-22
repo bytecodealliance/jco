@@ -22,7 +22,7 @@ suite('resources', () => {
             name: 'custom',
             cmRuntimeEsModule: new URL('./fixtures/custom-runtime-provider.js', import.meta.url).href,
         },
-    ])('zero resource reps survive ownership and borrow transfers ($name runtime)', async ({ cmRuntimeEsModule }) => {
+    ])('resource reps survive own and borrow transfers ($name runtime)', async ({ cmRuntimeEsModule }) => {
         const { instance, cleanup } = await setupAsyncTest({
             component: {
                 name: 'zero-resource-rep',
@@ -34,7 +34,8 @@ suite('resources', () => {
         });
 
         try {
-            for (const [index, rep] of [0, 0, 7].entries()) {
+            const reps = [0, 0, 7, 0x3fffffff, 0x40000000, 0x80000010, 0xc0000010, 0xffffffff];
+            for (const [index, rep] of reps.entries()) {
                 assert.strictEqual(instance.run(rep), rep);
                 assert.strictEqual(instance.last(), rep, 'the destructor receives the original rep');
                 assert.strictEqual(instance.count(), index + 1, 'only dropping the owned handle runs the destructor');
@@ -44,7 +45,7 @@ suite('resources', () => {
         }
     });
 
-    test('zero host resource reps preserve captured identity and disposal', async () => {
+    test('host resource reps preserve captured identity and disposal', async () => {
         class Thing {
             #value: number;
             disposed = 0;
@@ -77,14 +78,19 @@ suite('resources', () => {
         });
 
         try {
-            const zero = new Thing(0, 42);
-            const one = new Thing(1, 99);
-            assert.strictEqual(instance.inspect(zero, one), 42);
-            assert.strictEqual(instance.roundtrip(zero, one), zero);
-            assert.strictEqual(one.disposed, 1);
-            assert.strictEqual(zero.disposed, 0);
-            instance.drop(zero);
-            assert.strictEqual(zero.disposed, 1);
+            // Core Wasm returns i32s as signed JS numbers. Both spellings of a rep
+            // must find the captured object when lifting a borrow, an own, or a drop.
+            for (const rep of [0, 0x40000000, 0x80000010, -0x7ffffff0, 0xc0000010, -0x3ffffff0, 0xffffffff, -1]) {
+                const first = new Thing(rep, 42);
+                const second = new Thing(1, 99);
+                assert.strictEqual(instance.inspect(first, second), 42);
+                assert.strictEqual(instance.roundtrip(first, second), first);
+                assert.strictEqual(first.getValue(), 42);
+                assert.strictEqual(second.disposed, 1);
+                assert.strictEqual(first.disposed, 0);
+                instance.drop(first);
+                assert.strictEqual(first.disposed, 1);
+            }
         } finally {
             await cleanup();
         }
@@ -210,7 +216,7 @@ suite('resources', () => {
             const { Thing } = instance['test:resource-rep/api'];
             // Below, at and above bit 30, and with bit 31 set too
             for (const rep of [
-                0x10, 0x3fffffff, 0x40000000, 0x40000010, 0x7ffffff0, 0x80000010, 0xc0000010, 0xfffffff0,
+                0, 0x10, 0x3fffffff, 0x40000000, 0x40000010, 0x7ffffff0, 0x80000010, 0xc0000010, 0xfffffff0, 0xffffffff,
             ]) {
                 const thing = new Thing(rep);
                 assert.strictEqual(thing.rep(), rep, `rep 0x${rep.toString(16)}`);

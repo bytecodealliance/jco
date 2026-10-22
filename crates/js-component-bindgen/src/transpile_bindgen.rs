@@ -7706,7 +7706,7 @@ pub fn gen_flat_lower_fn_js_expr(
                                   }}
                                   let handle = obj[{symbol_resource_handle}];
                                   if (!handle) {{
-                                    const rep = obj[{symbol_resource_rep}] ?? ++captureCnt{rid};
+                                    const rep = (obj[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
                                     captureTable{rid}.set(rep, obj);
                                     handle = {create_own_fn}(handleTable{table_idx}, rep);
                                   }}
