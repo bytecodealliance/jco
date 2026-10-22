@@ -148,21 +148,28 @@ fn is_valid_js_identifier_char(code: char) -> bool {
     }
 }
 
+/// Render `name` as an object property key, quoting it as a string literal
+/// unless it is a plain identifier.
+///
+/// Names from core modules are only required to be UTF-8, so they must be
+/// fully escaped before they reach generated code.
 pub fn maybe_quote_id(name: &str) -> String {
     if is_valid_js_identifier(name) {
         name.to_string()
     } else {
-        format!("'{name}'")
+        js_string_literal(name)
     }
 }
 
+/// Render `name` as a member access, using a computed member with an escaped
+/// string literal unless it is a plain identifier.
 pub fn maybe_quote_member(name: &str) -> String {
     if name == "*" {
         "".to_string()
     } else if is_valid_js_identifier(name) {
         format!(".{name}")
     } else {
-        format!("['{name}']")
+        format!("[{}]", js_string_literal(name))
     }
 }
 
