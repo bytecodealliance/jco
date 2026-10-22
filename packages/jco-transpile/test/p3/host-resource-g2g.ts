@@ -24,12 +24,21 @@ suite('guest->guest call into a callee holding host resources', () => {
 
     for (const asyncMode of ['sync', 'jspi']) {
         for (const syncCount of [0, 1, 3]) {
-            test.concurrent(`${asyncMode}: async import result after ${syncCount} sync handle(s)`, async () => {
+            test.concurrent.each([
+                { name: 'assigned', repBase: undefined },
+                { name: 'bit 30', repBase: 0x40000000 },
+                { name: 'unsigned bit 31', repBase: 0x80000010 },
+                { name: 'signed bit 31', repBase: -0x7ffffff0 },
+            ])(`${asyncMode}: async result after ${syncCount} sync handles ($name reps)`, async ({ repBase }) => {
                 const disposed: string[] = [];
+                let created = 0;
                 class Thing {
                     #name: string;
                     constructor(name: string) {
                         this.#name = name;
+                        if (repBase !== undefined) {
+                            this[Symbol.for('cabiRep')] = repBase + created++;
+                        }
                     }
                     name() {
                         return this.#name;
