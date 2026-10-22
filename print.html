@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a5fb6b0c.js";
+            window.path_to_searchindex_js = "searchindex-146ce4a5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b62a3033.js"></script>
@@ -4780,9 +4780,10 @@ to be taken to ensure the full component model semantics are followed in this pr
 <p>The implementation here is based on a JS array of integers. This is done instead of using typed
 arrays because we need resizability without reserving a large buffer like resizable typed arrays
 might for the same use case (and unless that changes in future).</p>
-<p>The number bits are the lowest 29 bits, while the flag bit for all data values is 1 &lt;&lt; 30. We avoid
-the use of the highest bit entirely to not trigger SMI deoptimization.</p>
-<p>Each entry consists of a pair of u32s, with each pair either a free list entry, or a data entry.</p>
+<p>Each entry consists of a pair of JavaScript numbers, with each pair either a free list entry
+or a data entry. Resource representations use all 32 bits of a u32, so ownership is stored
+above those bits as an offset of <code>2 ** 32</code> (<code>T_OWN</code>). Bit 30 (<code>T_FLAG = 1 &lt;&lt; 30</code>) is used only
+in the scope slot to mark free entries.</p>
 <h4 id="free-list-entries"><a class="header" href="#free-list-entries">Free List Entries:</a></h4>
 <div class="table-wrapper">
 <table>
@@ -4795,7 +4796,7 @@ the use of the highest bit entirely to not trigger SMI deoptimization.</p>
 </tbody>
 </table>
 </div>
-<p>Free list entries use only the first value in the pair, with the high bit always set
+<p>Free list entries use only the first value in the pair, with bit 30 always set
 to indicate that the pair is part of the free list. The first entry pair at indices
 0 and 1 is the free list head, with the initial values of 1 &lt;&lt; 30 and 0 respectively.
 Removing the 1 &lt;&lt; 30 flag gives 0, which indicates the end of the free list.</p>
@@ -4803,26 +4804,26 @@ Removing the 1 &lt;&lt; 30 flag gives 0, which indicates the end of the free lis
 <div class="table-wrapper">
 <table>
 <thead>
-<tr><th style="text-align: center">scope (x, u30)</th><th style="text-align: center">own(o), rep(x, u30)</th></tr>
+<tr><th style="text-align: center">scope (x, u30)</th><th style="text-align: center">own(o) + rep(x, u32)</th></tr>
 </thead>
 <tbody>
-<tr><td style="text-align: center">32 bits</td><td style="text-align: center">32 bits</td></tr>
-<tr><td style="text-align: center">00xxxxxxxxxxxxxxxxx</td><td style="text-align: center">0oxxxxxxxxxxxxxxxxx</td></tr>
+<tr><td style="text-align: center">32 bits</td><td style="text-align: center">33 bits</td></tr>
+<tr><td style="text-align: center">00xxxxxxxxxxxxxxxxx</td><td style="text-align: center">oxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx</td></tr>
 </tbody>
 </table>
 </div>
 <p>Data entry pairs consist of a first u30 scope value and a second rep value. The field
 is only called the scope for interface shape consistency, but is actually used for the
-ref count for own handles and the scope id for borrow handles. The high bit is never
+ref count for own handles and the scope id for borrow handles. Bit 30 is never
 set for this first entry to distinguish the pair from the free list. The second value
-in the pair is the rep for the resource, with the high bit in this entry indicating
-if it is an own handle.</p>
+in the pair is the unsigned rep for the resource, plus <code>T_OWN</code> for an own handle.
+An entry is owned if this value is at least <code>T_OWN</code>; its rep is the value modulo <code>T_OWN</code>.</p>
 <p>The free list numbering and the handle numbering are the same, indexing by pair, so to
 get from a handle or free list numbering to an index, we multiply by two.</p>
 <p>For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
-the array to get the context and rep respectively. If the high bit is set on the
-context, we throw for an invalid handle. The rep value is masked out from the
-ownership high bit. A zero rep is valid for both owned and borrowed resources;
+the array to get the context and rep respectively. If bit 30 is set on the
+context, we throw for an invalid handle. The rep value is taken without the
+ownership offset. A zero rep is valid for both owned and borrowed resources;
 only handle index zero is reserved.</p>
 <h3 id="resourceinstancesymbolforcabirep"><a class="header" href="#resourceinstancesymbolforcabirep"><code>resourceInstance[Symbol.for('cabiRep')]</code></a></h3>
 <p>Normally imported resource classes do not have to define any special symbols, as they are assigned
@@ -4834,6 +4835,8 @@ component attached to that optimized low-level import bindgen.</p>
 <p>As a result, when using low-level bindgen, any high-level resource instances MUST define a
 <code>Symbol.for('cabiRep')</code> symbol in order for these resources to correctly interact with low-level
 bindgen functions referring to those same resources.</p>
+<p>Representations are normalized to unsigned 32-bit values, including capture-table keys.
+A signed JavaScript i32 and the corresponding u32 therefore identify the same representation.</p>
 <h3 id="resourceclasssymbolforcabidisposerep---void"><a class="header" href="#resourceclasssymbolforcabidisposerep---void"><code>ResourceClass[Symbol.for('cabiDispose')](rep) -&gt; void</code></a></h3>
 <p>Just like <code>Symbol.dispose</code> is used in high-level bindgen for imported resources to provide a
 destructor for when an own handle to a resource is dropped, low-level bindgen provides this hook
