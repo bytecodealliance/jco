@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-a4d58327.js";
+            window.path_to_searchindex_js = "searchindex-a5fb6b0c.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-b62a3033.js"></script>
@@ -4822,7 +4822,8 @@ get from a handle or free list numbering to an index, we multiply by two.</p>
 <p>For example, to access a handle n, we read the pair of values n * 2 and n * 2 + 1 in
 the array to get the context and rep respectively. If the high bit is set on the
 context, we throw for an invalid handle. The rep value is masked out from the
-ownership high bit, also throwing for an invalid zero rep.</p>
+ownership high bit. A zero rep is valid for both owned and borrowed resources;
+only handle index zero is reserved.</p>
 <h3 id="resourceinstancesymbolforcabirep"><a class="header" href="#resourceinstancesymbolforcabirep"><code>resourceInstance[Symbol.for('cabiRep')]</code></a></h3>
 <p>Normally imported resource classes do not have to define any special symbols, as they are assigned
 rep numbers when passed in.</p>
