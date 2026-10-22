@@ -190,6 +190,50 @@ export async function buildLlvm(
     return llvm;
 }
 
+async function existingInstallation(directory, platform, arch, llvmPrefix) {
+    try {
+        const installed = JSON.parse(await readFile(join(directory, 'install.json'), 'utf8'));
+        if (
+            installed?.perryRef !== pins.perryRef ||
+            installed.platform !== platform ||
+            installed.arch !== arch ||
+            JSON.stringify(installed.recipe) !== JSON.stringify(pins) ||
+            !['compiler', 'runtime', 'sdk', 'llvm'].every((key) => typeof installed[key] === 'string') ||
+            (llvmPrefix && installed.llvm !== (await realpath(resolve(llvmPrefix))))
+        ) {
+            return;
+        }
+        const { executable } = hostTools(platform, arch);
+        const files = [
+            installed.compiler,
+            join(installed.runtime, 'libperry_runtime.a'),
+            join(installed.sdk, 'bin', executable('clang')),
+            join(installed.sdk, 'bin', executable('llvm-ar')),
+            join(installed.sdk, 'bin', executable('wasm-ld')),
+            join(installed.llvm, 'bin', executable('llvm-config')),
+            join(installed.llvm, 'include', 'llvm', 'Target', 'TargetMachine.h'),
+            ...(platform === 'win32'
+                ? [join(installed.llvm, 'bin', 'LLVM-C.dll'), join(installed.llvm, 'lib', 'LLVM-C.lib')]
+                : []),
+        ];
+        for (const file of files) {
+            const info = await stat(file);
+            if (!info.isFile() || info.size === 0) {
+                return;
+            }
+        }
+        if (!(await stat(join(installed.sdk, 'share', 'wasi-sysroot'))).isDirectory()) {
+            return;
+        }
+        return installed;
+    } catch (error) {
+        if (error instanceof SyntaxError || error.code === 'ENOENT' || error.code === 'ENOTDIR') {
+            return;
+        }
+        throw error;
+    }
+}
+
 export async function install({
     jobs = Math.min(2, availableParallelism()),
     llvmPrefix,
@@ -202,6 +246,11 @@ export async function install({
     const { executable, python, rustToolchain, sdkArchive, sdkChecksum } = hostTools(platform, arch);
     assert.match(pins.perryRef, /^[a-f0-9]{40}$/, 'Pin perryRef to a full Git commit SHA');
     assert.ok(Number.isInteger(jobs) && jobs > 0, '--jobs must be a positive integer');
+    const installed = await existingInstallation(directory, platform, arch, llvmPrefix);
+    if (installed) {
+        console.log('Pinned Perry toolchain is already installed. Nothing to do.');
+        return installed;
+    }
     await mkdir(directory, { recursive: true });
     directory = await realpath(directory);
     for (const name of ['downloads', 'build', 'bin', 'runtime']) {
