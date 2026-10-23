@@ -55,17 +55,99 @@ node componentize-backends.mjs \
   --perry-source /path/to/perry-source
 ```
 
-The script checks every sample's output, prints sizes in KiB/MiB and timings in
-milliseconds, and writes exact byte counts, raw timing samples, tool versions,
+The script checks every build and runtime sample's output, prints sizes in KiB/MiB
+and timings in milliseconds, and writes exact byte counts, raw timing samples, tool versions,
 input hashes, and host details to
 `packages/jco/test/output/bench/componentize-backends/results.json`.
 Component artifacts and build metadata are retained in the same ignored directory.
+Use `--output-dir /path/to/artifacts` to select another location; pass the same
+location when using `--skip-build`.
 Use `--samples 50 --warmup 5` to change the default sample counts, or
 `--skip-build` to reuse unchanged components without requiring the toolchain.
 Cached builds from the old runtime recipe are rejected and must be rebuilt.
 The optional `--wasm-opt-bin` setting is passed to Jco's optimizer launcher hook.
-Runtime compilation, componentization, optimization, and transpilation time are
-excluded from the measurements.
+Componentization and optimization are measured separately from runtime execution.
+Compiler/engine/runtime builds and transpilation are excluded from both timing groups.
+
+### Compilation speed
+
+A full run measures **TS/JS source to a complete, usable Wasm component**, including
+the JavaScript engine for StarlingMonkey and QuickJS. It does not measure a
+script-only payload that requires a separately deployed engine.
+
+The compilation table reports three medians:
+
+- **TS/JS → component:** wall time around a fresh `jco componentize` process,
+  through successful exit after writing the component. This includes CLI startup,
+  TypeScript lowering and bundling, backend compilation or preinitialization,
+  linking/component encoding, and writing the output. Perry's CLI capability
+  probe is included as part of the normal Jco workflow.
+- **Optimize:** wall time around a fresh `jco opt` process on that sample's
+  component, using the common optimization flags.
+- **TS/JS → optimized component:** median of each sample's componentization plus
+  optimization time. This need not equal the sum of the first two medians.
+
+The default is **five measured builds per backend after one warmup round**.
+`--build-samples` and `--build-warmup` control these independently of the runtime
+`--samples` and `--warmup` settings. Builds run sequentially, rotating backend order
+between rounds. Every build starts with fresh output and WIT directories; Jco's
+injected WIT imports cannot accumulate between samples. Prebuilt engine binaries,
+Perry's prepared runtime archive, and OS/filesystem caches are reused. These are
+warm-cache application builds, not clean-machine toolchain bootstrap timings.
+
+The benchmark prepares its command wrapper and WIT fixture outside the timer;
+the timed CLI still performs the actual TypeScript transformation and bundling.
+Perry compiler installation, its one-time runtime archive preparation, dependency
+installation, transpilation and validation are also outside the timer. Every
+as-built **and** optimized component is transpiled and executed after the timed
+commands; incorrect output fails the benchmark instead of becoming a timing
+sample. The final optimized artifacts are reused for runtime measurements.
+
+```sh
+node componentize-backends.mjs \
+  --perry-cli-path /path/to/perry \
+  --perry-source /path/to/perry-source \
+  --build-samples 5 --build-warmup 1 \
+  --samples 20 --warmup 3
+```
+
+`build.json` and `results.json` retain compilation medians, every raw sample's
+stage timings and output sizes, round/order, sampling settings, host details,
+input hash, and measurement timestamps under `build.compilation` in the results.
+`--skip-build` runs only runtime measurements and explicitly labels compilation
+results as reused with their original timestamp. Older build receipts without
+compilation measurements remain usable but show no compilation table.
+
+For environments needing a componentize-js build-time shim workaround,
+`JCO_BENCH_BUILD_PRELOAD=/absolute/path/to/preload.mjs` adds Node's `--import` only
+to componentization processes. The path is recorded in build metadata and its
+execution cost is included in compilation time. It is not loaded during
+optimization, validation, or runtime samples. Leave it unset for normal builds.
+
+### Compilation results (2026-10-23)
+
+Five measured builds per backend after one warmup, on the Linux x86_64 Intel
+Xeon 2.60 GHz host with Node.js 24.21.0:
+
+| Backend        | TS/JS → component (median ms) | Optimize (median ms) | TS/JS → optimized component (median ms) |
+| -------------- | ----------------------------: | -------------------: | --------------------------------------: |
+| perry          |                       3328.06 |             10924.11 |                                14098.32 |
+| starlingmonkey |                       6839.72 |             23536.53 |                                30376.25 |
+| quickjs        |                       2619.39 |              3500.37 |                                 6119.76 |
+
+QuickJS was fastest for both endpoints on this fixture. These measurements use
+componentize-qjs 0.4.5, componentize-js 0.23.0 without Weval AOT, the pinned Perry
+0.5.1659 compiler and reduced runtime recipe described above, and native Binaryen
+132 through `--wasm-opt-bin`. They do not use the experimental local Perry
+specialization or QuickJS 0.5's size runtime. Jco was rebuilt from the comparison
+branch for this run; package versions alone do not identify local compiler changes.
+
+Output artifacts were written to tmpfs; normal OS/file caches were retained.
+The componentize-js 0.23.0 WIT-splicer shim needed the build-only preopen workaround
+described above; its startup cost is included. All 18 builds (warmups included)
+passed execution checks for both their as-built and optimized components. Results
+on other source graphs, hosts, disks, or tool versions can differ; this is not a
+universal compiler-throughput ranking.
 
 ### Recent results
 
@@ -99,7 +181,7 @@ it was disabled for timings.
 
 - **Component size:** the uncompressed `.wasm` component before transpilation,
   reported both as built and after optimization. MiB means 1,048,576 bytes.
-  All timings use the optimized components.
+  Runtime timings use the optimized components; compilation measures both output stages.
 - **Run:** the first command call on a fresh instance, including file read, stat, and output.
 - **Load + run:** importing and instantiating the transpiled component, then running it.
 - **Node process:** elapsed time from launching a fresh Node process until it exits,
@@ -108,8 +190,8 @@ it was disabled for timings.
 All three use explicit asynchronous instantiation with the same host setup.
 Each backend runs in a fresh process for every sample. The default is 20 measured
 samples per backend after three warmup rounds, rotating backend order between
-rounds. File and OS caches are not cleared. Builds and transpilation are excluded
-from the timing. To repeat measurements without rebuilding unchanged components:
+rounds. File and OS caches are not cleared. The runtime timing group excludes
+builds and transpilation; compilation is reported separately. To repeat measurements without rebuilding unchanged components:
 
 ```sh
 node componentize-backends.mjs --skip-build --samples 50 --warmup 5
