@@ -70,6 +70,14 @@ function portOf(server: { address(): string | { port: number } | null }): number
     }
     return address.port;
 }
+function expectVerifiedHttpsResponse(result: RunResult): void {
+    expect(result.report.error, "Verified HTTPS request failed").toBe("");
+    expect(result.report.status).toBeGreaterThanOrEqual(200);
+    expect(result.report.status).toBeLessThan(600);
+    expect(result.handshakes).toBe(1);
+    expect(result.connections).toBeGreaterThanOrEqual(1);
+    expect(result.after).toEqual(result.before);
+}
 async function run(root: string, url: string, policy = "trusted", body = "", servername = ""): Promise<RunResult> {
     try {
         const result = await exec(process.execPath, [runner, root, url, policy, body, servername], {
@@ -112,27 +120,26 @@ for (const backend of ["starlingmonkey"]) {
         test.concurrent("public network: verified GET https://example.com/", async () => {
             // Intentionally enabled: this case needs public DNS and outbound TCP/443.
             const result = await run(root, "https://example.com/", "public");
-            expect(result.report.error, "Public endpoint requires working DNS/TCP/443 and system trust").toBe("");
-            expect(result.report.status).toBe(200);
-            expect(result.report.body).toContain("Example Domain");
-            expect(result.handshakes).toBe(1);
-            expect(result.connections).toBeGreaterThanOrEqual(1);
-            expect(result.after).toEqual(result.before);
+            // A valid HTTP error response still proves TLS transport succeeded.
+            // The local cases below check exact status codes and response bodies.
+            expectVerifiedHttpsResponse(result);
         }, 25_000);
 
         test.concurrent.each([
-            ["verified custom host CA, SNI, ALPN, and fragmented response", "trusted", "localhost", "", true],
-            ["fragmented large request writes", "trusted", "localhost", "large", true],
-            ["untrusted certificate", "public", "localhost", "", false],
-            ["hostname mismatch", "trusted", "wrong.example", "", false],
-            ["missing TLS capability without plaintext fallback", "denied", "localhost", "", false],
+            ["verified custom host CA, SNI, ALPN, and fragmented response", "trusted", "localhost", "", true, 200],
+            ["HTTP 503 is a verified HTTPS response", "trusted", "localhost", "", true, 503],
+            ["fragmented large request writes", "trusted", "localhost", "large", true, 200],
+            ["untrusted certificate", "public", "localhost", "", false, 200],
+            ["hostname mismatch", "trusted", "wrong.example", "", false, 200],
+            ["missing TLS capability without plaintext fallback", "denied", "localhost", "", false, 200],
         ])(
             "%s",
-            async (_name, policy, servername, body, success) => {
+            async (_name, policy, servername, body, success, status) => {
                 const peers = new Set<Socket>();
                 let secureConnections = 0;
                 let negotiated: { servername: string | false | null; alpn: string | false | null } | undefined;
                 let received = 0;
+                const responseBody = status === 503 ? "temporarily unavailable" : "hello verified TLS";
                 const server = createTlsServer({ cert, key, ALPNProtocols: ["http/1.1"] }, (socket) => {
                     secureConnections++;
                     negotiated = { servername: socket.servername, alpn: socket.alpnProtocol };
@@ -150,7 +157,7 @@ for (const backend of ["starlingmonkey"]) {
                         }
                         responded = true;
                         const response = Buffer.from(
-                            "HTTP/1.1 200 OK\r\nContent-Length: 18\r\nConnection: close\r\n\r\nhello verified TLS",
+                            `HTTP/1.1 ${status} ${status === 503 ? "Service Unavailable" : "OK"}\r\nContent-Length: ${Buffer.byteLength(responseBody)}\r\nConnection: close\r\n\r\n${responseBody}`,
                         );
                         let offset = 0;
                         function fragment(): void {
@@ -180,9 +187,9 @@ for (const backend of ["starlingmonkey"]) {
                     const result = await run(root, `https://127.0.0.1:${portOf(server)}/`, policy, body, servername);
                     expect(result.after).toEqual(result.before);
                     if (success) {
-                        expect(result.report).toEqual({ status: 200, body: "hello verified TLS", error: "" });
+                        expectVerifiedHttpsResponse(result);
+                        expect(result.report).toEqual({ status, body: responseBody, error: "" });
                         expect(negotiated).toEqual({ servername: "localhost", alpn: "http/1.1" });
-                        expect(result.handshakes).toBe(1);
                         expect(secureConnections).toBe(1);
                         if (body) {
                             expect(received).toBe(150_000);

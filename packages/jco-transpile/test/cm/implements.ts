@@ -101,10 +101,10 @@ suite('Implements (labeled imports/exports)', () => {
         assert.deepStrictEqual([...imports].sort(), ['kv', 'primary', 'secondary']);
         assert.deepStrictEqual(exports, [['events', 'instance']]);
         const source = Buffer.from(files['labeled.js']).toString();
-        assert.ok(source.includes("from 'primary'"));
-        assert.ok(source.includes("from 'secondary'"));
+        assert.match(source, /from ['"]primary['"]/);
+        assert.match(source, /from ['"]secondary['"]/);
         // The bucket resource binds to the `kv` label import
-        assert.ok(source.includes("from 'kv'"));
+        assert.match(source, /from ['"]kv['"]/);
     });
 
     test.concurrent('transpile labeled imports with interface-id mapping', async () => {
@@ -122,8 +122,8 @@ suite('Implements (labeled imports/exports)', () => {
         assert.ok(imports.includes('./secondary.js'));
         assert.ok(!imports.includes('primary'));
         const source = Buffer.from(files['labeled.js']).toString();
-        assert.ok(source.includes("from './my-logger.js'"));
-        assert.ok(source.includes("from './secondary.js'"));
+        assert.match(source, /from ['"]\.\/my-logger\.js['"]/);
+        assert.match(source, /from ['"]\.\/secondary\.js['"]/);
     });
 
     test.concurrent('transpile same resource interface under multiple labels', async () => {
@@ -139,8 +139,8 @@ suite('Implements (labeled imports/exports)', () => {
         assert.deepStrictEqual([...imports].sort(), ['./a-store.js', './b-store.js']);
         const source = Buffer.from(files['multistore.js']).toString();
         // Each label binds its own resource class from its own module
-        const aImport = source.match(/import \{([^}]*)\} from '\.\/a-store\.js'/);
-        const bImport = source.match(/import \{([^}]*)\} from '\.\/b-store\.js'/);
+        const aImport = source.match(/import \{([^}]*)\} from ['"]\.\/a-store\.js['"]/);
+        const bImport = source.match(/import \{([^}]*)\} from ['"]\.\/b-store\.js['"]/);
         assert.ok(aImport && bImport, 'both labels are imported');
         const bucketEntries = (importList: string) =>
             importList.split(',').filter((entry) => entry.trim().startsWith('Bucket')).length;

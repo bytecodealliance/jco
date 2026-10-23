@@ -52,7 +52,7 @@ suite('screaming-case enums', () => {
             assert.notProperty(runtime.instance.api, 'Status');
 
             const declarations = await readFile(join(runtime.esModuleOutputDir, 'interfaces/api.d.ts'), 'utf8');
-            assert.include(declarations, "export type Status = 'VALUE_A' | 'HTTP_ERROR';");
+            assert.match(declarations, /export type Status = ['"]VALUE_A['"] \| ['"]HTTP_ERROR['"];/);
         } finally {
             await runtime.cleanup();
         }
@@ -128,7 +128,7 @@ suite('screaming-case enums', () => {
             useNamespaceObjects: true,
         });
         const declarations = Buffer.from(files['interfaces/test-namespace-objects-api.d.ts']).toString();
-        assert.include(declarations, "export type Direction = 'NORTH' | 'SOUTH';");
-        assert.include(declarations, "readonly North: 'NORTH',");
+        assert.match(declarations, /export type Direction = ['"]NORTH['"] \| ['"]SOUTH['"];/);
+        assert.match(declarations, /readonly North: ['"]NORTH['"],/);
     });
 });
