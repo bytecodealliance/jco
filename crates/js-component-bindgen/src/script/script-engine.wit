@@ -1,0 +1,29 @@
+package jco:script-engine@0.1.0;
+
+/// Loads JavaScript into a Jco script engine component at runtime.
+///
+/// A script engine is a JavaScript engine (StarlingMonkey or QuickJS) componentized
+/// against the union of the worlds its scripts target. Its world exports forward to
+/// whichever script is currently loaded, so one engine instance can run scripts one
+/// after the other. Scripts loaded into the same engine instance share a JavaScript
+/// realm, so this is not a multi-tenancy boundary.
+interface script-loader {
+    /// Evaluate `source` and make its exports the implementation behind the engine's
+    /// world exports, replacing any previously loaded script.
+    ///
+    /// `source` is an ES module as packaged by `jco componentize --script-only`: imports
+    /// hoisted to the top, one export list at the end, and no top-level await. It may import
+    /// any import of the engine world by its WIT specifier.
+    load: func(name: string, source: string) -> result<_, string>;
+
+    /// Drop the loaded script. World exports fail until another script is loaded.
+    unload: func();
+
+    /// Name of the loaded script, if any.
+    loaded: func() -> option<string>;
+}
+
+/// The world every script engine exports, in addition to the merged script worlds.
+world engine {
+    export script-loader;
+}
