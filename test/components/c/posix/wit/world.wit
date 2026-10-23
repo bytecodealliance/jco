@@ -1,0 +1,5 @@
+package test:posix-pthread-conformance;
+
+world biz {
+  export run: func() -> u32;
+}

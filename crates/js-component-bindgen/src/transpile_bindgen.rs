@@ -1351,22 +1351,23 @@ impl<'a> Instantiator<'a, '_> {
             return;
         }
 
-        let create_task = self.bindgen.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::CreateNewCurrentTask,
+        let create_implicit_thread = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
         ));
-        let clear_task = self
+        let clear_thread = self
             .bindgen
-            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask));
-        let set_task_meta = self
+            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentThread));
+        let set_thread_meta = self
             .bindgen
-            .intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
-        let clear_task_meta = self
+            .intrinsic(Intrinsic::SetGlobalCurrentThreadMetaFn);
+        let clear_thread_meta = self
             .bindgen
-            .intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
+            .intrinsic(Intrinsic::ClearGlobalCurrentThreadMetaFn);
 
         let mut setup = source::Source::default();
         for component_idx in &component_indices {
             uwriteln!(setup, "let _initTaskID{};", component_idx.as_u32());
+            uwriteln!(setup, "let _initThreadID{};", component_idx.as_u32());
         }
         uwriteln!(setup, "try {{");
         for component_idx in &component_indices {
@@ -1374,13 +1375,17 @@ impl<'a> Instantiator<'a, '_> {
             uwriteln!(
                 setup,
                 r#"
-                  [, _initTaskID{component_idx}] = {create_task}({{
+                {{
+                  const {{ taskID, threadID }} = {create_implicit_thread}({{
                       componentIdx: {component_idx},
                       isAsync: false,
                       callingWasmExport: true,
                       entryFnName: '<initialize>',
                   }});
-                  {set_task_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
+                  _initTaskID{component_idx} = taskID;
+                  _initThreadID{component_idx} = threadID;
+                  {set_thread_meta}({{ componentIdx: {component_idx}, taskID, threadID }});
+                }}
                 "#,
             );
         }
@@ -1392,8 +1397,8 @@ impl<'a> Instantiator<'a, '_> {
             uwriteln!(
                 self.src.js_init,
                 r#"
-                  {clear_task_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
-                  {clear_task}({component_idx}, _initTaskID{component_idx});
+                  {clear_thread_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx}, threadID: _initThreadID{component_idx} }});
+                  {clear_thread}({component_idx}, _initTaskID{component_idx}, _initThreadID{component_idx});
                 "#,
             );
         }
@@ -1714,6 +1719,11 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::FutureDropReadable { .. }
                 | Trampoline::FutureDropWritable { .. }
                 | Trampoline::ThreadYield { .. }
+                | Trampoline::ThreadSuspend { .. }
+                | Trampoline::ThreadSuspendThenResume { .. }
+                | Trampoline::ThreadSuspendThenPromote { .. }
+                | Trampoline::ThreadYieldThenResume { .. }
+                | Trampoline::ThreadYieldThenPromote { .. }
         )
     }
 
@@ -1737,7 +1747,13 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::StreamCancelWrite { async_, .. }
             | Trampoline::FutureCancelRead { async_, .. }
             | Trampoline::FutureCancelWrite { async_, .. } => !async_,
-            Trampoline::WaitableSetWait { .. } | Trampoline::ThreadYield { .. } => true,
+            Trampoline::WaitableSetWait { .. }
+            | Trampoline::ThreadYield { .. }
+            | Trampoline::ThreadSuspend { .. }
+            | Trampoline::ThreadSuspendThenResume { .. }
+            | Trampoline::ThreadSuspendThenPromote { .. }
+            | Trampoline::ThreadYieldThenResume { .. }
+            | Trampoline::ThreadYieldThenPromote { .. } => true,
             // The sync start call trampoline is always a Suspending import: a
             // sync-lowered call into an async-lifted callee suspends the caller
             // while the callee blocks. Every core function that can reach it
@@ -1898,6 +1914,12 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::SyncStartCall { .. }
                 | Trampoline::TaskCancel { .. }
                 | Trampoline::TaskReturn { .. }
+                | Trampoline::ThreadIndex { .. }
+                | Trampoline::ThreadNewIndirect { .. }
+                | Trampoline::ThreadResumeLater { .. }
+                | Trampoline::ThreadSuspend { .. }
+                | Trampoline::ThreadSuspendThenPromote { .. }
+                | Trampoline::ThreadSuspendThenResume { .. }
                 | Trampoline::ThreadYield { .. }
                 | Trampoline::ThreadYieldThenPromote { .. }
                 | Trampoline::ThreadYieldThenResume { .. }
@@ -1907,6 +1929,26 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::WaitableSetPoll { .. }
                 | Trampoline::WaitableSetWait { .. }
         )
+    }
+
+    fn thread_concede_trampoline(
+        &mut self,
+        i: u32,
+        intrinsic: AsyncTaskIntrinsic,
+        cancellable: bool,
+        instance: u32,
+    ) {
+        let concede_fn = self.bindgen.intrinsic(Intrinsic::AsyncTask(intrinsic));
+        let suspending_wrap_fn = self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+        uwriteln!(
+            self.src.js,
+            r#"
+              const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({instance}, {concede_fn}.bind(null, {{
+                  isCancellable: {cancellable},
+                  componentIdx: {instance},
+              }})));
+            "#
+        );
     }
 
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
@@ -3638,37 +3680,112 @@ impl<'a> Instantiator<'a, '_> {
                 cancellable,
                 instance,
             } => {
-                let yield_fn = self
+                self.thread_concede_trampoline(
+                    i,
+                    AsyncTaskIntrinsic::ThreadYield,
+                    *cancellable,
+                    instance.as_u32(),
+                );
+            }
+
+            Trampoline::ThreadIndex { instance } => {
+                let thread_index_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
-                let suspending_wrap_fn =
-                    self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadIndex));
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {thread_index_fn}.bind(null, {instance});\n",
+                    instance = instance.as_u32(),
+                );
+            }
+
+            Trampoline::ThreadNewIndirect {
+                instance,
+                start_func_table_idx,
+                ..
+            } => {
+                let thread_new_indirect_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadNewIndirect));
+                let component_instance_idx = instance.as_u32();
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {thread_new_indirect_fn}.bind(null, {{
+                        componentIdx: {component_instance_idx},
+                        getStartFuncTableFn: () => table{start_func_table},
+                    }});\n",
+                    start_func_table = start_func_table_idx.as_u32(),
+                );
+            }
+
+            Trampoline::ThreadSuspend {
+                cancellable,
+                instance,
+            } => {
+                self.thread_concede_trampoline(
+                    i,
+                    AsyncTaskIntrinsic::ThreadSuspend,
+                    *cancellable,
+                    instance.as_u32(),
+                );
+            }
+            Trampoline::ThreadSuspendThenResume {
+                cancellable,
+                instance,
+            } => {
+                self.thread_concede_trampoline(
+                    i,
+                    AsyncTaskIntrinsic::ThreadSuspendThenResume,
+                    *cancellable,
+                    instance.as_u32(),
+                );
+            }
+            Trampoline::ThreadSuspendThenPromote {
+                cancellable,
+                instance,
+            } => {
+                self.thread_concede_trampoline(
+                    i,
+                    AsyncTaskIntrinsic::ThreadSuspendThenPromote,
+                    *cancellable,
+                    instance.as_u32(),
+                );
+            }
+            Trampoline::ThreadYieldThenResume {
+                cancellable,
+                instance,
+            } => {
+                self.thread_concede_trampoline(
+                    i,
+                    AsyncTaskIntrinsic::ThreadYieldThenResume,
+                    *cancellable,
+                    instance.as_u32(),
+                );
+            }
+            Trampoline::ThreadYieldThenPromote {
+                cancellable,
+                instance,
+            } => {
+                self.thread_concede_trampoline(
+                    i,
+                    AsyncTaskIntrinsic::ThreadYieldThenPromote,
+                    *cancellable,
+                    instance.as_u32(),
+                );
+            }
+            Trampoline::ThreadResumeLater { instance } => {
+                let resume_later_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadResumeLater));
                 let component_instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_instance_idx}, {yield_fn}.bind(null, {{
-                          isCancellable: {cancellable},
+                      const trampoline{i} = {resume_later_fn}.bind(null, {{
                           componentIdx: {component_instance_idx},
-                      }})));
-                    "#,
+                      }});
+                    "#
                 );
-            }
-            Trampoline::ThreadIndex { .. } => todo!("Trampoline::ThreadIndex"),
-            Trampoline::ThreadNewIndirect { .. } => todo!("Trampoline::ThreadNewIndirect"),
-            Trampoline::ThreadSuspend { .. } => todo!("Trampoline::ThreadSuspend"),
-            Trampoline::ThreadSuspendThenResume { .. } => {
-                todo!("Trampoline::ThreadSuspendThenResume")
-            }
-            Trampoline::ThreadResumeLater { .. } => todo!("Trampoline::ThreadResumeLater"),
-            Trampoline::ThreadYieldThenPromote { .. } => {
-                todo!("Trampoline::ThreadYieldThenPromote")
-            }
-            Trampoline::ThreadSuspendThenPromote { .. } => {
-                todo!("Trampoline::ThreadSuspendThenPromote")
-            }
-            Trampoline::ThreadYieldThenResume { .. } => {
-                todo!("Trampoline::ThreadYieldThenResume")
             }
 
             Trampoline::Trap(trap) => {
@@ -3857,7 +3974,12 @@ impl<'a> Instantiator<'a, '_> {
 
             GlobalInitializer::Resource(_) => {}
 
-            GlobalInitializer::ExtractTable(_) => {}
+            GlobalInitializer::ExtractTable(t) => {
+                let def = self.core_export_var_name(&t.export);
+                let idx = t.index.as_u32();
+                uwriteln!(self.src.js, "let table{idx};");
+                uwriteln!(self.src.js_init, "table{idx} = {def};");
+            }
         }
     }
 
@@ -3889,17 +4011,17 @@ impl<'a> Instantiator<'a, '_> {
                 .as_u32();
 
             self.add_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-            self.add_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+            self.add_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
             let current_task_get_fn =
                 Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-            let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+            let get_global_current_thread_meta_fn = Intrinsic::GetGlobalCurrentThreadMetaFn.name();
 
             let dst = import_obj.entry("env").or_insert(BTreeMap::new());
             let prev = dst.insert(
                 "setTempRet0",
                 format!(
                     "(x) => {{
-                const {{ taskID }} = {get_global_current_task_meta_fn}({component_instance_idx});
+                const {{ taskID }} = {get_global_current_thread_meta_fn}({component_instance_idx});
 
                 const taskMeta = {current_task_get_fn}({component_instance_idx}, taskID);
                 if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
@@ -3942,11 +4064,11 @@ impl<'a> Instantiator<'a, '_> {
         {
             let set_task_meta = self
                 .bindgen
-                .intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+                .intrinsic(Intrinsic::SetGlobalCurrentThreadMetaFn);
             let idx = component_idx.as_u32();
             let import_object = imports.strip_prefix(", ").unwrap_or("{}");
             imports = format!(
-                ", ({set_task_meta}({{ componentIdx: {idx}, taskID: _initTaskID{idx} }}), {import_object})"
+                ", ({set_task_meta}({{ componentIdx: {idx}, taskID: _initTaskID{idx}, threadID: _initThreadID{idx} }}), {import_object})"
             );
         }
 
@@ -3971,13 +4093,31 @@ impl<'a> Instantiator<'a, '_> {
                     )
             )
         });
+        let uses_thread_suspension = args.iter().any(|def| {
+            matches!(
+                def,
+                CoreDef::Trampoline(index)
+                    if matches!(
+                        &self.translation.trampolines[*index],
+                        Trampoline::ThreadYield { .. }
+                            | Trampoline::ThreadSuspend { .. }
+                            | Trampoline::ThreadSuspendThenResume { .. }
+                            | Trampoline::ThreadSuspendThenPromote { .. }
+                            | Trampoline::ThreadYieldThenResume { .. }
+                            | Trampoline::ThreadYieldThenPromote { .. }
+                    )
+            )
+        });
         // Mutable imported/exported tables make indirect calls unsafe to run
         // directly, but do not by themselves change a component export's API
         // into a Promise-returning one. Only known suspending targets propagate
         // across that public binding boundary.
         let async_export_functions =
             self.modules[module_idx].suspending_functions(args, false, |def| {
-                self.core_def_requires_async_export(def, crosses_sync_call_boundary)
+                self.core_def_requires_async_export(
+                    def,
+                    crosses_sync_call_boundary || uses_thread_suspension,
+                )
             });
         let i = self.instances.push(module_idx);
         let async_analysis_instance =
@@ -5168,7 +5308,7 @@ impl<'a> Instantiator<'a, '_> {
             result_type_idx,
         } = args;
 
-        let (memory, realloc) =
+        let (memory, mut realloc) =
             if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
                 memory,
                 realloc,
@@ -5191,6 +5331,33 @@ impl<'a> Instantiator<'a, '_> {
             } else {
                 (None, None)
             };
+
+        // Wrap the realloc function to disable leaving the component state while it is executing
+        if let Some(realloc_fn) = realloc.take() {
+            let get_component_state = self.bindgen.intrinsic(Intrinsic::Component(
+                ComponentIntrinsic::GetOrCreateAsyncState,
+            ));
+            let component_idx = opts.instance.as_u32();
+            realloc = Some(format!(
+                r#"((...args) => {{
+                    const state = {get_component_state}({component_idx});
+                    const previousMayLeave = state.mayLeave;
+                    state.mayLeave = false;
+                    let result;
+                    try {{
+                        result = {realloc_fn}(...args);
+                    }} catch (err) {{
+                        state.mayLeave = previousMayLeave;
+                        throw err;
+                    }}
+                    if (result && typeof result.then === 'function') {{
+                        return Promise.resolve(result).finally(() => {{ state.mayLeave = previousMayLeave; }});
+                    }}
+                    state.mayLeave = previousMayLeave;
+                    return result;
+                }})"#
+            ));
+        }
 
         let post_return = opts.post_return.map(|idx| {
             format!(

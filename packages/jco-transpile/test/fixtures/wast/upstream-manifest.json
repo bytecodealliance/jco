@@ -76,6 +76,10 @@
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
         {
+            "name": "during-sync-call-may-block-if-other-ready-threads.wast",
+            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+        },
+        {
             "name": "empty-wait.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
@@ -105,6 +109,10 @@
         },
         {
             "name": "same-component-stream-future.wast",
+            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+        },
+        {
+            "name": "self-switch-traps.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
         {
