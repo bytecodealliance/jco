@@ -2,7 +2,7 @@ import { Buffer } from "node:buffer";
 import { Readable, Writable } from "node:stream";
 import { invalidArgType, outOfRange } from "../errors/core.js";
 import type { FsCore } from "./core.js";
-import type { PathLike, OpenMode, Mode } from "./public-types.js";
+import type { Mode, OpenMode, PathLike } from "./public-types.js";
 
 export interface FileStreamOptions {
   fd?: number;
@@ -57,7 +57,9 @@ function offset(value: number | undefined, name: string): number | undefined {
 }
 
 /** Incremental guest streams over the filesystem's typed descriptor operations. */
-export function createFsStreams(core: FsCore): FsStreams {
+export function createFsStreams(
+  core: Pick<FsCore, "openSync" | "readSync" | "writeSync" | "closeSync" | "fsyncSync">,
+): FsStreams {
   class ReadStream extends Readable {
     fd: number | null;
     readonly path: PathLike;

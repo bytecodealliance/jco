@@ -66,6 +66,42 @@ supported `node:` specifier while bundling.
 The application retains normal Node.js source code and does not need `jco-std`
 as a direct dependency solely for built-in compatibility.
 
+### Keeping filesystem bundles small
+
+Use named imports when you only need a few filesystem operations:
+
+```ts
+import { readFileSync, statSync } from 'node:fs';
+
+export function read(path: string) {
+  return { size: statSync(path).size, contents: readFileSync(path, 'utf8') };
+}
+```
+
+The synchronous functions share validation and host-error handling without
+constructing the callback, promise, descriptor-handle, or stream facades. Named
+callback and promise imports also retain only their operations. Default imports
+and dynamic namespace access remain supported; passing the whole filesystem
+object to another function can retain the full API. File handles and filesystem
+streams retain their stream support.
+
+Jco's QuickJS Web fallbacks have separate stream, Blob/File, and fetch entry
+points. Selecting a stream does not select the HTTP fallback. Generated WIT
+imports and companion callback exports follow capabilities in the bundled
+JavaScript; existing interfaces in a supplied WIT world remain unchanged.
+Filesystem access still requires the explicit host mapping and its permissions.
+
+For maintainers: the `fs/optional` module scope marks only `stream-api`, `file-handle`,
+`callback-api`, `callback-operations`, and `promise-operations` modules as having
+no required import-time effects. Its package metadata is copied to `dist` by
+`build:ts`. Their declarations and local facade construction
+do not call the host or install global hooks. This lets an unused facade discard
+its dependencies, including stream initialization. Keep that contract when editing
+these modules; the package's remaining modules retain normal side-effect analysis.
+The filesystem bundle regressions check retained modules and size ceilings in
+addition to API behavior. Buffer, validation, and error support still contribute
+to narrow filesystem bundles.
+
 > [!NOTE]
 > See [Node.js built-in compatibility](./nodejs-builtins.md) for the resolution
 > model and current support matrix.

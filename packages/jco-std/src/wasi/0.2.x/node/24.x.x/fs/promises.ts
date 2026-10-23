@@ -1,7 +1,6 @@
-import { deprecatedNodeApi, unsupportedNodeApi } from "../errors/core.js";
-
 import { constants } from "./constants.js";
 import type { FsCore } from "./core.js";
+import * as operations from "./optional/promise-operations.js";
 import type {
   BufferEncoding,
   CopyOptions,
@@ -18,166 +17,129 @@ import type {
   StatOptions,
   TimeLike,
 } from "./public-types.js";
-
-/** Build the promise facade over the same descriptor/state core as `node:fs`. */
 export function createFsPromises(core: FsCore) {
   return {
     constants,
     async access(path: PathLike, mode?: number): Promise<void> {
-      core.accessSync(path, mode);
+      return operations.access(core, path, mode);
     },
-
     async appendFile(
       file: PathLike | number,
       data: FileData,
       options?: BufferEncoding | FlagOptions | null,
     ): Promise<void> {
-      core.appendFileSync(file, data, options);
+      return operations.appendFile(core, file, data, options);
     },
-
     async chmod(path: PathLike, mode: Mode): Promise<void> {
-      core.chmodSync(path, mode);
+      return operations.chmod(core, path, mode);
     },
-
     async chown(path: PathLike, uid: number, gid: number): Promise<void> {
-      core.chownSync(path, uid, gid);
+      return operations.chown(core, path, uid, gid);
     },
-
     async copyFile(source: PathLike, destination: PathLike, mode?: number): Promise<void> {
-      core.copyFileSync(source, destination, mode);
+      return operations.copyFile(core, source, destination, mode);
     },
-
     async cp(source: PathLike, destination: PathLike, options?: CopyOptions): Promise<void> {
-      core.cpSync(source, destination, options);
+      return operations.cp(core, source, destination, options);
     },
-
     async glob(pattern: string | readonly string[], options?: GlobOptions) {
-      return core.globSync(pattern, options);
+      return operations.glob(core, pattern, options);
     },
-
     async lchmod(_path: PathLike, _mode: Mode): Promise<never> {
-      throw deprecatedNodeApi("fsPromises.lchmod");
+      return operations.lchmod(core, _path, _mode);
     },
-
     async lchown(path: PathLike, uid: number, gid: number): Promise<void> {
-      core.lchownSync(path, uid, gid);
+      return operations.lchown(core, path, uid, gid);
     },
-
     async link(existingPath: PathLike, newPath: PathLike): Promise<void> {
-      core.linkSync(existingPath, newPath);
+      return operations.link(core, existingPath, newPath);
     },
-
     async lstat(path: PathLike, options?: StatOptions) {
-      return core.lstatSync(path, options);
+      return operations.lstat(core, path, options);
     },
-
     async lutimes(path: PathLike, atime: TimeLike, mtime: TimeLike): Promise<void> {
-      core.lutimesSync(path, atime, mtime);
+      return operations.lutimes(core, path, atime, mtime);
     },
-
     async mkdir(path: PathLike, options?: Mode | MakeDirectoryOptions | null) {
-      return core.mkdirSync(path, options);
+      return operations.mkdir(core, path, options);
     },
-
     async mkdtemp(
       prefix: string,
       options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
     ) {
-      return core.mkdtempSync(prefix, options);
+      return operations.mkdtemp(core, prefix, options);
     },
-
     async mkdtempDisposable(
       prefix: string,
       options?: BufferEncoding | { encoding?: BufferEncoding } | null,
     ) {
-      return core.mkdtempDisposable(prefix, options);
+      return operations.mkdtempDisposable(core, prefix, options);
     },
-
     async open(path: PathLike, flags?: OpenMode, mode?: Mode) {
-      return core.open(path, flags, mode);
+      return operations.open(core, path, flags, mode);
     },
-
     async opendir(path: PathLike, options?: OpenDirOptions) {
-      return core.opendirSync(path, options);
+      return operations.opendir(core, path, options);
     },
-
     async readFile(file: PathLike | number, options?: BufferEncoding | FlagOptions | null) {
-      return core.readFileSync(file, options);
+      return operations.readFile(core, file, options);
     },
-
     async readdir(path: PathLike, options?: BufferEncoding | ReaddirOptions | null) {
-      return core.readdirSync(path, options);
+      return operations.readdir(core, path, options);
     },
-
     async readlink(
       path: PathLike,
       options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
     ) {
-      return core.readlinkSync(path, options);
+      return operations.readlink(core, path, options);
     },
-
     async realpath(
       path: PathLike,
       options?: BufferEncoding | { encoding?: BufferEncoding | "buffer" } | null,
     ) {
-      return core.realpathSync(path, options);
+      return operations.realpath(core, path, options);
     },
-
     async rename(oldPath: PathLike, newPath: PathLike): Promise<void> {
-      core.renameSync(oldPath, newPath);
+      return operations.rename(core, oldPath, newPath);
     },
-
     async rm(path: PathLike, options?: RemoveOptions): Promise<void> {
-      core.rmSync(path, options);
+      return operations.rm(core, path, options);
     },
-
     async rmdir(path: PathLike, options?: RemoveOptions): Promise<void> {
-      core.rmdirSync(path, options);
+      return operations.rmdir(core, path, options);
     },
-
     async stat(path: PathLike, options?: StatOptions) {
-      return core.statSync(path, options);
+      return operations.stat(core, path, options);
     },
-
     async statfs(path: PathLike, options?: { bigint?: boolean }) {
-      return core.statfsSync(path, options);
+      return operations.statfs(core, path, options);
     },
-
     async symlink(
       target: PathLike,
       path: PathLike,
       type?: "dir" | "file" | "junction" | null,
     ): Promise<void> {
-      core.symlinkSync(target, path, type);
+      return operations.symlink(core, target, path, type);
     },
-
     async truncate(path: PathLike, length?: number): Promise<void> {
-      core.truncateSync(path, length);
+      return operations.truncate(core, path, length);
     },
-
     async unlink(path: PathLike): Promise<void> {
-      core.unlinkSync(path);
+      return operations.unlink(core, path);
     },
-
     async utimes(path: PathLike, atime: TimeLike, mtime: TimeLike): Promise<void> {
-      core.utimesSync(path, atime, mtime);
+      return operations.utimes(core, path, atime, mtime);
     },
-
     watch(..._args: unknown[]): never {
-      throw unsupportedNodeApi(
-        "fsPromises.watch",
-        "the filesystem WIT interface does not model watcher resources",
-      );
+      return operations.watch(core, ..._args);
     },
-
     async writeFile(
       file: PathLike | number,
       data: FileData,
       options?: BufferEncoding | FlagOptions | null,
     ): Promise<void> {
-      core.writeFileSync(file, data, options);
+      return operations.writeFile(core, file, data, options);
     },
   };
 }
-
 export type FsPromises = ReturnType<typeof createFsPromises>;
