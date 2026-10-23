@@ -226,6 +226,9 @@ ${autoInstantiate}`;
  * See https://github.com/WebAssembly/binaryen/blob/main/src/asmjs/asmangle.cpp
  */
 function asmMangle(name: string) {
+    // Binaryen mangles the UTF-8 bytes of a name, rather than UTF-16 code units.
+    name = Buffer.from(name, 'utf8').toString('latin1');
+
     if (name === '') {
         return '$';
     }
