@@ -1020,6 +1020,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
+                let post_return_trap_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::PostReturnTrap));
                 let future_value_class = render_args.require_intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureValueClass,
                 ));
@@ -1882,7 +1884,8 @@ impl AsyncTaskIntrinsic {
                                         fn: () => this.#postReturnFn(taskValue),
                                     }});
                                 }} catch (err) {{
-                                    {debug_log_fn}("[{task_class}#onResolve] error during task resolve handler", err);
+                                    err = {post_return_trap_fn}(this.#componentIdx, err);
+                                    this.reject(err);
                                     throw err;
                                 }}
                             }}
