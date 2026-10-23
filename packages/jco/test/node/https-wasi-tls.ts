@@ -8,6 +8,8 @@ import { createServer as createTlsServer } from "node:tls";
 import { createServer as createTcpServer, type Socket } from "node:net";
 import { once } from "node:events";
 import { createServer as createHttpServer } from "node:http";
+import { lt } from "semver";
+import quickjsPackage from "componentize-qjs/package.json" with { type: "json" };
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 const exec = promisify(execFile);
@@ -78,6 +80,16 @@ function expectVerifiedHttpsResponse(result: RunResult): void {
     expect(result.connections).toBeGreaterThanOrEqual(1);
     expect(result.after).toEqual(result.before);
 }
+function expectTlsImports(imports: string): void {
+    expect(imports).toContain("import jco:node/tls@0.1.0");
+    expect(imports).toContain("import wasi:tls/types@0.2.0-draft");
+    expect(imports).toContain("import wasi:sockets/tcp@");
+    expect(imports).toContain("import wasi:io/streams@0.2.12");
+    expect(imports).not.toContain("wasi:io/streams@0.2.6");
+    expect(imports).not.toContain("jco:tls-streams");
+    expect(imports).not.toContain("import jco:node/http@");
+    expect(imports).not.toContain("import wasi:http/outgoing-handler@");
+}
 async function run(root: string, url: string, policy = "trusted", body = "", servername = ""): Promise<RunResult> {
     try {
         const result = await exec(process.execPath, [runner, root, url, policy, body, servername], {
@@ -101,15 +113,7 @@ for (const backend of ["starlingmonkey"]) {
         beforeAll(async () => {
             root = await mkdtemp(join(tmpdir(), "jco-https-tls-"));
             await exec(process.execPath, [build, root, backend], { timeout: 180_000, maxBuffer: 2_000_000 });
-            const imports = await readFile(join(root, "imports.wit"), "utf8");
-            expect(imports).toContain("import jco:node/tls@0.1.0");
-            expect(imports).toContain("import wasi:tls/types@0.2.0-draft");
-            expect(imports).toContain("import wasi:sockets/tcp@");
-            expect(imports).toContain("import wasi:io/streams@0.2.12");
-            expect(imports).not.toContain("wasi:io/streams@0.2.6");
-            expect(imports).not.toContain("jco:tls-streams");
-            expect(imports).not.toContain("import jco:node/http@");
-            expect(imports).not.toContain("import wasi:http/outgoing-handler@");
+            expectTlsImports(await readFile(join(root, "imports.wit"), "utf8"));
         }, 190_000);
         afterAll(async () => {
             if (root) {
@@ -278,12 +282,20 @@ for (const backend of ["starlingmonkey"]) {
     });
 }
 
-test.concurrent("QuickJS reports its snapshot linker TLS resource incompatibility", async () => {
+test.concurrent("QuickJS TLS componentization", async () => {
     const root = await mkdtemp(join(tmpdir(), "jco-https-tls-qjs-"));
     try {
-        await expect(
-            exec(process.execPath, [build, root, "quickjs"], { timeout: 180_000, maxBuffer: 2_000_000 }),
-        ).rejects.toThrow(/wasi:tls.*mismatched resource types/);
+        const buildResult = exec(process.execPath, [build, root, "quickjs"], {
+            timeout: 180_000,
+            maxBuffer: 2_000_000,
+        });
+        // Before 0.5.0, QuickJS cannot link the shared TLS/IO resources.
+        if (lt(quickjsPackage.version, "0.5.0")) {
+            await expect(buildResult).rejects.toThrow(/wasi:tls.*mismatched resource types/);
+        } else {
+            await buildResult;
+            expectTlsImports(await readFile(join(root, "imports.wit"), "utf8"));
+        }
     } finally {
         await rm(root, { recursive: true, force: true });
     }
