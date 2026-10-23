@@ -2720,7 +2720,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         uwriteln!(self.src, "const retCopy = {op};");
                         if task_managed {
-                            uwriteln!(self.src, "task.resolve([retCopy.val]);");
+                            uwriteln!(self.src, "task.resolve([retCopy]);");
                         }
 
                         if let Some(f) = &self.post_return {
