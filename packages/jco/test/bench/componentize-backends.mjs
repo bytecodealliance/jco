@@ -8,6 +8,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { buildPerryRuntime, perryRuntimeRecipe } from "./perry-runtime.mjs";
+
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const fixtures = fileURLToPath(new URL("./fixtures/filesystem/", import.meta.url));
 const output = join(root, "test", "output", "bench", "componentize-backends");
@@ -28,6 +30,7 @@ const { values } = parseArgs({
         "skip-build": { type: "boolean", default: false },
         "wasm-opt-bin": { type: "string" },
         "perry-cli-path": { type: "string" },
+        "perry-source": { type: "string" },
     },
 });
 const samples = Number(values.samples);
@@ -37,8 +40,8 @@ const perryCliPath = compiler ? resolve(compiler) : null;
 assert.ok(Number.isInteger(samples) && samples > 0, "--samples must be a positive integer");
 assert.ok(Number.isInteger(warmup) && warmup >= 0, "--warmup must be a nonnegative integer");
 
-function command(script, args = []) {
-    execFileSync(process.execPath, [script, ...args], { cwd: root, stdio: "inherit" });
+function command(script, args = [], env = process.env) {
+    execFileSync(process.execPath, [script, ...args], { cwd: root, env, stdio: "inherit" });
 }
 
 async function packageVersion(name) {
@@ -82,6 +85,9 @@ const guest = await readFile(join(fixtures, "guest.ts"), "utf8");
 const guestSha256 = createHash("sha256").update(guest).digest("hex");
 if (!values["skip-build"]) {
     assert.ok(perryCliPath, "Pass --perry-cli-path or set JCO_PERRY_CLI_PATH to a WASI-enabled Perry compiler");
+    // A failed rebuild must not leave a receipt for partially replaced artifacts.
+    await rm(join(output, "build.json"), { force: true });
+    const perryRuntime = await buildPerryRuntime(values["perry-source"] || process.env.JCO_PERRY_SOURCE, output);
 
     // Keep the fixture's read/stat/print statements inside run(): StarlingMonkey
     // preinitializes module-level code while building the component.
@@ -105,16 +111,20 @@ ${statements.map((statement) => statement.getFullText(source)).join("\n")}
         await mkdir(directory);
         const component = join(directory, "component.wasm");
         if (backend === "perry") {
-            command(jco, [
-                "componentize",
-                join(fixtures, "guest.ts"),
-                "--backend",
-                "perry",
-                "--backend-perry-cli-path",
-                perryCliPath,
-                "-o",
-                component,
-            ]);
+            command(
+                jco,
+                [
+                    "componentize",
+                    join(fixtures, "guest.ts"),
+                    "--backend",
+                    "perry",
+                    "--backend-perry-cli-path",
+                    perryCliPath,
+                    "-o",
+                    component,
+                ],
+                perryRuntime.env,
+            );
         } else {
             const wit = join(directory, "wit");
             await cp(join(root, "lib", "wit", "builtin", "0.2.12"), join(wit, "deps"), { recursive: true });
@@ -187,9 +197,10 @@ ${statements.map((statement) => statement.getFullText(source)).join("\n")}
                     },
                 ).trim(),
                 wasmOptLauncher: values["wasm-opt-bin"] ?? null,
-                perryRef: process.env.JCO_PERRY_REF ?? null,
+                perryRef: perryRuntime.metadata.recipe.perryRef,
                 perryCliPath,
                 perryVersion,
+                perryRuntime: perryRuntime.metadata,
             },
             null,
             2,
@@ -200,6 +211,11 @@ ${statements.map((statement) => statement.getFullText(source)).join("\n")}
 const build = JSON.parse(await readFile(join(output, "build.json"), "utf8"));
 assert.equal(build.guestSha256, guestSha256, "Guest changed; rerun without --skip-build");
 assert.deepEqual(build.optimizationArgs, optimizationArgs, "Optimization changed; rerun without --skip-build");
+assert.deepEqual(
+    build.perryRuntime?.recipe,
+    perryRuntimeRecipe,
+    "Perry runtime recipe changed; rerun without --skip-build",
+);
 const input = await readFile(join(fixtures, "data", "input.txt"));
 const expected = `Perry size: ${input.length}\nPerry read: ${input.toString("utf8")}\n`.replaceAll("\r\n", "\n");
 const measurements = Object.fromEntries(backends.map((backend) => [backend, []]));
