@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-const jco = fileURLToPath(new URL('../../../../packages/jco/dist/jco.js', import.meta.url));
+const jco = fileURLToPath(new URL('jco.js', import.meta.resolve('@bytecodealliance/jco')));
 const scratch = await mkdtemp(join(tmpdir(), 'perry-example-wit-'));
 try {
     // Copy the bundled reference world without maintaining a second WASI snapshot.

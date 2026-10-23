@@ -25,6 +25,7 @@ use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
+use crate::names::js_string_literal;
 use crate::{ManagesIntrinsics, get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
@@ -1649,11 +1650,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         crate::enum_case_name(&case.name, self.enum_values_screaming_snake_case);
                     uwriteln!(
                         self.src,
-                        "case '{case}': {{
+                        "case {case}: {{
                             enum{tmp} = {i};
                             break;
                         }}",
-                        case = case_name
+                        case = js_string_literal(&case_name)
                     );
                 }
                 uwriteln!(self.src, "default: {{");
