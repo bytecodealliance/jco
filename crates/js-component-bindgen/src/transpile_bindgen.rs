@@ -3752,6 +3752,7 @@ impl<'a> Instantiator<'a, '_> {
                 let callback_idx = index.as_u32();
                 let may_suspend = self.core_def_may_suspend(def);
                 let core_def = self.core_def(def);
+                let core_def_name = js_string_literal(&core_def);
 
                 uwriteln!(self.src.js, "let callback_{callback_idx};",);
 
@@ -3766,7 +3767,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js_init,
                         r#"
                           callback_{callback_idx} = WebAssembly.promising({core_def});
-                          callback_{callback_idx}.fnName = "{core_def}";
+                          callback_{callback_idx}.fnName = {core_def_name};
                         "#
                     );
                 } else {
@@ -3774,7 +3775,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js_init,
                         r#"
                           callback_{callback_idx} = Object.assign({core_def}, {{ _jcoMaySuspend: false }});
-                          callback_{callback_idx}.fnName = "{core_def}";
+                          callback_{callback_idx}.fnName = {core_def_name};
                         "#
                     );
                 }

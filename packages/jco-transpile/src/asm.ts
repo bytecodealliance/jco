@@ -80,6 +80,10 @@ export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
     const source = Buffer.from(inputJS)
         .toString('utf8')
         // update imports manging to match emscripten asm
+        .replace(
+            /exports(\d+)\[("(?:\\.|[^"\\])*")\]/g,
+            (_, i, literal) => `exports${i}[${JSON.stringify(asmMangle(JSON.parse(literal)))}]`,
+        )
         .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`)
         .replace(/export (async )?function instantiate/, '$1function _instantiate');
 
