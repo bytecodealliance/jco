@@ -19,6 +19,7 @@ import {
 } from "../node-builtins/index.js";
 import {
     injectNodeWitImports,
+    retainedNodeWitRequirements,
     witInjectionWarnings,
     type NodeGuestExport,
     type NodeWitRequirement,
@@ -293,6 +294,11 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
             ],
         };
         source = await bundleComponentSource(jsSource, bundleOptions);
+        const retained = retainedNodeWitRequirements(source, witRequirements.values());
+        witRequirements.clear();
+        for (const requirement of retained) {
+            witRequirements.set(requirement.witImport, requirement);
+        }
         const guestExports = [
             ...new Map(
                 [...witRequirements.values()]
@@ -302,6 +308,11 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         ];
         if (guestExports.length > 0) {
             source = await bundleNodeGuestExportsWrapper(jsSource, guestExports, bundleOptions);
+            const retained = retainedNodeWitRequirements(source, witRequirements.values());
+            witRequirements.clear();
+            for (const requirement of retained) {
+                witRequirements.set(requirement.witImport, requirement);
+            }
         }
     } else {
         source = await readFile(jsSource, "utf8");
