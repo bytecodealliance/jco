@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import { URL, fileURLToPath, pathToFileURL } from 'node:url';
 
 import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
-import { assert, describe, suite, test } from 'vitest';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+import { assert, describe, expect, suite, test } from 'vitest';
 
 import { transpile, transpileBytes, writeFiles } from '../src/index.js';
 import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 
-import { COMPONENT_FIXTURES_DIR, getDefaultComponentFixtures } from './common.js';
-import { getRandomPort, getTmpDir, readFixtureFlags } from './helpers.js';
+import { COMPONENT_FIXTURES_DIR, LOCAL_TEST_COMPONENTS_DIR, getDefaultComponentFixtures } from './common.js';
+import { getRandomPort, getTmpDir, readFixtureFlags, setupAsyncTest } from './helpers.js';
 
 suite('codegen', async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
@@ -334,6 +335,110 @@ suite('Trap detection', () => {
             await rm(outDir, { recursive: true });
         }
     });
+
+    // 1. Return 0 and complete post-return normally; verify the result and another export.
+    // 2. Return 1 successfully from Rust, then trap in post-return; verify the caller gets the trap.
+    // 3. Call the other export again; verify the trapped component refuses further entry.
+    test.concurrent('post-return trap prevents subsequent synchronous calls', testSynchronousPostReturnTrap);
+
+    describe.skipIf(typeof WebAssembly.Suspending !== 'function')('post-return traps with JSPI', () => {
+        test.concurrent(
+            'JSPI-wrapped synchronous export rejects and prevents subsequent calls',
+            testJspiPostReturnTrap,
+        );
+
+        test.concurrent('WIT async export rejects and prevents subsequent calls', testWitAsyncPostReturnTrap);
+    });
+
+    async function testSynchronousPostReturnTrap() {
+        const { instance, cleanup: cleanupFixture } = await setupAsyncTest({
+            asyncMode: 'sync',
+            component: {
+                name: 'post-return-trap',
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'post-return-trap.wasm'),
+                imports: new WASIShim().getImportObject(),
+            },
+        });
+        try {
+            const successfulResult = instance.returnWithCleanup(0);
+            assert.strictEqual(successfulResult, 0);
+
+            const subsequentResult = instance.ok();
+            assert.strictEqual(subsequentResult, 42);
+
+            // The core export succeeds; its post-return failure must reach the caller.
+            assert.throws(() => instance.returnWithCleanup(1), WebAssembly.RuntimeError, /unreachable/);
+
+            // The trapped instance must reject entry into an independent export.
+            assert.throws(() => instance.ok(), WebAssembly.RuntimeError, 'wasm trap: cannot enter component instance');
+        } finally {
+            await cleanupFixture();
+        }
+    }
+
+    async function testJspiPostReturnTrap() {
+        // Expose a synchronous WIT operation through a JSPI Promise wrapper.
+        const { instance, cleanup: cleanupFixture } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'post-return-trap',
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'post-return-trap.wasm'),
+                imports: new WASIShim().getImportObject(),
+            },
+            jco: {
+                transpile: {
+                    extraArgs: { asyncExports: ['return-with-cleanup'] },
+                },
+            },
+        });
+        try {
+            const successfulResult = await instance.returnWithCleanup(0);
+            assert.strictEqual(successfulResult, 0);
+
+            const subsequentResult = instance.ok();
+            assert.strictEqual(subsequentResult, 42);
+
+            // The core export succeeds; its post-return failure must reach the caller.
+            const failingCall = instance.returnWithCleanup(1);
+            await expect(failingCall).rejects.toBeInstanceOf(WebAssembly.RuntimeError);
+            await expect(failingCall).rejects.toThrow(/unreachable/);
+
+            // The trapped instance must reject entry into an independent export.
+            assert.throws(() => instance.ok(), WebAssembly.RuntimeError, 'wasm trap: cannot enter component instance');
+        } finally {
+            await cleanupFixture();
+        }
+    }
+
+    async function testWitAsyncPostReturnTrap() {
+        // Exercise an operation declared asynchronous in WIT, using JSPI.
+        const { instance, cleanup: cleanupFixture } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'post-return-trap',
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-post-return-trap.wasm'),
+                imports: new WASIShim().getImportObject(),
+            },
+        });
+        try {
+            const successfulResult = await instance.returnWithCleanup(0);
+            assert.strictEqual(successfulResult, 0);
+
+            const subsequentResult = instance.ok();
+            assert.strictEqual(subsequentResult, 42);
+
+            // Post-return traps after the task has recorded the successful core result.
+            // The caller must receive the trap instead of that recorded result.
+            const failingCall = instance.returnWithCleanup(1);
+            await expect(failingCall).rejects.toBeInstanceOf(WebAssembly.RuntimeError);
+            await expect(failingCall).rejects.toThrow(/unreachable/);
+
+            // The trapped instance must reject entry into an independent export.
+            assert.throws(() => instance.ok(), WebAssembly.RuntimeError, 'wasm trap: cannot enter component instance');
+        } finally {
+            await cleanupFixture();
+        }
+    }
 
     test.concurrent.skipIf(typeof WebAssembly.Suspending !== 'function')(
         'identifies a bindgen trap as a WebAssembly.RuntimeError',
