@@ -12,6 +12,63 @@ import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 import { COMPONENT_FIXTURES_DIR, LOCAL_TEST_COMPONENTS_DIR, getDefaultComponentFixtures } from './common.js';
 import { getRandomPort, getTmpDir, readFixtureFlags, setupAsyncTest } from './helpers.js';
 
+test.concurrent.each(['0', 'quoted"slash\\line\n'])('asm.js preserves escaped core export names: %j', async (name) => {
+    const outDir = await getTmpDir();
+    try {
+        const quoted = `"${Array.from(Buffer.from(name), (byte) => `\\${byte.toString(16).padStart(2, '0')}`).join('')}"`;
+        const component = await parse(`(component
+                (core module $m (func (export ${quoted}) (result i32) i32.const 42))
+                (core instance $i (instantiate $m))
+                (func (export "run") (result u32) (canon lift (core func $i ${quoted}))))`);
+        const { files } = await transpileBytes(component, { name: 'escaped-asm', js: true, instantiation: 'sync' });
+        await writeFiles(files, { baseDir: outDir });
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+        const { instantiate } = await import(pathToFileURL(join(outDir, 'escaped-asm.js')).href);
+        assert.strictEqual(instantiate({}).run(), 42);
+    } finally {
+        await rm(outDir, { recursive: true, force: true });
+    }
+});
+
+test.concurrent.each([false, true])('escapes callback diagnostic names (suspending: %s)', async (suspending) => {
+    if (typeof WebAssembly.Suspending !== 'function') {
+        return;
+    }
+    const outDir = await getTmpDir();
+    try {
+        const component = await parse(`(component
+                (core func $return (canon task.return (result u32)))
+                (core func $yield (canon thread.yield))
+                (core module $m
+                    (import "" "return" (func $return (param i32)))
+                    (import "" "yield" (func $yield (result i32)))
+                    (memory (export "memory") 1)
+                    (func (export "run") (result i32)
+                        (call $return (i32.const 42)) (i32.const 0))
+                    (func (export "callback\\22\\27\\5c\\0a") (param i32 i32 i32) (result i32)
+                        ${suspending ? '(drop (call $yield))' : ''} (i32.const 0)))
+                (core instance $i (instantiate $m (with "" (instance
+                    (export "return" (func $return)) (export "yield" (func $yield))))))
+                (func (export "run") async (result u32)
+                    (canon lift (core func $i "run") async
+                        (callback (core func $i "callback\\22\\27\\5c\\0a"))
+                        (memory (core memory $i "memory")))))`);
+        const { files } = await transpileBytes(component, {
+            name: 'escaped-callback',
+            instantiation: 'async',
+            asyncMode: 'jspi',
+            base64Cutoff: 0,
+        });
+        await writeFiles(files, { baseDir: outDir });
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+        const { instantiate } = await import(pathToFileURL(join(outDir, 'escaped-callback.js')).href);
+        const instance = await instantiate(undefined, {});
+        assert.strictEqual(await instance.run(), 42);
+    } finally {
+        await rm(outDir, { recursive: true, force: true });
+    }
+});
+
 suite('codegen', async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
     describe('codegen', async () => {

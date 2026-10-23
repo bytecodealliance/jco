@@ -35,11 +35,11 @@ suite('jco issue 1887', () => {
             const source = new TextDecoder().decode(files['out.js']);
             assert.match(
                 source,
-                /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?callResourceDestructor\(\{ componentIdx: 0, dtor: exports\d+\['\d+'\], rep: handleEntry\.rep \}\);/,
+                /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?callResourceDestructor\(\{ componentIdx: 0, dtor: exports\d+\[['"]\d+['"]\], rep: handleEntry\.rep \}\);/,
             );
             assert.match(
                 source,
-                /finalizationRegistryCreate\(\(handle\) => \{[\s\S]{0,300}?callResourceDestructor\(\{ componentIdx: 0, dtor: exports\d+\['\d+'\], rep \}\);/,
+                /finalizationRegistryCreate\(\(handle\) => \{[\s\S]{0,300}?callResourceDestructor\(\{ componentIdx: 0, dtor: exports\d+\[['"]\d+['"]\], rep \}\);/,
             );
             await writeFiles(files, { baseDir: outputDir });
 

@@ -412,6 +412,11 @@ export async function transpileBytes(
                 keepNames: true,
             },
         });
+        if (minified.errors.length) {
+            throw new Error(
+                `Failed to minify generated JavaScript: ${minified.errors.map((error) => error.message).join('\n')}`,
+            );
+        }
         jsFile[1] = new TextEncoder().encode(minified.code);
     }
 
