@@ -909,6 +909,13 @@ jobs:
 
       - run: pnpm install
 
+      - name: Cache example browsers
+        if: ${{ matrix.project.name == 'browser-p2-shims' || matrix.project.name == 'native-messaging' }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-examples-${{ runner.os }}-${{ runner.arch }}-${{ matrix.project.name }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/install-puppeteer.mjs') }}
+
       - name: Install Puppeteer browser
         if: ${{ matrix.project.name == 'browser-p2-shims' || matrix.project.name == 'native-messaging' }}
         run: pnpm run test:setup:puppeteer
