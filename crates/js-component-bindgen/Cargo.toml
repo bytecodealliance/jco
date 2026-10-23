@@ -32,6 +32,7 @@ heck = { workspace = true }
 log = { workspace = true }
 semver = { workspace = true }
 wasm-encoder = { workspace = true, features = [ "wasmparser" ] }
+wasm-metadata = { workspace = true }
 wasmparser = { workspace = true, features = [ "features", "component-model" ] }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
 wit-bindgen-core = { workspace = true }
