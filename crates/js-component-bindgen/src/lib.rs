@@ -18,6 +18,7 @@ mod ts_bindgen;
 pub mod esm_bindgen;
 pub mod function_bindgen;
 pub mod names;
+pub mod script;
 pub mod source;
 
 pub mod intrinsics;

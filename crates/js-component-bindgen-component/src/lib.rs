@@ -43,6 +43,9 @@ mod bindings {
     });
     export!(JsComponentBindgenComponent);
 }
+use bindings::exports::local::js_component_bindgen::scripts::{
+    self, ScriptComponentOpts, ScriptEngineBackend, ScriptEngineWitInput, ScriptEngineWorld,
+};
 use bindings::{
     AsyncImportsExports, AsyncMode, BindingsMode, EnabledFeatureSet, ExportType, GenerateOptions,
     InstantiationMode, PackageMismatch, Transpiled, TypeGenerationOptions, UnpackError, Wit,
@@ -266,6 +269,50 @@ impl bindings::Guest for JsComponentBindgenComponent {
                 Ok((path, printer.output.to_string()))
             })
             .collect()
+    }
+}
+
+/// Implementation of the `local:js-component-bindgen/scripts` interface
+impl scripts::Guest for JsComponentBindgenComponent {
+    fn create_world(
+        inputs: Vec<ScriptEngineWitInput>,
+        backend: ScriptEngineBackend,
+    ) -> Result<ScriptEngineWorld, String> {
+        use js_component_bindgen::script;
+        let inputs: Vec<script::WitInput> = inputs
+            .into_iter()
+            .map(|input| {
+                script::WitInput::builder()
+                    .path(input.path)
+                    .maybe_world(input.world)
+                    .build()
+            })
+            .collect();
+        let backend = match backend {
+            ScriptEngineBackend::Starlingmonkey => script::Backend::StarlingMonkey,
+            ScriptEngineBackend::Quickjs => script::Backend::QuickJs,
+        };
+        let engine = script::engine_world(&inputs, backend).map_err(|e| format!("{e:#}"))?;
+        Ok(ScriptEngineWorld {
+            wit: engine.wit,
+            world_name: engine.world_name,
+            bootstrap: engine.bootstrap,
+            imports: engine.imports,
+            exports: engine.exports,
+        })
+    }
+
+    fn create_component(opts: ScriptComponentOpts) -> Result<Vec<u8>, String> {
+        use js_component_bindgen::script;
+        script::script_component(
+            &script::ScriptComponent::builder()
+                .name(opts.name)
+                .source(opts.source)
+                .engine_world(opts.engine_world)
+                .exports(opts.exports)
+                .build(),
+        )
+        .map_err(|e| format!("{e:#}"))
     }
 }
 
