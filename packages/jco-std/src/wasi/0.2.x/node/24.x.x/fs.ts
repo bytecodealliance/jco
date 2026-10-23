@@ -1,107 +1,321 @@
-import { filesystem as fs } from "./fs/shared.js";
-
-export const constants = fs.constants;
-export const promises = fs.promises;
-export const Dir = fs.Dir;
-export const Dirent = fs.Dirent;
-export const FileReadStream = fs.FileReadStream;
-export const FileWriteStream = fs.FileWriteStream;
-export const ReadStream = fs.ReadStream;
-export const Stats = fs.Stats;
-export const Utf8Stream = fs.Utf8Stream;
-export const WriteStream = fs.WriteStream;
-export const _toUnixTimestamp = fs._toUnixTimestamp;
-export const access = fs.access;
-export const accessSync = fs.accessSync;
-export const appendFile = fs.appendFile;
-export const appendFileSync = fs.appendFileSync;
-export const chmod = fs.chmod;
-export const chmodSync = fs.chmodSync;
-export const chown = fs.chown;
-export const chownSync = fs.chownSync;
-export const close = fs.close;
-export const closeSync = fs.closeSync;
-export const copyFile = fs.copyFile;
-export const copyFileSync = fs.copyFileSync;
-export const cp = fs.cp;
-export const cpSync = fs.cpSync;
-export const createReadStream = fs.createReadStream;
-export const createWriteStream = fs.createWriteStream;
-export const exists = fs.exists;
-export const existsSync = fs.existsSync;
-export const fchmod = fs.fchmod;
-export const fchmodSync = fs.fchmodSync;
-export const fchown = fs.fchown;
-export const fchownSync = fs.fchownSync;
-export const fdatasync = fs.fdatasync;
-export const fdatasyncSync = fs.fdatasyncSync;
-export const fstat = fs.fstat;
-export const fstatSync = fs.fstatSync;
-export const fsync = fs.fsync;
-export const fsyncSync = fs.fsyncSync;
-export const ftruncate = fs.ftruncate;
-export const ftruncateSync = fs.ftruncateSync;
-export const futimes = fs.futimes;
-export const futimesSync = fs.futimesSync;
-export const glob = fs.glob;
-export const globSync = fs.globSync;
-export const lchmod = fs.lchmod;
-export const lchmodSync = fs.lchmodSync;
-export const lchown = fs.lchown;
-export const lchownSync = fs.lchownSync;
-export const link = fs.link;
-export const linkSync = fs.linkSync;
-export const lstat = fs.lstat;
-export const lstatSync = fs.lstatSync;
-export const lutimes = fs.lutimes;
-export const lutimesSync = fs.lutimesSync;
-export const mkdir = fs.mkdir;
-export const mkdirSync = fs.mkdirSync;
-export const mkdtemp = fs.mkdtemp;
-export const mkdtempDisposableSync = fs.mkdtempDisposableSync;
-export const mkdtempSync = fs.mkdtempSync;
-export const open = fs.open;
-export const openAsBlob = fs.openAsBlob;
-export const openSync = fs.openSync;
-export const opendir = fs.opendir;
-export const opendirSync = fs.opendirSync;
-export const read = fs.read;
-export const readFile = fs.readFile;
-export const readFileSync = fs.readFileSync;
-export const readSync = fs.readSync;
-export const readdir = fs.readdir;
-export const readdirSync = fs.readdirSync;
-export const readlink = fs.readlink;
-export const readlinkSync = fs.readlinkSync;
-export const readv = fs.readv;
-export const readvSync = fs.readvSync;
-export const realpath = fs.realpath;
-export const realpathSync = fs.realpathSync;
-export const rename = fs.rename;
-export const renameSync = fs.renameSync;
-export const rm = fs.rm;
-export const rmSync = fs.rmSync;
-export const rmdir = fs.rmdir;
-export const rmdirSync = fs.rmdirSync;
-export const stat = fs.stat;
-export const statSync = fs.statSync;
-export const statfs = fs.statfs;
-export const statfsSync = fs.statfsSync;
-export const symlink = fs.symlink;
-export const symlinkSync = fs.symlinkSync;
-export const truncate = fs.truncate;
-export const truncateSync = fs.truncateSync;
-export const unlink = fs.unlink;
-export const unlinkSync = fs.unlinkSync;
-export const unwatchFile = fs.unwatchFile;
-export const utimes = fs.utimes;
-export const utimesSync = fs.utimesSync;
-export const watch = fs.watch;
-export const watchFile = fs.watchFile;
-export const write = fs.write;
-export const writeFile = fs.writeFile;
-export const writeFileSync = fs.writeFileSync;
-export const writeSync = fs.writeSync;
-export const writev = fs.writev;
-export const writevSync = fs.writevSync;
+import promises from "./fs-promises.js";
+import {
+  access,
+  appendFile,
+  chmod,
+  chown,
+  close,
+  copyFile,
+  cp,
+  exists,
+  fchmod,
+  fchown,
+  fdatasync,
+  fstat,
+  fsync,
+  ftruncate,
+  futimes,
+  glob,
+  lchmod,
+  lchown,
+  link,
+  lstat,
+  lutimes,
+  mkdir,
+  mkdtemp,
+  open,
+  openAsBlob,
+  opendir,
+  read,
+  readFile,
+  readdir,
+  readlink,
+  readv,
+  realpath,
+  rename,
+  rm,
+  rmdir,
+  stat,
+  statfs,
+  symlink,
+  truncate,
+  unlink,
+  unwatchFile,
+  utimes,
+  watch,
+  watchFile,
+  write,
+  writeFile,
+  writev,
+} from "./fs/optional/callback-api.js";
+import { Dir, Dirent, Stats, Utf8Stream } from "./fs/classes.js";
+import { constants } from "./fs/constants.js";
+import {
+  FileReadStream,
+  FileWriteStream,
+  ReadStream,
+  WriteStream,
+  createReadStream,
+  createWriteStream,
+} from "./fs/optional/stream-api.js";
+import {
+  _toUnixTimestamp,
+  accessSync,
+  appendFileSync,
+  chmodSync,
+  chownSync,
+  closeSync,
+  copyFileSync,
+  cpSync,
+  existsSync,
+  fchmodSync,
+  fchownSync,
+  fdatasyncSync,
+  fstatSync,
+  fsyncSync,
+  ftruncateSync,
+  futimesSync,
+  globSync,
+  lchmodSync,
+  lchownSync,
+  linkSync,
+  lstatSync,
+  lutimesSync,
+  mkdirSync,
+  mkdtempDisposableSync,
+  mkdtempSync,
+  openSync,
+  opendirSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  readlinkSync,
+  readvSync,
+  realpathSync,
+  renameSync,
+  rmSync,
+  rmdirSync,
+  statSync,
+  statfsSync,
+  symlinkSync,
+  truncateSync,
+  unlinkSync,
+  utimesSync,
+  writeFileSync,
+  writeSync,
+  writevSync,
+} from "./fs/sync.js";
+export {
+  Dir,
+  Dirent,
+  FileReadStream,
+  FileWriteStream,
+  ReadStream,
+  Stats,
+  Utf8Stream,
+  WriteStream,
+  _toUnixTimestamp,
+  access,
+  accessSync,
+  appendFile,
+  appendFileSync,
+  chmod,
+  chmodSync,
+  chown,
+  chownSync,
+  close,
+  closeSync,
+  constants,
+  copyFile,
+  copyFileSync,
+  cp,
+  cpSync,
+  createReadStream,
+  createWriteStream,
+  exists,
+  existsSync,
+  fchmod,
+  fchmodSync,
+  fchown,
+  fchownSync,
+  fdatasync,
+  fdatasyncSync,
+  fstat,
+  fstatSync,
+  fsync,
+  fsyncSync,
+  ftruncate,
+  ftruncateSync,
+  futimes,
+  futimesSync,
+  glob,
+  globSync,
+  lchmod,
+  lchmodSync,
+  lchown,
+  lchownSync,
+  link,
+  linkSync,
+  lstat,
+  lstatSync,
+  lutimes,
+  lutimesSync,
+  mkdir,
+  mkdirSync,
+  mkdtemp,
+  mkdtempDisposableSync,
+  mkdtempSync,
+  open,
+  openAsBlob,
+  openSync,
+  opendir,
+  opendirSync,
+  promises,
+  read,
+  readFile,
+  readFileSync,
+  readSync,
+  readdir,
+  readdirSync,
+  readlink,
+  readlinkSync,
+  readv,
+  readvSync,
+  realpath,
+  realpathSync,
+  rename,
+  renameSync,
+  rm,
+  rmSync,
+  rmdir,
+  rmdirSync,
+  stat,
+  statSync,
+  statfs,
+  statfsSync,
+  symlink,
+  symlinkSync,
+  truncate,
+  truncateSync,
+  unlink,
+  unlinkSync,
+  unwatchFile,
+  utimes,
+  utimesSync,
+  watch,
+  watchFile,
+  write,
+  writeFile,
+  writeFileSync,
+  writeSync,
+  writev,
+  writevSync,
+};
+// A plain aggregate preserves the full default API and named-export identities.
+const fs = {
+  constants,
+  promises,
+  Dir,
+  Dirent,
+  FileReadStream,
+  FileWriteStream,
+  ReadStream,
+  Stats,
+  Utf8Stream,
+  WriteStream,
+  _toUnixTimestamp,
+  access,
+  accessSync,
+  appendFile,
+  appendFileSync,
+  chmod,
+  chmodSync,
+  chown,
+  chownSync,
+  close,
+  closeSync,
+  copyFile,
+  copyFileSync,
+  cp,
+  cpSync,
+  createReadStream,
+  createWriteStream,
+  exists,
+  existsSync,
+  fchmod,
+  fchmodSync,
+  fchown,
+  fchownSync,
+  fdatasync,
+  fdatasyncSync,
+  fstat,
+  fstatSync,
+  fsync,
+  fsyncSync,
+  ftruncate,
+  ftruncateSync,
+  futimes,
+  futimesSync,
+  glob,
+  globSync,
+  lchmod,
+  lchmodSync,
+  lchown,
+  lchownSync,
+  link,
+  linkSync,
+  lstat,
+  lstatSync,
+  lutimes,
+  lutimesSync,
+  mkdir,
+  mkdirSync,
+  mkdtemp,
+  mkdtempDisposableSync,
+  mkdtempSync,
+  open,
+  openAsBlob,
+  openSync,
+  opendir,
+  opendirSync,
+  read,
+  readFile,
+  readFileSync,
+  readSync,
+  readdir,
+  readdirSync,
+  readlink,
+  readlinkSync,
+  readv,
+  readvSync,
+  realpath,
+  realpathSync,
+  rename,
+  renameSync,
+  rm,
+  rmSync,
+  rmdir,
+  rmdirSync,
+  stat,
+  statSync,
+  statfs,
+  statfsSync,
+  symlink,
+  symlinkSync,
+  truncate,
+  truncateSync,
+  unlink,
+  unlinkSync,
+  unwatchFile,
+  utimes,
+  utimesSync,
+  watch,
+  watchFile,
+  write,
+  writeFile,
+  writeFileSync,
+  writeSync,
+  writev,
+  writevSync,
+};
 export default fs;
