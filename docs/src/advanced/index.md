@@ -14,3 +14,5 @@ the [Transpiling](../transpiling.md) chapter and the [WASI support](../wasi/inde
   streams flow between host and guest.
 - [Preview 3 host value disposal](./preview3-host-value-disposal.md): what happens to host-provided
   values a guest discards.
+- [Script-only components](./script-only-components.md): building one engine component for many
+  scripts, and packaging each script as a component of its own.
