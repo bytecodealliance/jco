@@ -2651,6 +2651,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.task_intrinsic(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
+                let post_return_trap_fn = self.post_return.filter(|_| task_managed).map(|_| {
+                    self.task_intrinsic(Intrinsic::Component(ComponentIntrinsic::PostReturnTrap))
+                });
                 let gen_post_return_js =
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
                         if !task_managed {
@@ -2663,12 +2666,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         try {{
                             {post_return_call}
                         }} catch (err) {{
-                            // Record a WebAssembly trap so subsequent entry is rejected.
-                            cstate.markTrapped(err);
-
-                            // The task may already hold a result, but caller completion
-                            // is still pending. Preserve the post-return failure before
-                            // that completion is settled.
+                            err = {post_return_trap_fn}({component_idx_expr}, err);
+                            // Cleanup can fail after the result was recorded.
                             task.reject(err);
                             throw err;
                         }}
@@ -2676,6 +2675,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         task.exit();
                         {ret_stmt}
                             "#,
+                            post_return_trap_fn = post_return_trap_fn.as_ref().unwrap(),
                             ret_stmt = ret_stmt.unwrap_or_default(),
                         )
                     };

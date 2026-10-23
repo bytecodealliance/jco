@@ -370,6 +370,15 @@ pub fn transpile_bindgen(
         bindgen: &mut bindgen,
         modules,
         instances: Default::default(),
+        core_instance_owners: component
+            .component
+            .initializers
+            .iter()
+            .filter_map(|init| match init {
+                GlobalInitializer::InstantiateModule(_, instance) => Some(*instance),
+                _ => None,
+            })
+            .collect(),
         error_context_component_initialized: (0..component
             .component
             .num_runtime_component_instances)
@@ -911,6 +920,8 @@ pub(crate) struct Instantiator<'a, 'b> {
     bindgen: &'a mut JsBindgen<'b>,
     modules: &'a PrimaryMap<StaticModuleIndex, core::Translation<'a>>,
     instances: PrimaryMap<RuntimeInstanceIndex, StaticModuleIndex>,
+    /// Owning component for each core instance; fused adapters have no owner.
+    core_instance_owners: PrimaryMap<RuntimeInstanceIndex, Option<RuntimeComponentInstanceIndex>>,
     types: &'a ComponentTypes,
     resolve: &'a Resolve,
     world: WorldId,
@@ -3873,7 +3884,22 @@ impl<'a> Instantiator<'a, '_> {
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
         for (module, name, arg) in self.modules[module_idx].imports(args) {
-            let def = self.augmented_import_def(&arg);
+            let def = if instance.is_none() && module == "post_return" {
+                // FACT calls cleanup inside Wasm, bypassing the export wrapper.
+                let core::AugmentedImport::CoreDef(CoreDef::Export(export)) = &arg else {
+                    panic!("fused post-return must be a core export");
+                };
+                let owner = self.core_instance_owners[export.instance]
+                    .expect("post-return must belong to a component instance")
+                    .as_u32();
+                let guard = self
+                    .bindgen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardPostReturn));
+                let value = self.core_export_var_name(export);
+                format!("Object.assign({guard}({owner}, {value}), {{ _jcoMaySuspend: false }})")
+            } else {
+                self.augmented_import_def(&arg)
+            };
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
             assert!(

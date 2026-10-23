@@ -30,6 +30,12 @@ pub enum ComponentIntrinsic {
     /// Normalize engine-specific core WebAssembly trap messages.
     NormalizeCoreTrap,
 
+    /// Convert failed post-return cleanup into a trap of its component.
+    PostReturnTrap,
+
+    /// Guard the synchronous post-return imports of fused adapters.
+    GuardPostReturn,
+
     /// Trap if the specified component instance may not currently leave.
     CheckMayLeave,
 
@@ -91,7 +97,7 @@ pub enum ComponentIntrinsic {
 impl ComponentIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        []
+        ["_postReturnTrap", "_guardPostReturn"]
     }
 
     /// Get the name for the intrinsic
@@ -103,6 +109,8 @@ impl ComponentIntrinsic {
             Self::CheckForDeadlock => "_checkForDeadlock",
             Self::TrackHostOperation => "_trackHostOperation",
             Self::NormalizeCoreTrap => "_normalizeCoreTrap",
+            Self::PostReturnTrap => "_postReturnTrap",
+            Self::GuardPostReturn => "_guardPostReturn",
             Self::CheckMayLeave => "_checkMayLeave",
             Self::GuardMayLeave => "_guardMayLeave",
             Self::RecordTrap => "_recordTrap",
@@ -279,6 +287,44 @@ impl ComponentIntrinsic {
                         const message = CORE_TRAP_MESSAGES.get(err.message);
                         if (message !== undefined) {{ err.message = message; }}
                         return err;
+                    }}
+                    "#,
+                ));
+            }
+
+            Self::PostReturnTrap => {
+                let post_return_trap_fn = render_args.require_intrinsic(Self::PostReturnTrap);
+                let get_state = render_args.require_intrinsic(Self::GetOrCreateAsyncState);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let stack_overflow = Trap::StackOverflow.to_string();
+                let uncaught_exception = Trap::UncaughtException.to_string();
+                output.push_str(&format!(
+                    r#"
+                    function {post_return_trap_fn}(componentIdx, err) {{
+                        // Core exceptions and stack exhaustion are fatal during cleanup.
+                        if (!(err instanceof {runtime_error_class})) {{
+                            const message = /call stack|stack overflow|too much recursion/i.test(err?.message ?? '')
+                                ? {stack_overflow:?} : {uncaught_exception:?};
+                            err = new {runtime_error_class}(message, {{ cause: err }});
+                        }}
+                        {get_state}(componentIdx).markTrapped(err);
+                        return err;
+                    }}
+                    "#,
+                ));
+            }
+
+            Self::GuardPostReturn => {
+                let guard = render_args.require_intrinsic(Self::GuardPostReturn);
+                let trap = render_args.require_intrinsic(Self::PostReturnTrap);
+                output.push_str(&format!(
+                    r#"
+                    function {guard}(componentIdx, fn) {{
+                        return (...args) => {{
+                            try {{ return fn(...args); }}
+                            catch (err) {{ throw {trap}(componentIdx, err); }}
+                        }};
                     }}
                     "#,
                 ));
