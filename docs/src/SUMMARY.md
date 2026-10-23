@@ -72,6 +72,7 @@
     - [Detecting traps](./advanced/detecting-traps.md)
     - [Preview 3 streams and backpressure](./advanced/preview3-streams-and-backpressure.md)
     - [Preview 3 host value disposal](./advanced/preview3-host-value-disposal.md)
+    - [Script-only components](./advanced/script-only-components.md)
 - [Troubleshooting](./troubleshooting/index.md)
     - [Common issues](./troubleshooting/common-issues.md)
 - [Contributor Guide](./contributor-guide.md)
