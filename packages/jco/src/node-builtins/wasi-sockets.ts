@@ -7,14 +7,13 @@ interface WasiSocketsProviderSource {
 
 /** Shared Preview 2 provider source used by net, HTTP/1, HTTP/2, and HTTPS adapters. */
 export function wasiSocketsProviderSource(version: string): WasiSocketsProviderSource {
-    const u64 = version === "0.2.10" ? "BigInt(value)" : "value";
     const schedule = version === "0.2.10" ? ", schedule: task => setTimeout(task, 0)" : "";
     return {
         imports: `
 import * as instanceNetwork from "wasi:sockets/instance-network@${version}";
 import * as ipNameLookup from "wasi:sockets/ip-name-lookup@${version}";
 import * as tcpCreateSocket from "wasi:sockets/tcp-create-socket@${version}";`,
-        value: `{ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => ${u64}${schedule} }`,
+        value: `{ instanceNetwork, ipNameLookup, tcpCreateSocket, u64: value => BigInt(value)${schedule} }`,
     };
 }
 

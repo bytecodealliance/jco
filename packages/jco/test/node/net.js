@@ -60,8 +60,8 @@ describe("node:net builtin adapter", () => {
                 witImport: `wasi:sockets/instance-network@${wasiSocketsVersion}`,
             }),
         );
+        expect(source).toContain("u64: value => BigInt(value)");
         if (wasiSocketsVersion === "0.2.10") {
-            expect(source).toContain("u64: value => BigInt(value)");
             expect(source).toContain("schedule: task => setTimeout(task, 0)");
         }
     });
