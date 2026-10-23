@@ -1,9 +1,7 @@
 mod bindings {
     wit_bindgen::generate!({
         world: "post-return-trap",
-        // The shared fixture module provides this core export and its post-return hook.
-        // Skip wit-bindgen's adapter for this function; keep its WIT declaration.
-        // jco generates the JavaScript returnWithCleanup() wrapper from that declaration.
+        // The fixture supplies the core export and its post-return hook.
         skip: ["return-with-cleanup"],
     });
 
@@ -14,5 +12,4 @@ mod bindings {
 #[path = "support/post_return_trap.rs"]
 mod fixture;
 
-// Required because this fixture is built as a binary.
 fn main() {}
