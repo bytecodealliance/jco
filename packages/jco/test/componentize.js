@@ -35,24 +35,26 @@ suite("componentize", () => {
         }
     });
 
-    test("rejects a custom StarlingMonkey engine with the QuickJS backend", async () => {
+    test("uses a custom engine path as the QuickJS runtime", async () => {
+        // The quickjs backend reads `--engine` as its runtime module, so a missing file fails there.
         await expect(
             componentizeFixture({
                 fixture: "typescript-direct",
                 entry: "source.ts",
                 wit: "source.wit",
-                extraArgs: ["--backend", "qjs", "--engine", "custom-engine.wasm"],
+                extraArgs: ["--backend", "qjs", "--engine", "missing-runtime.wasm"],
             }),
-        ).rejects.toThrow();
+        ).rejects.toThrow(/missing-runtime\.wasm/);
+    });
 
+    test("rejects a custom engine with the Perry backend", async () => {
         await expect(
             componentize("unused.js", {
-                backend: "quickjs",
+                backend: "perry",
                 engine: "custom-engine.wasm",
-                wit: "unused.wit",
                 out: "unused.wasm",
             }),
-        ).rejects.toThrow(/--engine option is only supported by the starlingmonkey backend/);
+        ).rejects.toThrow(/--engine is only supported by the starlingmonkey and quickjs backends/);
     });
 
     test.concurrent("detect older wasi:http", async () => {

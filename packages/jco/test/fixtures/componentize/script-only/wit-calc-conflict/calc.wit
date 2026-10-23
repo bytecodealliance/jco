@@ -1,0 +1,9 @@
+package local:other-calc;
+
+interface calc {
+  multiply: func(a: u32, b: u32) -> u32;
+}
+
+world calculator {
+  export calc;
+}
