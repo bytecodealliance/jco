@@ -155,7 +155,7 @@ suite('resources', () => {
 
         assert.match(
             source,
-            /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?\['0'\]\(handleEntry\.rep\);/,
+            /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?\[['"]0['"]\]\(handleEntry\.rep\);/,
             'explicit disposal should call the destructor with the representation returned while removing the handle',
         );
         assert.notMatch(

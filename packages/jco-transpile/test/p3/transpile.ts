@@ -116,9 +116,9 @@ suite('Transpile (WASI P3)', () => {
                 .map(([, source]) => (typeof source === 'string' ? source : decoder.decode(source)))
                 .join('\n');
 
-            assert.include(source, "from '@bytecodealliance/preview3-shim/random'");
-            assert.include(source, "from '@bytecodealliance/preview2-shim/cli'");
-            assert.notInclude(source, "from 'wasi:random/");
+            assert.match(source, /from ['"]@bytecodealliance\/preview3-shim\/random['"]/);
+            assert.match(source, /from ['"]@bytecodealliance\/preview2-shim\/cli['"]/);
+            assert.notMatch(source, /from ['"]wasi:random\//);
         });
     }
 
