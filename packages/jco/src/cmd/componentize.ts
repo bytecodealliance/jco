@@ -1,11 +1,11 @@
 import { mergeNodeWitRequirement } from "../node-wit.js";
-import { cp, mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve, basename, dirname, extname, join } from "node:path";
 
 import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
 
-import { bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
+import { bundleComponentChunk, bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { engineCompatPlugin } from "../engine-compat.js";
 import { styleText, isWindows } from "../common.js";
 import { componentizePerry } from "./componentize/perry.js";
@@ -32,10 +32,21 @@ const DEBUG_FEATURES = ["stdio"];
 
 type ComponentizeJSBackend = "qjs" | "quickjs" | "starlingmonkey" | "sm" | "perry";
 
+/** Fully-qualified world every script engine implements, which script-only components record. */
+export const SCRIPT_ENGINE_WORLD = "jco:script-engine/engine@0.1.0";
+
+/** File name of the engine component written by {@link componentizeScriptOnly}. */
+const SCRIPT_ENGINE_FILE = "engine.wasm";
+
 export interface ComponentizeOptions {
     /** Required by the JavaScript engine backends; Perry supplies its own WASI P2 world. */
     wit?: string;
     out: string;
+    /**
+     * Engine build to componentize with: a StarlingMonkey build for the starlingmonkey backend,
+     * or a QuickJS runtime module for the quickjs backend.
+     */
+    engine?: string;
     /**
      * Directory componentization runs from.
      *
@@ -76,12 +87,37 @@ export interface ComponentizeOptions {
     debug?: boolean;
     preview2Adapter?: string;
     debugStarlingmonkeyBuild?: boolean;
-    engine?: string;
     debugBindings?: boolean;
     debugBindingsDir?: string;
     debugBinary?: boolean;
     debugBinaryPath?: string;
     debugEnableWizerLogging?: boolean;
+}
+
+/**
+ * Options for {@link componentizeScriptOnly}.
+ *
+ * The engine is built against the union of every `wit` world, so `wit` accepts several paths.
+ * `worldName` selects the world in each: omit it to use each package's only world, or give one
+ * name per `wit` path.
+ */
+export interface ComponentizeScriptOnlyOptions extends Omit<ComponentizeOptions, "wit" | "worldName" | "out"> {
+    wit: string | string[];
+    worldName?: string | string[];
+    /** Directory that receives `engine.wasm`, `engine.wit` and one `<script>.wasm` per source. */
+    out: string;
+}
+
+/**
+ * CLI options for `jco componentize`.
+ *
+ * Commander collects repeatable `--wit` and `--world-name` flags into arrays, which only
+ * `--script-only` accepts more than one of.
+ */
+export interface ComponentizeCommandOptions extends Omit<ComponentizeOptions, "wit" | "worldName"> {
+    wit?: string[];
+    worldName?: string[];
+    scriptOnly?: boolean;
 }
 
 /** Arguments to a componentize backend */
@@ -101,7 +137,7 @@ const COMPONENTIZE_BACKENDS: Record<string, ComponentizeJSBackend> = {
     perry: "perry",
 };
 
-const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
+const STARLINGMONKEY_OPTIONS: Array<keyof Omit<ComponentizeOptions, "wit" | "worldName">> = [
     "aot",
     "aotMinStackSizeBytes",
     "wevalBin",
@@ -110,7 +146,6 @@ const STARLINGMONKEY_OPTIONS: Array<keyof ComponentizeOptions> = [
     "debug",
     "preview2Adapter",
     "debugStarlingmonkeyBuild",
-    "engine",
     "debugBindings",
     "debugBindingsDir",
     "debugBinary",
@@ -322,21 +357,43 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
 
     // Build the component
     let component;
-    const backendArgs = { source, sourceName, jsSource, witPath, opts };
-    // componentize-js reads the process working directory to decide the path prefix baked into
-    // the component and the directory it preopens. Pin it so the build does not depend on where
-    // the command ran, restoring the caller's directory afterwards.
-    const componentizeCwd = resolve(opts.cwd ?? dirname(resolve(jsSource)));
+    try {
+        component = await buildWithBackend(
+            backend,
+            { source, sourceName, jsSource, witPath, opts },
+            resolve(opts.cwd ?? dirname(resolve(jsSource))),
+        );
+    } finally {
+        if (temporaryWitDirectory) {
+            await rm(temporaryWitDirectory, { recursive: true, force: true });
+        }
+    }
+
+    // Write out the component
+    await writeComponent(opts.out, component);
+}
+
+/**
+ * Run the selected JavaScript engine backend from `cwd`.
+ *
+ * componentize-js reads the process working directory to decide the path prefix baked into the
+ * component and the directory it preopens. Pin it so the build does not depend on where the
+ * command ran, restoring the caller's directory afterwards.
+ */
+async function buildWithBackend(
+    backend: ComponentizeJSBackend,
+    backendArgs: BackendComponentizeArgs,
+    cwd: string,
+): Promise<Uint8Array> {
+    const { witPath } = backendArgs;
     const callerCwd = process.cwd();
     try {
-        process.chdir(componentizeCwd);
+        process.chdir(cwd);
         switch (backend) {
             case "quickjs":
-                component = await componentizeQJS(backendArgs);
-                break;
+                return await componentizeQJS(backendArgs);
             case "starlingmonkey":
-                component = await componentizeCJS(backendArgs);
-                break;
+                return await componentizeCJS(backendArgs);
             default:
                 throw new Error(`unrecognized componentization backend [${backend}]`);
         }
@@ -354,13 +411,171 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         throw err;
     } finally {
         process.chdir(callerCwd);
-        if (temporaryWitDirectory) {
-            await rm(temporaryWitDirectory, { recursive: true, force: true });
+    }
+}
+
+/**
+ * Entry point for the `jco componentize` CLI command.
+ *
+ * Dispatches between the one-script-one-component build and `--script-only`, and validates
+ * the option shapes that only make sense for one of them.
+ */
+export async function componentizeCommand(sources: string[], opts: ComponentizeCommandOptions): Promise<void> {
+    const { wit = [], worldName = [], scriptOnly, ...rest } = opts;
+    if (scriptOnly) {
+        await componentizeScriptOnly(sources, { ...rest, wit, worldName });
+        return;
+    }
+    if (sources.length !== 1) {
+        throw new Error(
+            `expected exactly one source module, received ${sources.length}; building several scripts requires --script-only`,
+        );
+    }
+    if (wit.length > 1) {
+        throw new Error("several --wit paths can only be combined with --script-only");
+    }
+    if (worldName.length > 1) {
+        throw new Error("several --world-name values can only be combined with --script-only");
+    }
+    await componentize(sources[0], { ...rest, wit: wit[0], worldName: worldName[0] });
+}
+
+/**
+ * Build a script engine component and script-only components that run on it.
+ *
+ * The engine is the selected JavaScript engine componentized against the union of the given WIT
+ * worlds plus `jco:script-engine/script-loader`; its exports forward to whichever script was
+ * loaded last. Each source is bundled to an ES module and packaged as a component exporting
+ * `jco:script/script`, from which a host reads the script to hand to the engine.
+ *
+ * Scripts loaded into one engine instance share a JavaScript realm, so the engine is not a
+ * sandbox between scripts.
+ *
+ * @param {string[]} sources - script entry modules to package; may be empty to build only the engine
+ * @param {ComponentizeScriptOnlyOptions} opts
+ */
+export async function componentizeScriptOnly(sources: string[], opts: ComponentizeScriptOnlyOptions): Promise<void> {
+    const backend = normalizeBackend(opts.backend);
+    if (backend === "perry") {
+        throw new Error("--script-only requires a JavaScript engine backend (starlingmonkey or quickjs)");
+    }
+    validateBackendOptions(backend, opts);
+
+    const witPaths = (Array.isArray(opts.wit) ? opts.wit : [opts.wit]).filter((path) => path !== undefined);
+    if (witPaths.length === 0) {
+        throw new Error("--script-only requires at least one --wit path describing a world the engine must support");
+    }
+    const worldNames =
+        opts.worldName === undefined ? [] : Array.isArray(opts.worldName) ? opts.worldName : [opts.worldName];
+    if (worldNames.length !== 0 && worldNames.length !== witPaths.length) {
+        throw new Error(
+            `received ${worldNames.length} --world-name value(s) for ${witPaths.length} --wit path(s); give one world per WIT path, in the same order, or none`,
+        );
+    }
+    for (const source of sources) {
+        if (classifyComponentSource(source) === "typescript-declaration") {
+            throw new Error(
+                `TypeScript declaration files cannot be componentized directly: ${source}. Provide a .ts, .mts, .cts, or .tsx entry module instead.`,
+            );
         }
     }
 
-    // Write out the component
-    await writeComponent(opts.out, component);
+    const outDir = resolve(opts.out);
+    await mkdir(outDir, { recursive: true });
+    if (!(await stat(outDir)).isDirectory()) {
+        throw new Error(`--script-only writes several components, so --out must be a directory: ${opts.out}`);
+    }
+    const scriptOutputs = sources.map((source) => join(outDir, `${basename(source, extname(source))}.wasm`));
+    for (const [index, output] of scriptOutputs.entries()) {
+        if (basename(output) === SCRIPT_ENGINE_FILE) {
+            throw new Error(
+                `the script ${sources[index]} would be written to ${output}, which is reserved for the engine`,
+            );
+        }
+        const duplicate = scriptOutputs.indexOf(output);
+        if (duplicate !== index) {
+            throw new Error(
+                `the scripts ${sources[duplicate]} and ${sources[index]} would both be written to ${output}`,
+            );
+        }
+    }
+
+    // TODO(unskip): use typed imports once jco-transpile publishes the script APIs.
+    // Load these only for script-only componentization so existing commands work
+    // with the published transpiler while the script-only tests are skipped.
+    const {
+        // @ts-expect-error The script APIs have not been published in jco-transpile yet.
+        createWorld,
+        // @ts-expect-error The script APIs have not been published in jco-transpile yet.
+        createComponent,
+    } = await import("@bytecodealliance/jco-transpile");
+
+    // Merge the worlds and generate the engine's bootstrap module
+    const engine = await createWorld(
+        witPaths.map((path, index) => ({
+            path: (isWindows ? "//?/" : "") + resolve(path),
+            world: worldNames[index],
+        })),
+        backend === "quickjs" ? "quickjs" : "starlingmonkey",
+    );
+
+    // Build the engine: the bootstrap module is componentized like any other script
+    const workDir = await mkdtemp(join(tmpdir(), "jco-script-engine-"));
+    try {
+        const witPath = join(workDir, "engine.wit");
+        const bootstrapPath = join(workDir, "engine.js");
+        await writeFile(witPath, engine.wit);
+        await writeFile(bootstrapPath, engine.bootstrap);
+        const component = await buildWithBackend(
+            backend,
+            {
+                source: engine.bootstrap,
+                sourceName: "engine.js",
+                jsSource: bootstrapPath,
+                witPath,
+                opts: { ...opts, wit: witPath, worldName: engine.worldName, out: join(outDir, SCRIPT_ENGINE_FILE) },
+            },
+            resolve(opts.cwd ?? workDir),
+        );
+        await writeComponent(join(outDir, SCRIPT_ENGINE_FILE), component);
+        await writeFile(join(outDir, "engine.wit"), engine.wit);
+    } finally {
+        await rm(workDir, { recursive: true, force: true });
+    }
+
+    // Package each script
+    const bundleConfig = opts.bundleConfig ? await loadBundleConfig(opts.bundleConfig) : undefined;
+    for (const [index, source] of sources.entries()) {
+        const entry = resolve(source);
+        const isTypeScript = classifyComponentSource(entry) === "typescript";
+        // Rolldown hoists imports and emits one trailing export list, which is the module shape
+        // the engine's loader rewrites at runtime.
+        const { code, exports, imports } = await bundleComponentChunk(entry, {
+            config: bundleConfig,
+            typescript: isTypeScript,
+            external: engine.imports,
+            plugins: [engineCompatPlugin()],
+        });
+        const unknownImports = imports.filter((specifier) => !engine.imports.includes(specifier));
+        if (unknownImports.length > 0) {
+            throw new Error(
+                `${source} imports ${unknownImports.map((specifier) => `"${specifier}"`).join(", ")}, which the engine world does not import. Pass a WIT world that imports ${unknownImports.length === 1 ? "it" : "them"} with --wit.`,
+            );
+        }
+        const unknownExports = exports.filter((name) => !engine.exports.includes(name));
+        if (unknownExports.length > 0) {
+            console.error(
+                `${styleText(["yellow", "bold"], "warning")} ${source} exports ${unknownExports.map((name) => `"${name}"`).join(", ")}, which the engine world does not export; the engine will never call ${unknownExports.length === 1 ? "it" : "them"}.`,
+            );
+        }
+        const component = await createComponent({
+            name: isTypeScript ? `${basename(entry, extname(entry))}.js` : basename(entry),
+            source: code,
+            engineWorld: SCRIPT_ENGINE_WORLD,
+            exports,
+        });
+        await writeComponent(scriptOutputs[index], component);
+    }
 }
 
 async function writeComponent(out: string, component: Uint8Array) {
@@ -378,12 +593,15 @@ function normalizeBackend(backend = "starlingmonkey") {
     return normalized;
 }
 
-function validateBackendOptions(backend: ComponentizeJSBackend, opts: ComponentizeOptions) {
+function validateBackendOptions(backend: ComponentizeJSBackend, opts: Omit<ComponentizeOptions, "wit" | "worldName">) {
     for (const option of ["backendPerryPackage", "backendPerryCliPath"] as const) {
         if (backend !== "perry" && opts[option] !== undefined) {
             const flag = option.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
             throw new Error(`--${flag} is only supported by the perry backend`);
         }
+    }
+    if (backend === "perry" && opts.engine !== undefined) {
+        throw new Error("--engine is only supported by the starlingmonkey and quickjs backends");
     }
     if (backend === "starlingmonkey") {
         return;
@@ -463,7 +681,7 @@ async function componentizeQJS(args: BackendComponentizeArgs) {
         world: opts.worldName,
         sync: opts.backendQjsDisableAsync,
         stubWasi: opts.backendQjsStubWasi,
-        runtime: process.env.JCO_QJS_RUNTIME_PATH,
+        runtime: opts.engine ?? process.env.JCO_QJS_RUNTIME_PATH,
     });
     return result.component;
 }

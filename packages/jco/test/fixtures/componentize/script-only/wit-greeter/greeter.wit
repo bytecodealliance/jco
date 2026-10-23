@@ -1,0 +1,23 @@
+package local:greeter;
+
+interface logger {
+  log: func(message: string);
+}
+
+interface greeter {
+  resource counter {
+    constructor(start: u32);
+    next: static func(start: u32) -> counter;
+    get: func() -> u32;
+    increment: func();
+  }
+
+  greet: func(name: string) -> string;
+}
+
+world greeting {
+  import logger;
+
+  export greeter;
+  export run: func() -> string;
+}

@@ -1,0 +1,10 @@
+package local:calc;
+
+interface calc {
+  add: func(a: u32, b: u32) -> u32;
+}
+
+world calculator {
+  export calc;
+  export run: func() -> string;
+}

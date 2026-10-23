@@ -10,6 +10,15 @@ export interface BundleComponentSourceOptions {
     typescript?: boolean;
 }
 
+/** A bundled entry chunk and what it imports and exports. */
+export interface BundledComponentChunk {
+    code: string;
+    /** Names the chunk exports */
+    exports: string[];
+    /** External specifiers the chunk imports */
+    imports: string[];
+}
+
 /** External imports that represent WebAssembly Component capabilities. */
 const WASI_EXTERNAL = /^wasi:/;
 const NODE_CAPABILITY_EXTERNAL = /^jco:node\//;
@@ -76,6 +85,22 @@ export async function bundleComponentSource(
     entryPath: string,
     options: BundleComponentSourceOptions = {},
 ): Promise<string> {
+    const { code } = await bundleComponentChunk(entryPath, options);
+    return code;
+}
+
+/**
+ * Bundle a component entry point, returning the chunk together with its external imports and
+ * export names.
+ *
+ * @param {string} entryPath
+ * @param {BundleComponentSourceOptions} [options]
+ * @returns {Promise<BundledComponentChunk>}
+ */
+export async function bundleComponentChunk(
+    entryPath: string,
+    options: BundleComponentSourceOptions = {},
+): Promise<BundledComponentChunk> {
     const { rolldown } = await import("rolldown");
     const absoluteEntryPath = resolve(entryPath);
     const config = options.config ?? {};
@@ -143,7 +168,8 @@ export async function bundleComponentSource(
             );
         }
 
-        return chunks[0].code;
+        const [chunk] = chunks;
+        return { code: chunk.code, exports: [...chunk.exports], imports: [...chunk.imports] };
     } finally {
         await build.close();
     }

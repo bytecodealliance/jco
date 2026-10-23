@@ -15,7 +15,7 @@ import {
     metadataShow,
     componentWit,
 } from "./cmd/wasm-tools.js";
-import { componentize } from "./cmd/componentize.js";
+import { componentizeCommand } from "./cmd/componentize.js";
 import { createProject } from "./cmd/new.js";
 import { styleText } from "./common.js";
 
@@ -49,9 +49,18 @@ program
     .command("componentize")
     .description("Create a component from a JavaScript or TypeScript module")
     .usage("<source> [--wit wit-world.wit] -o <component-path>")
-    .argument("<source>", "JavaScript or TypeScript source file to build")
-    .option("-w, --wit <path>", "WIT path to build with (required except for Perry)")
-    .option("-n, --world-name <name>", "WIT world to build")
+    .argument("[sources...]", "JavaScript or TypeScript source file to build (several, or none, with --script-only)")
+    .option(
+        "-w, --wit <path>",
+        "WIT path to build with (required except for Perry; repeatable with --script-only)",
+        collectOptions,
+        [],
+    )
+    .option("-n, --world-name <name>", "WIT world to build (repeatable with --script-only)", collectOptions, [])
+    .option(
+        "--script-only",
+        "write an engine component for the union of the --wit worlds to --out, plus one script-only component per source",
+    )
     .option("--aot", "Enable Weval AOT compilation of JS")
     .option("--aot-min-stack-size-bytes <number>", "Set the min stack size to be used during AOT")
     .option("--weval-bin <path>", "Specify a custom weval binary to use")
@@ -73,7 +82,7 @@ program
     )
     .option("--backend-qjs-stub-wasi", "replace all WASI imports with trap stubs when building with componentize-qjs")
     .option("--debug-starlingmonkey-build", "use a debug build of StarlingMonkey")
-    .option("--engine <path>", "use a specific StarlingMonkey build (StarlingMonkey backend only)")
+    .option("--engine <path>", "use a specific StarlingMonkey build or QuickJS runtime module")
     .option(
         "--cwd <path>",
         "directory componentization runs from; also selects Perry package resolution (default: source directory)",
@@ -110,7 +119,7 @@ program
         "--with-nodejs-vfs-wasi-config <module>",
         "guest module exporting the WASI VFS storage resolveRoot function",
     )
-    .requiredOption("-o, --out <out>", "output component file")
+    .requiredOption("-o, --out <out>", "output component file (output directory with --script-only)")
     .option("--debug-bindings", "Output debug bindings and metadata during componentization (by default to stderr)")
     .option("--debug-bindings-dir <dir>", "Directory to which to output generated bindings and metadata")
     .option(
@@ -119,7 +128,7 @@ program
     )
     .option("--debug-binary-path <path>", "Path to which to write the generated debug binary")
     .option("--debug-enable-wizer-logging", "Enable wizer call debugging")
-    .action(asyncAction(componentize));
+    .action(asyncAction(componentizeCommand));
 
 program
     .command("transpile")
