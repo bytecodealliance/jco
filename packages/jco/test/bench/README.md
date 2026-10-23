@@ -7,10 +7,10 @@ excluded from the normal test suite and are not CI performance gates.
 Run the commands below from `packages/jco/test/bench`, or use the package scripts
 from the repository root:
 
-| Benchmark                 | Command from this directory                                               | Package script                                                                                             |
-| ------------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Componentization backends | `node componentize-backends.mjs --perry-cli-path /absolute/path/to/perry` | `pnpm --filter @bytecodealliance/jco bench:componentize-backends --perry-cli-path /absolute/path/to/perry` |
-| Serve request isolation   | `node serve-request-isolation.js`                                         | `pnpm --filter @bytecodealliance/jco bench:serve-isolation`                                                |
+| Benchmark                 | Command from this directory                                                                           | Package script                                                                                                                         |
+| ------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Componentization backends | `node componentize-backends.mjs --perry-cli-path /path/to/perry --perry-source /path/to/perry-source` | `pnpm --filter @bytecodealliance/jco bench:componentize-backends --perry-cli-path /path/to/perry --perry-source /path/to/perry-source` |
+| Serve request isolation   | `node serve-request-isolation.js`                                                                     | `pnpm --filter @bytecodealliance/jco bench:serve-isolation`                                                                            |
 
 ## Componentization backends
 
@@ -23,22 +23,36 @@ The benchmark does not build or run the Perry example.
 
 ### Setup and running
 
-Perry must support `--target wasi`, with its matching runtime archive and
-wasi-sdk configured. The [Perry example's installer](../../../../examples/components/perry-filesystem/README.md#prerequisites)
-can provision a pinned source-built toolchain without sudo. Its setup is a
-separate prerequisite; this benchmark does not install compilers.
+Use a WASI-enabled compiler built from Perry commit
+`3945beb23ebeca54846a30d89cb4971de59b0c6c`, a clean checkout of that revision,
+wasi-sdk 34, and Rust `nightly-2026-10-08` with the `wasm32-wasip2` target.
+The [Perry example's installer](../../../../examples/components/perry-filesystem/README.md#prerequisites)
+can provision these prerequisites; the benchmark does not install compilers.
 
-| Setting                                    | Purpose                                                           |
-| ------------------------------------------ | ----------------------------------------------------------------- |
-| `--perry-cli-path` or `JCO_PERRY_CLI_PATH` | Path to the WASI-enabled Perry executable or JavaScript launcher. |
-| `PERRY_RUNTIME_DIR`                        | Directory containing the matching `libperry_runtime.a`.           |
-| `WASI_SDK_PATH`                            | wasi-sdk installation directory.                                  |
-| `JCO_PERRY_REF` (optional)                 | Source revision to record alongside the compiler version.         |
+Every full benchmark build rebuilds Perry's runtime with **optimization level
+`z`, fat LTO, and default features disabled**, retaining `keepalive-anchors`
+to preserve the entry points called by generated code.
+This is the smallest profile validated for this filesystem fixture. Cargo caches
+unchanged builds. The benchmark selects the resulting archive automatically,
+overriding `PERRY_RUNTIME_DIR`, and records the recipe, archive SHA-256, source
+revision, and toolchain versions in its build metadata. The normal Perry
+installation is unchanged. This feature subset is specific to the fixture;
+other applications may need additional runtime features.
 
-After configuring the runtime and SDK in your environment:
+| Setting                                    | Purpose                                                                |
+| ------------------------------------------ | ---------------------------------------------------------------------- |
+| `--perry-cli-path` or `JCO_PERRY_CLI_PATH` | Matching WASI-enabled Perry executable or JavaScript launcher.         |
+| `--perry-source` or `JCO_PERRY_SOURCE`     | Clean checkout of the pinned Perry revision.                           |
+| `WASI_SDK_PATH`                            | wasi-sdk installation directory.                                       |
+| `CARGO_TARGET_DIR` (optional)              | Reuse a Cargo build cache; defaults to the benchmark output directory. |
+| `CARGO_BUILD_JOBS` (optional)              | Runtime build parallelism; defaults to 2.                              |
+
+After setting `WASI_SDK_PATH`, run:
 
 ```sh
-node componentize-backends.mjs --perry-cli-path /absolute/path/to/perry
+node componentize-backends.mjs \
+  --perry-cli-path /path/to/perry \
+  --perry-source /path/to/perry-source
 ```
 
 The script checks every sample's output, prints sizes in KiB/MiB and timings in
@@ -47,18 +61,20 @@ input hashes, and host details to
 `packages/jco/test/output/bench/componentize-backends/results.json`.
 Component artifacts and build metadata are retained in the same ignored directory.
 Use `--samples 50 --warmup 5` to change the default sample counts, or
-`--skip-build` to reuse unchanged components without requiring the compiler.
+`--skip-build` to reuse unchanged components without requiring the toolchain.
+Cached builds from the old runtime recipe are rejected and must be rebuilt.
 The optional `--wasm-opt-bin` setting is passed to Jco's optimizer launcher hook.
-Build and transpilation time are excluded from the measurements.
+Runtime compilation, componentization, optimization, and transpilation time are
+excluded from the measurements.
 
 ### Recent results
 
-Example results measured on 2026-10-22 on a shared Linux x86_64 development host
+Example results measured on 2026-10-23 on a shared Linux x86_64 development host
 (Intel Xeon at 2.60 GHz, Node.js 24.21.0), using the bundled 26-byte input file:
 
 | Backend                          | As-built size | Optimized size |
 | -------------------------------- | ------------: | -------------: |
-| Perry                            |     11.42 MiB |       7.40 MiB |
+| Perry                            |      6.80 MiB |       3.21 MiB |
 | componentize-js (StarlingMonkey) |     15.99 MiB |      15.42 MiB |
 | componentize-qjs (QuickJS)       |      6.79 MiB |       6.66 MiB |
 
@@ -66,17 +82,20 @@ Timings for the optimized components:
 
 | Backend                          | Run (median ms) | Load + run (median ms) | Node process (median ms) |
 | -------------------------------- | --------------: | ---------------------: | -----------------------: |
-| Perry                            |           91.77 |                 168.26 |                   310.67 |
-| componentize-js (StarlingMonkey) |           51.03 |                 212.28 |                   421.66 |
-| componentize-qjs (QuickJS)       |           36.17 |                 136.58 |                   361.60 |
+| Perry                            |           98.80 |                 153.66 |                   301.14 |
+| componentize-js (StarlingMonkey) |           59.58 |                 228.90 |                   465.38 |
+| componentize-qjs (QuickJS)       |           40.96 |                 145.42 |                   403.16 |
 
-Tool versions: Jco `d5ae42df` (package version 1.39.0), componentize-js 0.23.0,
+Tool versions: Jco `feaa7d23` (package version 1.39.0) with this runtime build
+recipe, componentize-js 0.23.0,
 componentize-qjs 0.4.5, and
 Perry 0.5.1659 built at commit `3945beb23ebeca54846a30d89cb4971de59b0c6c`
 with LLVM 22.1.8 and wasi-sdk 34. All three components were optimized with
 Binaryen 132 using `-Oz --low-memory-unused --enable-bulk-memory
 --enable-reference-types --strip-debug`. These are example measurements from one
-host; rerun the comparison for results on your machine.
+host; rerun the comparison for results on your machine. A local shim compatibility
+workaround enabled filesystem access for componentize-js's build-time WIT splicer;
+it was disabled for timings.
 
 - **Component size:** the uncompressed `.wasm` component before transpilation,
   reported both as built and after optimization. MiB means 1,048,576 bytes.
@@ -106,34 +125,35 @@ These measurements compare this fixture's complete backend paths. The tiny file
 and console output make them sensitive to host overhead; they do not establish
 general JavaScript throughput or performance under sustained load.
 
-### Perry component size
+### Why Perry components are still several MiB
 
-AoT compilation removes the need to interpret this guest's TypeScript, but its
-JavaScript semantics still require runtime support: object layouts, strings,
-closures, exceptions, built-ins, and garbage collection. This pinned Perry build
-links a broad runtime. Its [WASI link path][perry-wasi-link] explicitly skips the
-app-specific runtime rebuild used by native targets, and the
-[WASI runtime build script][perry-wasi-runtime] enables almost all default runtime
-features.
+The size-focused runtime reduces this fixture from **7.40 MiB to 3.21 MiB**.
+The guest's original generated functions total only **1,918 bytes**; most of the
+payload implements JavaScript semantics:
 
-Inspecting the unoptimized core module found 9,630 defined functions and about
-8.12 MiB of Wasm instructions, including broad object/built-in support, GC,
-streams, regular expressions, and filesystem helpers. It also contained about
-1.63 MiB of DWARF debug information and 0.75 MiB of function names. The optimized
-size above removes debug information and runs size optimization and dead-code
-elimination; the remaining payload is mostly runtime code.
+- **Broad runtime defaults:** Perry's [WASI link path][perry-wasi-link] bypasses
+  native per-application specialization, while its [runtime builder][perry-wasi-runtime]
+  enables nearly all default features, including diagnostics. The native
+  `PERRY_SIZE_OPT` / `PERRY_SIZE_LTO` settings have no effect here, so this
+  benchmark explicitly rebuilds a reduced runtime at level `z` with fat LTO.
+- **Reachable generic helpers:** object property reads, string coercion,
+  exceptions, built-ins, and GC retain general runtime code. Importing `node:fs`
+  also [registers streams][perry-fs-registry]. These dispatch paths keep helpers
+  reachable even when the fixture never calls them directly, limiting dead-code
+  elimination.
+- **Small packaging overhead:** the 7.40 MiB baseline already had debug data
+  stripped; component wiring and auxiliary modules added only 19 KiB. An empty
+  Perry program still optimized to 6.30 MiB with the default runtime. Equivalent
+  C file I/O using the same SDK produced 60.9 KiB, without JS semantics.
 
-The emitted function names contain no SWC parser or dynamic-evaluation
-interpreter functions. Perry supports an optional interpreter for runtime-created
-code, but the evidence here does not attribute the size to that interpreter.
-Instead, general runtime dispatch and built-in registries retain helpers that a
-small statically known guest should ideally avoid. Once helpers are reachable
-through those registries, ordinary linker/Binaryen dead-code elimination cannot
-assume they will never be called. Further reductions would require specializing
-the WASI runtime to the program's needs, then measuring the resulting component.
+The reduced runtime passed changed-file, Unicode, and larger-input checks.
+Hundreds of KiB will require narrower dispatch or code generation; Perry's
+[tiny-program specialization][perry-tiny-program] currently excludes WASI.
 
 [perry-wasi-link]: https://github.com/PerryTS/perry/blob/3945beb23ebeca54846a30d89cb4971de59b0c6c/crates/perry/src/commands/compile/link/wasi.rs
 [perry-wasi-runtime]: https://github.com/PerryTS/perry/blob/3945beb23ebeca54846a30d89cb4971de59b0c6c/scripts/wasi_build_runtime.py
+[perry-fs-registry]: https://github.com/PerryTS/perry/blob/3945beb23ebeca54846a30d89cb4971de59b0c6c/crates/perry-runtime/src/object/native_module_registry.rs#L361-L370
+[perry-tiny-program]: https://github.com/PerryTS/perry/blob/3945beb23ebeca54846a30d89cb4971de59b0c6c/crates/perry/src/commands/compile/tiny_program/mod.rs#L204-L220
 
 ## Serve request isolation
 
