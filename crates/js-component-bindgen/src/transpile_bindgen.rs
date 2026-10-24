@@ -5281,6 +5281,15 @@ impl<'a> Instantiator<'a, '_> {
                 "return new {future_value}(() => (async () => {{"
             );
         }
+        // Class constructors cannot be `async`, so an async exported constructor
+        // runs its body in an async closure and returns the resulting promise
+        // (`this` and `new.target` are inherited by the arrow function).
+        let wrap_async_constructor = !for_import
+            && matches!(func.kind, FunctionKind::Constructor(_))
+            && (requires_async_porcelain || is_async);
+        if wrap_async_constructor {
+            uwriteln!(self.src.js, "return (async () => {{");
+        }
 
         // If tracing is enabled, output a function entry tracing message
         if self.bindgen.opts.tracing {
@@ -5425,6 +5434,9 @@ impl<'a> Instantiator<'a, '_> {
         self.src.js(&f.src);
         if wrap_async_future_result {
             self.src.js("})());");
+        }
+        if wrap_async_constructor {
+            self.src.js("})();");
         }
 
         // Close function body
@@ -6099,7 +6111,7 @@ impl<'a> Instantiator<'a, '_> {
                 let method_name = func.item_name().to_lower_camel_case();
                 uwrite!(
                     self.src.js,
-                    "\n{local_name}.{method_name} = function {}",
+                    "\n{local_name}.{method_name} = {maybe_async}function {}",
                     if !is_js_reserved_word(&method_name) {
                         method_name.to_string()
                     } else {
