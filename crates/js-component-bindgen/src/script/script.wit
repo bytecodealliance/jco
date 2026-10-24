@@ -1,0 +1,24 @@
+package jco:script@0.1.0;
+
+/// A JavaScript script packaged as a component.
+///
+/// The component does not execute the script. A host instantiates it to read the
+/// script out and feeds it to a Jco script engine component through
+/// `jco:script-engine/script-loader`.
+interface script {
+    /// Name the script was packaged under, usually its entry file name.
+    name: func() -> string;
+
+    /// The script as a bundled ES module whose imports name WIT imports of the engine world.
+    source: func() -> string;
+
+    /// Fully-qualified engine world the script was bundled against.
+    engine-world: func() -> string;
+
+    /// JavaScript export names found in the script.
+    exports: func() -> list<string>;
+}
+
+world script-only {
+    export script;
+}

@@ -665,6 +665,7 @@ dependencies = [
  "log",
  "semver",
  "wasm-encoder 0.259.0",
+ "wasm-metadata",
  "wasmparser 0.259.0",
  "wasmtime-environ",
  "wat",

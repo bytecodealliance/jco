@@ -115,7 +115,11 @@ jco componentize --backend qjs -w wit -o dist/component.wasm component.js
 ```
 
 The StarlingMonkey backend also accepts the aliases `starlingmonkey` and `sm`. Note that `--engine <path>`
-allows supplying a compatible custom ComponentizeJS engine build and is only supported by the StarlingMonkey backend.
+allows supplying a compatible custom engine build: a ComponentizeJS StarlingMonkey build for the StarlingMonkey
+backend, or a componentize-qjs runtime module for the QuickJS backend.
+
+To reuse one engine build across many scripts, `--script-only` builds the engine as its own component and packages
+each script separately; see [Script-only components](./advanced/script-only-components.md).
 
 With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:
 

@@ -1,5 +1,62 @@
 package local:js-component-bindgen;
 
+/// Script engines and the script-only components that run on them
+///
+/// A script engine is a JavaScript engine componentized against the union of several WIT
+/// worlds, with an extra `jco:script-engine/script-loader` export through which a host feeds it
+/// scripts at runtime. A script-only component packages one script's source as a component
+/// exporting `jco:script/script`.
+interface scripts {
+  /// A WIT world a script engine must support
+  record script-engine-wit-input {
+    /// Path to a WIT file or directory
+    path: string,
+    /// World to select within the package (the package's only world if omitted)
+    %world: option<string>,
+  }
+
+  /// JavaScript engine a script engine bootstrap will be componentized with
+  enum script-engine-backend {
+    starlingmonkey,
+    quickjs,
+  }
+
+  /// A merged script engine world and the bootstrap module that implements it
+  record script-engine-world {
+    /// Single WIT document (with nested packages) defining the engine world
+    wit: string,
+    /// Name of the engine world within `wit`
+    world-name: string,
+    /// JavaScript module to componentize as the engine
+    bootstrap: string,
+    /// Specifiers scripts may import
+    imports: list<string>,
+    /// JavaScript export names of the engine world, excluding the script loader
+    exports: list<string>,
+  }
+
+  /// A script to package as a script-only component
+  record script-component-opts {
+    /// Name the script is packaged under
+    name: string,
+    /// Script source, a bundled ES module
+    source: string,
+    /// Fully-qualified engine world the script was bundled against
+    engine-world: string,
+    /// JavaScript export names of the script
+    exports: list<string>,
+  }
+
+  /// Merge WIT worlds into a script engine world and generate the engine's bootstrap module
+  script-engine-world-new: func(
+    inputs: list<script-engine-wit-input>,
+    backend: script-engine-backend,
+  ) -> result<script-engine-world, string>;
+
+  /// Package a bundled ES module as a component exporting `jco:script/script`
+  script-component-new: func(opts: script-component-opts) -> result<list<u8>, string>;
+}
+
 world js-component-bindgen {
   type files = list<tuple<string, list<u8>>>;
   type maps = list<tuple<string, string>>;
@@ -221,4 +278,6 @@ world js-component-bindgen {
 
   /// Expand an encoded WIT package into a conventional WIT directory file map.
   export unpack-wit: func(expected: option<package-spec>, binary: list<u8>) -> result<wit-files, unpack-error>;
+
+  export scripts;
 }
