@@ -12,5 +12,6 @@
         "sourceMap": true,
         "skipLibCheck": true,
         "types": ["node"]
-    }
+    },
+    "exclude": ["test/fixtures/**"]
 }
