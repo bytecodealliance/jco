@@ -3,7 +3,7 @@ import { mkdir, rm, symlink } from 'node:fs/promises';
 
 import { fileURLToPath } from 'node:url';
 
-import { suite, test, assert } from 'vitest';
+import { suite, test, assert, expect } from 'vitest';
 
 import { transpile } from '../src/index.js';
 
@@ -250,5 +250,56 @@ suite('Host Import Async (JSPI)', () => {
             await rm(outDir, { recursive: true });
             await rm(outFile);
         } catch {}
+    });
+
+    // A failing JSPI-suspended import must trap the guest and reject the
+    // export, rather than leave the guest suspended forever.
+    test.concurrent('Transpile async, import rejects (NodeJS, JSPI)', async () => {
+        if (typeof WebAssembly?.Suspending !== 'function') {
+            return;
+        }
+        const tmpDir = await getTmpDir();
+        const modulesDir = resolve(tmpDir, 'node_modules', '@bytecodealliance');
+        await mkdir(modulesDir, { recursive: true });
+        await symlink(
+            fileURLToPath(new URL('../packages/preview2-shim', import.meta.url)),
+            resolve(modulesDir, 'preview2-shim'),
+            'dir',
+        );
+
+        const inducedError = new Error('induced host rejection');
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'async_call',
+                path: resolve('test/fixtures/components/runtime/async_call.component.wasm'),
+                imports: {
+                    'something:test/test-interface': {
+                        callAsync: async () => {
+                            throw inducedError;
+                        },
+                        callSync: () => 'called sync',
+                    },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncImports: ['something:test/test-interface#call-async'],
+                        asyncExports: ['run-async'],
+                    },
+                },
+            },
+        });
+
+        try {
+            const exportCall = instance.runAsync();
+            const timeout = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('export call timed out')), 5_000),
+            );
+            await expect(Promise.race([exportCall, timeout])).rejects.toBe(inducedError);
+        } finally {
+            await cleanup();
+        }
     });
 });
