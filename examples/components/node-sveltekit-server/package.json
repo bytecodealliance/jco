@@ -29,7 +29,7 @@
     "devDependencies": {
         "@bytecodealliance/jco": "workspace:*",
         "@sveltejs/adapter-node": "5.5.7",
-        "@sveltejs/kit": "2.70.3",
+        "@sveltejs/kit": "3.0.0",
         "@types/node": "^24.3.0",
         "puppeteer": "catalog:",
         "svelte": "5.57.0",
