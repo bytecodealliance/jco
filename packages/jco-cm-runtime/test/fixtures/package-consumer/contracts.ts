@@ -1,6 +1,10 @@
 // Compile-only fixtures: function properties must reject narrower capabilities and operands.
-import * as resource from '../src/intrinsics/resource.js';
-import type { ResourceModule, ResourceTableGetContext, RuntimeModuleContracts } from '../src/runtime.js';
+import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
+import type {
+    ResourceModule,
+    ResourceTableGetContext,
+    RuntimeModuleContracts,
+} from '@bytecodealliance/jco-cm-runtime/runtime';
 
 export const defaultModule: ResourceModule = resource;
 export const contractMapEntry: RuntimeModuleContracts['intrinsics/resource'] = resource;

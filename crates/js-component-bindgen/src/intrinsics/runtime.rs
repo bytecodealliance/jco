@@ -7,7 +7,7 @@ use crate::{names::js_string_literal, source::Source, uwriteln};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
-pub(crate) const CM_RUNTIME_API_VERSION: u32 = 2;
+pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
 pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 
@@ -81,7 +81,7 @@ pub(crate) fn module_specifier(base: &str, suffix: &str) -> Result<String> {
             .any(|ext| base.ends_with(ext))
         {
             bail!(
-                "cmRuntimeEsModule now identifies an API-v2 runtime directory base, not a provider file; replace the file specifier with a directory containing runtime.js and intrinsics/*.js"
+                "cmRuntimeEsModule now identifies a runtime directory base, not a provider file; replace the file specifier with a directory containing runtime.js and intrinsics/*.js"
             );
         }
     }

@@ -23,7 +23,7 @@ export default defineConfig({
         passWithNoTests: false,
         include: ['test/*.ts', 'test/external-runtime/*.ts'],
         exclude: [
-            'test/helpers.ts',
+            'test/**/helpers.ts',
             'test/common.ts',
             'test/output',
             'test/fixtures',
