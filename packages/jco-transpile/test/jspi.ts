@@ -146,6 +146,53 @@ suite('Host Import Async (JSPI)', () => {
         } catch {}
     });
 
+    // Class constructors cannot be `async`, so an async resource constructor
+    // must return a promise of the instance instead.
+    test.concurrent('Transpile async resource constructor and static exports (NodeJS, JSPI)', async () => {
+        if (typeof WebAssembly?.Suspending !== 'function') {
+            return;
+        }
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'example_guest_export',
+                path: resolve('test/fixtures/components/runtime/example_guest_export.wasm'),
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncExports: [
+                            'example:component/backend@0.1.0#[constructor]scalars',
+                            'example:component/backend@0.1.0#[static]scalars.get-a',
+                        ],
+                    },
+                },
+            },
+        });
+
+        try {
+            const { Scalars, scalarArg } = instance.backend;
+            assert.strictEqual(Scalars.getA instanceof AsyncFunction, true, 'getA() should be an async function');
+            assert.strictEqual(
+                Scalars.prototype.getB instanceof AsyncFunction,
+                false,
+                'getB() should be a sync function',
+            );
+
+            const pending = new Scalars();
+            assert.instanceOf(pending, Promise);
+            const scalar = await pending;
+            assert.instanceOf(scalar, Scalars);
+
+            assert.strictEqual(await Scalars.getA(), 5);
+            assert.strictEqual(scalar.getB(), 2);
+            assert.strictEqual(scalarArg(scalar), 7);
+        } finally {
+            await cleanup();
+        }
+    });
+
     // Ensure async imports whose promises settle without ever yielding to
     // the macrotask queue must still resume the suspended guest,
     // on every call (not just the first).
