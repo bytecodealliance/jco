@@ -2406,6 +2406,14 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "const started = task.enterSync();",);
                 }
 
+                // A task that is only async for JSPI never publishes its completion
+                // promise, so the error must be thrown to reject the suspended guest.
+                let async_err_exit = if *async_ {
+                    "return task.completionPromise();"
+                } else {
+                    "throw err;"
+                };
+
                 // Build the JS expression that calls the callee
                 let (call_prefix, call_wrapper, call_err_cleanup) = if is_async
                     || self.requires_async_porcelain
@@ -2424,7 +2432,7 @@ impl Bindgen for FunctionBindgen<'_> {
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
-                              return task.completionPromise();
+                              {async_err_exit}
                             "#
                         ),
                     )
