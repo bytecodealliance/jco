@@ -587,6 +587,7 @@ jobs:
           echo '{"private":true,"type":"module"}' > package.json
           pnpm install "$PACKAGE_PATH"
           cp "$GH_WORKSPACE/scripts/test-jco-cm-runtime-release.mjs" ./smoke.mjs
+          cp -r "$GH_WORKSPACE/scripts/cm-runtime-conformance" ./cm-runtime-conformance
           node smoke.mjs
 
       - name: Test built jco-node-fs NPM package
