@@ -32,7 +32,7 @@ $ cargo add js-component-bindgen
 
 Generated JavaScript includes its runtime intrinsics inline by default. To
 select an external runtime, set `TranspileOpts::cm_runtime_es_module` to
-`@bytecodealliance/jco-cm-runtime` or another package/directory base. API-v2 bindings
+`@bytecodealliance/jco-cm-runtime` or another package/directory base. Generated bindings
 import `CM_RUNTIME_API_VERSION` from `<base>/runtime` and `tableGet` from
 `<base>/intrinsics/resource`; directory and file/HTTP(S) URL bases append `.js`.
 Relative bases resolve from the generated output. `tableGet` receives an explicit

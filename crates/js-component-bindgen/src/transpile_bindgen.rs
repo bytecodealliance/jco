@@ -134,7 +134,7 @@ pub struct TranspileOpts {
     /// passing unpaired surrogates on to the receiving component.
     #[builder(default)]
     pub perf_strings_skip_copy_utf16_validation: bool,
-    /// Package or directory base for the API-v2 Component Model runtime.
+    /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     pub cm_runtime_es_module: Option<String>,
     /// Represent WIT flags as bigint values instead of objects of booleans.

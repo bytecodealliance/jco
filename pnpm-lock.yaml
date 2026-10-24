@@ -531,6 +531,9 @@ importers:
 
   packages/jco-cm-runtime:
     devDependencies:
+      '@types/node':
+        specifier: ^24.13.3
+        version: 24.13.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

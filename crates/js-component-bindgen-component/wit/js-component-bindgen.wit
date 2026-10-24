@@ -106,7 +106,7 @@ world js-component-bindgen {
     /// both use utf16 (they are validated by default)
     perf-strings-skip-copy-utf16-validation: option<bool>,
 
-    /// API-v2 Component Model runtime package or directory base.
+    /// Experimental Component Model runtime package or directory base.
     /// Imports named runtime and intrinsics/* subpaths; directory/URL bases use .js files.
     cm-runtime-es-module: option<string>,
 

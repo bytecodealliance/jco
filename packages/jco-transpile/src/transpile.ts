@@ -161,7 +161,7 @@ export interface TranspilationOptions {
      */
     perfStringsSkipCopyUtf16Validation?: boolean;
 
-    /** Optional API-v2 runtime package or directory base. Imports runtime and intrinsics/* subpaths; directory/URL bases use .js files. */
+    /** Optional experimental runtime package or directory base. Imports runtime and intrinsics/* subpaths; directory/URL bases use .js files. */
     cmRuntimeEsModule?: string;
 
     /** Represent WIT flags as bigint values instead of objects of booleans */

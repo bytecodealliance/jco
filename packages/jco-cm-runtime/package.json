@@ -42,10 +42,11 @@
         "fmt:check": "oxfmt --check",
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
-        "test": "vitest run",
+        "test": "vitest run -c test/vitest.ts",
         "prepack": "pnpm run build"
     },
     "devDependencies": {
+        "@types/node": "^24.13.3",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }

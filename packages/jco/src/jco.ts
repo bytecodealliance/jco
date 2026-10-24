@@ -194,7 +194,7 @@ program
     .option("--strict", "generate bindings with strict type checking")
     .option(
         "--cm-runtime-es-module <base>",
-        "API-v2 Component Model runtime package or directory base (named runtime and intrinsics/* subpaths)",
+        "Experimental Component Model runtime package or directory base (named runtime and intrinsics/* subpaths)",
     )
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
