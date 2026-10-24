@@ -1,5 +1,5 @@
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
-export const CM_RUNTIME_API_VERSION = 2 as const;
+export const CM_RUNTIME_API_VERSION = 1 as const;
 
 export type RuntimeApiVersion = number;
 export type ResourceHandle = number;

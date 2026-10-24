@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "skipLibCheck": false,
+        "target": "ES2022",
+        "lib": ["ES2022", "DOM"],
+        "types": [],
+        "verbatimModuleSyntax": true
+    },
+    "include": ["*.ts"]
+}
