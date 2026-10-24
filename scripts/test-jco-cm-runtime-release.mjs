@@ -1,12 +1,26 @@
-import assert from 'node:assert/strict';
+import { parseArgs } from 'node:util';
+import { pathToFileURL } from 'node:url';
 
-import * as root from '@bytecodealliance/jco-cm-runtime';
-import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
-import { tableGet } from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
+import { DEFAULT_GROUPS, DEFAULT_RUNTIME_BASE, runRuntimeConformance } from './cm-runtime-conformance/index.mjs';
 
-assert.equal(CM_RUNTIME_API_VERSION, 1);
-assert.deepEqual(Object.keys(root), ['CM_RUNTIME_API_VERSION']);
-assert.equal(root.CM_RUNTIME_API_VERSION, CM_RUNTIME_API_VERSION);
-const context = { RuntimeError: WebAssembly.RuntimeError };
-assert.deepEqual(tableGet(context, [1 << 30, 0, 7, 42 | (1 << 30)], 1), { rep: 42, scope: 7, own: true });
-assert.throws(() => tableGet(context, [1 << 30, 0], 0), WebAssembly.RuntimeError);
+export { runRuntimeConformance } from './cm-runtime-conformance/index.mjs';
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+    const { values } = parseArgs({
+        options: {
+            'runtime-base': { type: 'string', default: DEFAULT_RUNTIME_BASE },
+            group: { type: 'string', multiple: true },
+            help: { type: 'boolean', short: 'h' },
+        },
+    });
+    if (values.help) {
+        console.log(`Usage: node test-jco-cm-runtime-release.mjs [--runtime-base <package-or-directory>] [--group <name>]...
+
+Runtime base defaults to ${DEFAULT_RUNTIME_BASE}.
+Available groups: ${DEFAULT_GROUPS.join(', ')}. All groups run by default.
+Relative directory bases resolve from the working directory.`);
+    } else {
+        const result = await runRuntimeConformance({ base: values['runtime-base'], groups: values.group });
+        console.log(`CM runtime conformance passed: ${result.base} (${result.groups.join(', ')})`);
+    }
+}

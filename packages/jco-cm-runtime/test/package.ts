@@ -38,9 +38,38 @@ suite('runtime package', () => {
                 new URL('../../../scripts/test-jco-cm-runtime-release.mjs', import.meta.url),
                 join(consumer, 'smoke.mjs'),
             );
+            await cp(
+                new URL('../../../scripts/cm-runtime-conformance/', import.meta.url),
+                join(consumer, 'cm-runtime-conformance'),
+                { recursive: true },
+            );
             await exec(process.execPath, ['smoke.mjs'], { cwd: consumer });
 
             const installed = join(consumer, 'node_modules/@bytecodealliance/jco-cm-runtime');
+            await cp(installed, join(consumer, 'node_modules/test-runtime-alias'), {
+                recursive: true,
+                dereference: true,
+            });
+            await exec(process.execPath, ['conformance.mjs'], { cwd: consumer });
+            await exec(process.execPath, ['smoke.mjs', '--runtime-base', 'test-runtime-alias', '--group', 'resource'], {
+                cwd: consumer,
+            });
+            await exec(
+                process.execPath,
+                [
+                    'smoke.mjs',
+                    '--runtime-base',
+                    './node_modules/test-runtime-alias/dist',
+                    '--group',
+                    'runtime',
+                    '--group',
+                    'resource',
+                ],
+                { cwd: consumer },
+            );
+            expect((await exec(process.execPath, ['smoke.mjs', '--help'], { cwd: consumer })).stdout).toContain(
+                'Available groups:',
+            );
             const contract = await readFile(join(installed, 'dist/runtime.d.ts'), 'utf8');
             expect(contract).not.toMatch(/\b(?:import|from)\s*['"({]/);
             const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
