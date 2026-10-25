@@ -92,7 +92,7 @@ suite("API", () => {
         assert.strictEqual(imports.length, 4);
         assert.strictEqual(imports[0], "#testimport");
         const source = Buffer.from(files[name + ".js"]).toString();
-        assert.ok(source.includes("'#testimport'"));
+        assert.match(source, /from (["'])#testimport\1/);
     });
 
     test.concurrent("Type generation", async () => {

@@ -31,7 +31,14 @@ async function componentizeScriptOnly(args) {
 suite("componentize --script-only", () => {
     for (const backend of ["starlingmonkey", "quickjs"]) {
         test(`runs scripts one after the other on a ${backend} engine`, async () => {
-            const { outputDir, stdout } = await componentizeScriptOnly({ backend });
+            const { outputDir, stdout } = await componentizeScriptOnly({
+                backend,
+                // Node 22 lacks modern JSPI; newer runtimes exercise QuickJS's default async ABI.
+                extraArgs:
+                    backend === "quickjs" && typeof WebAssembly.Suspending !== "function"
+                        ? ["--backend-qjs-disable-async"]
+                        : [],
+            });
             assert.deepStrictEqual((await readdir(outputDir)).sort(), [
                 "calc.wasm",
                 "engine.wasm",

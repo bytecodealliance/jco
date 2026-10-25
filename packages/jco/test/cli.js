@@ -413,7 +413,7 @@ suite("CLI", () => {
             .find((line) => line.startsWith("export {"));
         assert.ok(exportLine);
         //Check that it does contain the namespaced export
-        assert.ok(exportLine.includes("test as 'test:flavorful/test'"));
+        assert.match(exportLine, /test as (["'])test:flavorful\/test\1/);
 
         await cleanup();
     });
@@ -683,7 +683,7 @@ suite("CLI", () => {
         assert.strictEqual(stderr, "");
         const outputJSPath = `${outDir}/transpile-wasi-mapping.js`;
         const source = await readFile(outputJSPath, "utf8");
-        assert.ok(source.includes("imports['custom-wasi:filesystem/types']"));
+        assert.match(source, /imports\[(["'])custom-wasi:filesystem\/types\1\]/);
 
         await cleanup();
     });
@@ -720,9 +720,9 @@ suite("CLI", () => {
         assert.strictEqual(res.stderr, "");
         let source = await readFile(`${outDir}/${name}.js`);
         source = source.toString();
-        assert(source.includes("from './cli.js'"));
-        assert(source.includes("from './io.js'"));
-        assert(source.includes("from './filesystem.js'"));
+        assert.match(source, /from (["'])\.\/cli\.js\1/);
+        assert.match(source, /from (["'])\.\/io\.js\1/);
+        assert.match(source, /from (["'])\.\/filesystem\.js\1/);
 
         // Since there aren't enough individual imports to map differently,
         // we perform the transpilation again with different settings below
@@ -762,13 +762,13 @@ suite("CLI", () => {
         assert.strictEqual(res.stderr, "");
         source = await readFile(`${outDir}/${name}.js`);
         source = source.toString();
-        assert(source.includes("from './cli.js'"));
-        assert(source.includes("from './cli-environment-older.js'"));
-        assert(source.includes("from './cli-stderr-newer.js'"));
-        assert(!source.includes("from './cli-exit-prerelease.js'"));
-        assert(source.includes("from './io.js'"));
-        assert(!source.includes("from './filesystem-types.js'"));
-        assert(source.includes("from './filesystem-preopens-higher.js'"));
+        assert.match(source, /from (["'])\.\/cli\.js\1/);
+        assert.match(source, /from (["'])\.\/cli-environment-older\.js\1/);
+        assert.match(source, /from (["'])\.\/cli-stderr-newer\.js\1/);
+        assert.notMatch(source, /from (["'])\.\/cli-exit-prerelease\.js\1/);
+        assert.match(source, /from (["'])\.\/io\.js\1/);
+        assert.notMatch(source, /from (["'])\.\/filesystem-types\.js\1/);
+        assert.match(source, /from (["'])\.\/filesystem-preopens-higher\.js\1/);
 
         await cleanup();
     });
