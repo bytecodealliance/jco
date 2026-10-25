@@ -199,7 +199,7 @@ jobs:
           name: jco-build-ts
           path: packages/jco/dist
       - name: Restore Component Model runtime build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-cm-runtime-dist
           path: packages/jco-cm-runtime/dist
@@ -212,7 +212,7 @@ jobs:
 
       # The runtime integration tests exercise the local transpiler through the API and CLI.
       - name: Restore jco-transpile vendor
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-transpile-vendor
           path: packages/jco-transpile/vendor
@@ -297,7 +297,7 @@ jobs:
           name: jco-transpile-vendor
           path: packages/jco-transpile/vendor
       - name: Restore Component Model runtime build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-cm-runtime-dist
           path: packages/jco-cm-runtime/dist
@@ -376,7 +376,7 @@ jobs:
           name: jco-build-ts
           path: packages/jco/dist
       - name: Restore Component Model runtime build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-cm-runtime-dist
           path: packages/jco-cm-runtime/dist
@@ -458,7 +458,7 @@ jobs:
           name: jco-build-ts
           path: packages/jco/dist
       - name: Restore Component Model runtime build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-cm-runtime-dist
           path: packages/jco-cm-runtime/dist
@@ -860,7 +860,7 @@ jobs:
           name: jco-build-ts
           path: packages/jco/dist
       - name: Restore Component Model runtime build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-cm-runtime-dist
           path: packages/jco-cm-runtime/dist
@@ -973,19 +973,19 @@ jobs:
           version: 11
 
       - name: Restore jco TS build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-ts
           path: packages/jco/dist
 
       - name: Restore jco build transpilation output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-build-transpiled
           path: packages/jco/obj
 
       - name: Restore preview2-shim build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: build-preview2-shim
           path: packages/preview2-shim/dist
@@ -1120,7 +1120,7 @@ jobs:
           name: jco-build-ts
           path: packages/jco/dist
       - name: Restore Component Model runtime build output
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jco-cm-runtime-dist
           path: packages/jco-cm-runtime/dist
