@@ -169,10 +169,14 @@ pub enum Intrinsic {
     /// Execute a closure with a certain set current thread
     WithGlobalCurrentThreadMetaFn,
 
-    /// Execute an async closure with a certain set current thread
+    /// Execute a closure with a certain set current task, which is async only
+    /// if the closure returns a promise
     WithGlobalCurrentThreadMetaFnAsync,
 
-    /// Clear the global thread meta
+    /// Run a generator function synchronously, until it yields a promise
+    MaybeSyncGeneratorFn,
+
+    /// Clear the global task meta
     ClearGlobalCurrentThreadMetaFn,
 
     /// Wrap the JS payload of a `WebAssembly.Suspending` import so the
@@ -1212,6 +1216,8 @@ impl Intrinsic {
             // In the future, this mechanism may be replaced with a simple event loop that necessarily executes
             // all pending work serially, with this intrinsic becoming simply queueing work onto that event loop.
             //
+            // A closure that returns synchronously is treated like WithGlobalCurrentThreadMetaFn.
+            // While the promise of one that returns a promise is pending, the task stays current.
             Self::WithGlobalCurrentThreadMetaFnAsync => {
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let with_global_current_thread_meta_async_fn =
@@ -1221,7 +1227,7 @@ impl Intrinsic {
 
                 output.push_str(&format!(
                     r#"
-                      async function {with_global_current_thread_meta_async_fn}(args) {{
+                      function {with_global_current_thread_meta_async_fn}(args) {{
                           {debug_log_fn}('[{with_global_current_thread_meta_async_fn}()] args', args);
                           if (!args) {{ throw new TypeError('args missing'); }}
                           if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
@@ -1230,27 +1236,88 @@ impl Intrinsic {
                           if (!args.fn) {{ throw new TypeError('missing fn'); }}
 
                           const {{ taskID, threadID, componentIdx, fn }} = args;
+                          const previous = {global_current_thread_meta_obj}[componentIdx] ?? null;
+                          const previousCurrent = {global_current_thread_meta_obj}.current ?? null;
 
+                          let result;
                           try {{
                               {global_current_thread_meta_obj}.current =
-                                  {global_current_thread_meta_obj}[componentIdx] = {{ threadID, taskID, componentIdx }};
-                              return await fn();
+                                  {global_current_thread_meta_obj}[componentIdx] = {{ taskID, threadID, componentIdx }};
+                              result = fn();
                           }} catch (err) {{
-                              {debug_log_fn}("error while executing async callee/callback", {{
+                              {debug_log_fn}("error while executing sync callee/callback", {{
                                   ...args,
                                   err,
                               }});
+                              {global_current_thread_meta_obj}[componentIdx] = previous;
+                              {global_current_thread_meta_obj}.current = previousCurrent;
                               throw err;
-                          }} finally {{
-                              if ({global_current_thread_meta_obj}[componentIdx]?.threadID === threadID &&
-                                  {global_current_thread_meta_obj}[componentIdx]?.taskID === taskID) {{
-                                  {global_current_thread_meta_obj}[componentIdx] = null;
-                              }}
-                              if ({global_current_thread_meta_obj}.current?.threadID === threadID &&
-                                  {global_current_thread_meta_obj}.current?.taskID === taskID) {{
-                                  {global_current_thread_meta_obj}.current = null;
-                              }}
                           }}
+
+                          if (result === null ||
+                              (typeof result !== 'object' && typeof result !== 'function') ||
+                              typeof result.then !== 'function') {{
+                              {global_current_thread_meta_obj}[componentIdx] = previous;
+                              {global_current_thread_meta_obj}.current = previousCurrent;
+                              return result;
+                          }}
+
+                          return (async () => {{
+                              try {{
+                                  return await result;
+                              }} catch (err) {{
+                                  {debug_log_fn}("error while executing async callee/callback", {{
+                                      ...args,
+                                      err,
+                                  }});
+                                  throw err;
+                              }} finally {{
+                                  if ({global_current_thread_meta_obj}[componentIdx]?.threadID === threadID &&
+                                      {global_current_thread_meta_obj}[componentIdx]?.taskID === taskID) {{
+                                      {global_current_thread_meta_obj}[componentIdx] = null;
+                                  }}
+                                  if ({global_current_thread_meta_obj}.current?.threadID === threadID &&
+                                      {global_current_thread_meta_obj}.current?.taskID === taskID) {{
+                                      {global_current_thread_meta_obj}.current = null;
+                                  }}
+                              }}
+                          }})();
+                      }}
+                    "#,
+                ));
+            }
+
+            // Wrap a generator function, which yields where an async function would await,
+            // so that it runs synchronously until it yields a promise. A host import that
+            // answers synchronously then returns synchronously, which a task that cannot
+            // block (e.g. a resource destructor) requires.
+            Self::MaybeSyncGeneratorFn => {
+                let maybe_sync_generator_fn = args.require_intrinsic(Self::MaybeSyncGeneratorFn);
+
+                output.push_str(&format!(
+                    r#"
+                      function {maybe_sync_generator_fn}(genFn) {{
+                          return function (...args) {{
+                              const gen = genFn.apply(this, args);
+                              const step = (method, value) => {{
+                                  while (true) {{
+                                      const {{ value: yielded, done }} = gen[method](value);
+                                      if (done) {{ return yielded; }}
+                                      if (yielded === null ||
+                                          (typeof yielded !== 'object' && typeof yielded !== 'function') ||
+                                          typeof yielded.then !== 'function') {{
+                                          method = 'next';
+                                          value = yielded;
+                                          continue;
+                                      }}
+                                      return Promise.resolve(yielded).then(
+                                          res => step('next', res),
+                                          err => step('throw', err),
+                                      );
+                                  }}
+                              }};
+                              return step('next', undefined);
+                          }};
                       }}
                     "#,
                 ));
@@ -1300,6 +1367,8 @@ impl Intrinsic {
             // can abandon an unobserved promise. A nonblocking task may still
             // call a suspending import when the helper completes synchronously,
             // so preserve its raw result and reject only a returned promise.
+            // A host import (`callsHost`) handles a call without a current task,
+            // such as a destructor run outside of any task, in the same way.
             //
             // Run blocking helpers entirely inside an async function. Moving
             // the helper invocation outside that function changes JSPI
@@ -1327,7 +1396,7 @@ impl Intrinsic {
 
                 output.push_str(&format!(
                     r#"
-                      function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false, switchesTask = false, convertsRangeErrors = true) {{
+                      function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false, switchesTask = false, convertsRangeErrors = true, callsHost = false) {{
                           return function (...args) {{
                               {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_thread_meta_obj}[componentIdx] ?? null;
@@ -1338,7 +1407,7 @@ impl Intrinsic {
                               const mayBlock = savedThread
                                   ? (savedThread?.task.mayBlock() ?? ({current_task_may_block}.value !== 0))
                                   : false;
-                              if (!saved && !mayBlock) {{
+                              if (!saved && !mayBlock && !callsHost) {{
                                   throw new {runtime_error_class}('cannot block a synchronous task before returning');
                               }}
 
@@ -1661,7 +1730,7 @@ mod tests {
         assert!(source.contains("if (syncOnly || !mayBlock) {"));
 
         assert!(!source.contains("return async function (...args) {"));
-        assert!(source.contains("if (!saved && !mayBlock) {"));
+        assert!(source.contains("if (!saved && !mayBlock && !callsHost) {"));
 
         assert!(source.contains("result = fn.apply(null, args);"));
         assert!(source.contains("typeof result.then === 'function'"));
@@ -1673,6 +1742,26 @@ mod tests {
         assert!(source.contains("return (async () => {"));
         assert!(source.contains("const result = await fn.apply(null, args);"));
         assert!(source.contains("CURRENT_TASK_META[componentIdx] = saved;"));
+    }
+
+    #[test]
+    fn maybe_sync_generator_awaits_only_promises() {
+        let source = render_intrinsic_body(Intrinsic::MaybeSyncGeneratorFn);
+
+        assert!(source.contains("const gen = genFn.apply(this, args);"));
+        assert!(source.contains("typeof yielded.then !== 'function'"));
+        assert!(source.contains("return Promise.resolve(yielded).then("));
+        assert!(source.contains("err => step('throw', err),"));
+    }
+
+    #[test]
+    fn async_current_task_wrapper_restores_sync_results() {
+        let source = render_intrinsic_body(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
+
+        assert!(source.contains("result = fn();"));
+        assert!(source.contains("CURRENT_TASK_META[componentIdx] = previous;"));
+        assert!(source.contains("return await result;"));
+        assert!(source.contains("CURRENT_TASK_META[componentIdx] = null;"));
     }
 
     #[test]
@@ -2936,6 +3025,7 @@ impl Intrinsic {
             Self::SetGlobalCurrentThreadMetaFn => "_setGlobalCurrentThreadMeta",
             Self::WithGlobalCurrentThreadMetaFn => "_withGlobalCurrentThreadMeta",
             Self::WithGlobalCurrentThreadMetaFnAsync => "_withGlobalCurrentThreadMetaAsync",
+            Self::MaybeSyncGeneratorFn => "_maybeSyncGenerator",
             Self::ClearGlobalCurrentThreadMetaFn => "_clearCurrentTask",
             Self::SuspendingImportWrapperFn => "_suspendingImport",
             Self::ConditionalSuspending1I32ToI32Fn => "_conditionalSuspending1I32ToI32",

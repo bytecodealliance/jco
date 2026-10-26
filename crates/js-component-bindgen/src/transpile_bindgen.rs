@@ -273,6 +273,9 @@ struct JsFunctionBindgenArgs<'a> {
     requires_async_porcelain: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
     is_async: bool,
+    /// Whether the function in question is an import generated as a generator function
+    /// (see `FunctionBindgen::host_import_generator`)
+    host_import_generator: bool,
     /// Whether an async export must preserve its future result as an awaitable layer.
     wrap_async_future_result: bool,
     /// Whether the function in question is being generated for an import
@@ -3107,7 +3110,7 @@ impl<'a> Instantiator<'a, '_> {
                     // we can avoid the second check below.
                     uwriteln!(
                         self.src.js,
-                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false)) : {call};"
+                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false, true)) : {call};"
                     );
                 }
             }
@@ -4350,6 +4353,7 @@ impl<'a> Instantiator<'a, '_> {
             import_name,
             &self.async_imports,
         );
+        let host_import_generator = requires_async_porcelain && !is_async;
         if is_async || self.types[func_ty].async_ || requires_async_porcelain {
             self.async_analysis
                 .suspending_trampolines
@@ -4499,8 +4503,18 @@ impl<'a> Instantiator<'a, '_> {
         let trampoline_idx = trampoline.as_u32();
         match self.bindgen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
+                // A JSPI import of a sync function returns synchronously when the host does,
+                // as a task that cannot block (e.g. a resource destructor) may be calling it.
+                //
                 // TODO(breaking): remove as we do not not need to manually specify async imports anymore in P3 w/ native coloring
-                if is_async | requires_async_porcelain {
+                if host_import_generator {
+                    let maybe_sync_generator_fn =
+                        self.bindgen.intrinsic(Intrinsic::MaybeSyncGeneratorFn);
+                    uwrite!(
+                        self.src.js,
+                        "\nconst _trampoline{trampoline_idx} = {maybe_sync_generator_fn}(function*"
+                    );
+                } else if is_async | requires_async_porcelain {
                     // NOTE: for async imports that will go through Trampoline::LowerImport,
                     // we prefix the raw import with '_' as it will later be used in the
                     // definition of trampoline{i} which will actually be fed into
@@ -4534,11 +4548,16 @@ impl<'a> Instantiator<'a, '_> {
                     abi,
                     requires_async_porcelain,
                     is_async,
+                    host_import_generator,
                     wrap_async_future_result: false,
                     for_import: true,
                     result_type_idx: None,
                 });
-                uwriteln!(self.src.js, "");
+                uwriteln!(
+                    self.src.js,
+                    "{}",
+                    if host_import_generator { ");" } else { "" }
+                );
 
                 uwriteln!(
                     self.src.js,
@@ -5329,6 +5348,7 @@ impl<'a> Instantiator<'a, '_> {
             abi,
             requires_async_porcelain,
             is_async,
+            host_import_generator,
             wrap_async_future_result,
             for_import,
             result_type_idx,
@@ -5536,6 +5556,7 @@ impl<'a> Instantiator<'a, '_> {
             resolve: self.resolve,
             requires_async_porcelain,
             is_async,
+            host_import_generator,
             canonical_abi_async: opts.async_,
             return_result_type_idx: result_type_idx,
             func_type_async: matches!(
@@ -6352,6 +6373,7 @@ impl<'a> Instantiator<'a, '_> {
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
             is_async,
+            host_import_generator: false,
             wrap_async_future_result,
             for_import: false,
             result_type_idx: Some(self.types[*func_ty_idx].results.as_u32()),
