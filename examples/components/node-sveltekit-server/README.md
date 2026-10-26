@@ -15,7 +15,8 @@ process.
 ## How it works
 
 The standard SvelteKit Node deployment flow starts when Vite builds the
-application with `@sveltejs/adapter-node`. The adapter produces
+application with `@sveltejs/adapter-node`, configured through the SvelteKit 3
+plugin in [`vite.config.js`](./vite.config.js). The adapter produces
 `build/handler.js`, containing SvelteKit's SSR server, form-action routing, and
 static asset middleware. Normally, an application imports that handler, passes
 it to a `node:http` server, and starts listening.
@@ -120,7 +121,8 @@ HTTP callbacks.
 
 jco-std's `AsyncLocalStorage` support is intentionally synchronous, while
 SvelteKit uses async request-local storage. The component-only bundle config
-selects SvelteKit's existing serialized-request fallback. It also bypasses
+selects SvelteKit's existing serialized-request fallback and disables optional
+Node diagnostics that use the unsupported `process.getBuiltinModule`. It also bypasses
 `String.prototype.normalize` for generated ASCII asset names because that
 method is not currently available in StarlingMonkey.
 
@@ -140,7 +142,7 @@ resulting Wasm. The future runtime's host capabilities are not attached during
 that build-time execution.
 
 Loading `node:http` initializes host-backed Node state, and the Node adapter
-reads `process.env` and indexes its generated client directory. The wrapper
+reads `process.env` and locates its generated client directory. The wrapper
 therefore dynamically imports [`src/runtime.ts`](./src/runtime.ts), which loads
 `node:http` and the adapter entry point, inside `start` after the component
 embedder has supplied HTTP, process, filesystem, and TTY capabilities.

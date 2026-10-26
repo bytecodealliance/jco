@@ -159,6 +159,12 @@ for (const target of targets) {
         assert.equal(invalid.status, 400);
         assert.match(await invalid.text(), /Give this task a short, useful name\./);
 
+        const escaped = await submit(url, 'add', { title: 'Escape <script>alert("x")</script> & 🌍' });
+        assert.equal(escaped.status, 200);
+        const escapedHtml = await escaped.text();
+        assert.ok(escapedHtml.includes('Escape &lt;script>alert("x")&lt;/script> &amp; 🌍'));
+        assert.ok(!escapedHtml.includes('<script>alert("x")</script>'));
+
         const missing = await fetch(new URL('/missing', url));
 
         assert.equal(missing.status, 404);
