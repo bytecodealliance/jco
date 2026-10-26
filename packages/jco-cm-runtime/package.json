@@ -17,7 +17,8 @@
         "url": "git+https://github.com/bytecodealliance/jco.git"
     },
     "files": [
-        "dist"
+        "dist",
+        "docs"
     ],
     "type": "module",
     "sideEffects": false,
