@@ -8,8 +8,8 @@ mod bindings {
     use super::Component;
     wit_bindgen::generate!({
         world: "sync-lowered-async-import",
-        async: [
-            "-import:jco:test-components/sync-lowered-async-import-host#compute",
+        sync: [
+            "import:jco:test-components/sync-lowered-async-import-host#compute",
         ],
     });
     export!(Component);

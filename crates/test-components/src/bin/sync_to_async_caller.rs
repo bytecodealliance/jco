@@ -5,9 +5,9 @@ mod bindings {
         // Force the (WIT-async) compute import to be *sync-lowered*: the
         // binding blocks until the callee resolves, and the fused adapter
         // routes the call through PrepareCall + SyncStartCall
-        async: [
-            "-import:jco:test-components/sync-lower-compute#compute",
-            "-import:jco:test-components/sync-lower-compute#compute-list",
+        sync: [
+            "import:jco:test-components/sync-lower-compute#compute",
+            "import:jco:test-components/sync-lower-compute#compute-list",
         ],
     });
     export!(Component);
