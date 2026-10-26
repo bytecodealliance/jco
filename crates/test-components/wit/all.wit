@@ -1073,3 +1073,17 @@ world host-value-disposal {
   import host-value-disposal-host;
   export host-value-disposal-guest;
 }
+
+/// A guest resource whose destructor calls back into the host
+interface dropped-resource {
+  resource thing {
+    constructor();
+  }
+}
+
+/// The destructor of `thing` calls the `tick` import. When the host drops a
+/// `thing`, the destructor runs as a synchronous task, which cannot block
+world resource-drop-host-import {
+  import tick;
+  export dropped-resource;
+}

@@ -1,14 +1,15 @@
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { mkdir, rm, symlink } from 'node:fs/promises';
 
 import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert, expect } from 'vitest';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 import { transpile } from '../src/index.js';
 
 import { getTmpDir, setupAsyncTest } from './helpers.js';
-import { AsyncFunction } from './common.js';
+import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
 suite('Host Import Async (JSPI)', () => {
     test('Transpile async', async () => {
@@ -298,6 +299,56 @@ suite('Host Import Async (JSPI)', () => {
                 setTimeout(() => reject(new Error('export call timed out')), 5_000),
             );
             await expect(Promise.race([exportCall, timeout])).rejects.toBe(inducedError);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // A resource destructor runs as a synchronous task, which cannot block: a JSPI
+    // import called from it must return synchronously when the host does, and trap
+    // only when the host returns a promise.
+    test.concurrent('Transpile async, import called from resource destructor (NodeJS, JSPI)', async () => {
+        if (typeof WebAssembly?.Suspending !== 'function') {
+            return;
+        }
+
+        let ticks = 0;
+        let hostIsAsync = false;
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'resource-drop-host-import.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/tick': {
+                        tick: () => {
+                            ticks += 1;
+                            if (hostIsAsync) {
+                                return Promise.resolve();
+                            }
+                        },
+                    },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncImports: ['jco:test-components/tick#tick'],
+                    },
+                },
+            },
+        });
+
+        try {
+            const { Thing } = instance['jco:test-components/dropped-resource'];
+
+            new Thing()[Symbol.dispose]();
+            new Thing()[Symbol.dispose]();
+            assert.strictEqual(ticks, 2);
+
+            hostIsAsync = true;
+            assert.throws(() => new Thing()[Symbol.dispose](), 'cannot block a synchronous task before returning');
+            assert.strictEqual(ticks, 3);
         } finally {
             await cleanup();
         }
