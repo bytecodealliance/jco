@@ -229,6 +229,11 @@ pub struct FunctionBindgen<'a> {
     /// Whether the function is guest async lifted (i.e. WASI P3)
     pub is_async: bool,
 
+    /// Whether the body of an import is generated for a generator function (run by
+    /// `MaybeSyncGeneratorFn`), which yields the host's answer instead of awaiting it,
+    /// so that it is synchronous unless the host returns a promise
+    pub(crate) host_import_generator: bool,
+
     /// Whether the canonical ABI call itself is async.
     ///
     /// This can differ from `is_async` when an async component function is
@@ -2395,12 +2400,19 @@ impl Bindgen for FunctionBindgen<'_> {
                 // at the CM level -- async functions always return
                 let fn_wasm_result_count = if func.result.is_none() { 0 } else { 1 };
 
+                // A generator yields only the host's answer, and a host task enters at once
+                let (await_, enter_task) = if self.host_import_generator {
+                    ("yield ", "task.enterHost()")
+                } else {
+                    ("await ", "await task.enter({ isHost: hostProvided })")
+                };
+
                 // If the task is async, do an explicit wait for backpressure before the call execution
                 if task_managed && is_async {
                     uwriteln!(
                         self.src,
                         r#"
-                        const started = await task.enter({{ isHost: hostProvided }});
+                        const started = {enter_task};
                         if (!started) {{
                             {debug_log_fn}('[Instruction::CallInterface] failed to enter task', {{
                                 taskID: task.id(),
@@ -2428,7 +2440,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     || self.requires_async_porcelain
                 {
                     (
-                        "await ",
+                        await_,
                         self.task_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync),
                         format!(
                             r#"

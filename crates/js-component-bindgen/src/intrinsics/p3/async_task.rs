@@ -1880,6 +1880,35 @@ impl AsyncTaskIntrinsic {
                             return true;
                         }}
 
+                        enterHost() {{
+                            if (this.#entered) {{
+                                throw new Error(`task with ID [${{this.#id}}] should not be entered twice`);
+                            }}
+
+                            // If cancellation was requested before the task was entered, resolve
+                            // as cancelled without ever running host code
+                            if (this.deliverPendingCancel({{ cancellable: true }})) {{
+                                this.cancel();
+                                return false;
+                            }}
+
+                            {get_or_create_async_state_fn}(this.#componentIdx);
+
+                            this.#entered = true;
+                            // A guest task may be synchronously blocked in this
+                            // host entry. Propagate that boundary so an async
+                            // cancellation driver can yield BLOCKED while the host
+                            // operation is outstanding.
+                            const parentTask = this.#parentSubtask?.getParentTask();
+                            if (
+                                parentTask?.taskState() === {task_class}.State.CANCEL_DELIVERED
+                                || (parentTask && !parentTask.hasCallback())
+                            ) {{
+                                parentTask.notifyProgress();
+                            }}
+                            return this.#entered;
+                        }}
+
                         async enter(opts) {{
                             {debug_log_fn}('[{task_class}#enter()] args', {{
                                 taskID: this.#id,
@@ -1888,6 +1917,8 @@ impl AsyncTaskIntrinsic {
                                 args: opts,
                                 entryFnName: this.#entryFnName,
                             }});
+
+                            if (opts?.isHost) {{ return this.enterHost(); }}
 
                             if (this.#entered) {{
                                 throw new Error(`task with ID [${{this.#id}}] should not be entered twice`);
@@ -1901,22 +1932,6 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-
-                            if (opts?.isHost) {{
-                                this.#entered = true;
-                                // A guest task may be synchronously blocked in this
-                                // host entry. Propagate that boundary so an async
-                                // cancellation driver can yield BLOCKED while the host
-                                // operation is outstanding.
-                                const parentTask = this.#parentSubtask?.getParentTask();
-                                if (
-                                    parentTask?.taskState() === {task_class}.State.CANCEL_DELIVERED
-                                    || (parentTask && !parentTask.hasCallback())
-                                ) {{
-                                    parentTask.notifyProgress();
-                                }}
-                                return this.#entered;
-                            }}
 
                             // NOTE: concurrent task lifetimes within one component instance are
                             // permitted by the Component Model: entry is governed by the
@@ -3904,8 +3919,8 @@ impl AsyncTaskIntrinsic {
                         // not actually async (but are specified as so).
                         //
                         // This is not normal p3 sync behavior but instead anticipating that
-                        // the caller that is doing manual async will be waiting for a promise that
-                        // resolves to the *actual* result.
+                        // the caller that is doing manual async will be given the *actual* result,
+                        // or a promise that resolves to it.
                         //
                         // TODO(breaking): remove once manually specified async is removed
                         //
@@ -3920,10 +3935,21 @@ impl AsyncTaskIntrinsic {
                         // lifting/lowering (async ABI did not exist when JSPI integratiton was
                         // initially merged to enable asynchronously returning values from the host)
                         //
-                        const requiresManualAsyncResult = !isAsync && !funcTypeIsAsync && isManualAsync;
-                        let manualAsyncResult;
-                        if (requiresManualAsyncResult) {{
-                            manualAsyncResult = {promise_with_resolvers_fn}();
+                        // The host is called now rather than in a microtask, so that a host which
+                        // answers synchronously is answered synchronously: a task that cannot block
+                        // (e.g. a resource destructor) traps on a promise.
+                        if (!isAsync && !funcTypeIsAsync && isManualAsync) {{
+                            {debug_log_fn}('[{lower_import_backwards_compat_fn}()] calling lowered import', {{ importFn, params }});
+                            if (createdTask) {{ createdTask.enterSync(); }}
+                            const res = importFn(...params);
+                            const isPromise = res !== null &&
+                                (typeof res === 'object' || typeof res === 'function') &&
+                                typeof res.then === 'function';
+                            // Without a current task the call cannot block, and its caller
+                            // traps on a promise, so a task created for it ends now
+                            if (createdTask) {{ createdTask.resolve([isPromise ? undefined : res]); }}
+                            if (!isPromise) {{ return subtask.getResult(); }}
+                            return Promise.resolve(res).then(() => subtask.getResult());
                         }}
 
                         queueMicrotask(async () => {{
@@ -3932,25 +3958,13 @@ impl AsyncTaskIntrinsic {
                                 if (createdTask) {{ await createdTask.enter(); }}
 
                                 const asyncRes = await importFn(...params);
-                                if (requiresManualAsyncResult) {{
-                                    manualAsyncResult.resolve(subtask.getResult());
-                                }}
-
                                 if (createdTask) {{ createdTask.resolve([asyncRes]); }}
-
-
                             }} catch (err) {{
                                 {debug_log_fn}("[{lower_import_backwards_compat_fn}()] import fn error:", err);
-                                if (requiresManualAsyncResult) {{
-                                    manualAsyncResult.reject(err);
-                                    return;
-                                }}
                                 task.setErrored(err);
                                 task.reject(err);
                             }}
                         }});
-
-                        if (requiresManualAsyncResult) {{ return manualAsyncResult.promise; }}
 
                         {debug_log_fn}('[{lower_import_backwards_compat_fn}()] async-lowered import return', {{
                             fnName: importFn.fnName,
