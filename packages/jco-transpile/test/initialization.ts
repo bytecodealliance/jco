@@ -78,4 +78,40 @@ suite('non-wizered raw initialize export', () => {
 
         await cleanup();
     });
+
+    // Initialization runs as a synchronous task, which cannot block: a JSPI import
+    // it calls must return synchronously when the host does
+    test('legacy async, initialization calls an async import', async () => {
+        if (typeof WebAssembly?.Suspending !== 'function') {
+            return;
+        }
+
+        const name = 'non-wizered-init';
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name,
+                path: join(LOCAL_TEST_COMPONENTS_DIR, `${name}.wasm`),
+                imports: {
+                    ...new WASIShim({ sandbox: { env: { TEST: 'YES' } } }).getImportObject(),
+                    'jco:test-components/get-string': {
+                        getString() {
+                            return 'FROM IMPORT';
+                        },
+                    },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        asyncMode: 'jspi',
+                        asyncImports: ['wasi:cli/environment@0.2.6#get-environment'],
+                    },
+                },
+            },
+        });
+
+        assert.strictEqual(instance['jco:test-components/local-run-string'].run(), 'YES');
+
+        await cleanup();
+    });
 });
