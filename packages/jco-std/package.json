@@ -756,7 +756,7 @@
     "hono": "^4.13.11",
     "rolldown": "^1.0.0-beta.46",
     "typescript": "catalog:",
-    "vitest": "^4.1.11",
+    "vitest": "^4.1.12",
     "which": "^5.0.0"
   },
   "peerDependencies": {

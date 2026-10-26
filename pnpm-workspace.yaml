@@ -8,13 +8,14 @@ allowBuilds:
 overrides:
   '@bytecodealliance/weval': 0.5.0
   brace-expansion: 5.0.12
-  cookie: 0.7.2
+  'cookie@<1': 0.7.2
   devalue: 5.9.4
-  fast-uri: 3.1.8
+  fast-uri: 3.1.9
   js-yaml: 4.3.2
   nanoid: 3.3.19
-  qs: 6.16.0
-  undici: 6.28.1
+  qs: 6.16.1
+  'tinypool@<2.1.2': 2.1.2
+  undici: 6.29.1
 
 packages:
   - crates/jco-tests
@@ -75,10 +76,10 @@ catalog:
   '@rolldown/binding-win32-arm64-msvc': ^1.2.4
   '@rolldown/binding-win32-x64-msvc': ^1.2.4
   mime: ^4.0.7
-  puppeteer: ^25.12.0
+  puppeteer: ^25.14.0
   rolldown: ^1.2.4
   typescript: 7.0.2
-  vitest: ^4.1.11
+  vitest: ^4.1.12
   which: ^2.0.2
 
 minimumReleaseAgeExclude:
@@ -140,11 +141,12 @@ minimumReleaseAgeExclude:
   - brace-expansion@5.0.12
   - cookie@0.7.2
   - devalue@5.9.4
-  - fast-uri@3.1.8
+  - fast-uri@3.1.9
   - js-yaml@4.3.2
   - nanoid@3.3.19
-  - qs@6.16.0
-  - undici@6.28.1
+  - qs@6.16.1
+  - undici@6.29.1
+  - body-parser@2.4.0
   - '@bytecodealliance/jco-transpile@0.3.7 || 0.3.8 || 0.3.9 || 0.4.0 || 0.4.1 || 0.4.2 || 0.5.0 || 0.5.1 || 0.5.2 || 0.6.0 || 0.6.1 || 0.7.0 || 0.8.0 || 0.10.0 || 0.11.0 || 0.12.0 || 0.12.1 || 0.13.0 || 0.14.0 || 0.15.0 || 0.16.0 || 0.17.0 || 0.18.0 || 0.19.0 || 0.20.0'
   - '@bytecodealliance/preview2-shim@0.19.0 || 0.20.1 || 0.20.2 || 0.21.0 || 0.22.0 || 0.24.0 || 0.24.1 || 0.25.0 || 0.26.0 || 0.26.1 || 0.27.0 || 0.27.1 || 0.28.0 || 0.29.0 || 0.30.0'
   - '@bytecodealliance/preview3-shim@0.1.2 || 0.2.0 || 0.2.2 || 0.3.0 || 0.3.1 || 0.3.2 || 0.4.0 || 0.5.0 || 0.6.0 || 0.6.1 || 0.7.0 || 0.8.0 || 0.8.1 || 0.9.0 || 0.10.0'
