@@ -104,7 +104,8 @@ export async function nodeExec(cmd: string, ...args) {
             }
         });
         cp.on('error', reject);
-        cp.on('exit', (code) => {
+        // The exit event can arrive before the child's stdout/stderr have been drained.
+        cp.on('close', (code) => {
             if (code === 0) {
                 resolve();
                 return;

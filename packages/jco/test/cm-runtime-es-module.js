@@ -10,26 +10,31 @@ import { transpileCmd } from "../src/cmd/transpile.js";
 import { exec, getTmpDir } from "./helpers.js";
 
 const fixture = fileURLToPath(
-    new URL("../../jco-transpile/test/fixtures/components/runtime/resources.2.component.wat", import.meta.url),
+    new URL(
+        "../../jco-transpile/test/fixtures/components/runtime/external-runtime-resource.component.wat",
+        import.meta.url,
+    ),
 );
 const cmRuntimeEsModule = "test-runtime-provider";
-const runtimeFixture = new URL("../../jco-transpile/test/fixtures/custom-runtime-provider.js", import.meta.url);
+const runtimeFixture = new URL("../../jco-transpile/test/fixtures/custom-runtime/", import.meta.url);
 const jcoPackageDir = fileURLToPath(new URL("../", import.meta.url));
 
 async function installRuntimeInConsumer(dir) {
     const packageDir = join(dir, "node_modules", cmRuntimeEsModule);
-    await mkdir(packageDir, { recursive: true });
-    await writeFile(join(packageDir, "package.json"), JSON.stringify({ name: cmRuntimeEsModule, type: "module" }));
-    await copyFile(runtimeFixture, join(packageDir, "index.js"));
-    const provider = await import(pathToFileURL(join(packageDir, "index.js")).href);
-    provider.resetRuntimeCreateCallCount();
+    await cp(runtimeFixture, packageDir, { recursive: true });
+    const provider = await import(pathToFileURL(join(packageDir, "intrinsics/resource.js")).href);
+    provider.resetTableGetCallCount();
     return provider;
 }
 
 async function instantiateFromDir(dir, name) {
     await writeFile(join(dir, "package.json"), JSON.stringify({ type: "module" }));
     const bindings = await import(pathToFileURL(join(dir, `${name}.js`)).href);
-    bindings.instantiate((moduleName) => new WebAssembly.Module(readFileSync(join(dir, moduleName))), {});
+    const instance = bindings.instantiate(
+        (moduleName) => new WebAssembly.Module(readFileSync(join(dir, moduleName))),
+        {},
+    );
+    expect(instance.run(42)).toBe(42);
 }
 
 async function installCliInConsumer(dir) {
@@ -50,14 +55,14 @@ async function installCliInConsumer(dir) {
 }
 
 describe("custom Component Model runtime", () => {
-    test("neither Jco package depends on the optional runtime", async () => {
+    test.concurrent("neither Jco package depends on the optional runtime", async () => {
         for (const path of ["../package.json", "../node_modules/@bytecodealliance/jco-transpile/package.json"]) {
             const manifest = JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
             expect(manifest.dependencies).not.toHaveProperty("@bytecodealliance/jco-cm-runtime");
         }
     });
 
-    test("the API imports a caller-supplied runtime only in generated bindings", async () => {
+    test.concurrent("the API imports a caller-supplied runtime only in generated bindings", async () => {
         const dir = await getTmpDir();
         const name = "runtime-api";
 
@@ -73,15 +78,15 @@ describe("custom Component Model runtime", () => {
                 await writeFile(join(dir, filename), bytes);
             }
             const source = await readFile(join(dir, `${name}.js`), "utf8");
-            expect(source).toContain(`from "${cmRuntimeEsModule}"`);
+            expect(source).toContain(`from "${cmRuntimeEsModule}/intrinsics/resource"`);
             await instantiateFromDir(dir, name);
-            expect(provider.runtimeCreateCallCount).toBe(1);
+            expect(provider.tableGetCallCount).toBe(1);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
     });
 
-    test("the command handler forwards cmRuntimeEsModule to generated bindings", async () => {
+    test.concurrent("the command handler forwards cmRuntimeEsModule to generated bindings", async () => {
         const dir = await getTmpDir();
         const name = "runtime-cli";
 
@@ -95,15 +100,15 @@ describe("custom Component Model runtime", () => {
                 quiet: true,
             });
             const source = await readFile(join(dir, `${name}.js`), "utf8");
-            expect(source).toContain(`from "${cmRuntimeEsModule}"`);
+            expect(source).toContain(`from "${cmRuntimeEsModule}/intrinsics/resource"`);
             await instantiateFromDir(dir, name);
-            expect(provider.runtimeCreateCallCount).toBe(1);
+            expect(provider.tableGetCallCount).toBe(1);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }
     });
 
-    test("the CLI uses its installed transpiler and a runtime installed only with its output", async () => {
+    test.concurrent("the CLI uses its installed transpiler and a runtime installed only with its output", async () => {
         const root = await getTmpDir();
         const dir = join(root, "output");
         const name = "runtime-cli-e2e";
@@ -126,9 +131,9 @@ describe("custom Component Model runtime", () => {
                 cmRuntimeEsModule,
             );
             const source = await readFile(join(dir, `${name}.js`), "utf8");
-            expect(source).toContain(`from "${cmRuntimeEsModule}"`);
+            expect(source).toContain(`from "${cmRuntimeEsModule}/intrinsics/resource"`);
             await instantiateFromDir(dir, name);
-            expect(provider.runtimeCreateCallCount).toBe(1);
+            expect(provider.tableGetCallCount).toBe(1);
         } finally {
             await rm(root, { recursive: true, force: true });
         }
