@@ -23,13 +23,13 @@ and base64-encoded contents. It never opens the named file.
 
 The server uses ordinary Node.js imports:
 
-| API | Use inside the component |
-| --- | --- |
-| `node:http` | Create and listen on the HTTP server in both runtimes. |
-| `node:stream` | Turn the chunks into a classic `Readable` stream. |
-| `node:stream/consumers` | Collect that stream as text. |
-| `node:buffer` | Count UTF-8 bytes and encode them as base64. |
-| `node:path` | Normalize the filename with portable POSIX semantics. |
+| API                     | Use inside the component                               |
+| ----------------------- | ------------------------------------------------------ |
+| `node:http`             | Create and listen on the HTTP server in both runtimes. |
+| `node:stream`           | Turn the chunks into a classic `Readable` stream.      |
+| `node:stream/consumers` | Collect that stream as text.                           |
+| `node:buffer`           | Count UTF-8 bytes and encode them as base64.           |
+| `node:path`             | Normalize the filename with portable POSIX semantics.  |
 
 Jco's built-in bundler replaces those imports with jco-std implementations.
 The SDK, Zod validation, and tool execution all run inside WebAssembly. There
@@ -62,15 +62,11 @@ this HTTP example does not need host process operations or native stdin/stdout.
 
 ## Quickstart
 
-Use Node.js 24 or newer and pnpm. This example uses workspace packages because
-it exercises Node compatibility support from this checkout. From the repository
-root, install and build the tooling once:
+Use Node.js 24 or newer and pnpm. This example uses the released Jco CLI.
+From the repository root, install the dependencies:
 
 ```console
 pnpm install
-pnpm --filter @bytecodealliance/jco run build
-pnpm --filter @bytecodealliance/jco-std run build:ts
-pnpm --filter @bytecodealliance/preview2-shim run build
 ```
 
 Then run the complete example:
