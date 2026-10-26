@@ -39,4 +39,41 @@ import `CM_RUNTIME_API_VERSION` from `<base>/runtime` and `tableGet` from
 Relative bases resolve from the generated output. `tableGet` receives an explicit
 trap context, table and handle; other intrinsics remain inline. Legacy provider
 files and `runtime.create` must migrate to the
-[named-module contract](../../packages/jco-cm-runtime/README.md).
+[named-module contract](../../packages/jco-cm-runtime/docs/runtime.md).
+
+```toml
+[dependencies]
+js-component-bindgen = { version = "2.17", features = ["external-runtime"] }
+```
+
+```rust
+use js_component_bindgen::{TranspileConfig, TranspileOpts, transpile_with_config};
+
+let config = TranspileConfig::builder()
+    .opts(TranspileOpts::builder().name("component".into()).build())
+    .cm_runtime_es_module("@bytecodealliance/jco-cm-runtime".into())
+    .build();
+let transpiled = transpile_with_config(component, config)?;
+```
+
+The existing `transpile(component, opts)` API and `TranspileOpts` struct literals
+remain supported. `TranspileConfig` is non-exhaustive so future configuration
+fields can be added without breaking callers; construct it with its builder or
+`Default`.
+
+The separate opt-in `coop-threads` Cargo feature exposes the thread-named
+`Intrinsic` aliases, such as `Intrinsic::GlobalCurrentThreadMeta`. The published
+task-named variants remain available for exhaustive matches. This feature is
+independent of `external-runtime`; it controls the public Rust names and does
+not change the generated JavaScript.
+
+# License
+
+This project is licensed under the Apache 2.0 license with the LLVM exception.
+See [LICENSE](LICENSE) for more details.
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license,
+shall be licensed as above, without any additional terms or conditions.

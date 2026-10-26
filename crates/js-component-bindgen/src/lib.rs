@@ -86,8 +86,8 @@ pub struct TranspileConfig {
     /// Options shared with `transpile` and [`generate_types`].
     #[builder(default)]
     pub opts: TranspileOpts,
-    /// ES module providing the Component Model runtime implementation used by
-    /// generated bindings. The module must export a `runtime` provider.
+    /// Package or directory base for the experimental Component Model runtime.
+    /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     /// Intrinsics are generated inline when this is `None` (the default).
     /// Requires the `external-runtime` Cargo feature.
     #[cfg(feature = "external-runtime")]
