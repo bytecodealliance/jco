@@ -91,6 +91,9 @@ Perry read: hello from the filesystem
 
 ### Install dependencies and select the compiler
 
+This example uses the workspace Jco CLI because Jco 1.39.0
+does not include `jco componentize --backend perry`.
+
 From this example directory, install the package dependencies and Perry:
 
 ```console
