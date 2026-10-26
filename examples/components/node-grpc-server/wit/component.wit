@@ -1,6 +1,7 @@
 package example:node-grpc-server;
 
 world component {
+    import jco:node/tls@0.1.0;
     import jco:node/http2@0.1.0;
 
     export jco:node/http2-callbacks@0.1.0;

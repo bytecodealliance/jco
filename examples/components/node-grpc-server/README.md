@@ -23,13 +23,13 @@ defines `GreeterService.Greet`, a unary RPC that returns a greeting or rejects a
 empty name with `INVALID_ARGUMENT`. The service also sets a response header and
 a trailer containing the UTF-8 byte count of the supplied name.
 
-| API or tool | Purpose |
-| --- | --- |
-| `node:http2` | Create the shared HTTP/2 server and send response trailers. |
-| `node:buffer` | Count UTF-8 bytes and construct empty response bodies. |
-| `node:stream/consumers` | Collect the SDK's response stream as a buffer. |
-| Buf CLI | Lint the schema, run the local code generator, and call the server over gRPC. |
-| Connect router | Handle gRPC envelopes, protobuf messages, status codes, and metadata. |
+| API or tool             | Purpose                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `node:http2`            | Create the shared HTTP/2 server and send response trailers.                   |
+| `node:buffer`           | Count UTF-8 bytes and construct empty response bodies.                        |
+| `node:stream/consumers` | Collect the SDK's response stream as a buffer.                                |
+| Buf CLI                 | Lint the schema, run the local code generator, and call the server over gRPC. |
+| Connect router          | Handle gRPC envelopes, protobuf messages, status codes, and metadata.         |
 
 The server uses Connect's router with only the gRPC protocol enabled. A small
 bridge connects its request/response interface to Node's HTTP/2 API. The
@@ -49,16 +49,17 @@ I/O. Import mappings preserve WIT interface names. Node's
 `--experimental-wasm-jspi` flag enables the asynchronous component callbacks.
 [`serve-node.js`](./serve-node.js) imports the same source directly on Node.
 
+The released CLI also imports `jco:node/tls@0.1.0` for the HTTP/2 module.
+The runner supplies the default denial providers for Node and WASI TLS because
+this example uses plaintext HTTP/2.
+
 ## Quickstart
 
-Use Node.js 24 or newer and pnpm. This example uses workspace packages to exercise
-the HTTP/2 trailer support from this checkout. From the repository root:
+Use Node.js 24 or newer and pnpm. This example uses the released Jco CLI.
+From the repository root, install the dependencies:
 
 ```console
 pnpm install
-pnpm --filter @bytecodealliance/jco run build
-pnpm --filter @bytecodealliance/jco-std run build:ts
-pnpm --filter @bytecodealliance/preview2-shim run build
 ```
 
 Then run the complete example:
@@ -96,7 +97,7 @@ Expected output:
 
 ```json
 {
-  "message": "Hello, World!"
+    "message": "Hello, World!"
 }
 ```
 

@@ -59,15 +59,11 @@ Svelte templates, route actions, server lifecycle, launcher, and e2e tests.
 
 ## Quickstart
 
-Use Node.js 24 or newer and pnpm. This example uses workspace packages because
-it exercises Node compatibility support from this checkout. From this example
-directory, install and build the tooling once:
+Use Node.js 24 or newer and pnpm. This example uses the released Jco CLI.
+From this example directory, install the dependencies:
 
 ```console
 pnpm install
-pnpm --filter @bytecodealliance/jco run build
-pnpm --filter @bytecodealliance/jco-std run build:ts
-pnpm --filter @bytecodealliance/preview2-shim run build
 pnpm run setup:browser
 ```
 

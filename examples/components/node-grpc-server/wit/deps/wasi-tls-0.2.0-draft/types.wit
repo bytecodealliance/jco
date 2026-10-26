@@ -1,0 +1,27 @@
+// Adapted from WebAssembly/wasi-tls wit/types.wit,
+// 6781ae26084100c0628ef72cc44e4517c6c48ae5 (W3C Community CLA).
+// Local changes: wasi:io@0.2.12 and an availability query. See README.md.
+interface types {
+    /// Whether the host grants TLS connections. This query performs no IO.
+    is-available: func() -> bool;
+
+    use wasi:io/streams@0.2.12.{input-stream, output-stream};
+    use wasi:io/poll@0.2.12.{pollable};
+    use wasi:io/error@0.2.12.{error as io-error};
+
+    resource client-handshake {
+        constructor(server-name: string, input: input-stream, output: output-stream);
+
+        finish: static func(this: client-handshake) -> future-client-streams;
+    }
+
+    resource client-connection {
+        close-output: func();
+    }
+
+    resource future-client-streams {
+        subscribe: func() -> pollable;
+
+        get: func() -> option<result<result<tuple<client-connection, input-stream, output-stream>, io-error>>>;
+    }
+}

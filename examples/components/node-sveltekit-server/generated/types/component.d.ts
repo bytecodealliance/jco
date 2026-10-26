@@ -25,19 +25,20 @@ export interface Component {
 * Options accepted by `instantiate`.
 */
 export interface InstantiateOptions {
-/** Runtime overrides for this instance. */
-shim?: {
-/** Platform globals used instead of those on `globalThis`. */
-globals?: {
-/**
-* The WebAssembly implementation used by this instance,
-* including by the default `instantiateCore`. Defaults to
-* `globalThis.WebAssembly`.
-*/
-WebAssembly?: typeof WebAssembly;
-};
-};
+  /** Runtime overrides for this instance. */
+  shim?: {
+    /** Platform globals used instead of those on `globalThis`. */
+    globals?: {
+      /**
+      * The WebAssembly implementation used by this instance,
+      * including by the default `instantiateCore`. Defaults to
+      * `globalThis.WebAssembly`.
+      */
+      WebAssembly?: typeof WebAssembly;
+    };
+  };
 }
+
 
 /**
 * Instantiates this component with the provided imports and
