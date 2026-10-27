@@ -843,6 +843,7 @@ impl AsyncTaskIntrinsic {
                         {debug_log_fn}('[{thread_resume_later_fn}()] args', {{ componentIdx, threadHandle }});
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate) {{ throw new Error(`missing async state for component idx [${{componentIdx}}]`); }}
                         const thread = cstate.threads.get(threadHandle);
                         if (!thread) {{ throw new Error(`invalid/missing thread [${{threadHandle}}] for resume-later`); }}
 

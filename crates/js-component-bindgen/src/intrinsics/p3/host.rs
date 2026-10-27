@@ -249,7 +249,7 @@ impl HostIntrinsic {
                            }}
                         }});
 
-                        const {{ task: newTask, taskID: newTaskID, threadID: newThreadID }} = {create_new_current_task_fn}({{
+                        const {{ task: newTask, thread: newThread }} = {create_new_current_task_fn}({{
                             componentIdx: calleeComponentIdx,
                             isAsync,
                             getCalleeParamsFn,
@@ -283,7 +283,7 @@ impl HostIntrinsic {
 
                         {set_global_current_thread_meta_fn}({{
                             taskID: newTask.id(),
-                            threadID: newThreadID,
+                            threadID: newThread.id(),
                             componentIdx: newTask.componentIdx(),
                         }});
                     }}
