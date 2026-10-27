@@ -901,13 +901,13 @@ impl AsyncTaskIntrinsic {
                 };
                 output.push_str(&format!(
                     "
-                    function {fn_name}(ctx, i) {{
+                    function {fn_name}(ctx, threadIdx) {{
                         const {{ componentIdx, isCancellable }} = ctx;
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, i }});
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, threadIdx }});
                         const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        const other = i === 0 ? undefined : cstate.threads.get(i >>> 0);
+                        const other = threadIdx === 0 ? undefined : cstate.threads.get(threadIdx >>> 0);
                         if (!other || other === thread || !cstate.isThreadSuspended(other)) {{
                             throw new {runtime_error_class}('cannot resume thread which is not suspended');
                         }}
@@ -954,13 +954,13 @@ impl AsyncTaskIntrinsic {
                 let self_suspended = matches!(self, Self::ThreadSuspendThenPromote);
                 output.push_str(&format!(
                     "
-                    function {fn_name}(ctx, i) {{
+                    function {fn_name}(ctx, threadIdx) {{
                         const {{ componentIdx, isCancellable }} = ctx;
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, i }});
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, threadIdx }});
                         const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        const other = i === 0 ? undefined : cstate.threads.get(i >>> 0);
+                        const other = threadIdx === 0 ? undefined : cstate.threads.get(threadIdx >>> 0);
                         // An index that names no live thread traps; so does a self
                         // switch (the same check as the `*-then-resume` built-ins).
                         if (!other) {{
