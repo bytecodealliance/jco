@@ -55,6 +55,62 @@ use wasmtime_environ::{
     PrimaryMap,
 };
 
+/// Dispatch a host import through JSPI only when its caller may block. The
+/// dispatcher must itself be Wasm: a JS wrapper would prevent suspension across
+/// the intervening JS frame. Preserve the exact canonical lowering signature.
+pub(crate) fn conditional_host_import(ty: &wasmtime_environ::WasmFuncType) -> Vec<u8> {
+    use wasm_encoder::{BlockType, Instruction, ValType};
+    use wasmtime_environ::WasmValType;
+
+    let encode_type = |ty: &WasmValType| match ty {
+        WasmValType::I32 => ValType::I32,
+        WasmValType::I64 => ValType::I64,
+        WasmValType::F32 => ValType::F32,
+        WasmValType::F64 => ValType::F64,
+        _ => unreachable!("host import canonical ABI must use numeric types"),
+    };
+    let mut types = TypeSection::new();
+    types.ty().function([], [ValType::I32]);
+    types.ty().function(
+        ty.params().iter().map(encode_type),
+        ty.results().iter().map(encode_type),
+    );
+
+    let mut imports = ImportSection::new();
+    imports.import("", "mayBlock", EntityType::Function(0));
+    imports.import("", "fast", EntityType::Function(1));
+    imports.import("", "slow", EntityType::Function(1));
+    let mut functions = FunctionSection::new();
+    functions.function(1);
+    let mut exports = ExportSection::new();
+    exports.export("run", ExportKind::Func, 3);
+
+    let mut body = Function::new([]);
+    body.instruction(&Instruction::Call(0));
+    body.instruction(&Instruction::If(BlockType::Empty));
+    for i in 0..ty.params().len() {
+        body.instruction(&Instruction::LocalGet(i as u32));
+    }
+    body.instruction(&Instruction::Call(2));
+    body.instruction(&Instruction::Return);
+    body.instruction(&Instruction::End);
+    for i in 0..ty.params().len() {
+        body.instruction(&Instruction::LocalGet(i as u32));
+    }
+    body.instruction(&Instruction::Call(1));
+    body.instruction(&Instruction::End);
+    let mut code = CodeSection::new();
+    code.function(&body);
+
+    let mut module = Module::new();
+    module.section(&types);
+    module.section(&imports);
+    module.section(&functions);
+    module.section(&exports);
+    module.section(&code);
+    module.finish()
+}
+
 pub enum Translation<'a> {
     Normal(ModuleTranslation<'a>),
     Augmented {

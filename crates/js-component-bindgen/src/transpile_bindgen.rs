@@ -20,7 +20,7 @@ use wasmtime_environ::component::{
     ExtractCallback, ImportIndex, NameMapNoIntern, Transcode,
     TypeComponentLocalErrorContextTableIndex,
 };
-use wasmtime_environ::{EntityIndex, FuncIndex, PrimaryMap};
+use wasmtime_environ::{EntityIndex, FuncIndex, ModuleInternedTypeIndex, PrimaryMap};
 use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
 use wit_parser::abi::{AbiVariant, WasmType};
@@ -224,6 +224,12 @@ pub enum BindingsMode {
     DirectOptimized,
 }
 
+struct HostImportModule {
+    bytes: Vec<u8>,
+    local_name: String,
+    file_name: String,
+}
+
 struct JsBindgen<'a> {
     local_names: LocalNames,
 
@@ -237,6 +243,9 @@ struct JsBindgen<'a> {
 
     /// Core module count
     core_module_cnt: usize,
+
+    /// Typed JSPI dispatchers, shared by host imports with the same core signature.
+    host_import_modules: BTreeMap<ModuleInternedTypeIndex, HostImportModule>,
 
     /// Various options for code generation.
     opts: &'a TranspileOpts,
@@ -330,6 +339,7 @@ pub fn transpile_bindgen(
         src: Source::default(),
         esm_bindgen: EsmBindgen::default(),
         core_module_cnt: 0,
+        host_import_modules: BTreeMap::new(),
         opts: &opts,
         all_intrinsics: BTreeSet::new(),
         all_core_exported_funcs: Vec::new(),
@@ -497,6 +507,50 @@ struct InstantiationHelperNames {
 }
 
 impl JsBindgen<'_> {
+    /// Return the JS binding for a host import's typed Wasm dispatcher.
+    /// Generate its bytes and emit module loading/compilation code once per interned
+    /// core type; the dispatcher bypasses JSPI when the caller cannot block.
+    fn generate_host_import_module(
+        &mut self,
+        core_type: ModuleInternedTypeIndex,
+        types: &ComponentTypes,
+    ) -> String {
+        if let Some(module) = self.host_import_modules.get(&core_type) {
+            return module.local_name.clone();
+        }
+
+        let bytes = core::conditional_host_import(types[core_type].unwrap_func());
+        let local_name = self.local_names.create_once("hostImportModule").to_string();
+        let file_name = format!(
+            "{}.conditional-host-import-{}.wasm",
+            self.opts.name,
+            self.host_import_modules.len(),
+        );
+        let bytes_js = bytes
+            .iter()
+            .map(|b| format!("0x{b:02x}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let compile = format!("new WebAssembly.Module(new Uint8Array([{bytes_js}]))");
+        if self.opts.loads_conditional_suspending_wasm() {
+            uwriteln!(
+                self.src.js,
+                "const {local_name} = (yield getCoreModule('{file_name}')) ?? {compile};"
+            );
+        } else {
+            uwriteln!(self.src.js, "const {local_name} = {compile};");
+        }
+        self.host_import_modules.insert(
+            core_type,
+            HostImportModule {
+                bytes,
+                local_name: local_name.clone(),
+                file_name,
+            },
+        );
+        local_name
+    }
+
     /// Allocate deconflicted local names for the instantiation helper
     fn instantiation_helper_names(&mut self) -> InstantiationHelperNames {
         InstantiationHelperNames {
@@ -599,6 +653,9 @@ impl JsBindgen<'_> {
         // Emit conditional-suspending trampolines as files so hosts can precompile them
         let mut conditional_suspending_compilations = source::Source::default();
         if self.opts.loads_conditional_suspending_wasm() {
+            for module in self.host_import_modules.values() {
+                files.push(&module.file_name, &module.bytes);
+            }
             let wasm = Intrinsic::ConditionalSuspendingWasm.name();
             for intrinsic in self.all_intrinsics.iter() {
                 let Some((suffix, bytes)) = intrinsic.conditional_suspending_wasm() else {
@@ -3105,13 +3162,25 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         "let trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false));"
                     );
-                } else {
+                } else if self
+                    .async_analysis
+                    .suspending_trampolines
+                    .contains(&TrampolineIndex::from_u32(i))
+                {
+                    let conditional_host_import = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspendingHostImportFn);
+                    let module = self
+                        .bindgen
+                        .generate_host_import_module(canon_opts.core_type, self.types);
                     // TODO(breaking): once manually specifying async imports is removed,
                     // we can avoid the second check below.
                     uwriteln!(
                         self.src.js,
-                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false, true)) : {call};"
+                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? {conditional_host_import}({module}, {component_idx}, {suspending_wrap_fn}({component_idx}, {call}, false, false, false, true)) : {call};"
                     );
+                } else {
+                    uwriteln!(self.src.js, "let trampoline{i} = {call};");
                 }
             }
 
