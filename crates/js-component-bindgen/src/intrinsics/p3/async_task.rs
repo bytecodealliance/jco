@@ -877,7 +877,7 @@ impl AsyncTaskIntrinsic {
                 // the yield variant leaves self ready, same as plain `thread.yield`.
                 let (self_ready_fn, self_suspended) = match self {
                     Self::ThreadYieldThenResume => ("() => true", false),
-                    _ => ("() => false", true),
+                    Self::ThreadSuspendThenResume => ("() => false", true),
                 };
                 output.push_str(&format!(
                     "
