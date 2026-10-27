@@ -878,6 +878,7 @@ impl AsyncTaskIntrinsic {
                 let (self_ready_fn, self_suspended) = match self {
                     Self::ThreadYieldThenResume => ("() => true", false),
                     Self::ThreadSuspendThenResume => ("() => false", true),
+                    _ => unreachable!(),
                 };
                 output.push_str(&format!(
                     "
