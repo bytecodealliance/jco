@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.31.0] - 2026-10-27
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ await pending OPFS writes before teardown by @vados-cosmonic in #2297
+
+- _(p2-shim)_ add opt-in mutate-directory support by @vados-cosmonic in #2271
+
 ## [0.30.0] - 2026-10-15
 
 ### 🐛 Bug Fixes
