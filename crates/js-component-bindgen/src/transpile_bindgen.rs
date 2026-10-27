@@ -3718,13 +3718,18 @@ impl<'a> Instantiator<'a, '_> {
                 let thread_new_indirect_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadNewIndirect));
+                let guard_trap_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                 let component_instance_idx = instance.as_u32();
+                // Like the other non-suspending built-ins, a trap (out-of-range or
+                // uninitialized table index) must be recorded against the instance.
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {thread_new_indirect_fn}.bind(null, {{
+                    "const trampoline{i} = {guard_trap_fn}({component_instance_idx}, {thread_new_indirect_fn}.bind(null, {{
                         componentIdx: {component_instance_idx},
                         getStartFuncTableFn: () => table{start_func_table},
-                    }});\n",
+                    }}));\n",
                     start_func_table = start_func_table_idx.as_u32(),
                 );
             }
@@ -3788,13 +3793,18 @@ impl<'a> Instantiator<'a, '_> {
                 let resume_later_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadResumeLater));
+                let guard_trap_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                 let component_instance_idx = instance.as_u32();
+                // Like the other non-suspending built-ins, a trap (unknown or
+                // non-suspended thread) must be recorded against the instance.
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = {resume_later_fn}.bind(null, {{
+                      const trampoline{i} = {guard_trap_fn}({component_instance_idx}, {resume_later_fn}.bind(null, {{
                           componentIdx: {component_instance_idx},
-                      }});
+                      }}));
                     "#
                 );
             }

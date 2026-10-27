@@ -1333,7 +1333,7 @@ impl Intrinsic {
                               const saved = {global_current_thread_meta_obj}[componentIdx] ?? null;
 
                               const savedThread = saved
-                                  ? {get_current_thread}(saved.componentIdx, saved.threadID)
+                                  ? {get_current_thread}(saved.componentIdx, saved.threadID, saved.taskID)
                                   : null;
                               const mayBlock = savedThread
                                   ? (savedThread?.task.mayBlock() ?? ({current_task_may_block}.value !== 0))
@@ -1827,10 +1827,10 @@ mod tests {
         let state = render_intrinsic_body(Intrinsic::Component(
             ComponentIntrinsic::ComponentAsyncStateClass,
         ));
-        assert!(state.contains("const { task, readyFn, cancellable, onResume } = args;"));
-        assert!(state.contains("resume = () => onResume(!task.isCancelled());"));
+        assert!(state.contains("const { task, ...opts } = args;"));
+        assert!(state.contains("resume = () => onResume(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());"));
         assert!(state.contains("suspendedTaskCancellable(taskID)"));
-        assert!(state.contains("task.notifyProgress();"));
+        assert!(state.contains("thread.notifyProgress();"));
         assert!(state.contains("suspendedTaskReady(taskID)"));
         assert!(!state.contains("resumeOneReadyTask()"));
     }
@@ -1873,7 +1873,7 @@ mod tests {
         assert!(!poll.contains("deliverPendingCancel"));
 
         let yield_ = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadYield));
-        assert!(yield_.contains("if (!threadMeta.task.mayBlock()) {"));
+        assert!(yield_.contains("if (!task.mayBlock()) {"));
         assert!(yield_.contains(".runTickLoop();"));
         assert!(yield_.contains("return thread.suspend({"));
         assert!(yield_.contains(".then(keepGoing => keepGoing ? 0 : 1)"));
