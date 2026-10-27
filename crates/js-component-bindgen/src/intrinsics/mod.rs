@@ -169,14 +169,17 @@ pub enum Intrinsic {
     /// Execute a closure with a certain set current thread
     WithGlobalCurrentThreadMetaFn,
 
-    /// Execute a closure with a certain set current task, which is async only
+    /// Execute a closure with a certain set current thread, which is async only
     /// if the closure returns a promise
     WithGlobalCurrentThreadMetaFnAsync,
 
     /// Run a generator function synchronously, until it yields a promise
     MaybeSyncGeneratorFn,
 
-    /// Clear the global task meta
+    /// Bypass the JSPI boundary when a host import's caller cannot block.
+    ConditionalSuspendingHostImportFn,
+
+    /// Clear the global thread meta
     ClearGlobalCurrentThreadMetaFn,
 
     /// Wrap the JS payload of a `WebAssembly.Suspending` import so the
@@ -1456,6 +1459,30 @@ impl Intrinsic {
                       }}
                     "#,
                 ));
+            }
+
+            Self::ConditionalSuspendingHostImportFn => {
+                let wrapper = args.require_intrinsic(*self);
+                let current_meta = args.require_intrinsic(Self::GlobalCurrentThreadMeta);
+                let get_thread = args.require_intrinsic(AsyncTaskIntrinsic::GetCurrentThread);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {wrapper}(module, componentIdx, fn) {{
+                        return new WebAssembly.Instance(module, {{ '': {{
+                            mayBlock: () => {{
+                                const saved = {current_meta}[componentIdx];
+                                const thread = saved
+                                    ? {get_thread}(saved.componentIdx, saved.threadID)
+                                    : null;
+                                return thread?.task.mayBlock() ?? false;
+                            }},
+                            fast: fn,
+                            slow: new WebAssembly.Suspending(fn),
+                        }} }}).exports.run;
+                    }}
+                    "#,
+                );
             }
 
             Self::ConditionalSuspending1I32ToI32Fn
@@ -3026,6 +3053,7 @@ impl Intrinsic {
             Self::WithGlobalCurrentThreadMetaFn => "_withGlobalCurrentThreadMeta",
             Self::WithGlobalCurrentThreadMetaFnAsync => "_withGlobalCurrentThreadMetaAsync",
             Self::MaybeSyncGeneratorFn => "_maybeSyncGenerator",
+            Self::ConditionalSuspendingHostImportFn => "_conditionalSuspendingHostImport",
             Self::ClearGlobalCurrentThreadMetaFn => "_clearCurrentTask",
             Self::SuspendingImportWrapperFn => "_suspendingImport",
             Self::ConditionalSuspending1I32ToI32Fn => "_conditionalSuspending1I32ToI32",

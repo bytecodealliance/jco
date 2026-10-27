@@ -1079,11 +1079,17 @@ interface dropped-resource {
   resource thing {
     constructor();
   }
+  initialized: func() -> u64;
+  call-sync: func() -> u64;
+  call-async: func(a: u32) -> u64;
+  drop-in-guest: func();
 }
 
-/// The destructor of `thing` calls the `tick` import. When the host drops a
-/// `thing`, the destructor runs as a synchronous task, which cannot block
+/// Host imports called during initialization, ordinary exports, and resource drops.
+/// Initialization and resource destructors cannot block, even when an import is
+/// marked async by the transpiler.
 world resource-drop-host-import {
   import tick;
+  import calculate: func(a: u32, b: u64, c: f32, d: f64) -> u64;
   export dropped-resource;
 }

@@ -1,17 +1,134 @@
 import { join, resolve } from 'node:path';
-import { mkdir, rm, symlink } from 'node:fs/promises';
+import { mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { suite, test, assert, expect } from 'vitest';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { transpile } from '../src/index.js';
+import { transpile, writeFiles } from '../src/index.js';
 
 import { getTmpDir, setupAsyncTest } from './helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
 suite('Host Import Async (JSPI)', () => {
+    test('synchronous host imports work in direct ESM output', async () => {
+        if (typeof WebAssembly?.Suspending !== 'function') {
+            return;
+        }
+
+        const outDir = await getTmpDir();
+        try {
+            const { files } = await transpile(join(LOCAL_TEST_COMPONENTS_DIR, 'resource-drop-host-import.wasm'), {
+                name: 'conditional-host-import',
+                asyncMode: 'jspi',
+                asyncImports: ['calculate', 'jco:test-components/tick#tick'],
+                asyncExports: ['jco:test-components/dropped-resource#call-async'],
+                map: { calculate: './host.js#calculate', 'jco:test-components/tick': './host.js#tick' },
+            });
+            await writeFiles(files, { baseDir: outDir });
+            await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+            const modulesDir = join(outDir, 'node_modules', '@bytecodealliance');
+            await mkdir(modulesDir, { recursive: true });
+            await symlink(
+                fileURLToPath(
+                    new URL('../../../', import.meta.resolve('@bytecodealliance/preview2-shim/instantiation')),
+                ),
+                join(modulesDir, 'preview2-shim'),
+                'dir',
+            );
+            await writeFile(
+                join(outDir, 'host.js'),
+                'export const calculate = () => 42n; export const tick = { tick: () => {} };',
+            );
+            const instance = await import(pathToFileURL(join(outDir, 'conditional-host-import.js')).href);
+            await instance.$init;
+            const api = instance['jco:test-components/dropped-resource'];
+            assert.strictEqual(api.initialized(), 42n);
+            assert.strictEqual(api.callSync(), 42n);
+            assert.strictEqual(await api.callAsync(1), 42n);
+            api.dropInGuest();
+            new api.Thing()[Symbol.dispose]();
+        } finally {
+            await rm(outDir, { recursive: true, force: true });
+        }
+    });
+
+    test.concurrent.each([false, true])(
+        'host imports bypass JSPI when the caller cannot block (minify=%s)',
+        async (minify) => {
+            if (typeof WebAssembly?.Suspending !== 'function') {
+                return;
+            }
+
+            const { esModule, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'resource-drop-host-import.wasm'),
+                    skipInstantiation: true,
+                },
+                jco: {
+                    transpile: {
+                        extraArgs: {
+                            minify,
+                            asyncImports: ['calculate', 'jco:test-components/tick#tick'],
+                            asyncExports: ['jco:test-components/dropped-resource#call-async'],
+                        },
+                    },
+                },
+            });
+
+            try {
+                let ticks = 0;
+                let calculateAsync = false;
+                let tickAsync = false;
+                const imports = {
+                    ...new WASIShim().getImportObject(),
+                    calculate: {
+                        default: (...args) => {
+                            assert.deepEqual(args, [1, 2n, 3.5, 4.5]);
+                            return calculateAsync ? Promise.resolve(42n) : 42n;
+                        },
+                    },
+                    'jco:test-components/tick': {
+                        tick: () => {
+                            ticks++;
+                            return tickAsync ? Promise.resolve() : undefined;
+                        },
+                    },
+                };
+
+                const instance = await esModule.instantiate(undefined, imports);
+                const api = instance['jco:test-components/dropped-resource'];
+                assert.strictEqual(api.initialized(), 42n);
+                assert.strictEqual(api.callSync(), 42n);
+                assert.strictEqual(await api.callAsync(1), 42n);
+                calculateAsync = true;
+                assert.strictEqual(await api.callAsync(1), 42n);
+
+                api.dropInGuest();
+                new api.Thing()[Symbol.dispose]();
+                assert.strictEqual(ticks, 2);
+                tickAsync = true;
+                assert.throws(
+                    () => new api.Thing()[Symbol.dispose](),
+                    /cannot block a synchronous task before returning/,
+                );
+                assert.strictEqual(ticks, 3);
+
+                // A promise returned during initialization must still trap, and must
+                // not be left as an unhandled rejection.
+                for (const calculate of [() => Promise.resolve(42n), () => Promise.reject(new Error('host failure'))]) {
+                    await expect(
+                        esModule.instantiate(undefined, { ...imports, calculate: { default: calculate } }),
+                    ).rejects.toThrow('cannot block a synchronous task before returning');
+                }
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
     test('Transpile async', async () => {
         const tmpDir = await getTmpDir();
         const outDir = resolve(tmpDir, 'out-component-dir');
@@ -320,6 +437,7 @@ suite('Host Import Async (JSPI)', () => {
                 path: join(LOCAL_TEST_COMPONENTS_DIR, 'resource-drop-host-import.wasm'),
                 imports: {
                     ...new WASIShim().getImportObject(),
+                    calculate: { default: () => 42n },
                     'jco:test-components/tick': {
                         tick: () => {
                             ticks += 1;
