@@ -139,6 +139,10 @@ pub enum AsyncTaskIntrinsic {
     /// Function that retrieves the current global async current thread
     GetCurrentThread,
 
+    /// Function that resolves the thread named by a component instance's ambient
+    /// thread-meta register, throwing if there is none (shared `thread.*` prologue)
+    CurrentThreadOrThrow,
+
     /// Function that creates a new implicit thread, and marks it as the current executing thread
     CreateNewCurrentImplicitThread,
 
@@ -297,6 +301,7 @@ impl AsyncTaskIntrinsic {
             Self::ContextSet.name(),
             Self::GetCurrentTask.name(),
             Self::GetCurrentThread.name(),
+            Self::CurrentThreadOrThrow.name(),
             Self::CreateNewCurrentImplicitThread.name(),
             Self::ClearCurrentThread.name(),
             Self::GlobalAsyncCurrentTaskMap.name(),
@@ -338,6 +343,7 @@ impl AsyncTaskIntrinsic {
             Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
             Self::GetCurrentThread => "getCurrentThread",
+            Self::CurrentThreadOrThrow => "currentThreadOrThrow",
             Self::CreateNewCurrentImplicitThread => "createNewCurrentImplicitThread",
             Self::ClearCurrentThread => "clearCurrentThread",
             Self::GlobalAsyncCurrentTaskMap => "ASYNC_TASKS_BY_COMPONENT_IDX",
@@ -429,7 +435,7 @@ impl AsyncTaskIntrinsic {
                           // task, whose context FACT temporarily saves and restores.
                           let currentThreadMeta = {get_global_current_thread_meta_fn}(ctx.componentIdx);
                           let threadMeta = currentThreadMeta
-                              ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID)
+                              ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                               : undefined;
 
                           // A post-return may run after the callee has exited. Its
@@ -438,7 +444,7 @@ impl AsyncTaskIntrinsic {
                           if (!threadMeta) {{
                               currentThreadMeta = {get_global_current_thread_meta_fn}();
                               threadMeta = currentThreadMeta
-                                  ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID)
+                                  ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                                   : undefined;
                           }}
                           if (!threadMeta) {{
@@ -484,7 +490,7 @@ impl AsyncTaskIntrinsic {
                           // task, whose context FACT temporarily saves and restores.
                           let currentThreadMeta = {get_global_current_thread_meta_fn}(ctx.componentIdx);
                           let threadMeta = currentThreadMeta
-                              ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID)
+                              ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                               : undefined;
 
                           // A post-return may run after the callee has exited. Its
@@ -493,7 +499,7 @@ impl AsyncTaskIntrinsic {
                           if (!threadMeta) {{
                               currentThreadMeta = {get_global_current_thread_meta_fn}();
                               threadMeta = currentThreadMeta
-                                  ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID)
+                                  ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                                   : undefined;
                           }}
                           if (!threadMeta) {{
@@ -668,9 +674,8 @@ impl AsyncTaskIntrinsic {
             Self::ThreadYield => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_yield_fn = self.name();
-                let current_thread_get_fn = render_args.require_intrinsic(Self::GetCurrentThread);
-                let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                let current_thread_or_throw_fn =
+                    render_args.require_intrinsic(Self::CurrentThreadOrThrow);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -679,18 +684,12 @@ impl AsyncTaskIntrinsic {
                     function {thread_yield_fn}(ctx) {{
                         {debug_log_fn}('[{thread_yield_fn}()] args', {{ ctx }});
                         const {{ componentIdx, isCancellable }} = ctx;
-                        const {{ threadID }} = {get_global_current_thread_meta_fn}(componentIdx);
-
-                        const threadMeta = {current_thread_get_fn}(componentIdx, threadID);
-                        if (!threadMeta) {{ throw new Error('invalid/missing async thread meta'); }}
-
-                        const thread = threadMeta.thread;
-                        if (!thread) {{ throw new Error('invalid/missing async thread'); }}
+                        const {{ thread, task }} = {current_thread_or_throw_fn}(componentIdx);
 
                         // A nonblocking task cannot suspend its Wasm stack. The
                         // Canonical ABI permits yield to complete without scheduling
                         // another thread, so take that synchronous fast path here.
-                        if (!threadMeta.task.mayBlock()) {{
+                        if (!task.mayBlock()) {{
                             {get_or_create_async_state_fn}(componentIdx).runTickLoop();
                             return isCancellable && thread.isCancelled() ? 1 : 0;
                         }}
@@ -726,27 +725,21 @@ impl AsyncTaskIntrinsic {
                     "
                 ))
             }
+
             // Suspends the current thread until something else explicitly
             // targets it via `thread.resume-later` -- unlike `thread.yield`,
             // it is never spontaneously ready on its own.
             Self::ThreadSuspend => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_suspend_fn = self.name();
-                let current_thread_get_fn = render_args.require_intrinsic(Self::GetCurrentThread);
-                let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                let current_thread_or_throw_fn =
+                    render_args.require_intrinsic(Self::CurrentThreadOrThrow);
                 output.push_str(&format!(
                     "
                     async function {thread_suspend_fn}(ctx) {{
                         {debug_log_fn}('[{thread_suspend_fn}()] args', {{ ctx }});
                         const {{ componentIdx, isCancellable }} = ctx;
-                        const {{ threadID }} = {get_global_current_thread_meta_fn}(componentIdx);
-
-                        const threadMeta = {current_thread_get_fn}(componentIdx, threadID);
-                        if (!threadMeta) {{ throw new Error('invalid/missing async thread meta'); }}
-
-                        const thread = threadMeta.thread;
-                        if (!thread) {{ throw new Error('invalid/missing async thread'); }}
+                        const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
                         const keepGoing = await thread.suspend({{
                             cancellable: isCancellable,
@@ -773,13 +766,16 @@ impl AsyncTaskIntrinsic {
             //
             // The returned id is allocated from the component instance's thread
             // table, so it can be targeted by another task in that instance.
+            //
+            // An out-of-range or uninitialized table index is a trap (the
+            // trampoline is installed under `guardTrap`, so the trap is also
+            // recorded against the instance).
             Self::ThreadNewIndirect => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_new_indirect_fn = self.name();
-                let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
+                let current_thread_or_throw_fn =
+                    render_args.require_intrinsic(Self::CurrentThreadOrThrow);
                 let thread_class = render_args.require_intrinsic(Self::AsyncThreadClass);
-                let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -787,6 +783,14 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(
                     "
+                    // Component validation requires the start type to be (func (param i32)).
+                    // Import matching checks a Wasm function's actual type without running it.
+                    const {thread_new_indirect_fn}TypeCheck = new WebAssembly.Module(new Uint8Array([
+                        0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,
+                        0x01, 0x05, 0x01, 0x60, 0x01, 0x7f, 0x00,
+                        0x02, 0x06, 0x01, 0x00, 0x01, 0x66, 0x00, 0x00,
+                    ]));
+                    const {thread_new_indirect_fn}Checked = new WeakSet();
                     function {thread_new_indirect_fn}(ctx, startFuncIdx, context) {{
                         const {{ componentIdx, getStartFuncTableFn }} = ctx;
                         {debug_log_fn}('[{thread_new_indirect_fn}()] args', {{ componentIdx, startFuncIdx, context }});
@@ -794,17 +798,27 @@ impl AsyncTaskIntrinsic {
                         const table = getStartFuncTableFn();
                         if (!table) {{ throw new Error('missing start function table for thread.new-indirect'); }}
 
-                        const startFuncRef = table.get(startFuncIdx);
+                        // (the index is a core i32; an out-of-range index traps like `call_indirect`)
+                        const tableIdx = startFuncIdx >>> 0;
+                        if (tableIdx >= table.length) {{
+                            throw new {runtime_error_class}('thread.new-indirect: table index out of bounds');
+                        }}
+                        const startFuncRef = table.get(tableIdx);
                         if (typeof startFuncRef !== 'function') {{
                             throw new {runtime_error_class}('thread.new-indirect: uninitialized table element');
                         }}
-                        // TODO(threads): validate the table entry against startFuncTyIdx.
+                        if (!{thread_new_indirect_fn}Checked.has(startFuncRef)) {{
+                            try {{
+                                new WebAssembly.Instance({thread_new_indirect_fn}TypeCheck, {{ '': {{ f: startFuncRef }} }});
+                            }} catch (err) {{
+                                if (!(err instanceof WebAssembly.LinkError)) {{ throw err; }}
+                                throw new {runtime_error_class}('thread.new-indirect: start function type mismatch');
+                            }}
+                            {thread_new_indirect_fn}Checked.add(startFuncRef);
+                        }}
                         const promisingStartFuncRef = WebAssembly.promising(startFuncRef);
 
-                        const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
-                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                        if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing current task while creating thread'); }}
-                        const task = taskMeta.task;
+                        const {{ task }} = {current_thread_or_throw_fn}(componentIdx);
 
                         const newThread = task.addThread(new {thread_class}({{
                             componentIdx,
@@ -828,6 +842,10 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
+            // Implements `thread.resume-later`: marks a suspended thread of this
+            // component instance ready to run. An index that names no live thread,
+            // or a thread that is not suspended, traps (the trampoline is installed
+            // under `guardTrap`, so the trap is also recorded against the instance).
             Self::ThreadResumeLater => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_resume_later_fn = self.name();
@@ -844,8 +862,10 @@ impl AsyncTaskIntrinsic {
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component idx [${{componentIdx}}]`); }}
-                        const thread = cstate.threads.get(threadHandle);
-                        if (!thread) {{ throw new Error(`invalid/missing thread [${{threadHandle}}] for resume-later`); }}
+                        const thread = threadHandle === 0 ? undefined : cstate.threads.get(threadHandle >>> 0);
+                        if (!thread) {{
+                            throw new {runtime_error_class}(`unknown handle index ${{threadHandle}}`);
+                        }}
 
                         if (!cstate.markThreadReady(thread)) {{
                             throw new {runtime_error_class}(`thread [${{threadHandle}}] is not suspended, cannot resume-later`);
@@ -864,9 +884,8 @@ impl AsyncTaskIntrinsic {
             Self::ThreadSuspendThenResume | Self::ThreadYieldThenResume => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
-                let current_thread_get_fn = render_args.require_intrinsic(Self::GetCurrentThread);
-                let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                let current_thread_or_throw_fn =
+                    render_args.require_intrinsic(Self::CurrentThreadOrThrow);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -885,18 +904,11 @@ impl AsyncTaskIntrinsic {
                     function {fn_name}(ctx, i) {{
                         const {{ componentIdx, isCancellable }} = ctx;
                         {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, i }});
-                        const {{ threadID }} = {get_global_current_thread_meta_fn}(componentIdx);
-
-                        const threadMeta = {current_thread_get_fn}(componentIdx, threadID);
-                        if (!threadMeta) {{ throw new Error('invalid/missing async thread meta'); }}
-                        const thread = threadMeta.thread;
+                        const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        const other = cstate.threads.get(i);
-                        if (other === thread) {{
-                            throw new {runtime_error_class}('cannot resume thread which is not suspended');
-                        }}
-                        if (!other || !cstate.isThreadSuspended(other)) {{
+                        const other = i === 0 ? undefined : cstate.threads.get(i >>> 0);
+                        if (!other || other === thread || !cstate.isThreadSuspended(other)) {{
                             throw new {runtime_error_class}('cannot resume thread which is not suspended');
                         }}
 
@@ -907,9 +919,7 @@ impl AsyncTaskIntrinsic {
                         }});
                         cstate.resumeThread(other);
 
-                        return suspension.then(keepGoing => {{
-                            return keepGoing ? 0 : 1;
-                        }});
+                        return suspension.then(keepGoing => keepGoing ? 0 : 1);
                     }}
                 "
                 ));
@@ -924,9 +934,8 @@ impl AsyncTaskIntrinsic {
             Self::ThreadSuspendThenPromote | Self::ThreadYieldThenPromote => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
-                let current_thread_get_fn = render_args.require_intrinsic(Self::GetCurrentThread);
-                let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                let current_thread_or_throw_fn =
+                    render_args.require_intrinsic(Self::CurrentThreadOrThrow);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -948,28 +957,27 @@ impl AsyncTaskIntrinsic {
                     function {fn_name}(ctx, i) {{
                         const {{ componentIdx, isCancellable }} = ctx;
                         {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, i }});
-                        const {{ threadID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                        const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
-                        const threadMeta = {current_thread_get_fn}(componentIdx, threadID);
-                        if (!threadMeta) {{ throw new Error('invalid/missing async thread meta'); }}
-                        const thread = threadMeta.thread;
-
-                        if (i === thread.id()) {{
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const other = i === 0 ? undefined : cstate.threads.get(i >>> 0);
+                        // An index that names no live thread traps; so does a self
+                        // switch (the same check as the `*-then-resume` built-ins).
+                        if (!other) {{
+                            throw new {runtime_error_class}('invalid thread handle');
+                        }}
+                        if (other === thread) {{
                             throw new {runtime_error_class}('cannot resume thread which is not suspended');
                         }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        const other = cstate.threads.get(i);
-                        if (other && cstate.isThreadReady(other)) {{
+                        if (cstate.isThreadReady(other)) {{
                             const suspension = thread.suspend({{
                                 cancellable: isCancellable,
                                 suspended: {self_suspended},
                                 readyFn: {self_ready_fn},
                             }});
                             cstate.resumeThread(other);
-                            return suspension.then(keepGoing => {{
-                                return keepGoing ? 0 : 1;
-                            }});
+                            return suspension.then(keepGoing => keepGoing ? 0 : 1);
                         }}
 
                         return {fallback_fn}(ctx);
@@ -1281,15 +1289,52 @@ impl AsyncTaskIntrinsic {
                 );
                 output.push_str(&format!(
                     r#"
-                    function {fn_name}(componentIdx, threadID) {{
+                    function {fn_name}(componentIdx, threadID, taskID) {{
+                        // Host (-1) tasks have no component instance, and so no thread table.
+                        if (componentIdx === -1) {{ return undefined; }}
+                        if (threadID === undefined || threadID === null || threadID === 0) {{ return undefined; }}
+
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         const thread = cstate.threads.get(threadID);
                         if (!thread) {{ return undefined; }}
+
+                        // Thread indices are recycled once a thread exits (the thread table
+                        // reuses freed slots) but task ids never are. A register that still
+                        // names an exited thread, e.g. during a post-return that runs after
+                        // its task exited, must not resolve to whichever newer thread took
+                        // the slot; callers then fall back as for a missing thread.
+                        if (taskID !== undefined && thread.taskID() !== taskID) {{ return undefined; }}
 
                         return {{ id: threadID, componentIdx, taskID: thread.taskID(), task: thread.task(), thread }};
                     }}
                 "#,
                     fn_name = self.name(),
+                ));
+            }
+
+            // The prologue shared by every `thread.*` built-in: the thread whose
+            // guest code is running is the one the component's ambient register
+            // names. Missing or stale register contents are an internal error
+            // here (the built-ins only run from guest code of a live thread).
+            Self::CurrentThreadOrThrow => {
+                let fn_name = self.name();
+                let get_current_thread_fn = render_args.require_intrinsic(Self::GetCurrentThread);
+                let get_global_current_thread_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                output.push_str(&format!(
+                    r#"
+                    function {fn_name}(componentIdx) {{
+                        const meta = {get_global_current_thread_meta_fn}(componentIdx);
+                        if (!meta) {{
+                            throw new Error(`missing/incomplete global current thread meta for component idx [${{componentIdx}}]`);
+                        }}
+                        const threadMeta = {get_current_thread_fn}(meta.componentIdx, meta.threadID, meta.taskID);
+                        if (!threadMeta || !threadMeta.thread) {{
+                            throw new Error(`invalid/missing async thread [${{meta.threadID}}] for component idx [${{componentIdx}}]`);
+                        }}
+                        return threadMeta;
+                    }}
+                "#
                 ));
             }
 
@@ -1340,8 +1385,6 @@ impl AsyncTaskIntrinsic {
                 ));
             }
 
-            // NOTE: since threads are not yet supported, places that would have called out to threads instead run
-            // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -1377,9 +1420,15 @@ impl AsyncTaskIntrinsic {
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
+                let get_global_current_thread_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+
                 output.push_str(&format!(r#"
                     class {task_class} {{
                         static _ID = 0n;
+                        // Ids for the implicit threads of host (-1) tasks, which have no
+                        // component instance thread table (see `addThread`).
+                        static _HOST_THREAD_ID = 0;
 
                         static State = {{
                             INITIAL: 'initial',
@@ -1657,6 +1706,14 @@ impl AsyncTaskIntrinsic {
                         // thread of one task can target a thread of another, e.g.
                         // via `thread.resume-later`.
                         addThread(thread) {{
+                            // Host (-1) tasks model host-side import handling: there is no
+                            // component instance behind them, so no instance thread table to
+                            // register with (and none may be materialised on their behalf).
+                            if (this.#componentIdx === -1) {{
+                                thread.setId(++{task_class}._HOST_THREAD_ID);
+                                this.#threads.push(thread);
+                                return thread;
+                            }}
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                             thread.setId(cstate.threads.insert(thread));
                             this.#threads.push(thread);
@@ -1666,8 +1723,14 @@ impl AsyncTaskIntrinsic {
                         // Unregisters a thread that has finished running
                         // (`Task.unregister_thread`), freeing its instance-scoped id.
                         removeThread(thread) {{
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                            cstate.threads.remove(thread.id());
+                            if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {{
+                                throw new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                            }}
+                            this.settleCompletion();
+                            if (this.#componentIdx !== -1) {{
+                                const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                                cstate.threads.remove(thread.id());
+                            }}
                             this.#threads = this.#threads.filter(t => t !== thread);
                             if (this.#exited && this.#threads.length === 0) {{
                                 {clear_current_task_fn}(this.#componentIdx, this.#id);
@@ -1991,7 +2054,6 @@ impl AsyncTaskIntrinsic {
 
                             // TODO(fix): check for cancel
                             // TODO(fix): determinism
-                            // TODO(threads): add this thread to waiting list
 
                             const keepGoing = await this.suspendUntil({{
                                 readyFn,
@@ -2095,32 +2157,16 @@ impl AsyncTaskIntrinsic {
                             return keepGoing;
                         }}
 
-                        async immediateSuspend(opts) {{ // NOTE: equivalent to thread.suspend()
-                            // A task that already resolved (via `task.return`) has delivered
-                            // its result: a caller must not wait for this block to end
-                            // (Canonical ABI: `on_resolve` runs at `task.return`).
-                            this.settleCompletion();
-                            // TODO(threads): store readyFn on the thread
-                            const {{ cancellable, readyFn }} = opts;
-                            {debug_log_fn}('[{task_class}#immediateSuspend()] args', {{ cancellable, readyFn }});
-
-                            const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
-                            if (pendingCancelled) {{ return false; }}
-
+                        async immediateSuspend(opts) {{
+                            // Entry can wait on backpressure before a guest register window exists.
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
-                            const keepGoing = await cstate.suspendTask({{
-                                task: this,
-                                cancellable,
-                                readyFn: () => {{
-                                    // A pending cancellation request wakes cancellable waits
-                                    if (cancellable && this.#state === {task_class}.State.CANCEL_PENDING) {{
-                                        return true;
-                                    }}
-                                    return readyFn();
-                                }},
-                            }});
-                            if (keepGoing && this.deliverPendingCancel({{ cancellable }})) {{ return false; }}
-                            return keepGoing;
+                            const thread = this.#entered
+                                ? cstate.threads.get({get_global_current_thread_meta_fn}(this.#componentIdx).threadID)
+                                : this.defaultThread();
+                            if (!thread || thread.task() !== this) {{ throw new Error('invalid current thread for wait'); }}
+                            // A blocking built-in retains automatic backpressure for a
+                            // synchronous guest slice; explicit thread.* switches release it.
+                            return thread.suspend({{ ...opts, releaseLock: false }});
                         }}
 
                         deliverPendingCancel(opts) {{
@@ -2141,6 +2187,7 @@ impl AsyncTaskIntrinsic {
 
                         isCancelled() {{ return this.cancelled }}
                         cancellationRequested() {{ return this.cancelRequested; }}
+                        cancellationPending() {{ return this.#state === {task_class}.State.CANCEL_PENDING; }}
 
                         // Request cooperative cancellation of this task, called on behalf of a
                         // supertask performing `subtask.cancel` on the subtask this task backs.
@@ -2372,18 +2419,18 @@ impl AsyncTaskIntrinsic {
                             this.endFirstSlice();
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
-                            if (this.#state !== {task_class}.State.RESOLVED) {{
-                                // (Canonical ABI `Task.exit_implicit_thread`: a task must resolve before it exits)
-                                throw new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
-                            }}
-
                             this.validateResourceBorrowScope();
 
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
-                            if (!state) {{ throw new Error('missing async state for component [' + this.#componentIdx + ']'); }}
+                            // Host (-1) tasks have no component instance (and so no async
+                            // state or exclusive lock); do not materialise one for them.
+                            const state = this.#componentIdx === -1
+                                ? null
+                                : {get_or_create_async_state_fn}(this.#componentIdx);
+                            if (!state && this.#componentIdx !== -1) {{
+                                throw new Error('missing async state for component [' + this.#componentIdx + ']');
+                            }}
 
-                            // Exempt the host from exclusive lock check
-                            if (this.#componentIdx !== -1 && !args?.skipExclusiveLockCheck && !this.#lockFreeEntry) {{
+                            if (state && !args?.skipExclusiveLockCheck && !this.#lockFreeEntry) {{
                                 if (this.needsExclusiveLock() && !state.exclusivelyLockedBy(this.#id)) {{
                                     throw new Error(`task [${{this.#id}}] exit: component [${{this.#componentIdx}}] should have been exclusively locked by it`);
                                 }}
@@ -2392,7 +2439,7 @@ impl AsyncTaskIntrinsic {
                             // Ownership-checked: releases only this task's own hold (a
                             // task exiting while another task's slice holds the lock no
                             // longer clears the foreign hold).
-                            state.exclusiveRelease(this.#id);
+                            if (state) {{ state.exclusiveRelease(this.#id); }}
                             this.notifyProgress();
 
                             for (const f of this.#onExitHandlers) {{
@@ -2492,6 +2539,9 @@ impl AsyncTaskIntrinsic {
                 let with_global_current_thread_meta_async_fn =
                     render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
 
+                let record_trap_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::RecordTrap));
+
                 output.push_str(&format!(r#"
                     class {thread_class} {{
                         static State = {{
@@ -2562,10 +2612,21 @@ impl AsyncTaskIntrinsic {
                         async suspend(opts) {{
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                             const task = this.#task;
-                            const reacquireLock = task.needsExclusiveLock() && cstate.exclusivelyLockedBy(task.id());
+                            task.endFirstSlice();
+                            task.settleCompletion();
+                            const {{ cancellable, readyFn, releaseLock = true }} = opts;
+                            if (task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
+                            const reacquireLock = releaseLock && task.needsExclusiveLock() && cstate.exclusivelyLockedBy(task.id());
                             if (reacquireLock) {{ cstate.exclusiveRelease(task.id()); }}
                             try {{
-                                return await cstate.suspendThread({{ thread: this, ...opts }});
+                                const keepGoing = await cstate.suspendThread({{
+                                    ...opts,
+                                    thread: this,
+                                    readyFn: () => (cancellable && task.cancellationPending()) || readyFn(),
+                                }});
+                                cstate.throwIfInterrupted();
+                                if (keepGoing && task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
+                                return keepGoing;
                             }} finally {{
                                 if (reacquireLock && !cstate.exclusivelyLockedBy(task.id())) {{
                                     await cstate.acquireExclusiveLock(task.id());
@@ -2589,11 +2650,15 @@ impl AsyncTaskIntrinsic {
                                 threadID: this.#id,
                                 taskID: this.#task.id(),
                                 componentIdx: this.#componentIdx,
-                                fn: () => startFn(),
+                                fn: () => {{
+                                    {get_or_create_async_state_fn}(this.#componentIdx).throwIfInterrupted();
+                                    return startFn();
+                                }},
                             }}).then(() => {{
                                 this.#state = {thread_class}.State.COMPLETED;
                                 this.#task.removeThread(this);
-                            }}, (err) => {{
+                            }}).catch((err) => {{
+                                err = {record_trap_fn}(this.#componentIdx, err);
                                 this.#state = {thread_class}.State.COMPLETED;
                                 {debug_log_fn}('[{thread_class}#start()] spawned thread errored', {{
                                     threadID: this.#id,
@@ -2601,9 +2666,9 @@ impl AsyncTaskIntrinsic {
                                     componentIdx: this.#componentIdx,
                                     err,
                                 }});
-                                this.#task.removeThread(this);
                                 this.#task.setErrored(err);
                                 this.#task.reject(err);
+                                this.#task.removeThread(this);
                             }});
                         }}
                     }}

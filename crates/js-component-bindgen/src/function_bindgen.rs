@@ -2216,9 +2216,13 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Argument lowering can await realloc and allow another task
                 // to run. Reinstall this task immediately before entering Wasm.
+                //
+                // The thread to reinstall is the one this export's task was created
+                // with (`threadID`, in scope since `start_wasm_export_task`), not
+                // whatever the component's ambient register names: another task's
+                // async wrapper may have overwritten and then cleared that register
+                // while this call was suspended in argument lowering.
                 let call_wrapper = self.task_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
-                let get_global_current_thread_meta_fn =
-                    self.task_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 if task_managed {
                     uwriteln!(
                         self.src,
@@ -2227,7 +2231,7 @@ impl Bindgen for FunctionBindgen<'_> {
                       try {{
                            {assignment_lhs} {call_prefix}{call_wrapper}({{
                                taskID: task.id(),
-                               threadID: {get_global_current_thread_meta_fn}(task.componentIdx()).threadID,
+                               threadID,
                                componentIdx: task.componentIdx(),
                                fn: () => {callee_invoke},
                            }});
@@ -2483,7 +2487,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         r#"{call_prefix} {call_wrapper}({{
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
-                                                            threadID,
+                              threadID,
                               fn: () => {track_host_operation}(() => {callee_fn_js}({callee_args_js})),
                           }})
                         "#,

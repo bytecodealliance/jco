@@ -42,11 +42,11 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/wait-during-callback.wast' },
     { relPath: 'async/cancel-delivery.wast' },
     { relPath: 'async/cancel-not-delivered.wast' },
-    // The remaining artifacts use thread.* built-ins, which jco does not
-    // support yet. These three cover targeted callback resumption without them.
+    // Include the first artifact: its implicit thread exits before a worker
+    // resolves the task. Later artifacts still require additional threading support.
     {
         relPath: 'async/cancel-targeted-resume.wast',
-        artifactCases: [1, 2, 3].map((index) => ({ index, exportName: 'run', expected: 42 })),
+        artifactCases: [0, 1, 2, 3].map((index) => ({ index, exportName: 'run', expected: 42 })),
     },
     { relPath: 'async/cancel-stream.wast' },
     { relPath: 'async/partial-stream-copies.wast' },
@@ -84,6 +84,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: 'async/validate-no-async-abi-for-sync-type.wast' },
     { relPath: 'async/builtin-trap-poisons-instance.wast' },
     { relPath: 'async/trap-if-transfer-in-waitable-set.wast' },
+    { relPath: 'async/thread-handle-traps.wast' },
 
     // Skipped tests
     // TODO: Revisit this fixture once stackful async support is implemented.
@@ -201,7 +202,10 @@ suite('component-model WAST', () => {
                 const componentName = basename(relPath).replace('.wast', '');
                 if (artifactCases) {
                     for (const artifactCase of artifactCases) {
-                        const artifactPath = wastPath.replace(/\.wast$/, `.wast.${artifactCase.index}.wasm`);
+                        const artifactPath =
+                            artifactCase.index === 0
+                                ? wasmPath
+                                : wastPath.replace(/\.wast$/, `.wast.${artifactCase.index}.wasm`);
                         assert(await fileExists(artifactPath), `missing generated WAT artifact @ [${artifactPath}]`);
                         const outputDir = await getTmpDir();
                         const setup = await setupAsyncTest({
