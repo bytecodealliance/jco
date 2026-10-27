@@ -3941,15 +3941,24 @@ impl AsyncTaskIntrinsic {
                         if (!isAsync && !funcTypeIsAsync && isManualAsync) {{
                             {debug_log_fn}('[{lower_import_backwards_compat_fn}()] calling lowered import', {{ importFn, params }});
                             if (createdTask) {{ createdTask.enterSync(); }}
-                            const res = importFn(...params);
-                            const isPromise = res !== null &&
-                                (typeof res === 'object' || typeof res === 'function') &&
-                                typeof res.then === 'function';
-                            // Without a current task the call cannot block, and its caller
-                            // traps on a promise, so a task created for it ends now
-                            if (createdTask) {{ createdTask.resolve([isPromise ? undefined : res]); }}
-                            if (!isPromise) {{ return subtask.getResult(); }}
-                            return Promise.resolve(res).then(() => subtask.getResult());
+                            try {{
+                                const res = importFn(...params);
+                                const isPromise = res !== null &&
+                                    (typeof res === 'object' || typeof res === 'function') &&
+                                    typeof res.then === 'function';
+                                // Without a current task the call cannot block, and its caller
+                                // traps on a promise, so a task created for it ends now.
+                                if (createdTask) {{ createdTask.resolve([isPromise ? undefined : res]); }}
+                                if (!isPromise) {{ return subtask.getResult(); }}
+                                return Promise.resolve(res).then(() => subtask.getResult());
+                            }} catch (err) {{
+                                if (createdTask) {{ createdTask.reject(err); }}
+                                throw err;
+                            }} finally {{
+                                // Resolution delivers the result; exit retires the implicit
+                                // thread and removes the task from the component's registry.
+                                if (createdTask) {{ createdTask.exit(); }}
+                            }}
                         }}
 
                         queueMicrotask(async () => {{

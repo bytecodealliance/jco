@@ -26,6 +26,13 @@ suite('Host Import Async (JSPI)', () => {
                 asyncExports: ['jco:test-components/dropped-resource#call-async'],
                 map: { calculate: './host.js#calculate', 'jco:test-components/tick': './host.js#tick' },
             });
+            // Observe task lifetime through the unminified runtime: initialization
+            // must retire its auto-created task as well as its implicit thread.
+            const source = Buffer.from(files['conditional-host-import.js']).toString();
+            files['conditional-host-import.js'] = new TextEncoder().encode(`${source}
+                export const liveTaskCount = () => [...ASYNC_TASKS_BY_COMPONENT_IDX.values()]
+                    .reduce((count, tasks) => count + tasks.length, 0);
+            `);
             await writeFiles(files, { baseDir: outDir });
             await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
             const modulesDir = join(outDir, 'node_modules', '@bytecodealliance');
@@ -43,12 +50,14 @@ suite('Host Import Async (JSPI)', () => {
             );
             const instance = await import(pathToFileURL(join(outDir, 'conditional-host-import.js')).href);
             await instance.$init;
+            assert.strictEqual(instance.liveTaskCount(), 0, 'initialization tasks must exit');
             const api = instance['jco:test-components/dropped-resource'];
             assert.strictEqual(api.initialized(), 42n);
             assert.strictEqual(api.callSync(), 42n);
             assert.strictEqual(await api.callAsync(1), 42n);
             api.dropInGuest();
             new api.Thing()[Symbol.dispose]();
+            assert.strictEqual(instance.liveTaskCount(), 0, 'completed calls must retire their tasks');
         } finally {
             await rm(outDir, { recursive: true, force: true });
         }
@@ -372,54 +381,67 @@ suite('Host Import Async (JSPI)', () => {
 
     // A failing JSPI-suspended import must trap the guest and reject the
     // export, rather than leave the guest suspended forever.
-    test.concurrent('Transpile async, import rejects (NodeJS, JSPI)', async () => {
-        if (typeof WebAssembly?.Suspending !== 'function') {
-            return;
-        }
-        const tmpDir = await getTmpDir();
-        const modulesDir = resolve(tmpDir, 'node_modules', '@bytecodealliance');
-        await mkdir(modulesDir, { recursive: true });
-        await symlink(
-            fileURLToPath(new URL('../packages/preview2-shim', import.meta.url)),
-            resolve(modulesDir, 'preview2-shim'),
-            'dir',
-        );
-
-        const inducedError = new Error('induced host rejection');
-        const { instance, cleanup } = await setupAsyncTest({
-            asyncMode: 'jspi',
-            component: {
-                name: 'async_call',
-                path: resolve('test/fixtures/components/runtime/async_call.component.wasm'),
-                imports: {
-                    'something:test/test-interface': {
-                        callAsync: async () => {
-                            throw inducedError;
-                        },
-                        callSync: () => 'called sync',
-                    },
-                },
-            },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        asyncImports: ['something:test/test-interface#call-async'],
-                        asyncExports: ['run-async'],
-                    },
-                },
-            },
-        });
-
-        try {
-            const exportCall = instance.runAsync();
-            const timeout = new Promise((_, reject) =>
-                setTimeout(() => reject(new Error('export call timed out')), 5_000),
+    test.concurrent.each(['throw', 'reject', 'throwing then getter'])(
+        'Transpile async, import fails with %s (NodeJS, JSPI)',
+        async (failure) => {
+            if (typeof WebAssembly?.Suspending !== 'function') {
+                return;
+            }
+            const tmpDir = await getTmpDir();
+            const modulesDir = resolve(tmpDir, 'node_modules', '@bytecodealliance');
+            await mkdir(modulesDir, { recursive: true });
+            await symlink(
+                fileURLToPath(new URL('../packages/preview2-shim', import.meta.url)),
+                resolve(modulesDir, 'preview2-shim'),
+                'dir',
             );
-            await expect(Promise.race([exportCall, timeout])).rejects.toBe(inducedError);
-        } finally {
-            await cleanup();
-        }
-    });
+
+            const inducedError = new Error('induced host rejection');
+            const { instance, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: 'async_call',
+                    path: resolve('test/fixtures/components/runtime/async_call.component.wasm'),
+                    imports: {
+                        'something:test/test-interface': {
+                            callAsync: () => {
+                                if (failure === 'reject') {
+                                    return Promise.reject(inducedError);
+                                }
+                                if (failure === 'throwing then getter') {
+                                    return {
+                                        get then() {
+                                            throw inducedError;
+                                        },
+                                    };
+                                }
+                                throw inducedError;
+                            },
+                            callSync: () => 'called sync',
+                        },
+                    },
+                },
+                jco: {
+                    transpile: {
+                        extraArgs: {
+                            asyncImports: ['something:test/test-interface#call-async'],
+                            asyncExports: ['run-async'],
+                        },
+                    },
+                },
+            });
+
+            try {
+                const exportCall = instance.runAsync();
+                const timeout = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('export call timed out')), 5_000),
+                );
+                await expect(Promise.race([exportCall, timeout])).rejects.toBe(inducedError);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
 
     // A resource destructor runs as a synchronous task, which cannot block: a JSPI
     // import called from it must return synchronously when the host does, and trap
