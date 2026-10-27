@@ -36,7 +36,7 @@ suite('namespace objects', async () => {
         assert.include(source, "North: 'north',");
         assert.include(source, 'const Permissions = Object.freeze({');
         assert.include(source, 'Read: 1n << 0n,');
-        const api = source.match(/const api = \{[\s\S]*?\n\};/)?.[0] ?? '';
+        const api = source.match(/const api = \{[\s\S]*?\n\s*\};/)?.[0] ?? '';
         assert.include(api, 'X: X,');
         assert.include(api, 'Y: Y,');
         assert.include(api, 'Direction: Direction,');
