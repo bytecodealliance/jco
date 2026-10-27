@@ -1,0 +1,204 @@
+# Specification: https://github.com/ossf/security-insights/tree/v2.2.0
+# Validate with the unmodified spec/schema.cue from that release:
+# cue vet -d '#SecurityInsights' schema.cue security-insights.yml
+# Review this file when security contacts, policies, tooling, or releases change.
+# Keep distribution-points in sync with published packages, including native
+# platform packages generated from packages/jco-node-fs/package.json targets.
+header:
+    schema-version: 2.2.0
+    last-updated: '2026-10-27'
+    last-reviewed: '2026-10-27'
+    url: https://raw.githubusercontent.com/bytecodealliance/jco/main/security-insights.yml
+    comment: |
+        This file describes the Jco monorepo, including its JavaScript packages,
+        Rust crates, Component Model runtime, and WASI host shims. It is a snapshot
+        of the documentation and automation in this revision, not a security audit
+        or a guarantee about every previously published release. Omitted optional
+        fields indicate information not documented here, rather than assurances.
+
+project:
+    name: Jco
+    homepage: https://bytecodealliance.github.io/jco/
+    # Maintainers have confirmed vados-cosmonic as the primary administrator.
+    administrators:
+        - name: vados-cosmonic
+          social: https://github.com/vados-cosmonic
+          primary: true
+        - name: andreiltd
+          social: https://github.com/andreiltd
+          primary: false
+    documentation:
+        quickstart-guide: https://github.com/bytecodealliance/jco#quickstart
+        detailed-guide: https://bytecodealliance.github.io/jco/
+        code-of-conduct: https://github.com/bytecodealliance/jco/blob/main/CODE_OF_CONDUCT.md
+        release-process: https://github.com/bytecodealliance/jco/blob/main/.github/workflows/release.yml
+    repositories:
+        - name: jco
+          url: https://github.com/bytecodealliance/jco
+          comment: |
+              JavaScript tooling for WebAssembly Components, maintained as a
+              Bytecode Alliance project. External componentization engines and
+              upstream WebAssembly tooling have their own repositories and policies.
+
+              Published npm packages and crates are enumerated under
+              repository.release.distribution-points, with their source paths.
+              They share this repository and its vulnerability reporting policy.
+
+              @bytecodealliance/jco-cm-runtime (packages/jco-cm-runtime) is also a
+              public package covered by this security policy. It provides the
+              default Component Model runtime for Jco-generated JavaScript and
+              is planned for npm publication, but is not yet published as of
+              this review. Its source is available at:
+              https://github.com/bytecodealliance/jco/tree/main/packages/jco-cm-runtime
+    vulnerability-reporting:
+        reports-accepted: true
+        bug-bounty-available: false
+        policy: https://bytecodealliance.org/security
+        contact:
+            name: Bytecode Alliance security team
+            email: security@bytecodealliance.org
+            primary: true
+        comment: |
+            Follow the Bytecode Alliance security policy for private reporting and
+            coordinated disclosure. Prefer GitHub private vulnerability reporting
+            where available; otherwise email security@bytecodealliance.org. Do not
+            disclose vulnerability details in public issues, pull requests, or chat.
+            Include reproduction steps, affected versions, and the security impact.
+            No Jco bug bounty program is advertised in the linked policy.
+
+repository:
+    url: https://github.com/bytecodealliance/jco
+    status: active
+    bug-fixes-only: false
+    accepts-change-request: true
+    accepts-automated-change-request: true
+    no-third-party-packages: false
+    # Maintainer contacts are published in CODEOWNERS; security reports go to
+    # the private contact above rather than to individual public profiles.
+    core-team:
+        - name: vados-cosmonic
+          social: https://github.com/vados-cosmonic
+          primary: true
+        - name: andreiltd
+          social: https://github.com/andreiltd
+          primary: false
+    documentation:
+        contributing-guide: https://bytecodealliance.github.io/jco/contributing.html
+        security-policy: https://bytecodealliance.org/security
+    license:
+        url: https://github.com/bytecodealliance/jco/blob/main/LICENSE
+        expression: Apache-2.0 WITH LLVM-exception
+    release:
+        automated-pipeline: true
+        changelog: https://github.com/bytecodealliance/jco/releases
+        distribution-points:
+            - uri: https://github.com/bytecodealliance/jco/releases
+              comment: GitHub releases for independently versioned packages and crates.
+            # Each npm entry identifies a separately published package. Registry
+            # publication was checked at the last-reviewed date; versions evolve
+            # independently. The release workflow requests npm provenance, whose
+            # availability must be checked on the exact package version consumed.
+            - uri: https://www.npmjs.com/package/jco
+              comment: jco (packages/bare-jco); redirect package for @bytecodealliance/jco.
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco
+              comment: '@bytecodealliance/jco (packages/jco); CLI and JavaScript API.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-transpile
+              comment: '@bytecodealliance/jco-transpile (packages/jco-transpile); component transpilation.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-std
+              comment: '@bytecodealliance/jco-std (packages/jco-std); shared component integrations.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/preview2-shim
+              comment: '@bytecodealliance/preview2-shim (packages/preview2-shim); WASI Preview 2 host implementations.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/preview3-shim
+              comment: '@bytecodealliance/preview3-shim (packages/preview3-shim); WASI Preview 3 host implementations.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/rolldown-plugin-jco
+              comment: |
+                  @bytecodealliance/rolldown-plugin-jco (packages/rolldown-plugin-jco);
+                  Rolldown and Rollup integration.
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs
+              comment: |
+                  @bytecodealliance/jco-node-fs (packages/jco-node-fs); public native
+                  Node.js filesystem helpers. The Rust crate in this directory is
+                  distributed through this package and its native platform packages.
+            # Native platform packages are generated and released from the same
+            # packages/jco-node-fs sources as the parent package above.
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-darwin-arm64
+              comment: '@bytecodealliance/jco-node-fs-darwin-arm64; macOS ARM64 native helper.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-darwin-x64
+              comment: '@bytecodealliance/jco-node-fs-darwin-x64; macOS x64 native helper.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-linux-arm64-gnu
+              comment: '@bytecodealliance/jco-node-fs-linux-arm64-gnu; Linux ARM64 glibc native helper.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-linux-arm64-musl
+              comment: '@bytecodealliance/jco-node-fs-linux-arm64-musl; Linux ARM64 musl native helper.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-linux-x64-gnu
+              comment: '@bytecodealliance/jco-node-fs-linux-x64-gnu; Linux x64 glibc native helper.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-linux-x64-musl
+              comment: '@bytecodealliance/jco-node-fs-linux-x64-musl; Linux x64 musl native helper.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-win32-arm64-msvc
+              comment: '@bytecodealliance/jco-node-fs-win32-arm64-msvc; Windows ARM64 native helper.'
+            - uri: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs-win32-x64-msvc
+              comment: '@bytecodealliance/jco-node-fs-win32-x64-msvc; Windows x64 native helper.'
+            - uri: https://crates.io/crates/js-component-bindgen
+              comment: js-component-bindgen (crates/js-component-bindgen); Rust library for generating JavaScript component bindings.
+        attestations:
+            - name: GitHub artifact build provenance
+              predicate-uri: https://slsa.dev/provenance/v1
+              location: https://github.com/bytecodealliance/jco/attestations
+              comment: |
+                  The release workflow uses actions/attest-build-provenance for the
+                  js-component-bindgen crate and jco-node-fs release tarballs. This
+                  does not assert coverage of other artifacts or historical releases.
+    security:
+        assessments:
+            self:
+                comment: |
+                    No formal self-assessment report is linked here. The following
+                    operational limits are documented in packages/jco/README.md and
+                    packages/preview2-shim/README.md:
+
+                    On Node.js, jco run and the Preview 2 shim grant host filesystem,
+                    environment, and network access by default. jco run --sandbox and
+                    WASIShim sandbox configuration restrict the capabilities supplied
+                    to a component; embedders must configure imports and permissions
+                    for their use case. Do not infer safe execution of untrusted code
+                    solely from the use of WebAssembly.
+
+                    jco serve is intended for development and testing and is not
+                    production ready. Its request isolation modes do not provide a
+                    security sandbox or isolate filesystem and network side effects.
+
+                    CI runs build, unit, integration, browser, and conformance tests;
+                    passing these tests is not a comprehensive security assessment.
+        tools:
+            - name: Dependabot version updates
+              type: other
+              rulesets:
+                  - https://github.com/bytecodealliance/jco/blob/main/.github/dependabot.yml
+              integration:
+                  adhoc: true
+                  ci: false
+                  release: false
+              results: {}
+              comment: |
+                  Scheduled weekly update pull requests for configured GitHub Actions,
+                  npm, and Cargo dependency locations. See .github/dependabot.yml for
+                  coverage, grouping, and cooldowns. Update pull requests appear at
+                  https://github.com/bytecodealliance/jco/pulls?q=is%3Apr+author%3Aapp%2Fdependabot
+                  This describes version update automation, not vulnerability alert
+                  coverage or a dependency audit. No scan attestation is claimed.
+            - name: zizmor
+              type: SAST
+              rulesets:
+                  - default
+              integration:
+                  adhoc: false
+                  ci: true
+                  release: false
+              results: {}
+              comment: |
+                  Analyzes GitHub Actions workflows on pull requests and merge groups
+                  through .github/workflows/lint.yml, and on pushes to main through
+                  .github/workflows/lint-gha.yml. Findings are available in workflow
+                  runs and GitHub code scanning, subject to viewer permissions:
+                  https://github.com/bytecodealliance/jco/security/code-scanning
+                  This scans workflow configuration; it does not scan the JavaScript
+                  or Rust implementation. No in-toto scan attestation is claimed.
