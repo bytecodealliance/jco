@@ -3,8 +3,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { assert, suite, test, vi } from 'vitest';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 import { nodeExec, setupAsyncTest } from './helpers.js';
+import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
 const componentPath = fileURLToPath(
     new URL('./fixtures/components/runtime/waitable-set-wait-unused.component.wat', import.meta.url),
@@ -30,6 +32,65 @@ function withoutRuntimeCompilation(): typeof WebAssembly {
 
 suite.skipIf(typeof WebAssembly.Suspending !== 'function')('runtime compilation', () => {
     for (const instantiation of ['async', 'sync'] as const) {
+        test.concurrent(`--instantiation ${instantiation} precompiles typed host-import dispatchers`, async () => {
+            const { esModule, esModuleOutputDir, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: `host-import-compilation-${instantiation}`,
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'resource-drop-host-import.wasm'),
+                    skipInstantiation: true,
+                },
+                jco: {
+                    transpile: {
+                        extraArgs: {
+                            instantiation,
+                            asyncImports: ['calculate', 'jco:test-components/tick#tick'],
+                            asyncExports: ['jco:test-components/dropped-resource#call-async'],
+                        },
+                    },
+                },
+            });
+
+            try {
+                const modules = new Map<string, WebAssembly.Module>();
+                for (const file of await readdir(esModuleOutputDir)) {
+                    if (file.endsWith('.wasm')) {
+                        modules.set(file, new WebAssembly.Module(await readFile(join(esModuleOutputDir, file))));
+                    }
+                }
+                assert.lengthOf(
+                    [...modules.keys()].filter((name) => name.includes('.conditional-host-import-')),
+                    2,
+                );
+                let hostAsync = false;
+                const requested: string[] = [];
+                const instance = await esModule.instantiate(
+                    (name: string) => {
+                        requested.push(name);
+                        const module = modules.get(name);
+                        assert.ok(module, `getCoreModule('${name}') names an emitted file`);
+                        return module;
+                    },
+                    {
+                        ...new WASIShim().getImportObject(),
+                        calculate: { default: () => (hostAsync ? Promise.resolve(42n) : 42n) },
+                        'jco:test-components/tick': { tick: () => {} },
+                    },
+                    undefined,
+                    { shim: { globals: { WebAssembly: withoutRuntimeCompilation() } } },
+                );
+                const api = instance['jco:test-components/dropped-resource'];
+                assert.strictEqual(api.initialized(), 42n);
+                assert.strictEqual(api.callSync(), 42n);
+                hostAsync = true;
+                assert.strictEqual(await api.callAsync(1), 42n);
+                new api.Thing()[Symbol.dispose]();
+                assert.deepStrictEqual(requested.toSorted(), [...modules.keys()].toSorted());
+            } finally {
+                await cleanup();
+            }
+        });
+
         test.concurrent(`--instantiation ${instantiation} compiles no Wasm at runtime`, async () => {
             const { esModule, esModuleOutputDir, cleanup } = await setupAsyncTest({
                 component: {
