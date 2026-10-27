@@ -1886,6 +1886,163 @@ mod tests {
     }
 
     #[test]
+    fn thread_builtins_share_the_current_thread_prologue() {
+        for intrinsic in [
+            AsyncTaskIntrinsic::ThreadYield,
+            AsyncTaskIntrinsic::ThreadSuspend,
+            AsyncTaskIntrinsic::ThreadSuspendThenResume,
+            AsyncTaskIntrinsic::ThreadYieldThenResume,
+            AsyncTaskIntrinsic::ThreadSuspendThenPromote,
+            AsyncTaskIntrinsic::ThreadYieldThenPromote,
+            AsyncTaskIntrinsic::ThreadNewIndirect,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncTask(intrinsic));
+            assert!(
+                source.contains("currentThreadOrThrow(componentIdx)"),
+                "{intrinsic:?} does not use the shared prologue"
+            );
+            assert!(!source.contains("invalid/missing async thread meta"));
+        }
+
+        // Both switch-to-another-thread families reject a self switch the same way.
+        for intrinsic in [
+            AsyncTaskIntrinsic::ThreadSuspendThenResume,
+            AsyncTaskIntrinsic::ThreadYieldThenPromote,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncTask(intrinsic));
+            assert!(source.contains("other === thread"), "{intrinsic:?}");
+            assert!(!source.contains("i === thread.id()"), "{intrinsic:?}");
+        }
+
+        let (source, intrinsics) = render([Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::CurrentThreadOrThrow,
+        )]);
+        assert!(intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread)));
+        assert!(source.contains("getCurrentThread(meta.componentIdx, meta.threadID, meta.taskID)"));
+    }
+
+    #[test]
+    fn current_thread_lookup_rejects_recycled_thread_indices() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread));
+        assert!(source.contains("function getCurrentThread(componentIdx, threadID, taskID) {"));
+        assert!(source.contains(
+            "if (taskID !== undefined && thread.taskID() !== taskID) { return undefined; }"
+        ));
+        assert!(source.contains("if (componentIdx === -1) { return undefined; }"));
+
+        // Every register-driven lookup passes the register's task along.
+        for intrinsic in [
+            AsyncTaskIntrinsic::ContextGet,
+            AsyncTaskIntrinsic::ContextSet,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncTask(intrinsic));
+            assert_eq!(
+                source
+                    .matches("getCurrentThread(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)")
+                    .count(),
+                2,
+                "{intrinsic:?}"
+            );
+        }
+        let wrapper = render_intrinsic_body(Intrinsic::SuspendingImportWrapperFn);
+        assert!(
+            wrapper.contains("getCurrentThread(saved.componentIdx, saved.threadID, saved.taskID)")
+        );
+    }
+
+    #[test]
+    fn thread_suspension_settles_completion_and_delivers_cancellation() {
+        let thread =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncThreadClass));
+        let suspend_start = thread.find("async suspend(opts) {").unwrap();
+        let suspend_end = thread.find("start() {").unwrap();
+        let suspend = &thread[suspend_start..suspend_end];
+        assert!(suspend.contains("task.settleCompletion();"));
+        assert!(
+            suspend.contains("if (task.deliverPendingCancel({ cancellable })) { return false; }")
+        );
+        assert!(
+            suspend.contains(
+                "readyFn: () => (cancellable && task.cancellationPending()) || readyFn(),"
+            )
+        );
+        assert!(suspend.contains(
+            "if (keepGoing && task.deliverPendingCancel({ cancellable })) { return false; }"
+        ));
+
+        let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+        assert!(task.contains(
+            "cancellationPending() { return this.#state === AsyncTask.State.CANCEL_PENDING; }"
+        ));
+    }
+
+    #[test]
+    fn spawned_thread_traps_are_recorded_against_the_instance() {
+        let (source, intrinsics) =
+            render([Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncThreadClass)]);
+        assert!(intrinsics.contains(&Intrinsic::Component(ComponentIntrinsic::RecordTrap)));
+        let record_trap = Intrinsic::Component(ComponentIntrinsic::RecordTrap).name();
+        let recorded = source
+            .find(&format!("err = {record_trap}(this.#componentIdx, err);"))
+            .expect("spawned thread errors are recorded as traps");
+        let rejected = source
+            .find("this.#task.reject(err);")
+            .expect("spawned thread errors reject the owning task");
+        assert!(
+            recorded < rejected,
+            "the trap is recorded before the task is rejected"
+        );
+    }
+
+    #[test]
+    fn host_tasks_do_not_materialise_component_async_state() {
+        let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+        assert!(task.contains("thread.setId(++AsyncTask._HOST_THREAD_ID);"));
+
+        let remove_start = task.find("removeThread(thread) {").unwrap();
+        let remove_end = task.find("defaultThread() {").unwrap();
+        assert!(task[remove_start..remove_end].contains("if (this.#componentIdx !== -1) {"));
+
+        let exit_start = task.find("exit(args) {").unwrap();
+        let exit_end = task.find("needsExclusiveLock() {").unwrap();
+        let exit = &task[exit_start..exit_end];
+        assert!(exit.contains("const state = this.#componentIdx === -1"));
+        assert!(exit.contains("if (state) { state.exclusiveRelease(this.#id); }"));
+
+        let lookup =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread));
+        assert!(lookup.contains("if (componentIdx === -1) { return undefined; }"));
+    }
+
+    #[test]
+    fn suspended_threads_are_queued_in_the_map_alone() {
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+        assert!(!state.contains("#suspendedThreadRefs"));
+        assert!(state.contains("for (const [thread, meta] of this.#suspendedThreadsByRef) {"));
+        assert!(state.contains("const idle = this.#suspendedThreadsByRef.size > 0;"));
+    }
+
+    #[test]
+    fn thread_handle_builtins_trap_on_unknown_indices() {
+        let resume_later =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadResumeLater));
+        assert!(resume_later.contains(
+            "throw new WebAssemblyRuntimeError(`unknown handle index ${threadHandle}`);"
+        ));
+        assert!(!resume_later.contains("throw new Error(`invalid/missing thread"));
+
+        let new_indirect =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadNewIndirect));
+        assert!(new_indirect.contains("if (tableIdx >= table.length) {"));
+        assert!(new_indirect.contains(
+            "throw new WebAssemblyRuntimeError('thread.new-indirect: table index out of bounds');"
+        ));
+    }
+
+    #[test]
     fn thread_scheduler_distinguishes_suspended_and_ready_targets() {
         let state = render_intrinsic_body(Intrinsic::Component(
             ComponentIntrinsic::ComponentAsyncStateClass,
