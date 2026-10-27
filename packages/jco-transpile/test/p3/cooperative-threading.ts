@@ -6,7 +6,7 @@ import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
 import { setupAsyncTest } from '../helpers.js';
 
 suite.skipIf(typeof WebAssembly.Suspending !== 'function')('cooperative threading regressions', () => {
-    test.each([
+    test.concurrent.each([
         { name: 'return-suspend', behavior: 'publishes a returned result when its thread suspends' },
         { name: 'keeper', behavior: 'lets a worker resolve a task after the implicit thread exits' },
         { name: 'two-waits', behavior: 'lets two threads of the same task wait on events' },
@@ -25,7 +25,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('cooperative threadin
         }
     });
 
-    test.each([
+    test.concurrent.each([
         { name: 'wrong-type', error: /start function type mismatch/ },
         { name: 'wrong-param', error: /start function type mismatch/ },
         { name: 'bad-promote', error: /invalid thread handle/ },
@@ -47,7 +47,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('cooperative threadin
         }
     });
 
-    test('a spawned Wasm trap poisons its instance after task.return', async () => {
+    test.concurrent('a spawned Wasm trap poisons its instance after task.return', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
