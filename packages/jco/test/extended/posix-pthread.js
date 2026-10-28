@@ -20,8 +20,7 @@ async function runPosixPthreadTest(testPath) {
     }
 }
 
-// TODO(unskip): When jco-transpile is updated
-suite.skip("posix-pthread", () => {
+suite("posix-pthread", () => {
     test("mutex lock: 1-1", async () => {
         assert.strictEqual(await runPosixPthreadTest("pthread-mutex-lock/1-1"), 0);
     });
