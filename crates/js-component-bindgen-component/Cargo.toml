@@ -16,4 +16,4 @@ wit-bindgen = { workspace = true, features = ["macros"] }
 wit-component = { workspace = true }
 wat = { workspace = true, features = [ "component-model" ]}
 
-js-component-bindgen = { path = "../js-component-bindgen" }
+js-component-bindgen = { path = "../js-component-bindgen", features = ["external-runtime"] }

@@ -66,6 +66,8 @@ const MAX_FLAT_PARAMS: usize = 16;
 /// Maximum direct flat results for sync canonical lowering.
 const MAX_FLAT_RESULTS: usize = 1;
 
+// TODO(breaking): replace this exhaustively constructible options type with the
+// non-exhaustive TranspileConfig at the next major release.
 #[derive(Debug, Default, Clone, bon::Builder)]
 pub struct TranspileOpts {
     pub name: String,
@@ -137,9 +139,6 @@ pub struct TranspileOpts {
     /// passing unpaired surrogates on to the receiving component.
     #[builder(default)]
     pub perf_strings_skip_copy_utf16_validation: bool,
-    /// ES module providing the Component Model runtime implementation used by
-    /// generated bindings. The module must export a `runtime` provider.
-    pub cm_runtime_es_module: Option<String>,
     /// Represent WIT flags as bigint values instead of objects of booleans.
     #[builder(default)]
     pub flags_as_bigint: bool,
@@ -250,6 +249,9 @@ struct JsBindgen<'a> {
     /// Various options for code generation.
     opts: &'a TranspileOpts,
 
+    /// Optional external Component Model runtime provider.
+    cm_runtime_es_module: Option<&'a str>,
+
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,
 
@@ -325,6 +327,7 @@ pub fn transpile_bindgen(
     resolve: &Resolve,
     id: WorldId,
     opts: TranspileOpts,
+    cm_runtime_es_module: Option<&str>,
     files: &mut Files,
 ) -> TranspileBindgenResult {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
@@ -341,6 +344,7 @@ pub fn transpile_bindgen(
         core_module_cnt: 0,
         host_import_modules: BTreeMap::new(),
         opts: &opts,
+        cm_runtime_es_module,
         all_intrinsics: BTreeSet::new(),
         all_core_exported_funcs: Vec::new(),
     };
@@ -676,14 +680,17 @@ impl JsBindgen<'_> {
             .intrinsics(&mut self.all_intrinsics)
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
             .determinism_profile(AsyncDeterminismProfile::default())
-            .transpile_opts(opts)
-            .build();
-        let js_intrinsics = render_intrinsics(render_args);
-        if uses_external_runtime(&self.all_intrinsics, opts.cm_runtime_es_module.is_some()) {
+            .transpile_opts(opts);
+        #[cfg(feature = "external-runtime")]
+        let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
+        let js_intrinsics = render_intrinsics(render_args.build());
+        if let Some(module) = self.cm_runtime_es_module
+            && uses_external_runtime(&self.all_intrinsics, true)
+        {
             uwriteln!(
                 output,
                 "import {{ runtime as {CM_RUNTIME_PROVIDER_LOCAL_NAME} }} from {};",
-                js_string_literal(opts.cm_runtime_es_module.as_deref().unwrap()),
+                js_string_literal(module),
             );
         }
 
@@ -3167,9 +3174,9 @@ impl<'a> Instantiator<'a, '_> {
                     .suspending_trampolines
                     .contains(&TrampolineIndex::from_u32(i))
                 {
-                    let conditional_host_import = self
-                        .bindgen
-                        .intrinsic(Intrinsic::ConditionalSuspendingHostImportFn);
+                    let conditional_host_import = self.bindgen.intrinsic(Intrinsic::JsHelper(
+                        JsHelperIntrinsic::ConditionalSuspendingHostImportFn,
+                    ));
                     let module = self
                         .bindgen
                         .generate_host_import_module(canon_opts.core_type, self.types);
@@ -4587,8 +4594,9 @@ impl<'a> Instantiator<'a, '_> {
                 //
                 // TODO(breaking): remove as we do not not need to manually specify async imports anymore in P3 w/ native coloring
                 if host_import_generator {
-                    let maybe_sync_generator_fn =
-                        self.bindgen.intrinsic(Intrinsic::MaybeSyncGeneratorFn);
+                    let maybe_sync_generator_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn));
                     uwrite!(
                         self.src.js,
                         "\nconst _trampoline{trampoline_idx} = {maybe_sync_generator_fn}(function*"

@@ -20,6 +20,10 @@ crate-type = ["lib"]
 [features]
 default = ["transpile-bindgen"]
 transpile-bindgen = []
+# Expose cooperative-thread names in the public intrinsic API.
+coop-threads = []
+# Enable selection of an external Component Model runtime provider.
+external-runtime = []
 
 [package.metadata.docs.rs]
 all-features = true

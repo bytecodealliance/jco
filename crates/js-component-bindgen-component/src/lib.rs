@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use anyhow::{Context as _, Result};
 
 use js_component_bindgen::source::wit_parser::{Resolve, UnresolvedPackageGroup};
-use js_component_bindgen::transpile;
+use js_component_bindgen::{TranspileConfig, transpile_with_config};
 use wit_component::{DecodedWasm, WitPrinter};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
@@ -86,7 +86,6 @@ impl bindings::Guest for JsComponentBindgenComponent {
                     .perf_strings_skip_copy_utf16_validation
                     .unwrap_or(false),
             )
-            .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
             .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
             .variants_inline_cases(options.variants_inline_cases.unwrap_or(false))
             .use_namespace_objects(options.use_namespace_objects.unwrap_or(false))
@@ -103,9 +102,15 @@ impl bindings::Guest for JsComponentBindgenComponent {
             files,
             imports,
             mut exports,
-        } = transpile(&component, opts)
-            .map_err(|e| format!("{e:?}"))
-            .map_err(|e| e.to_string())?;
+        } = transpile_with_config(
+            &component,
+            TranspileConfig::builder()
+                .opts(opts)
+                .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
+                .build(),
+        )
+        .map_err(|e| format!("{e:?}"))
+        .map_err(|e| e.to_string())?;
 
         Ok(Transpiled {
             files,

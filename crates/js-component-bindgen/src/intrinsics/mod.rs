@@ -51,6 +51,8 @@ use p3::waitable::WaitableIntrinsic;
 /// These intrinsics refer to JS code that is included in order to make
 /// transpiled WebAssembly components and their imports/exports functional
 /// in the relevant JS context.
+// TODO(breaking): mark Intrinsic non-exhaustive at the next major release so
+// future helper additions do not break downstream exhaustive matches.
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Intrinsic {
     JsHelper(JsHelperIntrinsic),
@@ -156,31 +158,27 @@ pub enum Intrinsic {
     /// Tracking of component memories
     LookupMemoriesForComponent,
 
+    // TODO(breaking): rename the task-named variants below to their thread-named
+    // aliases at the next major release. Keep their published names for 2.x.
     /// Per-component thread registers plus `current`, the thread executing core Wasm.
     /// FACT adapters use `current` because they have no owning component.
-    GlobalCurrentThreadMeta,
+    GlobalCurrentTaskMeta,
 
     /// Gets the current global thread state
-    GetGlobalCurrentThreadMetaFn,
+    GetGlobalCurrentTaskMetaFn,
 
     /// Gets the current global thread state
-    SetGlobalCurrentThreadMetaFn,
+    SetGlobalCurrentTaskMetaFn,
 
     /// Execute a closure with a certain set current thread
-    WithGlobalCurrentThreadMetaFn,
+    WithGlobalCurrentTaskMetaFn,
 
     /// Execute a closure with a certain set current thread, which is async only
     /// if the closure returns a promise
-    WithGlobalCurrentThreadMetaFnAsync,
-
-    /// Run a generator function synchronously, until it yields a promise
-    MaybeSyncGeneratorFn,
-
-    /// Bypass the JSPI boundary when a host import's caller cannot block.
-    ConditionalSuspendingHostImportFn,
+    WithGlobalCurrentTaskMetaFnAsync,
 
     /// Clear the global thread meta
-    ClearGlobalCurrentThreadMetaFn,
+    ClearGlobalCurrentTaskMetaFn,
 
     /// Wrap the JS payload of a `WebAssembly.Suspending` import so the
     /// importing component's current-task register survives suspension
@@ -205,6 +203,43 @@ pub enum Intrinsic {
 
     /// Compiled Wasm of the conditional-suspending trampolines, by trampoline name
     ConditionalSuspendingWasm,
+}
+
+// Keep the published task-named variants and their order for downstream exhaustive
+// matches. Internally these registers now track threads.
+// TODO(breaking): remove these aliases once the variants themselves use the
+// thread names at the next major release.
+#[cfg(not(feature = "coop-threads"))]
+#[allow(non_upper_case_globals)]
+impl Intrinsic {
+    pub(crate) const GlobalCurrentThreadMeta: Self = Self::GlobalCurrentTaskMeta;
+    pub(crate) const GetGlobalCurrentThreadMetaFn: Self = Self::GetGlobalCurrentTaskMetaFn;
+    pub(crate) const SetGlobalCurrentThreadMetaFn: Self = Self::SetGlobalCurrentTaskMetaFn;
+    pub(crate) const WithGlobalCurrentThreadMetaFn: Self = Self::WithGlobalCurrentTaskMetaFn;
+    pub(crate) const WithGlobalCurrentThreadMetaFnAsync: Self =
+        Self::WithGlobalCurrentTaskMetaFnAsync;
+    pub(crate) const ClearGlobalCurrentThreadMetaFn: Self = Self::ClearGlobalCurrentTaskMetaFn;
+}
+
+// The opt-in public names remain aliases so exhaustive matches on the published
+// variants continue to work, including when all features are enabled.
+// TODO(breaking): replace these aliases with thread-named variants at the next
+// major release, alongside removal of the compatibility aliases above.
+#[cfg(feature = "coop-threads")]
+#[allow(non_upper_case_globals)]
+impl Intrinsic {
+    /// Cooperative-thread alias for [`Self::GlobalCurrentTaskMeta`].
+    pub const GlobalCurrentThreadMeta: Self = Self::GlobalCurrentTaskMeta;
+    /// Cooperative-thread alias for [`Self::GetGlobalCurrentTaskMetaFn`].
+    pub const GetGlobalCurrentThreadMetaFn: Self = Self::GetGlobalCurrentTaskMetaFn;
+    /// Cooperative-thread alias for [`Self::SetGlobalCurrentTaskMetaFn`].
+    pub const SetGlobalCurrentThreadMetaFn: Self = Self::SetGlobalCurrentTaskMetaFn;
+    /// Cooperative-thread alias for [`Self::WithGlobalCurrentTaskMetaFn`].
+    pub const WithGlobalCurrentThreadMetaFn: Self = Self::WithGlobalCurrentTaskMetaFn;
+    /// Cooperative-thread alias for [`Self::WithGlobalCurrentTaskMetaFnAsync`].
+    pub const WithGlobalCurrentThreadMetaFnAsync: Self = Self::WithGlobalCurrentTaskMetaFnAsync;
+    /// Cooperative-thread alias for [`Self::ClearGlobalCurrentTaskMetaFn`].
+    pub const ClearGlobalCurrentThreadMetaFn: Self = Self::ClearGlobalCurrentTaskMetaFn;
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
@@ -1102,12 +1137,12 @@ impl Intrinsic {
                 );
             }
 
-            Self::GlobalCurrentThreadMeta => {
+            Self::GlobalCurrentTaskMeta => {
                 let name = self.name();
                 output.push_str(&format!("const {name} = {{}};\n"));
             }
 
-            Self::GetGlobalCurrentThreadMetaFn => {
+            Self::GetGlobalCurrentTaskMetaFn => {
                 let get_current_global_thread_meta_fn =
                     args.require_intrinsic(Self::GetGlobalCurrentThreadMetaFn);
                 let global_current_thread_meta_obj =
@@ -1129,7 +1164,7 @@ impl Intrinsic {
                 );
             }
 
-            Self::SetGlobalCurrentThreadMetaFn => {
+            Self::SetGlobalCurrentTaskMetaFn => {
                 let set_global_current_thread_meta_fn = self.name();
                 let global_current_thread_meta_obj =
                     args.require_intrinsic(Self::GlobalCurrentThreadMeta);
@@ -1150,7 +1185,7 @@ impl Intrinsic {
                 );
             }
 
-            Self::WithGlobalCurrentThreadMetaFn => {
+            Self::WithGlobalCurrentTaskMetaFn => {
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let with_global_current_thread_meta_fn =
                     args.require_intrinsic(Self::WithGlobalCurrentThreadMetaFn);
@@ -1221,7 +1256,7 @@ impl Intrinsic {
             //
             // A closure that returns synchronously is treated like WithGlobalCurrentThreadMetaFn.
             // While the promise of one that returns a promise is pending, the task stays current.
-            Self::WithGlobalCurrentThreadMetaFnAsync => {
+            Self::WithGlobalCurrentTaskMetaFnAsync => {
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let with_global_current_thread_meta_async_fn =
                     args.require_intrinsic(Self::WithGlobalCurrentThreadMetaFnAsync);
@@ -1290,43 +1325,7 @@ impl Intrinsic {
                 ));
             }
 
-            // Wrap a generator function, which yields where an async function would await,
-            // so that it runs synchronously until it yields a promise. A host import that
-            // answers synchronously then returns synchronously, which a task that cannot
-            // block (e.g. a resource destructor) requires.
-            Self::MaybeSyncGeneratorFn => {
-                let maybe_sync_generator_fn = args.require_intrinsic(Self::MaybeSyncGeneratorFn);
-
-                output.push_str(&format!(
-                    r#"
-                      function {maybe_sync_generator_fn}(genFn) {{
-                          return function (...args) {{
-                              const gen = genFn.apply(this, args);
-                              const step = (method, value) => {{
-                                  while (true) {{
-                                      const {{ value: yielded, done }} = gen[method](value);
-                                      if (done) {{ return yielded; }}
-                                      if (yielded === null ||
-                                          (typeof yielded !== 'object' && typeof yielded !== 'function') ||
-                                          typeof yielded.then !== 'function') {{
-                                          method = 'next';
-                                          value = yielded;
-                                          continue;
-                                      }}
-                                      return Promise.resolve(yielded).then(
-                                          res => step('next', res),
-                                          err => step('throw', err),
-                                      );
-                                  }}
-                              }};
-                              return step('next', undefined);
-                          }};
-                      }}
-                    "#,
-                ));
-            }
-
-            Self::ClearGlobalCurrentThreadMetaFn => {
+            Self::ClearGlobalCurrentTaskMetaFn => {
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
                 let clear_global_current_thread_meta_fn =
                     args.require_intrinsic(Self::ClearGlobalCurrentThreadMetaFn);
@@ -1459,30 +1458,6 @@ impl Intrinsic {
                       }}
                     "#,
                 ));
-            }
-
-            Self::ConditionalSuspendingHostImportFn => {
-                let wrapper = args.require_intrinsic(*self);
-                let current_meta = args.require_intrinsic(Self::GlobalCurrentThreadMeta);
-                let get_thread = args.require_intrinsic(AsyncTaskIntrinsic::GetCurrentThread);
-                uwriteln!(
-                    output,
-                    r#"
-                    function {wrapper}(module, componentIdx, fn) {{
-                        return new WebAssembly.Instance(module, {{ '': {{
-                            mayBlock: () => {{
-                                const saved = {current_meta}[componentIdx];
-                                const thread = saved
-                                    ? {get_thread}(saved.componentIdx, saved.threadID)
-                                    : null;
-                                return thread?.task.mayBlock() ?? false;
-                            }},
-                            fast: fn,
-                            slow: new WebAssembly.Suspending(fn),
-                        }} }}).exports.run;
-                    }}
-                    "#,
-                );
             }
 
             Self::ConditionalSuspending1I32ToI32Fn
@@ -1773,7 +1748,8 @@ mod tests {
 
     #[test]
     fn maybe_sync_generator_awaits_only_promises() {
-        let source = render_intrinsic_body(Intrinsic::MaybeSyncGeneratorFn);
+        let source =
+            render_intrinsic_body(Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn));
 
         assert!(source.contains("const gen = genFn.apply(this, args);"));
         assert!(source.contains("typeof yielded.then !== 'function'"));
@@ -2807,12 +2783,27 @@ pub struct RenderIntrinsicsArgs<'a> {
     pub(crate) determinism_profile: AsyncDeterminismProfile,
     /// Options provided when performing transpilation
     pub(crate) transpile_opts: &'a TranspileOpts,
+    /// Whether runtime-provided intrinsics are enabled.
+    #[cfg(feature = "external-runtime")]
+    #[builder(default)]
+    pub(crate) external_runtime: bool,
     /// Intrinsic dependencies discovered while rendering one intrinsic
     #[builder(default)]
     discovered_intrinsics: Mutex<BTreeSet<Intrinsic>>,
 }
 
 impl RenderIntrinsicsArgs<'_> {
+    fn external_runtime_enabled(&self) -> bool {
+        #[cfg(feature = "external-runtime")]
+        {
+            self.external_runtime
+        }
+        #[cfg(not(feature = "external-runtime"))]
+        {
+            false
+        }
+    }
+
     /// Retrieve an intrinsic's name and register it as a dependency of the
     /// intrinsic currently being rendered.
     pub fn require_intrinsic(&self, intrinsic: impl Into<Intrinsic>) -> &'static str {
@@ -2822,7 +2813,7 @@ impl RenderIntrinsicsArgs<'_> {
             .expect("intrinsic dependency collector lock should not be poisoned")
             .insert(intrinsic);
         intrinsic
-            .binding(self.transpile_opts.cm_runtime_es_module.is_some())
+            .binding(self.external_runtime_enabled())
             .local_name()
     }
 
@@ -2855,7 +2846,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         debug_assert!(args.take_discovered_intrinsics().is_empty());
         let mut source = Source::default();
         if matches!(
-            intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some()),
+            intrinsic.binding(args.external_runtime_enabled()),
             IntrinsicBinding::Inline { .. }
         ) {
             intrinsic.render(&mut source, args);
@@ -2872,10 +2863,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
     }
 
     let mut output = Source::default();
-    if uses_external_runtime(
-        args.intrinsics,
-        args.transpile_opts.cm_runtime_es_module.is_some(),
-    ) {
+    if uses_external_runtime(args.intrinsics, args.external_runtime_enabled()) {
         uwriteln!(
             output,
             r#"
@@ -2906,7 +2894,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
 
         for intrinsic in args.intrinsics.iter() {
             let IntrinsicBinding::Runtime { local_name, path } =
-                intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some())
+                intrinsic.binding(args.external_runtime_enabled())
             else {
                 continue;
             };
@@ -3204,14 +3192,12 @@ impl Intrinsic {
             Intrinsic::CoinFlip => "_coinFlip",
 
             // Global current task tracking machinery
-            Self::GlobalCurrentThreadMeta => "CURRENT_TASK_META",
-            Self::GetGlobalCurrentThreadMetaFn => "_getGlobalCurrentThreadMeta",
-            Self::SetGlobalCurrentThreadMetaFn => "_setGlobalCurrentThreadMeta",
-            Self::WithGlobalCurrentThreadMetaFn => "_withGlobalCurrentThreadMeta",
-            Self::WithGlobalCurrentThreadMetaFnAsync => "_withGlobalCurrentThreadMetaAsync",
-            Self::MaybeSyncGeneratorFn => "_maybeSyncGenerator",
-            Self::ConditionalSuspendingHostImportFn => "_conditionalSuspendingHostImport",
-            Self::ClearGlobalCurrentThreadMetaFn => "_clearCurrentTask",
+            Self::GlobalCurrentTaskMeta => "CURRENT_TASK_META",
+            Self::GetGlobalCurrentTaskMetaFn => "_getGlobalCurrentThreadMeta",
+            Self::SetGlobalCurrentTaskMetaFn => "_setGlobalCurrentThreadMeta",
+            Self::WithGlobalCurrentTaskMetaFn => "_withGlobalCurrentThreadMeta",
+            Self::WithGlobalCurrentTaskMetaFnAsync => "_withGlobalCurrentThreadMetaAsync",
+            Self::ClearGlobalCurrentTaskMetaFn => "_clearCurrentTask",
             Self::SuspendingImportWrapperFn => "_suspendingImport",
             Self::ConditionalSuspending1I32ToI32Fn => "_conditionalSuspending1I32ToI32",
             Self::ConditionalSuspending2I32ToI32Fn => "_conditionalSuspending2I32ToI32",
