@@ -341,6 +341,18 @@ jobs:
       - name: Install node modules
         run: pnpm install
 
+      # TODO(publish-jco-transpile): remove these two steps once @bytecodealliance/jco depends on
+      # a published jco-transpile again; with the temporary workspace: dependency, jco's runtime
+      # resolves packages/jco-transpile/dist, which has to be built here.
+      - name: Restore jco-transpile vendor
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jco-transpile-vendor
+          path: packages/jco-transpile/vendor
+
+      - name: Build workspace jco-transpile
+        run: pnpm --filter '@bytecodealliance/jco-transpile' run build:ts
+
       - name: Generate tests
         run: |
           cargo xtask generate tests preview2
