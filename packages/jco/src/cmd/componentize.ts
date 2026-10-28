@@ -3,7 +3,7 @@ import { cp, mkdir, mkdtemp, rm, stat, readFile, writeFile } from "node:fs/promi
 import { tmpdir } from "node:os";
 import { resolve, basename, dirname, extname, join } from "node:path";
 
-import { componentWitMetadataForWorld } from "@bytecodealliance/jco-transpile";
+import { componentWitMetadataForWorld, createComponent, createWorld } from "@bytecodealliance/jco-transpile";
 
 import { bundleComponentChunk, bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { engineCompatPlugin } from "../engine-compat.js";
@@ -499,16 +499,6 @@ export async function componentizeScriptOnly(sources: string[], opts: Componenti
             );
         }
     }
-
-    // TODO(unskip): use typed imports once jco-transpile publishes the script APIs.
-    // Load these only for script-only componentization so existing commands work
-    // with the published transpiler while the script-only tests are skipped.
-    const {
-        // @ts-expect-error The script APIs have not been published in jco-transpile yet.
-        createWorld,
-        // @ts-expect-error The script APIs have not been published in jco-transpile yet.
-        createComponent,
-    } = await import("@bytecodealliance/jco-transpile");
 
     // Merge the worlds and generate the engine's bootstrap module
     const engine = await createWorld(

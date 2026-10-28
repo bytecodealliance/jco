@@ -464,8 +464,8 @@ importers:
         specifier: ^0.9.0
         version: 0.9.0(@bytecodealliance/preview2-shim@0.30.0)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.20.0
-        version: 0.20.0
+        specifier: workspace:^
+        version: link:../jco-transpile
       '@bytecodealliance/preview2-shim':
         specifier: ^0.30.0
         version: 0.30.0
@@ -1151,8 +1151,6 @@ packages:
   '@bytecodealliance/jco-transpile@0.18.0':
     resolution: {integrity: sha512-Ou4MWoxGC6HKBjRpTJ4SEUxsN8DOAv9LIi2RD22Kosq2OZTnUvKikFrOAGS2vCGNMzvXkeKBS1jFMLKzYBk4pg==}
 
-  '@bytecodealliance/jco-transpile@0.20.0':
-    resolution: {integrity: sha512-FJ8Ue1vsqY8loI6TgYe50Dvt5HVFu0DoiJ7r1NLN/UEa+kbLlO2cbl4vwsLmJrMff8yBRkzb5P7rIN1PCvVGgg==}
 
   '@bytecodealliance/jco-transpile@0.4.2':
     resolution: {integrity: sha512-45aeQsUSJsrru1FY1EU47T6kREUkQ7QC1EwIqb5Vi3yakrl6cyqOTRG005k/BWq/fNR0i0n3QtTZQRoF4fi88g==}
@@ -5960,12 +5958,6 @@ snapshots:
       binaryen: 132.0.0
       oxc-minify: 0.151.0
 
-  '@bytecodealliance/jco-transpile@0.20.0':
-    dependencies:
-      '@bytecodealliance/preview2-shim': 0.30.0
-      '@bytecodealliance/preview3-shim': 0.10.0
-      binaryen: 132.0.0
-      oxc-minify: 0.151.0
 
   '@bytecodealliance/jco-transpile@0.4.2':
     dependencies:
