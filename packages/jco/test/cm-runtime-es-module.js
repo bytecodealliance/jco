@@ -3,11 +3,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { describe, expect, test, vi } from "vitest";
-
-// Jco depends on the last published jco-transpile release. Exercise the local
-// implementation while testing this branch's Jco integration.
-vi.mock("@bytecodealliance/jco-transpile", async () => import("../../jco-transpile/src/index.js"));
+import { describe, expect, test } from "vitest";
 
 import { transpile } from "../src/api.js";
 import { transpileCmd } from "../src/cmd/transpile.js";
@@ -19,7 +15,6 @@ const fixture = fileURLToPath(
 const cmRuntimeEsModule = "test-runtime-provider";
 const runtimeFixture = new URL("../../jco-transpile/test/fixtures/custom-runtime-provider.js", import.meta.url);
 const jcoPackageDir = fileURLToPath(new URL("../", import.meta.url));
-const localTranspilerDir = fileURLToPath(new URL("../../jco-transpile/", import.meta.url));
 
 async function installRuntimeInConsumer(dir) {
     const packageDir = join(dir, "node_modules", cmRuntimeEsModule);
@@ -37,7 +32,7 @@ async function instantiateFromDir(dir, name) {
     bindings.instantiate((moduleName) => new WebAssembly.Module(readFileSync(join(dir, moduleName))), {});
 }
 
-async function installCliWithLocalTranspiler(dir) {
+async function installCliInConsumer(dir) {
     const installDir = join(dir, "jco-install");
     await mkdir(installDir);
     await cp(join(jcoPackageDir, "dist"), join(installDir, "dist"), { recursive: true });
@@ -46,10 +41,7 @@ async function installCliWithLocalTranspiler(dir) {
 
     const manifest = JSON.parse(await readFile(join(jcoPackageDir, "package.json"), "utf8"));
     for (const name of Object.keys(manifest.dependencies)) {
-        const source =
-            name === "@bytecodealliance/jco-transpile"
-                ? localTranspilerDir
-                : await realpath(join(jcoPackageDir, "node_modules", name));
+        const source = await realpath(join(jcoPackageDir, "node_modules", name));
         const destination = join(installDir, "node_modules", name);
         await mkdir(dirname(destination), { recursive: true });
         await symlink(source, destination, process.platform === "win32" ? "junction" : "dir");
@@ -59,7 +51,7 @@ async function installCliWithLocalTranspiler(dir) {
 
 describe("custom Component Model runtime", () => {
     test("neither Jco package depends on the optional runtime", async () => {
-        for (const path of ["../package.json", "../../jco-transpile/package.json"]) {
+        for (const path of ["../package.json", "../node_modules/@bytecodealliance/jco-transpile/package.json"]) {
             const manifest = JSON.parse(await readFile(new URL(path, import.meta.url), "utf8"));
             expect(manifest.dependencies).not.toHaveProperty("@bytecodealliance/jco-cm-runtime");
         }
@@ -111,14 +103,14 @@ describe("custom Component Model runtime", () => {
         }
     });
 
-    test("the CLI uses a local transpiler and a runtime installed only with its output", async () => {
+    test("the CLI uses its installed transpiler and a runtime installed only with its output", async () => {
         const root = await getTmpDir();
         const dir = join(root, "output");
         const name = "runtime-cli-e2e";
 
         try {
             await mkdir(dir);
-            const jcoCli = await installCliWithLocalTranspiler(root);
+            const jcoCli = await installCliInConsumer(root);
             const provider = await installRuntimeInConsumer(dir);
             await exec(
                 jcoCli,
