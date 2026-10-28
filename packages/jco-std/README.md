@@ -12,6 +12,12 @@ WebAssembly components can be used from server side applications _and_ in the br
 [cm-book]: https://component-model.bytecodealliance.org/
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
+`@bytecodealliance/preview2-shim` is an optional peer dependency used by the opt-in
+Node implementation of `wasi:tls`. Applications using this provider must share the
+same shim instance with their WASI sockets and streams: separate instances have
+different resource classes and IO workers. Use a shim version that satisfies the
+installed `jco-std` release's peer requirement. Other consumers do not need the shim.
+
 # Adapters
 
 Below is a list of adapters provided by `@bytecodealliance/jco-std`:
