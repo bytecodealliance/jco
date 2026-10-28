@@ -1,5 +1,86 @@
 # Changelog
 
+## [2.17.0] - 2026-10-28
+
+### 🚀 Features
+
+- _(bindgen)_ generate script engines and script components by @vados-cosmonic
+
+- _(bindgen)_ support external runtime provider by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ preserve interface identity in resources and aliases by @vados-cosmonic
+
+- _(bindgen)_ support scoped guest resource class names by @vados-cosmonic
+
+- _(bindgen)_ preserve Rust API compatibility for 2.17 by @vados-cosmonic in #2330
+
+- _(bindgen)_ retire implicit JSPI initialization tasks by @vados-cosmonic
+
+- _(bindgen)_ bypass JSPI for nonblocking host import callers by @vados-cosmonic
+
+- _(bindgen)_ return JSPI host imports synchronously when the context cannot wait by @chenyan2002
+
+- _(bindgen)_ handle cooperative thread waits, traps and registers by @vados-cosmonic
+
+- _(bindgen)_ make thread resume intrinsic match exhaustive by @vados-cosmonic in #2282
+
+- _(bindgen)_ fix async import hang by @vados-cosmonic
+
+- _(bindgen)_ fix async constructor and static functions by @vados-cosmonic
+
+- _(bindgen)_ preserve result tags through async completion by @vados-cosmonic
+
+- _(bindgen)_ trap cleanup failures across component boundaries by @vados-cosmonic
+
+- _(bindgen)_ propagate post-return traps by @vados-cosmonic
+
+- _(bindgen)_ normalize resource capture keys to unsigned reps by @vados-cosmonic in #2294
+
+- _(bindgen)_ keep every bit of resource reps in handle tables by @kiro-agent
+
+- _(bindgen)_ allow zero-valued resource representations by @vados-cosmonic
+
+- _(bindgen)_ bind runtime intrinsics to their receivers by @vados-cosmonic
+
+- _(bindgen)_ preserve runtime WebAssembly overrides by @vados-cosmonic
+
+- _(bindgen)_ make external runtime opt-in by @vados-cosmonic
+
+- _(bindgen)_ observe core-load rejections immediately by @gurkerl83
+
+- _(bindgen)_ prevent resources from shadowing Promise by @gurkerl83
+
+- _(bindgen)_ avoid map-lowering loop counter collisions by @andreiltd in #2279
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ name the thread switch built-ins' index threadIdx by @vados-cosmonic
+
+
+### 🧪 Testing
+
+- _(bindgen)_ cover the cooperative threading fixes by @vados-cosmonic
+
+- _(bindgen)_ address core-load rejection review feedback by @vados-cosmonic in #2281
+
+
+### 🔒️ Security
+
+- _(bindgen)_ escape names and specifiers at every quoted emission site by @vados-cosmonic
+
+- _(bindgen)_ escape non-identifier names in generated property keys by @vados-cosmonic
+
+
+
+## New Contributors
+* @kiro-agent made their first contribution
+* @ryan-surname-p made their first contribution in [#2261](https://github.com/bytecodealliance/jco/pull/2261)
+
+
 ## [2.16.0] - 2026-10-13
 
 ### 🚀 Features
