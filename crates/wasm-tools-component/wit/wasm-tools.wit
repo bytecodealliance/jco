@@ -29,10 +29,16 @@ interface tools {
      build: option<string>,
   }
 
-  /// Metadata that can be returned related to an interface
+  /// Metadata identifying an interface imported or exported by a world
+  ///
+  /// An interface defined in a package is identified by its `namespace`, `package`,
+  /// `interface` name and the package `version`. An interface declared inline in the world
+  /// (`import name: interface { ... }`) belongs to no package: `namespace`, `package` and
+  /// `version` are absent, and `interface` is its world key name, which is also how
+  /// components and JavaScript address it.
   record interface-metadata {
-      namespace: string,
-      %package: string,
+      namespace: option<string>,
+      %package: option<string>,
       %interface: string,
       version: option<semver-version>,
   }
@@ -53,7 +59,7 @@ interface tools {
 
   /// Extract metadata from a WIT interface for a component for a given world
   ///
-  /// If no world is specified, the root world is used
+  /// If no world is specified, the root world is used.
   component-wit-metadata-for-world: func(
     wit: wit-specifier,
     world-name: option<string>
