@@ -283,7 +283,7 @@ pub fn ts_bindgen(
                         TypeDefKind::FixedLengthList(t, len) => {
                             generator.type_fixed_size_list(*id, name, t, len, &ty.docs)
                         }
-                        TypeDefKind::Type(t) => generator.type_alias(*id, name, t, None, &ty.docs),
+                        TypeDefKind::Type(t) => generator.type_alias(name, t, None, &ty.docs),
                         TypeDefKind::Future(t) => generator.type_future(name, t, &ty.docs),
                         TypeDefKind::Stream(t) => generator.type_stream(name, t, &ty.docs),
                         TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
@@ -1036,7 +1036,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::FixedLengthList(t, len) => {
                     self.type_fixed_size_list(*id, name, t, len, &ty.docs)
                 }
-                TypeDefKind::Type(t) => self.type_alias(*id, name, t, Some(iface_id), &ty.docs),
+                TypeDefKind::Type(t) => self.type_alias(name, t, Some(iface_id), &ty.docs),
                 TypeDefKind::Future(t) => self.type_future(name, t, &ty.docs),
                 TypeDefKind::Stream(t) => self.type_stream(name, t, &ty.docs),
                 TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
@@ -1573,14 +1573,7 @@ impl<'a> TsInterface<'a> {
         self.type_enum_namespace(name, enum_);
     }
 
-    fn type_alias(
-        &mut self,
-        id: TypeId,
-        name: &str,
-        ty: &Type,
-        parent_id: Option<InterfaceId>,
-        docs: &Docs,
-    ) {
+    fn type_alias(&mut self, name: &str, ty: &Type, parent_id: Option<InterfaceId>, docs: &Docs) {
         let owner_not_parent = match ty {
             Type::Id(type_def_id) => {
                 let ty = &self.resolve.types[*type_def_id];
@@ -1605,8 +1598,12 @@ impl<'a> TsInterface<'a> {
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
             Some(owned_interface_id) => {
-                let orig_id = dealias(self.resolve, id);
-                let orig_name = self.resolve.types[orig_id]
+                // The import path names the immediate owner, so retain that
+                // interface's alias name rather than the ultimate target's.
+                let Type::Id(orig_id) = ty else {
+                    unreachable!()
+                };
+                let orig_name = self.resolve.types[*orig_id]
                     .name
                     .as_ref()
                     .unwrap()
