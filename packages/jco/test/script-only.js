@@ -28,8 +28,7 @@ async function componentizeScriptOnly(args) {
     return { outputDir, stdout, stderr };
 }
 
-// TODO(unskip): enable once the published jco-transpile includes the script APIs.
-suite.skip("componentize --script-only", () => {
+suite("componentize --script-only", () => {
     for (const backend of ["starlingmonkey", "quickjs"]) {
         test.concurrent(`runs scripts one after the other on a ${backend} engine`, async () => {
             const { outputDir, stdout } = await componentizeScriptOnly({
