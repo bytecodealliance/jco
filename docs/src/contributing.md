@@ -122,7 +122,7 @@ pnpm --filter '@bytecodealliance/jco-transpile' build
 pnpm run test future-lifts.js
 ```
 
-Ensure to reset the `jco-transpile` dependency to a published version once you've finsihed testing locally
+Ensure to reset the `jco-transpile` dependency to a published version once you've finished testing locally
 
 ### Running specific tests
 

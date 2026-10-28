@@ -44,7 +44,7 @@ The command and reactor aliases select the `wasi:cli/command` and `wasi:cli/impo
 `wasi:http/service` in WASI 0.3 and `wasi:http/proxy` in WASI 0.2. Jco copies the selected snapshot into the generated
 project's `wit/` directory, so this workflow does not require a registry client or network access.
 
-After runnig this command you can enter the folder and build the project:
+After running this command you can enter the folder and build the project:
 
 ```console
 cd hello-component
