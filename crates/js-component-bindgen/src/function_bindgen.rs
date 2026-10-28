@@ -151,6 +151,11 @@ pub struct FunctionBindgen<'a> {
     /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
 
+    /// Allocated JS class names for guest-defined resources, keyed by their
+    /// dealiased WIT type. Embedders can supply these when distinct interfaces
+    /// declare resources with the same name. Omitted entries use the WIT name.
+    pub guest_resource_class_names: Option<&'a BTreeMap<TypeId, String>>,
+
     /// Whether current resource borrows need to be deactivated
     pub clear_resource_borrows: bool,
 
@@ -3225,6 +3230,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         let upper_camel = resource_name.to_upper_camel_case();
                         let lower_camel = resource_name.to_lower_camel_case();
                         let prefix = prefix.as_deref().unwrap_or("");
+                        let class_name = self
+                            .guest_resource_class_names
+                            .and_then(|names| names.get(&crate::dealias(self.resolve, *ty)))
+                            .map(String::as_str)
+                            .unwrap_or(&upper_camel);
 
                         let symbol_resource_handle =
                             self.intrinsic(Intrinsic::SymbolResourceHandle);
@@ -3248,7 +3258,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     r#"
-                                      if (!({op} instanceof {upper_camel})) {{
+                                      if (!({op} instanceof {class_name})) {{
                                           throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
                                       }}
                                       let {handle} = {op}[{symbol_resource_handle}];
@@ -3267,7 +3277,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     r#"
-                                      if (!({op} instanceof {upper_camel})) {{
+                                      if (!({op} instanceof {class_name})) {{
                                           throw new TypeError('Resource error: Not a valid \"{upper_camel}\" resource.');
                                       }}
                                       let {handle} = {op}[{symbol_resource_handle}];
@@ -4395,6 +4405,119 @@ fn gen_dataview_set_and_check_fn_js_for_numeric_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn guest_resource_lowering_uses_allocated_class_names() {
+        let mut resolve = Resolve::default();
+        let package = resolve
+            .push_str(
+                "resources.wit",
+                r#"
+                    package example:resources;
+                    interface first { resource token; }
+                    interface second { resource token; }
+                    interface aliases { use second.{token as second-token}; }
+                "#,
+            )
+            .unwrap();
+        let interfaces = &resolve.packages[package].interfaces;
+        let first = resolve.interfaces[interfaces["first"]].types["token"];
+        let second = resolve.interfaces[interfaces["second"]].types["token"];
+        let alias = resolve.interfaces[interfaces["aliases"]].types["second-token"];
+        let class_names = BTreeMap::from([
+            (first, "Token".to_string()),
+            (second, "Token$1".to_string()),
+        ]);
+        let resource_map = BTreeMap::from([
+            (
+                first,
+                ResourceTable {
+                    imported: false,
+                    data: ResourceData::Guest {
+                        resource_name: "token".into(),
+                        prefix: Some("first$".into()),
+                        extra: None,
+                    },
+                },
+            ),
+            (
+                second,
+                ResourceTable {
+                    imported: false,
+                    data: ResourceData::Guest {
+                        resource_name: "token".into(),
+                        prefix: Some("second$".into()),
+                        extra: None,
+                    },
+                },
+            ),
+        ]);
+        let sizes = SizeAlign::default();
+        let tracing_prefix = String::new();
+        // Cover owned and borrowed lowering, aliases, and the existing default.
+        for names in [Some(&class_names), None] {
+            for (ty, expected) in [(first, "Token"), (second, "Token$1"), (alias, "Token$1")] {
+                for handle in [Handle::Own(ty), Handle::Borrow(ty)] {
+                    let mut intrinsics = BTreeSet::new();
+                    let mut bindgen = FunctionBindgen::builder()
+                        .resource_map(&resource_map)
+                        .maybe_guest_resource_class_names(names)
+                        .clear_resource_borrows(false)
+                        .intrinsics(&mut intrinsics)
+                        .valid_lifting_optimization(false)
+                        .sizes(&sizes)
+                        .err(ErrHandling::None)
+                        .tmp(0)
+                        .src(source::Source::default())
+                        .block_storage(Vec::new())
+                        .blocks(Vec::new())
+                        .params(Vec::new())
+                        .tracing_prefix(&tracing_prefix)
+                        .tracing_enabled(false)
+                        .no_component_error_wrapping(false)
+                        .encoding(StringEncoding::UTF8)
+                        .callee("unused")
+                        .callee_resource_dynamic(false)
+                        .resolve(&resolve)
+                        .requires_async_porcelain(false)
+                        .is_async(false)
+                        .host_import_generator(false)
+                        .canonical_abi_async(false)
+                        .func_type_async(false)
+                        .wrap_async_future_result(false)
+                        .asmjs(false)
+                        .skip_fn_call_task_management(true)
+                        .build();
+                    let mut results = Vec::new();
+                    bindgen.emit(
+                        &resolve,
+                        &Instruction::HandleLower {
+                            handle: &handle,
+                            name: "token",
+                            ty,
+                        },
+                        &mut vec!["value".to_string()],
+                        &mut results,
+                    );
+                    let expected = if names.is_some() { expected } else { "Token" };
+                    assert!(
+                        bindgen
+                            .src
+                            .contains(&format!("value instanceof {expected})"))
+                    );
+                    // Class renaming must not change the canonical ABI helper names.
+                    if matches!(handle, Handle::Own(_)) && ty != first {
+                        assert!(bindgen.src.contains("$resource_second$new$token("));
+                        assert!(
+                            bindgen
+                                .src
+                                .contains("finalizationRegistry_export$second$token")
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn result_wrapper_detection_preserves_ambiguous_success_payloads() {

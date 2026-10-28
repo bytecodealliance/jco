@@ -5597,6 +5597,7 @@ impl<'a> Instantiator<'a, '_> {
         // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
+            guest_resource_class_names: None,
             skip_fn_call_task_management: false,
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
