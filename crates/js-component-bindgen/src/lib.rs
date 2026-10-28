@@ -73,6 +73,26 @@ pub struct ComponentInfo {
     pub exports: Vec<(String, transpile_bindgen::ExportKind)>,
 }
 
+// TODO(breaking): merge TranspileOpts into this non-exhaustive configuration at
+// the next major release, so new options no longer need a separate type.
+/// Extensible configuration for `transpile_with_config`.
+///
+/// `TranspileOpts` keeps its published fields so existing struct literals remain
+/// valid. New options belong here, where fields can be added compatibly.
+#[derive(Debug, Default, Clone, bon::Builder)]
+#[non_exhaustive]
+pub struct TranspileConfig {
+    /// Options shared with `transpile` and [`generate_types`].
+    #[builder(default)]
+    pub opts: TranspileOpts,
+    /// ES module providing the Component Model runtime implementation used by
+    /// generated bindings. The module must export a `runtime` provider.
+    /// Intrinsics are generated inline when this is `None` (the default).
+    /// Requires the `external-runtime` Cargo feature.
+    #[cfg(feature = "external-runtime")]
+    pub cm_runtime_es_module: Option<String>,
+}
+
 pub fn generate_types(
     name: &str,
     resolve: Resolve,
@@ -95,10 +115,26 @@ pub fn generate_types(
 /// Generate the JS transpilation bindgen for a given Wasm component binary
 /// Outputs the file map and import and export metadata for the Transpilation
 #[cfg(feature = "transpile-bindgen")]
-pub fn transpile(component: &[u8], mut opts: TranspileOpts) -> Result<Transpiled> {
+pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
+    // TODO(breaking): accept the extensible configuration directly in transpile
+    // and remove this compatibility adapter at the next major release.
+    transpile_with_config(component, TranspileConfig::builder().opts(opts).build())
+}
+
+/// Transpile a component with additional configuration, including an optional
+/// external Component Model runtime provider.
+#[cfg(feature = "transpile-bindgen")]
+pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> Result<Transpiled> {
     use wasmtime_environ::component::{Component, Translator};
 
-    normalize_namespace_object_options(&mut opts)?;
+    normalize_transpile_config(&mut config)?;
+    let TranspileConfig {
+        mut opts,
+        #[cfg(feature = "external-runtime")]
+        cm_runtime_es_module,
+    } = config;
+    #[cfg(not(feature = "external-runtime"))]
+    let cm_runtime_es_module: Option<String> = None;
     let name = opts.name.clone();
     let mut files = files::Files::default();
 
@@ -193,6 +229,7 @@ pub fn transpile(component: &[u8], mut opts: TranspileOpts) -> Result<Transpiled
         &resolve,
         world_id,
         opts.clone(),
+        cm_runtime_es_module.as_deref(),
         &mut files,
     );
 
@@ -224,7 +261,13 @@ fn normalize_namespace_object_options(opts: &mut TranspileOpts) -> Result<()> {
     if opts.use_namespace_objects {
         opts.flags_as_bigint = true;
     }
-    if let Some(cm_runtime_es_module) = &opts.cm_runtime_es_module {
+    Ok(())
+}
+
+fn normalize_transpile_config(config: &mut TranspileConfig) -> Result<()> {
+    normalize_namespace_object_options(&mut config.opts)?;
+    #[cfg(feature = "external-runtime")]
+    if let Some(cm_runtime_es_module) = &config.cm_runtime_es_module {
         ensure!(
             !cm_runtime_es_module.is_empty() && !cm_runtime_es_module.chars().any(char::is_control),
             "cmRuntimeEsModule must be a non-empty module specifier without control characters"
@@ -464,29 +507,28 @@ mod tests {
         ));
     }
 
+    #[cfg(feature = "external-runtime")]
     #[test]
     fn validates_cm_runtime_es_module_specifiers() {
-        let mut default = TranspileOpts::default();
-        normalize_namespace_object_options(&mut default).unwrap();
+        let mut default = TranspileConfig::default();
+        normalize_transpile_config(&mut default).unwrap();
         assert!(default.cm_runtime_es_module.is_none());
 
-        let mut custom = TranspileOpts::builder()
-            .name("component".into())
+        let mut custom = TranspileConfig::builder()
             .cm_runtime_es_module("./runtime.js".into())
             .build();
-        normalize_namespace_object_options(&mut custom).unwrap();
+        normalize_transpile_config(&mut custom).unwrap();
         assert_eq!(custom.cm_runtime_es_module.as_deref(), Some("./runtime.js"));
 
         for invalid in ["", "runtime\nmodule"] {
-            let mut opts = TranspileOpts::builder()
-                .name("component".into())
+            let mut config = TranspileConfig::builder()
                 .cm_runtime_es_module(invalid.into())
                 .build();
-            assert!(normalize_namespace_object_options(&mut opts).is_err());
+            assert!(normalize_transpile_config(&mut config).is_err());
         }
     }
 
-    #[cfg(feature = "transpile-bindgen")]
+    #[cfg(all(feature = "transpile-bindgen", feature = "external-runtime"))]
     #[test]
     fn resource_rep_uses_external_runtime_provider() {
         let component = wat::parse_str(
@@ -523,12 +565,16 @@ mod tests {
         assert!(direct_source.contains("function rscTableGet(table, handle)"));
         assert!(!direct_source.contains("_jcoRuntimeProvider"));
 
-        let transpiled = transpile(
+        let transpiled = transpile_with_config(
             &component,
-            TranspileOpts::builder()
-                .name("resource-runtime".into())
+            TranspileConfig::builder()
+                .opts(
+                    TranspileOpts::builder()
+                        .name("resource-runtime".into())
+                        .instantiation_mode(InstantiationMode::Sync)
+                        .build(),
+                )
                 .cm_runtime_es_module("./custom-runtime.js".into())
-                .instantiation_mode(InstantiationMode::Sync)
                 .build(),
         )
         .unwrap();
