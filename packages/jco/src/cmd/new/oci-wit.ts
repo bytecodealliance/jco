@@ -49,11 +49,7 @@ export async function pullOciWit(input: string, destination: string): Promise<vo
     const blobResponse = await registryFetch(`${base}/blobs/${layer.digest}`, { repository: ref.repository });
     const bytes = new Uint8Array(await blobResponse.arrayBuffer());
     verifyDescriptor(input, layer, bytes);
-    // Use a dynamic import so Jco can build against the latest published compatible
-    // jco-transpile while this new API is released alongside it.
-    const { unpackWit } = (await import("@bytecodealliance/jco-transpile")) as unknown as {
-        unpackWit(expected: string | undefined, binary: Uint8Array): Promise<Map<string, string>>;
-    };
+    const { unpackWit } = await import("@bytecodealliance/jco-transpile");
     const files = await unpackWit(packageSpec, bytes);
     for (const [path, contents] of files) {
         const output = join(destination, path);
