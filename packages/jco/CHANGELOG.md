@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.40.0] - 2026-10-28
+
+### 🚀 Features
+
+- _(jco)_ build script engines and script-only components with --script-only by @vados-cosmonic
+
+- _(jco)_ cooperative threading by @TartanLlama
+
+- _(jco)_ add user-managed Perry componentization backend by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(jco)_ support QuickJS 0.5 in the TLS fixture by @vados-cosmonic in #2310
+
+### 🎨 Styling
+
+- _(jco)_ format runtime CLI tests by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ unskip pthread tests by @TartanLlama in #2339
+
+- _(jco)_ run script-only coverage against workspace jco-transpile by @vados-cosmonic
+
+- _(jco)_ defer script-only coverage and run tests concurrently by @vados-cosmonic in #2311
+
+- _(jco)_ support current codegen and Node 22 script engines by @vados-cosmonic
+
+- _(jco)_ exercise runtime option through the CLI by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-std to v0.10.0 by @vados-cosmonic in #2346
+
+- _(jco)_ update preview2-shim to v0.31.0 by @vados-cosmonic in #2341
+
+- _(jco)_ update jco-transpile to 0.21.0 by @vados-cosmonic in #2340
+
+- _(jco)_ bump componentize-qjs by @andreiltd in #2307
+
 ## [1.39.0] - 2026-10-16
 
 ### ⚙️ Miscellaneous Tasks
