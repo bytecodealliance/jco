@@ -1,0 +1,64 @@
+package example:resources;
+
+interface first {
+    type value = u32;
+    type value-alias = value;
+    type token-alias = token;
+    record payload { value: value }
+    enum state { ready, done }
+    flags permissions { read, write }
+    variant choice { none, some(u32) }
+
+    resource token {
+        constructor(value: u32);
+        make: static func(value: u32) -> token;
+        value: func() -> u32;
+        inspect: static func(other: borrow<token>) -> u32;
+    }
+
+    get-value: func() -> value;
+    roundtrip: func(other: token-alias) -> token-alias;
+}
+
+interface second {
+    type value = u32;
+    type value-alias = value;
+    type token-alias = token;
+    record payload { value: value }
+    enum state { ready, done }
+    flags permissions { read, write }
+    variant choice { none, some(u32) }
+
+    resource token {
+        constructor(value: u32);
+        make: static func(value: u32) -> token;
+        value: func() -> u32;
+        inspect: static func(other: borrow<token>) -> u32;
+    }
+
+    get-value: func() -> value;
+    roundtrip: func(other: token-alias) -> token-alias;
+}
+
+world resources {
+    export first;
+    export second;
+    export get-value: func() -> u32;
+}
+
+interface bridge {
+    use first.{token as first-token, value as first-value};
+    use second.{token as second-token};
+}
+
+interface forwarded {
+    use bridge.{first-token as token, second-token as other-token, first-value as value};
+    roundtrip: func(other: token) -> token;
+}
+
+world alias-chains {
+    export first;
+    export second;
+    export bridge;
+    export forwarded;
+}

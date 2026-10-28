@@ -13,96 +13,71 @@ import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 
 suite('resources', () => {
     // https://github.com/bytecodealliance/jco/issues/2329
-    test('same-named resources stay separate across exported interfaces', async () => {
-        const interfaces = ['first', 'second'];
-        const coreModule = await parse(`
-            (module
-                ${interfaces
-                    .map(
-                        (name) => `
-                    (import "[export]example:resources/${name}" "[resource-new]token"
-                        (func $new-${name} (param i32) (result i32)))
-                `,
-                    )
-                    .join('')}
-                (memory (export "memory") 0)
-                ${interfaces
-                    .map(
-                        (name) => `
-                    (func (export "example:resources/${name}#[constructor]token") (param i32) (result i32)
-                        (call $new-${name} (local.get 0)))
-                    (func (export "example:resources/${name}#[static]token.make") (param i32) (result i32)
-                        (call $new-${name} (local.get 0)))
-                    (func (export "example:resources/${name}#[method]token.value") (param i32) (result i32)
-                        (local.get 0))
-                    (func (export "example:resources/${name}#[static]token.inspect") (param i32) (result i32)
-                        (local.get 0))
-                    (func (export "example:resources/${name}#[dtor]token") (param i32))
-                `,
-                    )
-                    .join('')}
-            )
-        `);
-        const component = await componentNew(
-            await componentEmbed({
-                binary: coreModule,
-                witSource: `
-                package example:resources;
-                ${interfaces
-                    .map(
-                        (name) => `
-                    interface ${name} {
-                        resource token {
-                            constructor(value: u32);
-                            make: static func(value: u32) -> token;
-                            value: func() -> u32;
-                            inspect: static func(other: borrow<token>) -> u32;
-                        }
-                    }
-                `,
-                    )
-                    .join('')}
-                world resources {
-                    export first;
-                    export second;
-                }
-            `,
-            }),
-        );
-        const componentDir = await getTmpDir();
+    test.concurrent.each([
+        { name: 'plain', useNamespaceObjects: false },
+        { name: 'namespace objects', useNamespaceObjects: true },
+    ])('same-named interface members stay scoped ($name)', async ({ useNamespaceObjects }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name: 'same-named-resources',
+                path: fileURLToPath(
+                    new URL('./fixtures/components/runtime/same-named-resources/component.wat', import.meta.url),
+                ),
+            },
+            jco: { transpile: { extraArgs: { useNamespaceObjects } } },
+        });
         try {
-            const componentPath = join(componentDir, 'same-named-resources.wasm');
-            await writeFile(componentPath, component);
-            const { instance, cleanup } = await setupAsyncTest({ component: { path: componentPath } });
-            try {
-                const FirstToken = instance['example:resources/first'].Token;
-                const SecondToken = instance['example:resources/second'].Token;
-                assert.notStrictEqual(FirstToken, SecondToken);
-                const first = new FirstToken(11);
-                const second = new SecondToken(22);
-                const madeFirst = FirstToken.make(33);
-                const madeSecond = SecondToken.make(44);
-                for (const [Token, token, value] of [
-                    [FirstToken, first, 11],
-                    [SecondToken, second, 22],
-                    [FirstToken, madeFirst, 33],
-                    [SecondToken, madeSecond, 44],
-                ] as const) {
-                    assert.instanceOf(token, Token);
-                    assert.strictEqual(token.value(), value);
-                    assert.strictEqual(Token.inspect(token), value);
-                }
-                assert.throws(() => FirstToken.inspect(second), /not a valid/i);
-                assert.throws(() => SecondToken.inspect(first), /not a valid/i);
-                for (const token of [first, second, madeFirst, madeSecond]) {
-                    token[Symbol.dispose]();
-                    assert.throws(() => token.value(), /not a valid/i);
-                }
-            } finally {
-                await cleanup();
+            const FirstToken = instance['example:resources/first'].Token;
+            const SecondToken = instance['example:resources/second'].Token;
+            assert.notStrictEqual(FirstToken, SecondToken);
+            const first = new FirstToken(11);
+            const second = new SecondToken(22);
+            const madeFirst = FirstToken.make(33);
+            const madeSecond = SecondToken.make(44);
+            const firstInterface = instance['example:resources/first'];
+            const secondInterface = instance['example:resources/second'];
+            if (useNamespaceObjects) {
+                assert.notStrictEqual(firstInterface.State, secondInterface.State);
+                assert.deepEqual(firstInterface.State, { Ready: 'ready', Done: 'done' });
+                assert.deepEqual(secondInterface.State, { Ready: 'ready', Done: 'done' });
+                assert.notStrictEqual(firstInterface.Permissions, secondInterface.Permissions);
+                assert.deepEqual(firstInterface.Permissions, { Read: 1n, Write: 2n });
+                assert.deepEqual(secondInterface.Permissions, { Read: 1n, Write: 2n });
+                assert.notStrictEqual(firstInterface.Choice, secondInterface.Choice);
+                assert.deepEqual(firstInterface.Choice.Some(11), { tag: 'some', val: 11 });
+                assert.deepEqual(secondInterface.Choice.Some(22), { tag: 'some', val: 22 });
+            }
+            assert.strictEqual(firstInterface.getValue(), 33);
+            assert.strictEqual(secondInterface.getValue(), 44);
+            assert.strictEqual(instance.getValue(), 99);
+            for (const [Token, token, value] of [
+                [FirstToken, first, 11],
+                [SecondToken, second, 22],
+                [FirstToken, madeFirst, 33],
+                [SecondToken, madeSecond, 44],
+            ] as const) {
+                assert.instanceOf(token, Token);
+                assert.strictEqual(token.value(), value);
+                assert.strictEqual(Token.inspect(token), value);
+            }
+            assert.throws(() => FirstToken.inspect(second), /not a valid/i);
+            assert.throws(() => SecondToken.inspect(first), /not a valid/i);
+            assert.throws(() => firstInterface.roundtrip(second), /not a valid/i);
+            assert.throws(() => secondInterface.roundtrip(first), /not a valid/i);
+            const returnedFirst = firstInterface.roundtrip(first);
+            const returnedSecond = secondInterface.roundtrip(second);
+            assert.instanceOf(returnedFirst, FirstToken);
+            assert.instanceOf(returnedSecond, SecondToken);
+            assert.strictEqual(returnedFirst.value(), 11);
+            assert.strictEqual(returnedSecond.value(), 22);
+            assert.throws(() => first.value(), /not a valid/i);
+            assert.throws(() => second.value(), /not a valid/i);
+            for (const token of [returnedFirst, returnedSecond, madeFirst, madeSecond]) {
+                token[Symbol.dispose]();
+                assert.throws(() => token.value(), /not a valid/i);
             }
         } finally {
-            await rm(componentDir, { recursive: true, force: true });
+            await cleanup();
         }
     });
 

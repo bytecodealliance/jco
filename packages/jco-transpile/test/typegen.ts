@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer';
+import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
 
@@ -7,6 +8,46 @@ import { JCO_WIT_FIXTURE_DIR, WIT_FIXTURE_DIR } from './helpers.js';
 import { generateGuestTypes, generateHostTypes } from '../src/typegen.js';
 
 suite('Type Generation', () => {
+    test.concurrent.each([
+        { name: 'host', generate: generateHostTypes },
+        { name: 'guest', generate: generateGuestTypes },
+    ])('same-named interface types and functions stay scoped ($name)', async ({ generate }) => {
+        const witPath = fileURLToPath(
+            new URL('./fixtures/components/runtime/same-named-resources/world.wit', import.meta.url),
+        );
+        const files = await generate(witPath, { worldName: 'example:resources/resources' });
+        for (const name of ['first', 'second']) {
+            const source = Buffer.from(files[`interfaces/example-resources-${name}.d.ts`]).toString();
+            assert.include(source, 'export type Value = number;');
+            assert.include(source, 'export type ValueAlias = Value;');
+            assert.include(source, 'export type TokenAlias = Token;');
+            assert.include(source, 'export interface Payload');
+            assert.include(source, 'export type State = ');
+            assert.include(source, 'export interface Permissions');
+            assert.include(source, 'export type Choice = ');
+            assert.include(source, 'export class Token');
+            assert.include(source, 'export function getValue(): Value;');
+            assert.include(source, 'export function roundtrip(other: TokenAlias): TokenAlias;');
+        }
+    });
+
+    test.concurrent.each([
+        { name: 'host', generate: generateHostTypes, specifier: './example-resources-bridge.js' },
+        { name: 'guest', generate: generateGuestTypes, specifier: 'example:resources/bridge' },
+    ])(
+        'renamed aliases keep their defining interface through alias chains ($name)',
+        async ({ generate, specifier }) => {
+            const witPath = fileURLToPath(
+                new URL('./fixtures/components/runtime/same-named-resources/world.wit', import.meta.url),
+            );
+            const files = await generate(witPath, { worldName: 'example:resources/alias-chains' });
+            const source = Buffer.from(files['interfaces/example-resources-forwarded.d.ts']).toString();
+            assert.include(source, `export type Token = import('${specifier}').FirstToken;`);
+            assert.include(source, `export type OtherToken = import('${specifier}').SecondToken;`);
+            assert.include(source, `export type Value = import('${specifier}').FirstValue;`);
+        },
+    );
+
     test('type generation (host)', async () => {
         const files = await generateHostTypes(`${JCO_WIT_FIXTURE_DIR}/flavorful`, {
             worldName: 'test:flavorful/flavorful',
