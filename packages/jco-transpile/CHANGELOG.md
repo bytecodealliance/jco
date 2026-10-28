@@ -1,5 +1,53 @@
 # Changelog
 
+## [0.21.0] - 2026-10-28
+
+### 🚀 Features
+
+- _(transpile)_ expose script engine and script component builders by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ reject invalid minified JavaScript by @vados-cosmonic
+
+- _(transpile)_ preserve Unicode core export names in asm.js by @vados-cosmonic in #2302
+
+- _(transpile)_ handle escaped names in generated JavaScript by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(transpile)_ cover inline interfaces in WIT world metadata by @vados-cosmonic
+
+- _(transpile)_ cover interface naming with component fixtures by @vados-cosmonic in #2331
+
+- _(transpile)_ cover precompiled JSPI host import dispatchers by @vados-cosmonic in #2324
+
+- _(transpile)_ add regression test for JSPI import in initialization and destructor by @chenyan2002
+
+- _(transpile)_ tolerate indentation in namespace export assertions by @vados-cosmonic in #2325
+
+- _(transpile)_ run cooperative threading regressions concurrently by @vados-cosmonic
+
+- _(transpile)_ add regression test for failing JSPI import trap by @vados-cosmonic in #2309
+
+- _(transpile)_ add async class constructor regression test by @vados-cosmonic in #2308
+
+- _(transpile)_ cover fatal cleanup and async result errors by @vados-cosmonic in #2305
+
+- _(transpile)_ cover minifier parser diagnostics by @vados-cosmonic
+
+- _(transpile)_ cover post-return trap propagation by @vados-cosmonic
+
+- _(transpile)_ cover zero-valued resource representations by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ preview2-shim -> 0.31.0, preview3-shim -> 0.12.0 by @vados-cosmonic in #2337
+
+## New Contributors
+
+- @kiro-agent made their first contribution
+
 ## [0.20.0] - 2026-10-16
 
 ### ⚙️ Miscellaneous Tasks
