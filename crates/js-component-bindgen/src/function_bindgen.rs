@@ -3109,6 +3109,15 @@ impl Bindgen for FunctionBindgen<'_> {
                         let tid = tid.as_u32();
                         let rid = rid.as_u32();
 
+                        uwriteln!(
+                            self.src,
+                            r#"
+                              if (!({op} instanceof {local_name})) {{
+                                  throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
+                              }}
+                            "#,
+                        );
+
                         match (imported, is_own) {
                             // Imported, owned host-provided resource
                             (_imported @ false, _owned @ true) => {
@@ -3169,9 +3178,6 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     r#"
-                                      if (!({op} instanceof {local_name})) {{
-                                          throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
-                                      }}
                                       var {handle} = {op}[{symbol_resource_handle}];
                                       if (!{handle}) {{
                                           const rep = ({op}[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
@@ -3202,9 +3208,6 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(
                                     self.src,
                                     r#"
-                                      if (!({op} instanceof {local_name})) {{
-                                          throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
-                                      }}
                                       var {handle} = {op}[{symbol_resource_handle}];
                                       if (!{handle}) {{
                                           const rep = ({op}[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
