@@ -35,7 +35,7 @@ suite("componentize", () => {
         }
     });
 
-    test("uses a custom engine path as the QuickJS runtime", async () => {
+    test.concurrent("uses a custom engine path as the QuickJS runtime", async () => {
         // The quickjs backend reads `--engine` as its runtime module, so a missing file fails there.
         await expect(
             componentizeFixture({
@@ -47,7 +47,7 @@ suite("componentize", () => {
         ).rejects.toThrow(/missing-runtime\.wasm/);
     });
 
-    test("rejects a custom engine with the Perry backend", async () => {
+    test.concurrent("rejects a custom engine with the Perry backend", async () => {
         await expect(
             componentize("unused.js", {
                 backend: "perry",
