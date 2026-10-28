@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-146ce4a5.js";
+            window.path_to_searchindex_js = "searchindex-9f54b9f9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b62a3033.js"></script>
+        <script src="toc-7cd18f1d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -261,7 +261,10 @@ copied <code>wit/</code> package, and use <code>pnpm check</code>, <code>pnpm te
 <pre><code class="language-console">jco componentize --backend qjs -w wit -o dist/component.wasm component.js
 </code></pre>
 <p>The StarlingMonkey backend also accepts the aliases <code>starlingmonkey</code> and <code>sm</code>. Note that <code>--engine &lt;path&gt;</code>
-allows supplying a compatible custom ComponentizeJS engine build and is only supported by the StarlingMonkey backend.</p>
+allows supplying a compatible custom engine build: a ComponentizeJS StarlingMonkey build for the StarlingMonkey
+backend, or a componentize-qjs runtime module for the QuickJS backend.</p>
+<p>To reuse one engine build across many scripts, <code>--script-only</code> builds the engine as its own component and packages
+each script separately; see <a href="./advanced/script-only-components.html">Script-only components</a>.</p>
 <p>With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.ts
 </code></pre>

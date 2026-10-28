@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-146ce4a5.js";
+            window.path_to_searchindex_js = "searchindex-9f54b9f9.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-b62a3033.js"></script>
+        <script src="toc-7cd18f1d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -277,7 +277,10 @@ copied <code>wit/</code> package, and use <code>pnpm check</code>, <code>pnpm te
 <pre><code class="language-console">jco componentize --backend qjs -w wit -o dist/component.wasm component.js
 </code></pre>
 <p>The StarlingMonkey backend also accepts the aliases <code>starlingmonkey</code> and <code>sm</code>. Note that <code>--engine &lt;path&gt;</code>
-allows supplying a compatible custom ComponentizeJS engine build and is only supported by the StarlingMonkey backend.</p>
+allows supplying a compatible custom engine build: a ComponentizeJS StarlingMonkey build for the StarlingMonkey
+backend, or a componentize-qjs runtime module for the QuickJS backend.</p>
+<p>To reuse one engine build across many scripts, <code>--script-only</code> builds the engine as its own component and packages
+each script separately; see <a href="#script-only-components">Script-only components</a>.</p>
 <p>With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:</p>
 <pre><code class="language-console">jco componentize -w wit -o dist/component.wasm component.ts
 </code></pre>
@@ -4722,6 +4725,8 @@ instantiating a transpiled component yourself and replacing individual WASI inte
 streams flow between host and guest.</li>
 <li><a href="#preview-3-host-value-disposal">Preview 3 host value disposal</a>: what happens to host-provided
 values a guest discards.</li>
+<li><a href="#script-only-components">Script-only components</a>: building one engine component for many
+scripts, and packaging each script as a component of its own.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="host-bindings"><a class="header" href="#host-bindings">Host Bindings</a></h1>
@@ -5868,6 +5873,132 @@ stream, only the returned promise is disposed, as the future or stream was never
 delivered to the guest are not covered by this mechanism.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="script-only-components"><a class="header" href="#script-only-components">Script-only components</a></h1>
+<p><code>jco componentize</code> normally bakes one script into one JavaScript engine, producing a component that is
+ready to run. <code>--script-only</code> splits that in two:</p>
+<ul>
+<li>an <strong>engine component</strong>, <code>engine.wasm</code>: the selected JavaScript engine (StarlingMonkey or QuickJS)
+componentized against the <em>union</em> of the given WIT worlds, with an extra export,
+<code>jco:script-engine/script-loader</code>, through which a host feeds it scripts at runtime;</li>
+<li>one <strong>script-only component</strong> per source: a tiny component that exports <code>jco:script/script</code> and
+does nothing but hand back the script’s source and some metadata. It is packaging, not execution.</li>
+</ul>
+<p>A host instantiates the engine once, instantiates a script-only component whenever it needs a script,
+reads the script out of it and loads it into the engine. The engine’s world exports then forward to
+that script. Loading another script replaces the previous one, so a single engine instance runs scripts
+one after the other.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p>Scripts loaded into the same engine instance share one JavaScript realm. Anything a script leaves on
+<code>globalThis</code>, or in the imports it holds on to, is visible to the next script. A script engine is a
+way to reuse an engine build across scripts, <strong>not</strong> a sandbox between tenants. Instantiate a fresh
+engine per trust boundary.</p>
+</blockquote>
+<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<p>Pass <code>--script-only</code>, one or more <code>--wit</code> paths, the scripts to package, and an output <em>directory</em>:</p>
+<pre><code class="language-console">jco componentize --script-only \
+  --wit ./wit-greeter --wit ./wit-calc \
+  greet.js calc.ts \
+  -o ./dist
+</code></pre>
+<p>This writes <code>dist/engine.wasm</code>, <code>dist/engine.wit</code> (the merged world the engine was built against),
+<code>dist/greet.wasm</code> and <code>dist/calc.wasm</code>.</p>
+<ul>
+<li><code>--wit</code> is repeatable. Each path is a WIT file or directory; the engine world is the union of their
+worlds plus <code>jco:script-engine/script-loader</code>. Shared dependencies such as <code>wasi:cli</code> are merged when
+the packages agree. Two worlds exporting different interfaces that would share a JavaScript export
+name (for example <code>a:x/types</code> and <code>b:y/types</code>) are rejected, since the engine presents one namespace
+to its scripts.</li>
+<li><code>--world-name</code> is repeatable too. Give none to use each package’s only world, or one name per <code>--wit</code>
+path in the same order.</li>
+<li>Scripts may be omitted to build only the engine. The engine does not need to know which scripts will
+run on it, only which imports and exports they may use.</li>
+<li><code>--backend starlingmonkey</code> (default) or <code>--backend quickjs</code> selects the engine. <code>--engine &lt;path&gt;</code> uses
+a specific StarlingMonkey build or QuickJS runtime module, so an existing engine release can be
+wrapped without rebuilding it.</li>
+<li>Scripts are always bundled (TypeScript included) into a single ES module whose imports name WIT
+interfaces. A script that imports an interface the engine world does not import fails the build;
+a script that exports something the engine world does not export produces a warning.</li>
+</ul>
+<p>Other <code>jco componentize</code> options apply to the engine build. Node.js built-in compatibility
+(<code>--with-nodejs-*</code>) is not available in this mode, because it rewrites the WIT world per script.</p>
+<h2 id="running"><a class="header" href="#running">Running</a></h2>
+<p>Transpile the engine and the script components like any other component, then load scripts through
+the engine’s <code>scriptLoader</code> export:</p>
+<pre><code class="language-console">jco transpile dist/engine.wasm -o dist/host/engine --map 'local:greeter/logger=./logger.js'
+jco transpile dist/greet.wasm -o dist/host/greet
+jco transpile dist/calc.wasm -o dist/host/calc
+</code></pre>
+<pre><code class="language-js">import { scriptLoader, greeter, calc, run } from "./dist/host/engine/engine.js";
+import { script as greet } from "./dist/host/greet/greet.js";
+import { script as calcScript } from "./dist/host/calc/calc.js";
+
+scriptLoader.load(greet.name(), greet.source());
+run(); // "greet"
+greeter.greet("jco"); // "Hello, jco!"
+new greeter.Counter(41).get(); // 41
+
+scriptLoader.load(calcScript.name(), calcScript.source());
+run(); // "calc"
+calc.add(2, 3); // 5
+
+scriptLoader.loaded(); // "calc.js"
+scriptLoader.unload();
+</code></pre>
+<p>The engine’s imports (here <code>local:greeter/logger</code>) are supplied by the host of the engine, exactly as
+for a regular component; the script components import nothing. Any component runtime can do the same:
+instantiate the engine, call <code>script.source()</code> on a script component, and pass the result to
+<code>script-loader.load</code>.</p>
+<h2 id="the-interfaces"><a class="header" href="#the-interfaces">The interfaces</a></h2>
+<p>Every engine exports <code>jco:script-engine/script-loader@0.1.0</code>:</p>
+<pre><code class="language-wit">interface script-loader {
+    /// Evaluate `source` and make its exports the implementation behind the engine's
+    /// world exports, replacing any previously loaded script.
+    load: func(name: string, source: string) -&gt; result&lt;_, string&gt;;
+
+    /// Drop the loaded script. World exports fail until another script is loaded.
+    unload: func();
+
+    /// Name of the loaded script, if any.
+    loaded: func() -&gt; option&lt;string&gt;;
+}
+</code></pre>
+<p><code>load</code> takes an ES module. Neither engine can import a module from a string at runtime, so the loader
+rewrites the module’s top-level <code>import</code> declarations and its export list before evaluating it. It
+relies on the shape Rolldown produces, which <code>jco componentize --script-only</code> always uses: imports
+hoisted to the top, one <code>export { ... }</code> list at the end, no top-level <code>await</code>. <code>load</code> returns an error
+when the script fails to parse or evaluate, or imports something the engine world lacks; the previously
+loaded script stays loaded. Calling a world export that the loaded script
+does not implement throws inside the engine, which traps unless the export returns a <code>result</code>.</p>
+<p>Every script-only component exports <code>jco:script/script@0.1.0</code>:</p>
+<pre><code class="language-wit">interface script {
+    /// Name the script was packaged under, usually its entry file name.
+    name: func() -&gt; string;
+
+    /// The script as a bundled ES module whose imports name WIT imports of the engine world.
+    source: func() -&gt; string;
+
+    /// Fully-qualified engine world the script was bundled against.
+    engine-world: func() -&gt; string;
+
+    /// JavaScript export names found in the script.
+    exports: func() -&gt; list&lt;string&gt;;
+}
+</code></pre>
+<p><code>exports</code> lets a host check that a script implements what it is about to call before loading it.</p>
+<h2 id="writing-scripts"><a class="header" href="#writing-scripts">Writing scripts</a></h2>
+<p>Scripts are ordinary component sources: <code>import</code> WIT imports by their specifier and <code>export</code> the
+world’s exports under the usual JavaScript names, exactly as for <code>jco componentize</code> without
+<code>--script-only</code>. A script only has to implement the exports the host will call while it is loaded.</p>
+<p>Exported resources work as well: the engine’s class for a resource stands in for the script’s class,
+and instances created by either side pass through transparently. Two limits apply:</p>
+<ul>
+<li>With the QuickJS backend, functions imported directly on a world (<code>import log: func(...)</code>) are not
+supported in script-only mode; place them in an interface instead.</li>
+<li>Resources are matched by their exported class. A script that exports a different class for the same
+resource than the one the host already holds instances of will not recognise those instances.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="troubleshooting"><a class="header" href="#troubleshooting">Troubleshooting</a></h1>
 <p>When something goes wrong with a transpiled or componentized module, start here.</p>
 <ul>
@@ -5946,7 +6077,7 @@ rustup target add wasm32-wasi
 One off configuration and/or secrets should of course not be checked in either.</p>
 <p>If there is information/configuration that is important for users or developers to see, include them in documentation
 and/or examples with appropriate context/explanation.</p>
-<h2 id="building"><a class="header" href="#building">Building</a></h2>
+<h2 id="building-1"><a class="header" href="#building-1">Building</a></h2>
 <p>To build jco, run:</p>
 <pre><code>pnpm install
 pnpm run build
