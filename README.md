@@ -50,7 +50,7 @@ As Jco aims to do many things, it contains many subprojects that are organized i
 | Subproject                       | Language   | Directory                               | Description                                                                                     |
 |----------------------------------|------------|-----------------------------------------|-------------------------------------------------------------------------------------------------|
 | `jco`                            | Javascript | `packages/jco`                          | The `jco` CLI                                                                                   |
-| `jco-transpile`                  | Javascript | `packages/jco-transpile`                | WebAssembly Component Transpilation functionaltiy                                               |
+| `jco-transpile`                  | Javascript | `packages/jco-transpile`                | WebAssembly Component Transpilation functionality                                               |
 | `jco-std`                        | Javascript | `packages/jco-std`                      | A "standard library" for Jco which provides integrations for popular JS frameworks/paradigms    |
 | `jco-node-fs`                    | Rust/JS    | `packages/jco-node-fs`                  | Native Node.js filesystem helpers used by Jco's WASI shims                                      |
 | `preview2-shim`                  | Javascript | `packages/preview2-shim`                | Library that provides a mapping of [WASI Preview 2][wasi-p2] for NodeJS and Browsers            |
@@ -86,8 +86,8 @@ pnpm exec jco scaffold my-command --wit builtin:wasi-command
 # jco scaffold my-component --wit path/to/wit
 ```
 
-Scaffolding the project wil create a folder called `my-command` (the first argument to `jco scaffold`),
-and you can swith to that folder and instantly build the component:
+Scaffolding the project will create a folder called `my-command` (the first argument to `jco scaffold`),
+and you can switch to that folder and instantly build the component:
 
 ```console
 cd my-command
@@ -153,7 +153,7 @@ pnpm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
 It may be necessary to replace `@oxc-parser/binding-linux-x64-gnu` with whatever platform is appropriate.
 
 > [!NOTE]
-> If you are using pnpm *instaed* of pnpm, similar installation issues may occur when
+> If you are using pnpm *instead* of pnpm, similar installation issues may occur when
 > using an `npm` version older than 11.3.0, due to [`npm` bugs related to optional dependencies][npm-opt-deps-issues]
 
 [npm-opt-deps-issues]: https://github.com/npm/cli/issues/4828
