@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.12.0] - 2026-10-28
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.31.0 by @vados-cosmonic in #2334
+
 ## [0.11.0] - 2026-10-15
 
 ### 🐛 Bug Fixes
