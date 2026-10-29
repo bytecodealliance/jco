@@ -9,12 +9,13 @@ export const processor: typeof ProcessorInterface = {
             defaultOptions: JSON.stringify({ minScore: 0 }),
         };
     },
-    process(json) {
+    processBatch(logs, json) {
         const { minScore = 0 } = parseOptions(json);
         if (typeof minScore !== 'number' || !Number.isInteger(minScore) || minScore < 0 || minScore > 100) {
             throw 'minScore must be an integer from 0 to 100';
         }
         const data = getDataset();
+        data.logs = logs;
         const requests = new Map<string, number>();
         for (const log of data.logs) {
             requests.set(log.ip, (requests.get(log.ip) ?? 0) + 1);
@@ -30,6 +31,10 @@ export const processor: typeof ProcessorInterface = {
                 ),
             }))
             .filter((log) => log.riskScore >= minScore);
-        return `Risk: scored logs and kept ${data.logs.length} with score ≥ ${minScore}`;
+        return { logs: data.logs, summary: `Risk: scored logs and kept ${data.logs.length} with score ≥ ${minScore}` };
+    },
+    processSingle(log, options) {
+        const { logs, summary } = processor.processBatch([log], options);
+        return { log: logs[0], summary };
     },
 };

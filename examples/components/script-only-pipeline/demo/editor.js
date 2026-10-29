@@ -1,12 +1,9 @@
-const CODEMIRROR_URL = 'https://esm.sh/codemirror@6.0.2';
-const JAVASCRIPT_URL = 'https://esm.sh/@codemirror/lang-javascript@6.2.4';
-
 /** Enhance the source textarea without making the rest of the demo depend on a CDN. */
 export async function mountEditor(textarea, parent) {
-    const [{ EditorView, basicSetup }, { javascript }] = await Promise.all([
-        import(/* @vite-ignore */ CODEMIRROR_URL),
-        import(/* @vite-ignore */ JAVASCRIPT_URL),
-    ]);
+    const modules = ['codemirror', '@codemirror/lang-javascript'];
+    const [{ EditorView, basicSetup }, { javascript }] = await Promise.all(
+        modules.map((name) => import(/* @vite-ignore */ name)),
+    );
     const view = new EditorView({
         parent,
         doc: textarea.value,

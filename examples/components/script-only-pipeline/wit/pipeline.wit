@@ -1,6 +1,6 @@
 package example:log-pipeline;
 
-interface dataset {
+interface types {
     record access-log {
         timestamp: string,
         ip: string,
@@ -10,26 +10,52 @@ interface dataset {
         country: option<string>,
         risk-score: option<u8>,
     }
+}
 
-    /// Replace the shared dataset with a JSON array of access-log records.
-    reset: func(json: string) -> result<_, string>;
-    /// Read the current logs and reports as JSON without resetting them.
-    snapshot: func() -> string;
+interface dataset {
+    use types.{access-log};
+
+    record dataset-snapshot {
+        logs: list<access-log>,
+        /// Processor-defined reports encoded as a JSON object.
+        reports-json: string,
+    }
+
+    /// Replace the shared dataset with raw logs, clearing annotations and reports.
+    reset: func(logs: list<access-log>) -> result<_, string>;
+    /// Read the current logs and reports without resetting them.
+    snapshot: func() -> dataset-snapshot;
 }
 
 interface processor {
+    use types.{access-log};
+
     record description {
         name: string,
         description: string,
         default-options: string,
     }
 
+    record batch-result {
+        logs: list<access-log>,
+        summary: string,
+    }
+
+    record single-result {
+        /// None means the processor filtered out this log.
+        log: option<access-log>,
+        summary: string,
+    }
+
     describe: func() -> description;
-    /// Mutate the shared dataset and return a short summary, or an error.
-    process: func(options: string) -> result<string, string>;
+    /// Process a host-provided batch, updating the shared dataset and reports.
+    process-batch: func(logs: list<access-log>, options: string) -> result<batch-result, string>;
+    /// Process one host-provided log; filters may remove it.
+    process-single: func(log: access-log, options: string) -> result<single-result, string>;
 }
 
 world pipeline {
+    export types;
     export dataset;
     export processor;
 }
