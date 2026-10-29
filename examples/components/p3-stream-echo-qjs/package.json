@@ -12,6 +12,6 @@
         "all": "pnpm run componentize && pnpm run transpile && pnpm run demo && pnpm run test"
     },
     "dependencies": {
-        "@bytecodealliance/jco": "workspace:*"
+        "@bytecodealliance/jco": "1.40.0"
     }
 }

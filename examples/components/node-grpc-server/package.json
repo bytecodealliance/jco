@@ -24,7 +24,7 @@
     "devDependencies": {
         "@bufbuild/buf": "1.72.0",
         "@bufbuild/protoc-gen-es": "2.14.1",
-        "@bytecodealliance/jco": "workspace:*"
+        "@bytecodealliance/jco": "1.40.0"
     },
     "engines": {
         "node": ">=24"
