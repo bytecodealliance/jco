@@ -5465,28 +5465,44 @@ impl<'a> Instantiator<'a, '_> {
                 (None, None)
             };
 
-        // Wrap the realloc function to disable leaving the component state while it is executing
+        // Realloc runs with fresh context slots, without leaving the component.
+        // In particular, wasi-libc's realloc task hook may replace the TLS base;
+        // it must not overwrite the calling Python/C thread's context.
         if let Some(realloc_fn) = realloc.take() {
             let get_component_state = self.bindgen.intrinsic(Intrinsic::Component(
                 ComponentIntrinsic::GetOrCreateAsyncState,
             ));
+            let get_current_thread_meta = self
+                .bindgen
+                .intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+            let get_current_thread = self
+                .bindgen
+                .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread));
             let component_idx = opts.instance.as_u32();
             realloc = Some(format!(
                 r#"((...args) => {{
                     const state = {get_component_state}({component_idx});
                     const previousMayLeave = state.mayLeave;
+                    const meta = {get_current_thread_meta}({component_idx});
+                    const thread = meta && {get_current_thread}(meta.componentIdx, meta.threadID, meta.taskID)?.thread;
+                    const previousStorage = thread?.storage;
+                    if (thread) {{ thread.storage = [0, 0]; }}
                     state.mayLeave = false;
+                    const restore = () => {{
+                        state.mayLeave = previousMayLeave;
+                        if (thread) {{ thread.storage = previousStorage; }}
+                    }};
                     let result;
                     try {{
                         result = {realloc_fn}(...args);
                     }} catch (err) {{
-                        state.mayLeave = previousMayLeave;
+                        restore();
                         throw err;
                     }}
                     if (result && typeof result.then === 'function') {{
-                        return Promise.resolve(result).finally(() => {{ state.mayLeave = previousMayLeave; }});
+                        return Promise.resolve(result).finally(restore);
                     }}
-                    state.mayLeave = previousMayLeave;
+                    restore();
                     return result;
                 }})"#
             ));

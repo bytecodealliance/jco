@@ -11,6 +11,40 @@ const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL('../fixtures/components', i
 const P3_COMPONENT_FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'p3');
 
 suite('Context (WASI P3)', () => {
+    test.concurrent.each([
+        { minify: false, suspend: false },
+        { minify: true, suspend: false },
+        { minify: false, suspend: true },
+        { minify: true, suspend: true },
+    ])('realloc isolates both context slots (minify=$minify, suspend=$suspend)', async ({ minify, suspend }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: suspend ? 'jspi' : undefined,
+            component: {
+                name: 'context-realloc',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'context-realloc.wat'),
+                imports: {
+                    echo: { default: (value: string) => (suspend ? Promise.resolve(value) : value) },
+                },
+            },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        minify,
+                        asyncImports: suspend ? ['echo'] : [],
+                        asyncExports: suspend ? ['run'] : [],
+                    },
+                },
+            },
+        });
+        try {
+            for (let call = 0; call < 2; call++) {
+                expect(await instance.run('hello')).toBe(5);
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('context.get/set (sync export, sync call)', async () => {
         const name = 'context-sync';
 
