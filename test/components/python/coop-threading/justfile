@@ -8,9 +8,11 @@ componentize_py_rev := "e520f231f761d771f30224096e4f972fcaaa9c62"
 
 # Temporary source pin until componentize-py PR #242 ships in a release.
 # Let upstream download its matching SDK (including shared-library exceptions).
+# setup-wasi-sdk-action also exports CC/CXX and a dotted SDK version. Clear
+# those so native dependencies use host compilers and upstream selects its SDK.
 setup:
     rustup toolchain install {{rust_toolchain}} --profile minimal --target wasm32-wasip2 --target wasm32-wasip3
-    env -u WASI_SDK_PATH COMPONENTIZE_PY_TEST_COUNT=0 {{cargo}} +{{rust_toolchain}} install \
+    env -u CC -u CXX -u WASI_SDK_PATH -u WASI_SDK_VERSION COMPONENTIZE_PY_TEST_COUNT=0 {{cargo}} +{{rust_toolchain}} install \
         --git https://github.com/bytecodealliance/componentize-py \
         --rev {{componentize_py_rev}} \
         --root .tools \
