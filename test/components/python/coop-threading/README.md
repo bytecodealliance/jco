@@ -20,8 +20,10 @@ not upstream `main` or a released wheel. `just setup` pins revision
 `e520f231f761d771f30224096e4f972fcaaa9c62` and Rust `nightly-2026-10-08`.
 The PR downloads its matching CPython build and WASI SDK 34 fork with shared
 library exception support. A stock SDK 34 installation alone is insufficient
-to build this version of componentize-py. The setup recipe deliberately lets
-upstream select its SDK rather than using `WASI_SDK_PATH`.
+to build this version of componentize-py. The setup recipe clears `CC`, `CXX`,
+`WASI_SDK_PATH`, and `WASI_SDK_VERSION` for the Cargo install. This lets native
+dependencies use host compilers and upstream select its matching SDK, even when
+the WASI SDK setup action has exported WebAssembly compiler overrides.
 
 From the repository root:
 
