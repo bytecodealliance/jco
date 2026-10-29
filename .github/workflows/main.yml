@@ -1069,6 +1069,19 @@ jobs:
 
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
+      # PR #242 supplies the experimental wasm32-wasip3-threads target. Replace
+      # this source build with a released wheel once componentize-py ships it.
+      - name: Cache threading-capable componentize-py
+        id: cache-componentize-py-threads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: test/components/python/coop-threading/.tools
+          key: componentize-py-threads-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('test/components/python/coop-threading/justfile') }}
+
+      - name: Build threading-capable componentize-py
+        if: steps.cache-componentize-py-threads.outputs.cache-hit != 'true'
+        run: just -f test/components/python/coop-threading/justfile setup
+
       - name: Install the Rust WASI P2 target
         run: rustup target add wasm32-wasip2
 
