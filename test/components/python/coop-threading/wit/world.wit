@@ -1,0 +1,5 @@
+package jco:python-coop-threading;
+
+world tests {
+    export run: async func(test-case: string) -> list<string>;
+}

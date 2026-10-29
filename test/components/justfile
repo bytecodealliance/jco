@@ -25,6 +25,14 @@ build:
     {{just}} build-posix-pthread-create-join-1-1
     {{just}} build-posix-pthread-cond-wait-1-1
     {{just}} build-posix-pthread-setspecific-1-1
+    {{just}} build-python-coop-threading
+
+# Build Python standard-library threading tests with componentize-py WASIp3.
+[group('build')]
+@build-python-coop-threading:
+    mkdir -p output/python-coop-threading
+    {{just}} -f python/coop-threading/justfile build
+    mv python/coop-threading/component.wasm output/python-coop-threading/component.wasm
 
 # Build the wstd P2 HTTP client required to test jco issue #577
 [group('build')]

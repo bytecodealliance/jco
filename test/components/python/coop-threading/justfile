@@ -1,0 +1,24 @@
+componentize_py := env_var_or_default("COMPONENTIZE_PY", justfile_directory() / ".tools/bin/componentize-py")
+cargo := env_var_or_default("CARGO", "cargo")
+rust_toolchain := "nightly-2026-10-08"
+componentize_py_rev := "e520f231f761d771f30224096e4f972fcaaa9c62"
+
+@_default:
+    just --list
+
+# Temporary source pin until componentize-py PR #242 ships in a release.
+# Let upstream download its matching SDK (including shared-library exceptions).
+setup:
+    rustup toolchain install {{rust_toolchain}} --profile minimal --target wasm32-wasip2 --target wasm32-wasip3
+    env -u WASI_SDK_PATH COMPONENTIZE_PY_TEST_COUNT=0 {{cargo}} +{{rust_toolchain}} install \
+        --git https://github.com/bytecodealliance/componentize-py \
+        --rev {{componentize_py_rev}} \
+        --root .tools \
+        --bin componentize-py componentize-py
+
+build:
+    @if [ ! -x "{{componentize_py}}" ]; then \
+        echo '[error] run just setup in test/components/python/coop-threading or set COMPONENTIZE_PY to a threading-capable binary'; \
+        exit 1; \
+    fi
+    "{{componentize_py}}" -d wit -w tests componentize --target wasm32-wasip3-threads component -o component.wasm

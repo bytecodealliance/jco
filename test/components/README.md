@@ -62,3 +62,8 @@ useful but likely incomplete list is below:
 [uv]: https://github.com/astral-sh/uv
 [componentize-py]: https://github.com/bytecodealliance/componentize-py/
 [moon]: https://www.moonbitlang.com/download/
+
+The [Python cooperative threading fixture](./python/coop-threading/README.md)
+currently needs a pinned source build of componentize-py. Run its `just setup`
+recipe before building the full component tree; the extended CI job caches this
+toolchain automatically.
