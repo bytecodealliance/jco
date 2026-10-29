@@ -47,6 +47,7 @@ packages:
   - examples/components/node-fetch
   - examples/components/perry-filesystem
   - examples/components/p3-stream-echo-qjs
+  - examples/components/script-only-pipeline
   - examples/components/string-reverse
   - examples/components/string-reverse-upper
   - examples/components/ts-resource-export

@@ -1,0 +1,14 @@
+[
+    { "timestamp": "2026-01-15T10:00:00Z", "ip": "192.0.2.10", "method": "GET", "path": "/", "status": 200 },
+    { "timestamp": "2026-01-15T10:00:01Z", "ip": "198.51.100.20", "method": "GET", "path": "/docs", "status": 200 },
+    { "timestamp": "2026-01-15T10:00:02Z", "ip": "203.0.113.30", "method": "GET", "path": "/pricing", "status": 200 },
+    { "timestamp": "2026-01-15T10:00:03Z", "ip": "198.51.100.99", "method": "POST", "path": "/login", "status": 401 },
+    { "timestamp": "2026-01-15T10:00:04Z", "ip": "198.51.100.99", "method": "GET", "path": "/admin", "status": 403 },
+    { "timestamp": "2026-01-15T10:00:05Z", "ip": "192.0.2.10", "method": "GET", "path": "/docs", "status": 200 },
+    { "timestamp": "2026-01-15T10:00:06Z", "ip": "198.51.100.21", "method": "GET", "path": "/docs", "status": 200 },
+    { "timestamp": "2026-01-15T10:00:07Z", "ip": "203.0.113.31", "method": "GET", "path": "/", "status": 200 },
+    { "timestamp": "2026-01-15T10:00:08Z", "ip": "198.51.100.99", "method": "POST", "path": "/login", "status": 500 },
+    { "timestamp": "2026-01-15T10:00:09Z", "ip": "192.0.2.11", "method": "GET", "path": "/pricing", "status": 200 },
+    { "timestamp": "2026-01-15T10:00:10Z", "ip": "203.0.113.30", "method": "GET", "path": "/docs", "status": 404 },
+    { "timestamp": "2026-01-15T10:00:11Z", "ip": "192.0.2.12", "method": "GET", "path": "/", "status": 200 }
+]

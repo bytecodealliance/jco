@@ -1,0 +1,35 @@
+package example:log-pipeline;
+
+interface dataset {
+    record access-log {
+        timestamp: string,
+        ip: string,
+        method: string,
+        path: string,
+        status: u16,
+        country: option<string>,
+        risk-score: option<u8>,
+    }
+
+    /// Replace the shared dataset with a JSON array of access-log records.
+    reset: func(json: string) -> result<_, string>;
+    /// Read the current logs and reports as JSON without resetting them.
+    snapshot: func() -> string;
+}
+
+interface processor {
+    record description {
+        name: string,
+        description: string,
+        default-options: string,
+    }
+
+    describe: func() -> description;
+    /// Mutate the shared dataset and return a short summary, or an error.
+    process: func(options: string) -> result<string, string>;
+}
+
+world pipeline {
+    export dataset;
+    export processor;
+}

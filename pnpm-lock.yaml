@@ -334,6 +334,25 @@ importers:
         specifier: workspace:*
         version: link:../../../packages/jco
 
+  examples/components/script-only-pipeline:
+    dependencies:
+      '@bytecodealliance/jco':
+        specifier: workspace:*
+        version: link:../../../packages/jco
+      '@bytecodealliance/jco-transpile':
+        specifier: ^0.21.0
+        version: 0.21.0
+    devDependencies:
+      puppeteer:
+        specifier: 'catalog:'
+        version: 25.14.0(yauzl@2.10.0)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vite:
+        specifier: ^7.3.7
+        version: 7.3.7(@types/node@24.13.3)(jiti@2.6.1)(lightningcss@1.33.0)
+
   examples/components/string-reverse:
     dependencies:
       '@bytecodealliance/jco':
