@@ -27,7 +27,7 @@
         "@bytecodealliance/preview2-shim": "0.27.1"
     },
     "devDependencies": {
-        "@bytecodealliance/jco": "workspace:*",
+        "@bytecodealliance/jco": "1.40.0",
         "@sveltejs/adapter-node": "6.0.0",
         "@sveltejs/kit": "3.1.0",
         "@types/node": "^24.3.0",

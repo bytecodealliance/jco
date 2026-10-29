@@ -250,8 +250,8 @@ importers:
         specifier: 2.14.1
         version: 2.14.1(@bufbuild/protobuf@2.14.1)
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.40.0
+        version: 1.40.0
 
   examples/components/node-mcp-server:
     dependencies:
@@ -269,8 +269,8 @@ importers:
         version: 4.6.7
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.40.0
+        version: 1.40.0
       '@modelcontextprotocol/client':
         specifier: 2.3.0
         version: 2.3.0
@@ -285,8 +285,8 @@ importers:
         version: 0.27.1
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.40.0
+        version: 1.40.0
       '@sveltejs/adapter-node':
         specifier: 6.0.0
         version: 6.0.0(@sveltejs/kit@3.1.0(@sveltejs/vite-plugin-svelte@7.3.0(svelte@5.57.2)(vite@8.3.3(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1)))(svelte@5.57.2)(typescript@6.0.3)(vite@8.3.3(@types/node@24.13.3)(esbuild@0.28.1)(jiti@2.6.1)))
@@ -321,8 +321,8 @@ importers:
   examples/components/p3-stream-echo-qjs:
     dependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.40.0
+        version: 1.40.0
 
   examples/components/perry-filesystem:
     dependencies:
@@ -331,8 +331,8 @@ importers:
         version: 0.30.0
     devDependencies:
       '@bytecodealliance/jco':
-        specifier: workspace:*
-        version: link:../../../packages/jco
+        specifier: 1.40.0
+        version: 1.40.0
 
   examples/components/string-reverse:
     dependencies:
@@ -1171,6 +1171,10 @@ packages:
 
   '@bytecodealliance/jco@1.37.0':
     resolution: {integrity: sha512-z/crtP4L3wumdFA74K1cEsLfdZ8Ki0dE/7m1fJ9SVq5Z9VsAf0yQXWQzMb6ZrJmXvRN+4wHC2MNkFwSFdaoBzQ==}
+    hasBin: true
+
+  '@bytecodealliance/jco@1.40.0':
+    resolution: {integrity: sha512-yC3hSK09KL8ER5YwT7DL/RZkJJKR2JuhSNxcWSpWlq7zol79G7hkAvmA172uWAJ02N/3FcetTHgA1doZXFJB3g==}
     hasBin: true
 
   '@bytecodealliance/preview2-shim@0.17.9':
@@ -5783,7 +5787,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.19.3':
     dependencies:
-      '@bytecodealliance/jco': 1.37.0
+      '@bytecodealliance/jco': 1.31.0
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
       oxc-parser: 0.76.0
@@ -6026,6 +6030,23 @@ snapshots:
       binaryen: 132.0.0
       commander: 14.0.3
       componentize-qjs: 0.4.5
+      mkdirp: 3.0.1
+      regexpu-core: 6.4.0
+      rolldown: 1.2.13
+      typescript: 7.0.2
+      typescript-compiler-api: typescript@6.0.3
+      unenv: 2.0.0-rc.24
+
+  '@bytecodealliance/jco@1.40.0':
+    dependencies:
+      '@bytecodealliance/componentize-js': 0.23.0
+      '@bytecodealliance/componentize-js-0-19-3': '@bytecodealliance/componentize-js@0.19.3'
+      '@bytecodealliance/jco-std': 0.10.0(@bytecodealliance/preview2-shim@0.31.0)
+      '@bytecodealliance/jco-transpile': 0.21.0
+      '@bytecodealliance/preview2-shim': 0.31.0
+      binaryen: 132.0.0
+      commander: 14.0.3
+      componentize-qjs: 0.5.0
       mkdirp: 3.0.1
       regexpu-core: 6.4.0
       rolldown: 1.2.13

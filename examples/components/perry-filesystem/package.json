@@ -16,6 +16,6 @@
         "@bytecodealliance/preview2-shim": "^0.30.0"
     },
     "devDependencies": {
-        "@bytecodealliance/jco": "workspace:*"
+        "@bytecodealliance/jco": "1.40.0"
     }
 }
