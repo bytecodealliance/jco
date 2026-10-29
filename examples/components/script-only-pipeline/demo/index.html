@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Access log lab · Jco script-only components</title>
+        <link rel="icon" href="data:," />
+        <link rel="stylesheet" href="./style.css" />
+        <script type="module" src="./browser.js"></script>
+    </head>
+    <body>
+        <main>
+            <header>
+                <p class="eyebrow">JCO / SCRIPT-ONLY COMPONENTS</p>
+                <h1>Access log lab</h1>
+                <p>This example showcases WebAssembly components used in a dynamic pipeline.</p>
+                <p>The controls on this page enable processing one shared dataset with multiple scripts compiled to WebAssembly and one shared JavaScript engine.</p>
+                <p id="status" role="status" aria-live="polite">Starting the shared engine…</p>
+            </header>
+            <section aria-labelledby="pipeline-title">
+                <div class="section-heading">
+                    <h2 id="pipeline-title">Your pipeline</h2>
+                    <button id="clear" disabled>Clear pipeline</button>
+                </div>
+                <p>Download the sample components, then upload them in the order you want to run them.</p>
+                <nav aria-label="Sample components" class="downloads">
+                    <a href="../dist/components/geoip.wasm" download>↓ GeoIP filter</a>
+                    <a href="../dist/components/risk-score.wasm" download>↓ Risk score</a>
+                    <a href="../dist/components/top-pages.wasm" download>↓ Most visited pages</a>
+                </nav>
+                <label class="upload" for="components">
+                    <strong>Add .wasm components</strong>
+                    <span>Files are processed locally in this browser.</span>
+                    <input id="components" type="file" accept=".wasm,application/wasm" multiple disabled />
+                </label>
+                <p id="empty">Your pipeline is empty. Upload a component to add the first step.</p>
+                <ol id="pipeline"></ol>
+                <p class="note">
+                    Use trusted scripts: components loaded into this engine share a JavaScript realm and dataset.
+                </p>
+            </section>
+            <section id="authoring" aria-labelledby="authoring-title">
+                <div class="section-heading">
+                    <h2 id="authoring-title">Write your own component</h2>
+                    <button id="reset-source">Reset source</button>
+                </div>
+                <p>Write a TypeScript processor, create its .wasm component here, and add it to your pipeline.</p>
+                <p class="note">
+                    Export a processor with describe() and process(options). Import getDataset and parseOptions from
+                    pipeline:state to work with the shared logs and reports. No server build is needed.
+                </p>
+                <label for="component-name">Component name</label>
+                <input id="component-name" value="http-status" pattern="[a-z][a-z0-9-]*" />
+                <label for="source">TypeScript source</label>
+                <textarea id="source" spellcheck="false" rows="18"></textarea>
+                <div id="source-editor"></div>
+                <p id="editor-status" class="note" role="status">Loading CodeMirror syntax highlighting…</p>
+                <div class="authoring-actions">
+                    <button id="create-component" class="primary" disabled>Create component &amp; add step</button>
+                    <a id="download-custom" hidden download>Download .wasm</a>
+                </div>
+                <p id="build-status" role="status" aria-live="polite">
+                    Your component will be built locally in this browser.
+                </p>
+            </section>
+            <div class="columns">
+                <section aria-labelledby="input-title">
+                    <div class="section-heading">
+                        <h2 id="input-title">01 / Input</h2>
+                        <button id="restore">Restore sample</button>
+                    </div>
+                    <label for="input">Editable JSON access logs</label>
+                    <textarea id="input" spellcheck="false" rows="22"></textarea>
+                    <p class="note">
+                        Synthetic logs and invented locations for documentation IP ranges. Risk scores are illustrative.
+                    </p>
+                    <button id="run" class="primary" disabled>Run pipeline</button>
+                </section>
+                <section aria-labelledby="output-title">
+                    <div class="section-heading">
+                        <h2 id="output-title">02 / Output</h2>
+                        <span id="count">No run yet</span>
+                    </div>
+                    <p id="output-note">Run the empty pipeline to see the original logs, or add a few steps first.</p>
+                    <ol id="steps" aria-label="Processing results"></ol>
+                    <pre id="output" aria-label="Output JSON">{}</pre>
+                </section>
+            </div>
+        </main>
+    </body>
+</html>

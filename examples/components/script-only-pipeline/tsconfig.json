@@ -1,0 +1,15 @@
+{
+    "compilerOptions": {
+        "strict": true,
+        "target": "ES2022",
+        "module": "ESNext",
+        "moduleResolution": "bundler",
+        "allowImportingTsExtensions": true,
+        "noEmit": true,
+        "types": [],
+        "paths": {
+            "pipeline:state": ["./components/shared/state.ts"]
+        }
+    },
+    "include": ["components", "generated/types", "demo/custom-template.ts"]
+}

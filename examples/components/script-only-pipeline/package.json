@@ -1,0 +1,30 @@
+{
+    "name": "script-only-pipeline",
+    "version": "0.1.0",
+    "private": true,
+    "description": "Process JSON access logs with script-only components sharing one engine in Node.js and the browser",
+    "type": "module",
+    "scripts": {
+        "gen:types": "jco guest-types wit --world-name pipeline -o generated/types",
+        "check": "tsc --noEmit",
+        "build:component": "jco componentize --script-only --backend quickjs --backend-qjs-disable-async --backend-qjs-stub-wasi --wit wit --world-name pipeline components/dataset/dataset.ts components/geoip/geoip.ts components/risk-score/risk-score.ts components/top-pages/top-pages.ts -o dist/components",
+        "transpile": "node scripts/transpile.mjs",
+        "build": "pnpm run gen:types && pnpm run check && pnpm run build:component && pnpm run transpile",
+        "run": "node demo/node.mjs",
+        "demo": "vite --config demo/vite.config.js",
+        "demo:open": "pnpm run demo --open /demo/",
+        "test:node": "node test/pipeline.mjs",
+        "test:browser": "node test/browser.mjs",
+        "test": "pnpm run test:node && pnpm run test:browser",
+        "all": "pnpm run build && pnpm run run && pnpm run test"
+    },
+    "dependencies": {
+        "@bytecodealliance/jco": "workspace:*",
+        "@bytecodealliance/jco-transpile": "^0.21.0"
+    },
+    "devDependencies": {
+        "puppeteer": "catalog:",
+        "typescript": "catalog:",
+        "vite": "^7.3.7"
+    }
+}

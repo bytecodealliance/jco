@@ -804,15 +804,22 @@ jobs:
             setup-std: true
           - name: node-sveltekit-server
             workspace: examples/components/node-sveltekit-server
+            uses-browser: true
             setup-p2-shim: true
             setup-std: true
           - name: fs-write-file
             workspace: examples/components/fs-write-file
           - name: browser-p2-shims
             workspace: examples/components/browser-p2-shims
+            uses-browser: true
             setup-p2-shim: true
+          - name: script-only-pipeline
+            workspace: examples/components/script-only-pipeline
+            uses-browser: true
           - name: native-messaging
             workspace: examples/components/native-messaging
+            uses-browser: true
+            uses-firefox: true
             setup-p2-shim: true
           - name: wintertc
             workspace: examples/components/wintertc
@@ -900,23 +907,18 @@ jobs:
       - run: pnpm install
 
       - name: Cache example browsers
-        if: ${{ matrix.project.name == 'browser-p2-shims' || matrix.project.name == 'native-messaging' }}
+        if: ${{ matrix.project.uses-browser }}
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/puppeteer
           key: puppeteer-examples-${{ runner.os }}-${{ runner.arch }}-${{ matrix.project.name }}-${{ hashFiles('pnpm-lock.yaml', 'scripts/install-puppeteer.mjs') }}
 
       - name: Install Puppeteer browser
-        if: ${{ matrix.project.name == 'browser-p2-shims' || matrix.project.name == 'native-messaging' }}
+        if: ${{ matrix.project.uses-browser }}
         run: pnpm run test:setup:puppeteer
 
-      - name: Install SvelteKit example browser
-        if: ${{ matrix.project.name == 'node-sveltekit-server' }}
-        working-directory: ${{ matrix.project.workspace }}
-        run: pnpm run setup:browser
-
       - name: Install Firefox
-        if: ${{ matrix.project.name == 'native-messaging' }}
+        if: ${{ matrix.project.uses-firefox }}
         run: pnpm run test:setup:firefox
 
       - name: Build required deps
