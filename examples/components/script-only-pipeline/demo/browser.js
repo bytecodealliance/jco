@@ -117,15 +117,16 @@ $('#components').addEventListener('change', async (event) => {
 $('#run').addEventListener('click', () => {
     invalidate();
     try {
-        const result = pipeline.run(
-            $('#input').value,
-            stages.map((stage) => ({
-                script: stage.script,
-                options: JSON.parse(stage.options),
-            })),
-        );
+        const input = JSON.parse($('#input').value);
+        const configuredStages = stages.map((stage) => ({
+            script: stage.script,
+            options: JSON.parse(stage.options),
+        }));
+        const result = Array.isArray(input)
+            ? pipeline.runBatch(input, configuredStages)
+            : pipeline.runSingle(input, configuredStages);
         $('#output').textContent = JSON.stringify({ logs: result.logs, reports: result.reports }, null, 2);
-        $('#count').textContent = `${result.logs.length} logs / ${stages.length} steps`;
+        $('#count').textContent = `${result.logs.length} logs / ${result.steps.length} steps`;
         $('#output-note').textContent = 'Every run starts with fresh input. Steps share data inside the engine.';
         for (const step of result.steps) {
             const row = document.createElement('li');
@@ -145,6 +146,10 @@ $('#clear').addEventListener('click', () => {
     status('Pipeline cleared · upload a component to start again');
 });
 $('#restore').addEventListener('click', restoreSample);
+$('#single-input').addEventListener('click', () => {
+    $('#input').value = JSON.stringify(sample[1], null, 2);
+    invalidate();
+});
 $('#input').addEventListener('input', invalidate);
 function restoreSample() {
     $('#input').value = JSON.stringify(sample, null, 2);

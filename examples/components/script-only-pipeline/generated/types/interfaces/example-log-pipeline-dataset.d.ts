@@ -1,19 +1,19 @@
+/// <reference path="./example-log-pipeline-types.d.ts" />
 declare module 'example:log-pipeline/dataset' {
   /**
-   * Replace the shared dataset with a JSON array of access-log records.
+   * Replace the shared dataset with raw logs, clearing annotations and reports.
    */
-  export function reset(json: string): void;
+  export function reset(logs: Array<AccessLog>): void;
   /**
-   * Read the current logs and reports as JSON without resetting them.
+   * Read the current logs and reports without resetting them.
    */
-  export function snapshot(): string;
-  export interface AccessLog {
-    timestamp: string,
-    ip: string,
-    method: string,
-    path: string,
-    status: number,
-    country?: string,
-    riskScore?: number,
+  export function snapshot(): DatasetSnapshot;
+  export type AccessLog = import('example:log-pipeline/types').AccessLog;
+  export interface DatasetSnapshot {
+    logs: Array<AccessLog>,
+    /**
+     * Processor-defined reports encoded as a JSON object.
+     */
+    reportsJson: string,
   }
 }

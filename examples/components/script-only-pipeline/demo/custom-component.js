@@ -58,7 +58,7 @@ export async function createCustomComponent(name, source) {
     });
     const exports = Object.values(result.metafile.outputs).flatMap((output) => output.exports);
     if (exports.length !== 1 || exports[0] !== 'processor') {
-        throw new Error('Export one processor object with describe() and process(options) methods');
+        throw new Error('Export one processor object with describe(), processBatch(), and processSingle() methods');
     }
     await $init;
     return scripts.createComponent({

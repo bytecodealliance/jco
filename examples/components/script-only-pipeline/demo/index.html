@@ -6,6 +6,30 @@
         <title>Access log lab · Jco script-only components</title>
         <link rel="icon" href="data:," />
         <link rel="stylesheet" href="./style.css" />
+        <!-- Pin shared dependencies to one copy so CodeMirror's extension identity checks work. -->
+        <script type="importmap">
+            {
+                "imports": {
+                    "codemirror": "https://cdn.jsdelivr.net/npm/codemirror@6.0.2/dist/index.js",
+                    "@codemirror/lang-javascript": "https://cdn.jsdelivr.net/npm/@codemirror/lang-javascript@6.2.4/dist/index.js",
+                    "@codemirror/state": "https://cdn.jsdelivr.net/npm/@codemirror/state@6.5.2/dist/index.js",
+                    "@codemirror/view": "https://cdn.jsdelivr.net/npm/@codemirror/view@6.37.2/dist/index.js",
+                    "@codemirror/language": "https://cdn.jsdelivr.net/npm/@codemirror/language@6.11.1/dist/index.js",
+                    "@codemirror/commands": "https://cdn.jsdelivr.net/npm/@codemirror/commands@6.8.1/dist/index.js",
+                    "@codemirror/search": "https://cdn.jsdelivr.net/npm/@codemirror/search@6.5.11/dist/index.js",
+                    "@codemirror/autocomplete": "https://cdn.jsdelivr.net/npm/@codemirror/autocomplete@6.18.6/dist/index.js",
+                    "@codemirror/lint": "https://cdn.jsdelivr.net/npm/@codemirror/lint@6.8.5/dist/index.js",
+                    "@lezer/common": "https://cdn.jsdelivr.net/npm/@lezer/common@1.2.3/dist/index.js",
+                    "@lezer/highlight": "https://cdn.jsdelivr.net/npm/@lezer/highlight@1.2.1/dist/index.js",
+                    "@lezer/lr": "https://cdn.jsdelivr.net/npm/@lezer/lr@1.4.2/dist/index.js",
+                    "@lezer/javascript": "https://cdn.jsdelivr.net/npm/@lezer/javascript@1.5.1/dist/index.js",
+                    "@marijn/find-cluster-break": "https://cdn.jsdelivr.net/npm/@marijn/find-cluster-break@1.0.2/src/index.js",
+                    "crelt": "https://cdn.jsdelivr.net/npm/crelt@1.0.6/index.js",
+                    "style-mod": "https://cdn.jsdelivr.net/npm/style-mod@4.1.2/src/style-mod.js",
+                    "w3c-keyname": "https://cdn.jsdelivr.net/npm/w3c-keyname@2.2.8/index.js"
+                }
+            }
+        </script>
         <script type="module" src="./browser.js"></script>
     </head>
     <body>
@@ -46,8 +70,9 @@
                 </div>
                 <p>Write a TypeScript processor, create its .wasm component here, and add it to your pipeline.</p>
                 <p class="note">
-                    Export a processor with describe() and process(options). Import getDataset and parseOptions from
-                    pipeline:state to work with the shared logs and reports. No server build is needed.
+                    Export a processor with describe(), processBatch(logs, options), and processSingle(log, options).
+                    Import getDataset and parseOptions from pipeline:state to work with the shared logs and reports. No
+                    server build is needed.
                 </p>
                 <label for="component-name">Component name</label>
                 <input id="component-name" value="http-status" pattern="[a-z][a-z0-9-]*" />
@@ -69,8 +94,10 @@
                         <h2 id="input-title">01 / Input</h2>
                         <button id="restore">Restore sample</button>
                     </div>
-                    <label for="input">Editable JSON access logs</label>
+                    <label for="input">Editable JSON access logs (array or single record)</label>
                     <textarea id="input" spellcheck="false" rows="22"></textarea>
+                    <button id="single-input">Use one sample log</button>
+                    <p class="note">An array calls process-batch; one record calls process-single.</p>
                     <p class="note">
                         Synthetic logs and invented locations for documentation IP ranges. Risk scores are illustrative.
                     </p>

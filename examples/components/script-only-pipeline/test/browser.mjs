@@ -10,14 +10,14 @@ import { createPipeline } from '../demo/shared/pipeline.js';
 import { readScript } from '../demo/shared/read-script.js';
 
 const component = (name) => fileURLToPath(new URL(`../dist/components/${name}.wasm`, import.meta.url));
-const input = await readFile(new URL('../demo/access-logs.json', import.meta.url), 'utf8');
+const input = JSON.parse(await readFile(new URL('../demo/access-logs.json', import.meta.url), 'utf8'));
 const nodePipeline = await createPipeline(readFile);
 const nodeStages = [];
 for (const name of ['geoip', 'risk-score', 'top-pages']) {
     const script = await readScript(await readFile(component(name)));
     nodeStages.push({ script, options: JSON.parse(nodePipeline.describe(script).defaultOptions) });
 }
-const expected = nodePipeline.run(input, nodeStages);
+const expected = nodePipeline.runBatch(input, nodeStages);
 const server = await createServer({
     ...config,
     configFile: false,
@@ -59,7 +59,7 @@ try {
     assert.equal((await page.$$('#pipeline > li')).length, 0);
     assert.equal(await page.$eval('#empty', (el) => el.hidden), false);
     await page.click('#run');
-    assert.deepEqual(await output(page), { logs: JSON.parse(input), reports: {} });
+    assert.deepEqual(await output(page), { logs: input, reports: {} });
 
     // Download links serve actual component binaries, ready to upload again.
     for (const name of ['geoip', 'risk-score', 'top-pages']) {
@@ -79,6 +79,16 @@ try {
     await page.click('#run');
     assert.deepEqual(await output(page), { logs: expected.logs, reports: expected.reports });
     assert.equal((await page.$$('#steps > li')).length, 3);
+
+    await page.click('#single-input');
+    await page.click('#run');
+    const single = nodePipeline.runSingle(input[1], nodeStages);
+    assert.deepEqual(await output(page), { logs: single.logs, reports: single.reports });
+    await setValue(page, '#input', JSON.stringify(input[0]));
+    await page.click('#run');
+    assert.deepEqual(await output(page), { logs: [], reports: {} });
+    assert.equal((await page.$$('#steps > li')).length, 1);
+    await page.click('#restore');
 
     await setValue(page, '#pipeline > li:nth-child(2) textarea', '{"minScore":70}');
     await page.click('#run');
@@ -108,7 +118,7 @@ try {
     assert.equal(await page.$eval('#status', (el) => el.dataset.state), 'error');
     await page.click('#restore');
     await page.click('#run');
-    assert.deepEqual(await output(page), { logs: JSON.parse(input), reports: {} });
+    assert.deepEqual(await output(page), { logs: input, reports: {} });
     assert.equal((await page.$$('#pipeline > li')).length, 0);
     await page.waitForFunction(() => document.querySelector('#source-editor').dataset.ready === 'true', {
         timeout: 60_000,
@@ -143,10 +153,13 @@ try {
     );
     const customScript = await readScript(bytes);
     const description = nodePipeline.describe(customScript);
-    const fromNode = nodePipeline.run(input, [
+    const fromNode = nodePipeline.runBatch(input, [
         { script: customScript, options: JSON.parse(description.defaultOptions) },
     ]);
     assert.deepEqual(await output(page), { logs: fromNode.logs, reports: fromNode.reports });
+    const customStage = { script: customScript, options: JSON.parse(description.defaultOptions) };
+    assert.deepEqual(nodePipeline.runSingle(input[8], [customStage]).logs, [input[8]]);
+    assert.deepEqual(nodePipeline.runSingle(input[1], [customStage]).logs, []);
     const downloaded = join(downloads, 'http-status.wasm');
     await writeFile(downloaded, bytes);
     await page.click('#clear');
@@ -209,6 +222,6 @@ async function editSource(page, source) {
     await page.keyboard.down('Control');
     await page.keyboard.press('KeyA');
     await page.keyboard.up('Control');
-    await page.keyboard.insertText(source);
+    await page.keyboard.sendCharacter(source);
     await page.waitForFunction((source) => document.querySelector('#source').value === source, {}, source);
 }

@@ -1,4 +1,4 @@
-import type { AccessLog } from 'example:log-pipeline/dataset';
+import type { AccessLog } from 'example:log-pipeline/types';
 
 export interface Dataset {
     logs: AccessLog[];

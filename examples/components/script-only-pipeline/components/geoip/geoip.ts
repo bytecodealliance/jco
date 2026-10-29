@@ -17,12 +17,13 @@ export const processor: typeof ProcessorInterface = {
             defaultOptions: JSON.stringify({ country: 'DE' }),
         };
     },
-    process(json) {
+    processBatch(logs, json) {
         const { country = 'DE' } = parseOptions(json);
         if (typeof country !== 'string' || !['all', 'US', 'DE', 'JP', 'unknown'].includes(country)) {
             throw 'country must be all, US, DE, JP, or unknown';
         }
         const data = getDataset();
+        data.logs = logs;
         const before = data.logs.length;
         data.logs = data.logs
             .map((log) => ({
@@ -30,6 +31,10 @@ export const processor: typeof ProcessorInterface = {
                 country: countries.get(log.ip.split('.').slice(0, 3).join('.')) ?? 'unknown',
             }))
             .filter((log) => country === 'all' || log.country === country);
-        return `GeoIP: ${before} → ${data.logs.length} logs (${country})`;
+        return { logs: data.logs, summary: `GeoIP: ${before} → ${data.logs.length} logs (${country})` };
+    },
+    processSingle(log, options) {
+        const { logs, summary } = processor.processBatch([log], options);
+        return { log: logs[0], summary };
     },
 };
