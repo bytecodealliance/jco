@@ -13,7 +13,7 @@ use wasmtime_environ::component::{
     ComponentTypes, CoreDef, CoreExport, Export, ExportItem, FixedEncoding, GlobalInitializer,
     InstantiateModule, InterfaceType, LinearMemoryOptions, LoweredIndex, ResourceIndex,
     RuntimeComponentInstanceIndex, RuntimeImportIndex, RuntimeInstanceIndex, StaticModuleIndex,
-    Trampoline, TrampolineIndex, TypeDef, TypeFuncIndex, TypeFutureTableIndex,
+    Trampoline, TrampolineIndex, TypeDef, TypeFuncIndex, TypeFutureTableIndex, TypeResourceTable,
     TypeResourceTableIndex, TypeStreamTableIndex,
 };
 use wasmtime_environ::component::{
@@ -324,6 +324,7 @@ pub fn transpile_bindgen(
     component: &ComponentTranslation,
     modules: &PrimaryMap<StaticModuleIndex, core::Translation<'_>>,
     types: &ComponentTypes,
+    num_resource_tables: usize,
     resolve: &Resolve,
     id: WorldId,
     opts: TranspileOpts,
@@ -438,7 +439,7 @@ pub fn transpile_bindgen(
         .fill(resolve)
         .expect("WIT type sizes must fit in the target address space");
     instantiator.initialize();
-    instantiator.instantiate();
+    instantiator.instantiate(num_resource_tables);
 
     instantiator.resource_definitions();
     instantiator.instance_flags();
@@ -1272,7 +1273,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    fn instantiate(&mut self) {
+    fn instantiate(&mut self, num_resource_tables: usize) {
         // Handle all built in trampolines
         for (i, trampoline) in self.translation.trampolines.iter() {
             let Trampoline::LowerImport {
@@ -1380,6 +1381,17 @@ impl<'a> Instantiator<'a, '_> {
         // Process lower import initializers that were discovered after the last module instantiation
         for init in lower_import_initializers.drain(..) {
             self.instantiation_global_initializer(init);
+        }
+
+        // Fused adapters can transfer a returned resource into a table whose
+        // instance never uses resource.new/rep/drop or exposes it to JS. Such a
+        // table still needs its owning instance before its first allocation,
+        // otherwise the transfer helper creates a separate handle index space.
+        for index in 0..num_resource_tables {
+            let table = TypeResourceTableIndex::from_u32(index as u32);
+            if matches!(self.types[table], TypeResourceTable::Concrete { .. }) {
+                self.ensure_resource_table(table);
+            }
         }
 
         // Process imports and build mappings

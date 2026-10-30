@@ -209,6 +209,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         .map(|(_i, module)| core::Translation::new(module, opts.multi_memory))
         .collect::<Result<_>>()?;
 
+    let num_resource_tables = types.num_resource_tables();
     let wasmtime_component = Component::default();
     let types = types.finish(&wasmtime_component);
 
@@ -227,6 +228,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         &component,
         &modules,
         &types.0,
+        num_resource_tables,
         &resolve,
         world_id,
         opts.clone(),
