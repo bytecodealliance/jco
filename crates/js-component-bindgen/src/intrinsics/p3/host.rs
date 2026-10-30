@@ -849,6 +849,10 @@ impl HostIntrinsic {
                         if (!preparedTask) {{ throw new Error('unexpectedly missing current (prepared) task'); }}
                         if (!preparedTask.subtaskMeta) {{ throw new Error('missing subtask meta from prepare'); }}
 
+                        // sync-start lowers the caller synchronously but invokes an
+                        // asynchronously lifted callee (callback or stackful).
+                        preparedTask.setCalleeIsAsync(true);
+
                         const {{ subtask, calleeComponentIdx, callerComponentIdx }} = preparedTask.subtaskMeta;
                         if (!subtask) {{ throw new Error('missing subtask from prepare during sync start call'); }}
                         if (calleeComponentIdx !== preparedTask.componentIdx()) {{

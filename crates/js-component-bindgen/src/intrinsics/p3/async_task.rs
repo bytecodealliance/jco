@@ -559,6 +559,10 @@ impl AsyncTaskIntrinsic {
 
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata'); }}
+                        // JSPI wrapping does not change the canonical lift option.
+                        if (!task.calleeIsAsync()) {{
+                            throw new {runtime_error_class}('task.return requires an async canonical lift');
+                        }}
                         task.validateResourceBorrowScope();
 
                         // Canonical ABI `canon_task_return`: the result type must be the one of
@@ -1695,6 +1699,8 @@ impl AsyncTaskIntrinsic {
 
                         setReturnLowerFns(fns) {{ this.#returnLowerFns = fns; }}
                         getReturnLowerFns() {{ return this.#returnLowerFns; }}
+
+                        calleeIsAsync() {{ return this.#calleeIsAsync === true; }}
 
                         setCalleeIsAsync(value) {{
                             if (typeof value !== 'boolean') {{ throw new TypeError('callee async state must be a boolean'); }}
@@ -4104,6 +4110,9 @@ impl AsyncTaskIntrinsic {
                             callingWasmExport: !!calleeIsAsync,
                         }});
 
+                        // This symmetric adapter uses a synchronous canonical lift,
+                        // even when the component function type itself is async.
+                        newTask.setCalleeIsAsync(false);
                         subtask.setChildTask(newTask);
                         newTask.setParentSubtask(subtask);
 
