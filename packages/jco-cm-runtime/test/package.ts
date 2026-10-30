@@ -76,7 +76,7 @@ suite('runtime package', () => {
             expect(Object.keys(manifest.exports).sort()).toEqual(['.', './intrinsics/resource', './runtime']);
             expect(manifest.sideEffects).toBe(false);
             const rust = await readFile(
-                new URL('../../../crates/js-component-bindgen/src/intrinsics/runtime.rs', import.meta.url),
+                new URL('../../../crates/js-component-bindgen/src/intrinsics/ext.rs', import.meta.url),
                 'utf8',
             );
             expect(rust).toContain('CM_RUNTIME_API_VERSION: u32 = 1;');
