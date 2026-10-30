@@ -545,6 +545,8 @@ impl LowerIntrinsic {
                     render_args.require_intrinsic(Self::LowerFlatStringUtf8);
                 let lower_flat_string_utf16_fn =
                     render_args.require_intrinsic(Self::LowerFlatStringUtf16);
+                let compact_encode = render_args
+                    .require_intrinsic(Intrinsic::String(StringIntrinsic::CompactUtf16Encode));
                 output.push_str(&format!("
                     function {lower_flat_string_any_fn}(ctx) {{
                         switch (ctx.stringEncoding) {{
@@ -552,6 +554,15 @@ impl LowerIntrinsic {
                                 return {lower_flat_string_utf8_fn}(ctx);
                             case 'utf16':
                                 return {lower_flat_string_utf16_fn}(ctx);
+                            case 'compact-utf16': {{
+                                if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
+                                const {{ ptr, len }} = {compact_encode}(ctx.vals[0], ctx.realloc, ctx.memory);
+                                const view = new DataView(ctx.memory.buffer);
+                                view.setUint32(ctx.storagePtr, ptr, true);
+                                view.setUint32(ctx.storagePtr + 4, len, true);
+                                ctx.storagePtr += 8;
+                                return;
+                            }}
                             default:
                                 throw new Error(`missing/unrecognized/unsupported string encoding [${{ctx.stringEncoding}}]`);
                         }}

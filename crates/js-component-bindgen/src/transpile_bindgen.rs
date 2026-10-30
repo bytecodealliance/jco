@@ -2831,25 +2831,33 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
 
-                // Generate a string decoding function to match this trampoline that does appropriate encoding
-                let (decoder, code_units_ty) = match string_encoding {
-                    wasmtime_environ::component::StringEncoding::Utf8 => (
-                        self.bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8)),
-                        "Uint8Array",
-                    ),
-                    wasmtime_environ::component::StringEncoding::Utf16 => (
-                        self.bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder)),
-                        "Uint16Array",
-                    ),
-                    enc => panic!("unsupported string encoding [{enc:?}] for error-context.new"),
+                let decode = match string_encoding {
+                    wasmtime_environ::component::StringEncoding::Utf8 => {
+                        let decoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+                        format!(
+                            "{decoder}.decode(new Uint8Array(memory{memory_idx}.buffer, ptr >>> 0, len >>> 0))"
+                        )
+                    }
+                    wasmtime_environ::component::StringEncoding::Utf16 => {
+                        let decoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder));
+                        format!(
+                            "{decoder}.decode(new Uint16Array(memory{memory_idx}.buffer, ptr >>> 0, len >>> 0))"
+                        )
+                    }
+                    wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                        let decoder = self
+                            .bindgen
+                            .intrinsic(Intrinsic::String(StringIntrinsic::CompactUtf16Decode));
+                        format!("{decoder}(memory{memory_idx}, ptr, len)")
+                    }
                 };
                 uwriteln!(
                     self.src.js,
-                    "function trampoline{i}InputStr(ptr, len) {{
-                         return {decoder}.decode(new {code_units_ty}(memory{memory_idx}.buffer, ptr >>> 0, len));
-                    }}"
+                    "function trampoline{i}InputStr(ptr, len) {{ return {decode}; }}"
                 );
 
                 let err_ctx_new_fn = self
@@ -2901,44 +2909,29 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("missing realloc fn idx for error-context.debug-message")
                     .as_u32();
 
-                // Generate a string encoding function to match this trampoline that does appropriate encoding
-                match string_encoding {
+                let encode_intrinsic = match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => {
-                        let encode_fn = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
-                        uwriteln!(
-                            self.src.js,
-                            "function trampoline{i}OutputStr(s, outputPtr) {{
-                                 const memory = memory{memory_idx};
-                                 const reallocFn = realloc{realloc_fn_idx};
-                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
-                                 outputPtr >>>= 0;
-                                 new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
-                                 new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
-                             }}"
-                        );
+                        StringIntrinsic::Utf8Encode
                     }
                     wasmtime_environ::component::StringEncoding::Utf16 => {
-                        let encode_fn = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Encode));
-                        uwriteln!(
-                            self.src.js,
-                            "function trampoline{i}OutputStr(s, outputPtr) {{
-                                 const memory = memory{memory_idx};
-                                 const reallocFn = realloc{realloc_fn_idx};
-                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
-                                 outputPtr >>>= 0;
-                                 new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
-                                 new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
-                             }}"
-                        );
+                        StringIntrinsic::Utf16Encode
                     }
-                    enc => panic!(
-                        "unsupported string encoding [{enc:?}] for error-context.debug-message"
-                    ),
+                    wasmtime_environ::component::StringEncoding::CompactUtf16 => {
+                        StringIntrinsic::CompactUtf16Encode
+                    }
                 };
+                let encode_fn = self.bindgen.intrinsic(Intrinsic::String(encode_intrinsic));
+                uwriteln!(
+                    self.src.js,
+                    "function trampoline{i}OutputStr(s, outputPtr) {{
+                         const memory = memory{memory_idx};
+                         const {{ ptr, len }} = {encode_fn}(s, realloc{realloc_fn_idx}, memory);
+                         outputPtr >>>= 0;
+                         const view = new DataView(memory.buffer);
+                         view.setUint32(outputPtr, ptr, true);
+                         view.setUint32(outputPtr + 4, len, true);
+                     }}"
+                );
 
                 let options_obj = format!(
                     "{{callback:{callback}, postReturn: {post_return}, async: {async_}}}",
