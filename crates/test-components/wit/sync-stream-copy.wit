@@ -1,0 +1,5 @@
+package jco:test-components;
+world sync-stream-copy {
+  import payloads: func(values: stream<u32>);
+  export run: func() -> list<u32>;
+}
