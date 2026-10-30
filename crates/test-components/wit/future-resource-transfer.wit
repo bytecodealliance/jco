@@ -1,0 +1,17 @@
+package jco:test-components;
+
+interface future-resource-source {
+  resource item {
+    value: func() -> u32;
+  }
+  make: async func(value: u32, delayed: bool) -> future<item>;
+}
+world future-resource-callee {
+  import ready: async func();
+  import dropped: func(value: u32);
+  export future-resource-source;
+}
+world future-resource-caller {
+  import future-resource-source;
+  export run: async func(value: u32, delayed: bool) -> u32;
+}
