@@ -1,0 +1,22 @@
+package jco:test-components;
+
+world unresolved-callback-exit {
+  export exit-immediately: async func() -> u32;
+  export exit-after-yield: async func() -> u32;
+  export return-then-exit: async func() -> u32;
+}
+
+interface unresolved-exit-source {
+  consume: async func(input: stream);
+}
+
+world unresolved-exit-g2g-callee {
+  export unresolved-exit-source;
+}
+
+world unresolved-exit-g2g-caller {
+  import unresolved-exit-source;
+  import progress: func(value: u32);
+  export run: async func() -> u32;
+  export ok: func() -> u32;
+}
