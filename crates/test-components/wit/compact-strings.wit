@@ -1,0 +1,8 @@
+package jco:test-components;
+world compact-strings {
+  import payloads: func(values: stream<string>);
+  export error-message: func(case-index: u32) -> tuple<string, bool>;
+  export produce: func(case-index: u32) -> stream<string>;
+  export finish: func();
+  export consume: func(values: stream<string>) -> tuple<string, bool>;
+}
