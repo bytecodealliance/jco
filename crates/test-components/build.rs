@@ -13,6 +13,9 @@ use anyhow::{Context as _, Result};
 const HIGH_MEMORY_BASE: u32 = 1 << 31;
 
 fn main() -> Result<()> {
+    // thread.new-indirect resolves Rust function pointers through this table.
+    println!("cargo:rustc-link-arg-bin=thread_indices=--export-table");
+
     let bin_dir = Path::new("src/bin");
     println!("cargo:rerun-if-changed={}", bin_dir.display());
 

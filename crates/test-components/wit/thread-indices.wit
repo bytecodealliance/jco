@@ -1,0 +1,6 @@
+package jco:test-components;
+
+world thread-indices {
+  import progress: func(value: u32);
+  export run: func() -> tuple<u32, u32, u32>;
+}
