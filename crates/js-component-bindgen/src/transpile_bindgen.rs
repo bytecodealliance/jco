@@ -49,7 +49,8 @@ use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 use crate::intrinsics::{
-    AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs, render_intrinsics, runtime,
+    AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs, ext::ExternalRuntime,
+    render_intrinsics, runtime, runtime::IntrinsicRuntime,
 };
 use crate::names::{
     LocalNames, is_js_reserved_word, js_string_literal, maybe_quote_id, maybe_quote_member,
@@ -685,7 +686,7 @@ impl JsBindgen<'_> {
         let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
         let js_intrinsics = render_intrinsics(render_args.build());
         if let Some(base) = self.cm_runtime_es_module {
-            runtime::render_imports(&mut output, &self.all_intrinsics, base);
+            ExternalRuntime.render_imports(&mut output, &self.all_intrinsics, base);
         }
 
         // Write out instantiation
@@ -895,19 +896,21 @@ impl JsBindgen<'_> {
         files.push(&format!("{name}.js"), bytes);
     }
 
+    /// The runtime generating intrinsics for these bindings.
+    fn runtime(&self) -> &'static dyn IntrinsicRuntime {
+        runtime::select(self.cm_runtime_es_module.is_some())
+    }
+
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
-        intrinsic
-            .binding(self.cm_runtime_es_module.is_some())
+        runtime::binding(self.runtime(), intrinsic)
             .local_name()
             .to_string()
     }
 
     fn intrinsic_call(&mut self, intrinsic: Intrinsic, operands: &str) -> String {
         self.all_intrinsics.insert(intrinsic);
-        intrinsic
-            .binding(self.cm_runtime_es_module.is_some())
-            .call(operands)
+        self.runtime().call(intrinsic, operands)
     }
 
     /// Write out utility helpers/objects (available via esModule._util)

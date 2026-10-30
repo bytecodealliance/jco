@@ -271,7 +271,7 @@ fn normalize_transpile_config(config: &mut TranspileConfig) -> Result<()> {
     normalize_namespace_object_options(&mut config.opts)?;
     #[cfg(feature = "external-runtime")]
     if let Some(cm_runtime_es_module) = &config.cm_runtime_es_module {
-        intrinsics::runtime::module_specifier(cm_runtime_es_module, "runtime")?;
+        intrinsics::ext::module_specifier(cm_runtime_es_module, "runtime")?;
     }
     Ok(())
 }

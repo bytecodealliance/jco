@@ -10,9 +10,12 @@ use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
 pub(crate) mod runtime;
-use runtime::{
-    CM_RUNTIME_API_VERSION, RuntimeContext, RuntimeImport, TABLE_GET_CONTEXT, VERSION_LOCAL,
-};
+use runtime::IntrinsicRuntime;
+
+pub(crate) mod ext;
+use ext::{TABLE_GET_CONTEXT, VERSION_LOCAL};
+
+pub(crate) mod inline;
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -240,45 +243,6 @@ impl Intrinsic {
     pub const WithGlobalCurrentThreadMetaFnAsync: Self = Self::WithGlobalCurrentTaskMetaFnAsync;
     /// Cooperative-thread alias for [`Self::ClearGlobalCurrentTaskMetaFn`].
     pub const ClearGlobalCurrentThreadMetaFn: Self = Self::ClearGlobalCurrentTaskMetaFn;
-}
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum IntrinsicBinding {
-    Inline {
-        local_name: &'static str,
-    },
-    Runtime {
-        local_name: &'static str,
-        import: RuntimeImport,
-    },
-}
-
-impl IntrinsicBinding {
-    pub(crate) fn local_name(self) -> &'static str {
-        match self {
-            Self::Inline { local_name } | Self::Runtime { local_name, .. } => local_name,
-        }
-    }
-
-    /// Render a call, inserting only the context required by this operation.
-    pub(crate) fn call(self, operands: &str) -> String {
-        let name = self.local_name();
-        match self {
-            Self::Runtime {
-                import:
-                    RuntimeImport {
-                        context: Some(context),
-                        ..
-                    },
-                ..
-            } => {
-                let context = context.local_name();
-                let separator = if operands.is_empty() { "" } else { ", " };
-                format!("{name}({context}{separator}{operands})")
-            }
-            _ => format!("{name}({operands})"),
-        }
-    }
 }
 
 macro_rules! impl_from_intrinsic {
@@ -2824,12 +2788,15 @@ impl RenderIntrinsicsArgs<'_> {
         }
     }
 
+    /// The runtime generating intrinsics for these arguments.
+    pub(crate) fn runtime(&self) -> &'static dyn IntrinsicRuntime {
+        runtime::select(self.external_runtime_enabled())
+    }
+
     pub(crate) fn intrinsic_call(&self, intrinsic: impl Into<Intrinsic>, operands: &str) -> String {
         let intrinsic = intrinsic.into();
         self.require_intrinsic(intrinsic);
-        intrinsic
-            .binding(self.external_runtime_enabled())
-            .call(operands)
+        self.runtime().call(intrinsic, operands)
     }
 
     /// Retrieve an intrinsic's name and register it as a dependency of the
@@ -2840,9 +2807,7 @@ impl RenderIntrinsicsArgs<'_> {
             .lock()
             .expect("intrinsic dependency collector lock should not be poisoned")
             .insert(intrinsic);
-        intrinsic
-            .binding(self.external_runtime_enabled())
-            .local_name()
+        runtime::binding(self.runtime(), intrinsic).local_name()
     }
 
     fn take_discovered_intrinsics(&self) -> BTreeSet<Intrinsic> {
@@ -2862,6 +2827,7 @@ pub fn render_intrinsics(mut args: RenderIntrinsicsArgs) -> Source {
 }
 
 fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
+    let runtime = args.runtime();
     let mut pending = args.intrinsics.clone();
     let mut rendered = BTreeMap::new();
     let mut dependencies = BTreeMap::new();
@@ -2873,12 +2839,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
 
         debug_assert!(args.take_discovered_intrinsics().is_empty());
         let mut source = Source::default();
-        if matches!(
-            intrinsic.binding(args.external_runtime_enabled()),
-            IntrinsicBinding::Inline { .. }
-        ) {
-            intrinsic.render(&mut source, args);
-        }
+        runtime::render(runtime, intrinsic, &mut source, args);
         let discovered = args.take_discovered_intrinsics();
         for dependency in &discovered {
             if !rendered.contains_key(dependency) {
@@ -2891,31 +2852,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
     }
 
     let mut output = Source::default();
-    if uses_external_runtime(args.intrinsics, args.external_runtime_enabled()) {
-        uwriteln!(
-            output,
-            r#"
-                if ({VERSION_LOCAL} !== {CM_RUNTIME_API_VERSION}) {{
-                    throw new Error(`incompatible Jco JavaScript Component Model runtime API: requested {CM_RUNTIME_API_VERSION}, supported ${{{VERSION_LOCAL}}}`);
-                }}
-            "#,
-        );
-        let mut contexts = BTreeSet::new();
-        for intrinsic in args.intrinsics.iter() {
-            if let IntrinsicBinding::Runtime {
-                import:
-                    RuntimeImport {
-                        context: Some(context),
-                        ..
-                    },
-                ..
-            } = intrinsic.binding(true)
-                && contexts.insert(context.local_name())
-            {
-                context.render(&mut output);
-            }
-        }
-    }
+    runtime.render_prelude(args.intrinsics, &mut output);
     if args
         .intrinsics
         .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
@@ -3031,31 +2968,6 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 ];
 
 impl Intrinsic {
-    pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
-        match self {
-            Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
-                IntrinsicBinding::Runtime {
-                    local_name: self.name(),
-                    import: RuntimeImport {
-                        suffix: "intrinsics/resource",
-                        export: "tableGet",
-                        context: Some(RuntimeContext::ResourceTableGet),
-                    },
-                }
-            }
-            _ => IntrinsicBinding::Inline {
-                local_name: self.name(),
-            },
-        }
-    }
-
-    pub(crate) fn is_runtime_provided(&self, external_runtime: bool) -> bool {
-        matches!(
-            self.binding(external_runtime),
-            IntrinsicBinding::Runtime { .. }
-        )
-    }
-
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         // Every intrinsic is bound in the generated module's scope, so each
         // name is reserved against the local names of exports and imports (an
@@ -3275,13 +3187,4 @@ impl Intrinsic {
             self.compile_conditional_suspending_js()
         )
     }
-}
-
-pub(crate) fn uses_external_runtime(
-    intrinsics: &BTreeSet<Intrinsic>,
-    external_runtime: bool,
-) -> bool {
-    intrinsics
-        .iter()
-        .any(|intrinsic| intrinsic.is_runtime_provided(external_runtime))
 }
