@@ -53,6 +53,9 @@ suite(`p2 http`, async () => {
             res.end();
         }).listen(port); // transpile component expects this port
 
+        // Keep the response header deterministic across Node versions.
+        server.keepAliveTimeout = 5_000;
+
         const runtimeName = 'wasi-http-proxy';
         try {
             // componentize
