@@ -462,6 +462,7 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::GetFutureEnd => {
+                let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_future_end_fn = self.name();
@@ -494,11 +495,11 @@ impl AsyncFutureIntrinsic {
                             throw new TypeError("must specify either waitable idx or handle to retrieve future");
                         }}
 
-                        if (!futureEnd) {{
+                        if (!(futureEnd instanceof {future_end_class})) {{
                             throw new {runtime_error_class}(`missing future end (tableIdx [${{tableIdx}}], handle [${{futureEndHandle}}], waitableIdx [${{futureEndWaitableIdx}}])`);
                         }}
-                        if (tableIdx && futureEnd.futureTableIdx() !== tableIdx) {{
-                            throw new Error(`future end table idx [${{futureEnd.futureTableIdx()}}] does not match [${{tableIdx}}]`);
+                        if (futureEnd.futureTableIdx() !== tableIdx) {{
+                            throw new {runtime_error_class}(`future end table idx [${{futureEnd.futureTableIdx()}}] does not match [${{tableIdx}}]`);
                         }}
 
                         return futureEnd;
@@ -553,6 +554,9 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::RemoveFutureEndFromTable => {
+                let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let remove_future_end_from_table_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_future_table_map =
@@ -577,8 +581,8 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
 
                         const futureEnd = cstate.handles.get(futureWaitableIdx);
-                        if (!futureEnd) {{
-                            throw new Error(`missing future end (handle [${{futureWaitableIdx}}], table [${{tableIdx}}])`);
+                        if (!(futureEnd instanceof {future_end_class}) || futureEnd.futureTableIdx() !== tableIdx) {{
+                            throw new {runtime_error_class}('invalid future end for table [' + tableIdx + ']');
                         }}
                         const handle = futureEnd.handle();
 
@@ -1705,7 +1709,7 @@ impl AsyncFutureIntrinsic {
                             throw new {runtime_error_class}('invalid future end, expected value of type [{future_end_class}]');
                         }}
 
-                        if (!futureEnd.isCopying()) {{ throw new Error('future end is not copying, cannot cancel'); }}
+                        if (!futureEnd.isCopying()) {{ throw new {runtime_error_class}('future end is not copying, cannot cancel'); }}
 
                         futureEnd.setCopyState({future_end_class}.CopyState.CANCELLING_COPY);
 

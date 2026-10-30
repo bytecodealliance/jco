@@ -648,6 +648,9 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::SubtaskDrop => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let subtask_drop_fn = render_args.require_intrinsic(Self::SubtaskDrop);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -660,11 +663,14 @@ impl AsyncTaskIntrinsic {
                         {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentIdx, subtaskWaitableRep }});
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
+                        if (!cstate.mayLeave) {{ throw new {runtime_error_class}('component is not marked as may leave, cannot drop subtask'); }}
 
-                        const subtask = cstate.handles.remove(subtaskWaitableRep);
-                        if (!subtask) {{ throw new Error('missing/invalid subtask specified for drop in component instance'); }}
+                        const subtask = cstate.handles.get(subtaskWaitableRep);
+                        if (!(subtask instanceof {subtask_class})) {{
+                            throw new {runtime_error_class}('invalid subtask handle for drop');
+                        }}
 
+                        cstate.handles.remove(subtaskWaitableRep);
                         subtask.drop();
                     }}
                 "#
@@ -986,6 +992,8 @@ impl AsyncTaskIntrinsic {
                 ));
             }
             Self::SubtaskCancel => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let subtask_cancel_fn = render_args.require_intrinsic(Self::SubtaskCancel);
                 let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
@@ -1006,17 +1014,17 @@ impl AsyncTaskIntrinsic {
                         {debug_log_fn}('[{subtask_cancel_fn}()] args', {{ componentIdx, isAsync, subtaskRep }});
 
                         const state = {get_or_create_async_state_fn}(componentIdx);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot cancel subtask'); }}
+                        if (!state.mayLeave) {{ throw new {runtime_error_class}('component instance is not marked as may leave, cannot cancel subtask'); }}
 
                         const subtask = state.handles.get(subtaskRep);
                         if (!(subtask instanceof {subtask_class})) {{
-                            throw new Error('missing/invalid subtask [' + subtaskRep + '] specified for cancel in component instance');
+                            throw new {runtime_error_class}('missing/invalid subtask [' + subtaskRep + '] specified for cancel in component instance');
                         }}
                         if (subtask.resolveDelivered()) {{
-                            throw new Error('`subtask.cancel` called after terminal status delivered');
+                            throw new {runtime_error_class}('`subtask.cancel` called after terminal status delivered');
                         }}
                         if (!isAsync && subtask.waitable().isInSet()) {{
-                            throw new Error('cannot synchronously cancel a subtask that is in a waitable set');
+                            throw new {runtime_error_class}('cannot synchronously cancel a subtask that is in a waitable set');
                         }}
 
                         const finishCancel = () => {{
@@ -1031,7 +1039,7 @@ impl AsyncTaskIntrinsic {
 
                         if (subtask.cancellationRequested()) {{
                             if (!slowOnly) {{
-                                throw new Error('cancellation has already been requested for this subtask');
+                                throw new {runtime_error_class}('cancellation has already been requested for this subtask');
                             }}
                             if (subtask.isResolved()) {{ return finishCancel(); }}
 
@@ -2691,6 +2699,8 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::AsyncSubtaskClass => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -3140,7 +3150,7 @@ impl AsyncTaskIntrinsic {
                             }});
                             if (!this.#waitable) {{ throw new Error('missing/invalid inner waitable'); }}
                             if (!this.resolveDelivered()) {{
-                                throw new Error('cannot drop a subtask which has not yet resolved');
+                                throw new {runtime_error_class}('cannot drop a subtask which has not yet resolved');
                             }}
                             if (this.#waitable) {{ this.#waitable.drop() }}
                             this.#dropped = true;
