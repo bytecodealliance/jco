@@ -1409,6 +1409,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let post_return_trap_fn = render_args
                     .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::PostReturnTrap));
+                let record_trap_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::RecordTrap));
                 let future_value_class = render_args.require_intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureValueClass,
                 ));
@@ -1720,12 +1722,17 @@ impl AsyncTaskIntrinsic {
                             return thread;
                         }}
 
+                        #checkThreadExit() {{
+                            if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {{
+                                const err = new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                                throw this.#componentIdx === -1 ? err : {record_trap_fn}(this.#componentIdx, err);
+                            }}
+                        }}
+
                         // Unregisters a thread that has finished running
                         // (`Task.unregister_thread`), freeing its instance-scoped id.
                         removeThread(thread) {{
-                            if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {{
-                                throw new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
-                            }}
+                            this.#checkThreadExit();
                             this.settleCompletion();
                             if (this.#componentIdx !== -1) {{
                                 const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
@@ -2434,6 +2441,10 @@ impl AsyncTaskIntrinsic {
                             this.endFirstSlice();
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
+                            // Validate before publishing exit or running its handlers.
+                            // Otherwise a failed exit leaves #exited true, so the driver
+                            // cannot finish rejection cleanup and settle the host call.
+                            this.#checkThreadExit();
                             this.validateResourceBorrowScope();
 
                             // Host (-1) tasks have no component instance (and so no async
