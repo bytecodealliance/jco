@@ -15,6 +15,12 @@ pub enum StringIntrinsic {
 
     Utf16Encode,
 
+    /// Decode Latin-1 bytes or tagged UTF-16 code units from guest memory.
+    CompactUtf16Decode,
+
+    /// Allocate and encode a string using the compact Latin-1/UTF-16 ABI.
+    CompactUtf16Encode,
+
     Utf16EncodeAsync,
 
     /// Copy UTF-16 code units between two equal-length `Uint16Array`s,
@@ -47,6 +53,8 @@ impl StringIntrinsic {
         [
             Self::Utf16Decoder.name(),
             Self::Utf16Encode.name(),
+            Self::CompactUtf16Decode.name(),
+            Self::CompactUtf16Encode.name(),
             Self::Utf16EncodeAsync.name(),
             Self::Utf16ValidatingCopy.name(),
             Self::GlobalTextDecoderUtf8.name(),
@@ -63,6 +71,8 @@ impl StringIntrinsic {
         match self {
             Self::Utf16Decoder => "utf16Decoder",
             Self::Utf16Encode => "_utf16AllocateAndEncode",
+            Self::CompactUtf16Decode => "_compactUtf16Decode",
+            Self::CompactUtf16Encode => "_compactUtf16AllocateAndEncode",
             Self::Utf16EncodeAsync => "_utf16AllocateAndEncodeAsync",
             Self::Utf16ValidatingCopy => "_utf16ValidatingCopy",
             Self::GlobalTextDecoderUtf8 => "TEXT_DECODER_UTF8",
@@ -84,6 +94,55 @@ impl StringIntrinsic {
                 output,
                 "const {name} = new TextDecoder('utf-16', {{ fatal: true, ignoreBOM: true }});"
             ),
+
+            Self::CompactUtf16Decode => {
+                let utf16_decoder = render_args.require_intrinsic(Self::Utf16Decoder);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}(memory, ptr, taggedLength) {{
+                        ptr >>>= 0;
+                        taggedLength >>>= 0;
+                        if (ptr % 2 !== 0) {{ throw new RangeError('unaligned compact UTF-16 string'); }}
+                        if (taggedLength & 0x80000000) {{
+                            return {utf16_decoder}.decode(new Uint8Array(memory.buffer, ptr, (taggedLength & 0x7fffffff) * 2));
+                        }}
+                        const bytes = new Uint8Array(memory.buffer, ptr, taggedLength);
+                        let value = '';
+                        // TextDecoder('latin1') uses Windows-1252, which changes
+                        // bytes 0x80..0x9f. The ABI maps every byte directly.
+                        for (let i = 0; i < bytes.length; i += 0x8000) {{
+                            value += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+                        }}
+                        return value;
+                    }}
+                "#
+                );
+            }
+
+            Self::CompactUtf16Encode => {
+                let utf16_encode = render_args.require_intrinsic(Self::Utf16Encode);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}(str, realloc, memory) {{
+                        if (typeof str !== 'string') {{ throw new TypeError('expected a string'); }}
+                        if (str.length >= 0x80000000) {{ throw new RangeError('compact UTF-16 string is too long'); }}
+                        for (let i = 0; i < str.length; i++) {{
+                            if (str.charCodeAt(i) > 0xff) {{
+                                const encoded = {utf16_encode}(str, realloc, memory);
+                                return {{ ...encoded, len: (encoded.len | 0x80000000) >>> 0 }};
+                            }}
+                        }}
+                        const ptr = realloc(0, 0, 2, str.length) >>> 0;
+                        if (ptr % 2 !== 0) {{ throw new RangeError('unaligned compact UTF-16 allocation'); }}
+                        const bytes = new Uint8Array(memory.buffer, ptr, str.length);
+                        for (let i = 0; i < str.length; i++) {{ bytes[i] = str.charCodeAt(i); }}
+                        return {{ ptr, len: str.length }};
+                    }}
+                "#
+                );
+            }
 
             Self::Utf16Encode | Self::Utf16EncodeAsync => {
                 let is_le = render_args.require_intrinsic(Intrinsic::IsLE);
