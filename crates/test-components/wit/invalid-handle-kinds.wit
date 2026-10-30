@@ -1,0 +1,9 @@
+package jco:test-components;
+
+world invalid-handle-kinds {
+  // Supplies concrete stream/future types for the raw intrinsic probes. The
+  // function itself is never called; only its associated ABI intrinsics are.
+  import payloads: func(a: stream<u8>, b: future<u32>, c: stream<u32>, d: future<u64>);
+  import fail: func();
+  export run: func(case-index: u32);
+}
