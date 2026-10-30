@@ -1068,7 +1068,10 @@ impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
 impl<'a> Instantiator<'a, '_> {
     fn stream_elem_meta_js(&mut self, table_idx: TypeStreamTableIndex) -> String {
         let stream_ty = &self.types[self.types[table_idx].ty];
-        let payload = stream_ty.payload;
+        self.async_payload_meta_js(stream_ty.payload)
+    }
+
+    fn async_payload_meta_js(&mut self, payload: Option<InterfaceType>) -> String {
         let payload_ty_name_js = payload
             .map(|ty| format!("'{ty:?}'"))
             .unwrap_or_else(|| "null".into());
@@ -2544,67 +2547,8 @@ impl<'a> Instantiator<'a, '_> {
                 let future_table_idx = ty.as_u32();
                 let component_idx = instance.as_u32();
 
-                // Build element metadata
-                let future_table_ty = &self.types[*ty];
-                let future_ty = &self.types[future_table_ty.ty];
-                let (
-                    payload_size32,
-                    payload_align32,
-                    payload_flat_count_js,
-                    payload_lift_fn_js,
-                    payload_lower_fn_js,
-                    is_borrowed,
-                    is_none_type,
-                    is_numeric_type,
-                    is_async_value,
-                ) = match future_ty.payload {
-                    None => (
-                        0,
-                        0,
-                        "0".into(),
-                        "() => {{ throw new Error('empty future payload'); }}".into(),
-                        "() => {{ throw new Error('empty future payload'); }}".into(),
-                        false,
-                        true,
-                        false,
-                        false,
-                    ),
-                    Some(payload_ty) => {
-                        let cabi = self.types.canonical_abi(&payload_ty);
-                        (
-                            cabi.size32,
-                            cabi.align32,
-                            cabi.flat_count
-                                .map(|v| format!("{v}"))
-                                .unwrap_or_else(|| "null".into()),
-                            gen_flat_lift_fn_js_expr(self, &payload_ty, &None),
-                            gen_flat_lower_fn_js_expr(self, &payload_ty, &None),
-                            matches!(payload_ty, InterfaceType::Borrow(_)),
-                            false,
-                            matches!(
-                                payload_ty,
-                                InterfaceType::U8
-                                    | InterfaceType::U16
-                                    | InterfaceType::U32
-                                    | InterfaceType::U64
-                                    | InterfaceType::S8
-                                    | InterfaceType::S16
-                                    | InterfaceType::S32
-                                    | InterfaceType::S64
-                                    | InterfaceType::Float32
-                                    | InterfaceType::Float64
-                            ),
-                            matches!(
-                                payload_ty,
-                                InterfaceType::Stream(_) | InterfaceType::Future(_)
-                            ),
-                        )
-                    }
-                };
-                let payload_ty_name_js = future_ty
-                    .payload
-                    .map(|iface_ty| format!("'{iface_ty:?}'"))
-                    .unwrap_or_else(|| "null".into());
+                let elem_meta_js =
+                    self.async_payload_meta_js(self.types[self.types[*ty].ty].payload);
 
                 uwriteln!(
                     self.src.js,
@@ -2612,18 +2556,7 @@ impl<'a> Instantiator<'a, '_> {
                       const trampoline{i} = {future_new_fn}.bind(null, {{
                           componentIdx: {component_idx},
                           futureTableIdx: {future_table_idx},
-                          elemMeta: {{
-                              liftFn: {payload_lift_fn_js},
-                              lowerFn: {payload_lower_fn_js},
-                              payloadTypeName: {payload_ty_name_js},
-                              isNone: {is_none_type},
-                              isNumeric: {is_numeric_type},
-                              isBorrowed: {is_borrowed},
-                              isAsyncValue: {is_async_value},
-                              flatCount: {payload_flat_count_js},
-                              align32: {payload_align32},
-                              size32: {payload_size32},
-                          }},
+                          elemMeta: {elem_meta_js},
                       }});
                     "#,
                 );
@@ -2680,6 +2613,8 @@ impl<'a> Instantiator<'a, '_> {
                     "post_return should not be present for future intrinsic"
                 );
 
+                let elem_meta_js =
+                    self.async_payload_meta_js(self.types[self.types[*ty].ty].payload);
                 let future_table_idx = ty.as_u32();
                 let component_idx = instance.as_u32();
                 let (memory_idx_js, get_memory_fn_js) = match memory {
@@ -2707,6 +2642,7 @@ impl<'a> Instantiator<'a, '_> {
                         getReallocFn: {get_realloc_fn_js},
                         stringEncoding: {string_encoding},
                         futureTableIdx: {future_table_idx},
+                        elemMeta: {elem_meta_js},
                         isAsync: {async_},
                     }}"#,
                 );

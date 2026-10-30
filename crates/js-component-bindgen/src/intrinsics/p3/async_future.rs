@@ -902,7 +902,9 @@ impl AsyncFutureIntrinsic {
                                   throw new {runtime_error_class}('cannot read from and write to intra-component future');
                               }}
 
-                              buffer.write(meta.buffer.read(1));
+                              const transferResources = buffer.componentIdx() !== -1
+                                  && meta.buffer.componentIdx() !== -1;
+                              buffer.write(meta.buffer.read(1, {{ transferResources }}), {{ transferResources }});
                               this.resetAndNotifyPending({future_end_class}.CopyResult.COMPLETED);
                               onCopyDoneFn({future_end_class}.CopyResult.COMPLETED);
                           }}
@@ -947,7 +949,9 @@ impl AsyncFutureIntrinsic {
                                   throw new {runtime_error_class}('cannot read from and write to intra-component future');
                               }}
 
-                              meta.buffer.write(buffer.read(1));
+                              const transferResources = buffer.componentIdx() !== -1
+                                  && meta.buffer.componentIdx() !== -1;
+                              meta.buffer.write(buffer.read(1, {{ transferResources }}), {{ transferResources }});
                               this.resetAndNotifyPending({future_end_class}.CopyResult.COMPLETED);
                               onCopyDoneFn({future_end_class}.CopyResult.COMPLETED);
                           }}
@@ -975,17 +979,13 @@ impl AsyncFutureIntrinsic {
                                       data,
                                   }} = args;
 
-                                  if (this.#elemMeta.stringEncoding === undefined && stringEncoding) {{
-                                      this.#elemMeta.stringEncoding = stringEncoding;
-                                  }}
+                                  const elemMeta = {{
+                                      ...(args.elemMeta ?? this.#elemMeta),
+                                      stringEncoding: stringEncoding ?? this.#elemMeta.stringEncoding,
+                                      getReallocFn: args.getReallocFn ?? this.#elemMeta.getReallocFn,
+                                  }};
 
-                                  if (args.getReallocFn && this.#elemMeta.getReallocFn === undefined) {{
-                                     this.#elemMeta.getReallocFn = args.getReallocFn;
-                                  }}
-
-                                  const elemMeta = this.#elemMeta;
-
-                                  if (this.#elemMeta.isBorrowed) {{
+                                  if (elemMeta.isBorrowed) {{
                                       throw new Error('cannot call future.read on a borrow');
                                   }}
 
@@ -1000,7 +1000,7 @@ impl AsyncFutureIntrinsic {
                                           count: 1,
                                           isReadable: this.isWritable(),
                                           isWritable: this.isReadable(),
-                                          elemMeta: this.#elemMeta,
+                                          elemMeta,
                                       }});
                                       buffer = createBufferRes.buffer;
                                   }}
@@ -1076,17 +1076,13 @@ impl AsyncFutureIntrinsic {
                                       data,
                                   }} = args;
 
-                                  if (this.#elemMeta.stringEncoding === undefined && stringEncoding) {{
-                                      this.#elemMeta.stringEncoding = stringEncoding;
-                                  }}
+                                  const elemMeta = {{
+                                      ...(args.elemMeta ?? this.#elemMeta),
+                                      stringEncoding: stringEncoding ?? this.#elemMeta.stringEncoding,
+                                      getReallocFn: args.getReallocFn ?? this.#elemMeta.getReallocFn,
+                                  }};
 
-                                  if (args.getReallocFn && this.#elemMeta.getReallocFn === undefined) {{
-                                      this.#elemMeta.getReallocFn = getReallocFn;
-                                  }}
-
-                                  const elemMeta = this.#elemMeta;
-
-                                  if (this.#elemMeta.isBorrowed) {{
+                                  if (elemMeta.isBorrowed) {{
                                       throw new Error('cannot call future.read on a borrow');
                                   }}
 
@@ -1101,7 +1097,7 @@ impl AsyncFutureIntrinsic {
                                           count: 1,
                                           isReadable: this.isWritable(),
                                           isWritable: this.isReadable(),
-                                          elemMeta: this.#elemMeta,
+                                          elemMeta,
                                       }});
                                       buffer = createBufferRes.buffer;
                                   }}
@@ -1566,6 +1562,7 @@ impl AsyncFutureIntrinsic {
                         const {{
                             componentIdx,
                             futureTableIdx,
+                            elemMeta,
                             memoryIdx,
                             getMemoryFn,
                             reallocIdx,
@@ -1619,6 +1616,7 @@ impl AsyncFutureIntrinsic {
                         futureEnd.{guest_op_fn}({{
                             componentIdx,
                             stringEncoding,
+                            elemMeta,
                             memory: getMemoryFn?.(),
                             realloc: getReallocFn?.(),
                             getReallocFn,
