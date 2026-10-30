@@ -2194,8 +2194,8 @@ impl AsyncTaskIntrinsic {
                                 ? cstate.threads.get({get_global_current_thread_meta_fn}(this.#componentIdx).threadID)
                                 : this.defaultThread();
                             if (!thread || thread.task() !== this) {{ throw new Error('invalid current thread for wait'); }}
-                            // A blocking built-in retains automatic backpressure for a
-                            // synchronous guest slice; explicit thread.* switches release it.
+                            // Suspending a core Wasm stack retains the task's exclusive
+                            // lock. Only a callback return releases it between slices.
                             return thread.suspend({{ ...opts, releaseLock: false }});
                         }}
 
@@ -2501,6 +2501,10 @@ impl AsyncTaskIntrinsic {
                             // inside the calling guest slice, which already holds the
                             // lock; only tasks that execute guest slices need it.
                             if (!this.#callingWasmExport) {{ return false; }}
+                            // Automatic backpressure only applies to async function
+                            // types. A sync-typed call may run ready callback threads
+                            // before returning, so holding this lock would deadlock it.
+                            if (!this.#funcTypeIsAsync) {{ return false; }}
                             // A sync-lifted callee cannot be reentered until the whole
                             // stackful call returns. This is the Component Model's
                             // automatic-backpressure rule for async-lowered calls.
@@ -2648,7 +2652,7 @@ impl AsyncTaskIntrinsic {
                             const task = this.#task;
                             task.endFirstSlice();
                             task.settleCompletion();
-                            const {{ cancellable, readyFn, releaseLock = true }} = opts;
+                            const {{ cancellable, readyFn, releaseLock = false }} = opts;
                             if (task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
                             const reacquireLock = releaseLock && task.needsExclusiveLock() && cstate.exclusivelyLockedBy(task.id());
                             if (reacquireLock) {{ cstate.exclusiveRelease(task.id()); }}
@@ -4103,6 +4107,7 @@ impl AsyncTaskIntrinsic {
                             // what permits ordinary synchronous reentrance.
                             callingWasmExport: !!calleeIsAsync,
                         }});
+                        newTask.setFuncTypeIsAsync(!!calleeIsAsync);
 
                         subtask.setChildTask(newTask);
                         newTask.setParentSubtask(subtask);
