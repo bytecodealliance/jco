@@ -2457,9 +2457,19 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional_suspending_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending3I32ToI32Fn);
+                    let guard_trap_fn = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional_suspending_fn}(
+                            {guard_trap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
+                            {suspending_wrap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                        );"#,
                     );
                 }
             }
