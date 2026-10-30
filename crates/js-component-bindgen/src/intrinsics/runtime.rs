@@ -1,258 +1,253 @@
-//! Named external runtime imports. Keep public suffix selection and base resolution here.
+//! Contracts for intrinsic runtimes. A runtime decides how each intrinsic is made
+//! available to generated bindings: rendered inline or imported from elsewhere.
+//!
+//! [`IntrinsicRuntime`] lists every intrinsic family as a [`Provides`] supertrait, so
+//! a runtime that does not account for a family fails to compile.
 
-use anyhow::{Result, bail, ensure};
+use std::collections::BTreeSet;
 
-use super::{Intrinsic, IntrinsicBinding};
-use crate::{names::js_string_literal, source::Source, uwriteln};
-use std::collections::{BTreeMap, BTreeSet};
-use std::fmt::Write;
+use super::component::ComponentIntrinsic;
+use super::conversion::ConversionIntrinsic;
+use super::ext::ExternalRuntime;
+use super::inline::InlineRuntime;
+use super::js_helper::JsHelperIntrinsic;
+use super::lift::LiftIntrinsic;
+use super::lower::LowerIntrinsic;
+use super::p3::async_future::AsyncFutureIntrinsic;
+use super::p3::async_stream::AsyncStreamIntrinsic;
+use super::p3::async_task::AsyncTaskIntrinsic;
+use super::p3::error_context::ErrCtxIntrinsic;
+use super::p3::host::HostIntrinsic;
+use super::p3::waitable::WaitableIntrinsic;
+use super::resource::ResourceIntrinsic;
+use super::string::StringIntrinsic;
+use super::webidl::WebIdlIntrinsic;
+use super::{Intrinsic, RenderIntrinsicsArgs};
+use crate::source::Source;
 
-pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
-pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
-pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
-
+/// How generated code refers to an intrinsic.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum RuntimeContext {
-    ResourceTableGet,
+pub(crate) enum IntrinsicBinding {
+    /// Rendered into the generated module.
+    Inline { local_name: &'static str },
+    /// Imported by the runtime; nothing is rendered for it.
+    Imported { local_name: &'static str },
 }
 
-impl RuntimeContext {
+impl IntrinsicBinding {
     pub(crate) fn local_name(self) -> &'static str {
         match self {
-            Self::ResourceTableGet => TABLE_GET_CONTEXT,
-        }
-    }
-
-    pub(crate) fn render(self, output: &mut Source) {
-        match self {
-            Self::ResourceTableGet => uwriteln!(
-                output,
-                "const {TABLE_GET_CONTEXT} = {{ RuntimeError: WebAssembly.RuntimeError }};"
-            ),
+            Self::Inline { local_name } | Self::Imported { local_name } => local_name,
         }
     }
 }
 
-/// A named call export. Context requirements are separate from the public name.
-/// Add value/constructor/state descriptors when such exports are implemented.
+/// Top-level [`Intrinsic`] variants that do not belong to a family enum.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) struct RuntimeImport {
-    pub(crate) suffix: &'static str,
-    pub(crate) export: &'static str,
-    pub(crate) context: Option<RuntimeContext>,
+pub(crate) struct BaseIntrinsic(Intrinsic);
+
+impl From<BaseIntrinsic> for Intrinsic {
+    fn from(intrinsic: BaseIntrinsic) -> Self {
+        intrinsic.0
+    }
 }
 
-/// Resolve an informal runtime package/directory contract without consulting the filesystem.
-pub(crate) fn module_specifier(base: &str, suffix: &str) -> Result<String> {
-    ensure!(
-        !base.trim().is_empty() && !base.chars().any(char::is_control),
-        "cmRuntimeEsModule must be a non-empty base specifier without control characters"
-    );
-    let directory_path = base == "."
-        || base == ".."
-        || base.starts_with("./")
-        || base.starts_with("../")
-        || base.starts_with('/');
-    let url = if !directory_path
-        && let Some((scheme, _)) = base
-            .split_once(':')
-            .filter(|(prefix, _)| !prefix.contains('/'))
-    {
-        ensure!(
-            ["file", "http", "https"]
-                .iter()
-                .any(|supported| scheme.eq_ignore_ascii_case(supported))
-                && base.starts_with(&format!("{scheme}://")),
-            "cmRuntimeEsModule has an unsupported URL scheme; use a package, directory, or file/HTTP(S) URL (including file URLs on Windows)"
-        );
-        true
-    } else {
-        false
+/// Availability of one intrinsic family `F`.
+pub(crate) trait Provides<F> {
+    fn binding(&self, intrinsic: F) -> IntrinsicBinding;
+
+    /// Render `intrinsic` if this runtime generates it; dependencies are reported
+    /// through [`RenderIntrinsicsArgs::require_intrinsic`].
+    fn render(&self, intrinsic: F, output: &mut Source, args: &RenderIntrinsicsArgs<'_>);
+}
+
+/// A complete intrinsic runtime. The supertraits are the intrinsic families every
+/// runtime must provide.
+pub(crate) trait IntrinsicRuntime:
+    Provides<BaseIntrinsic>
+    + Provides<JsHelperIntrinsic>
+    + Provides<WebIdlIntrinsic>
+    + Provides<ConversionIntrinsic>
+    + Provides<StringIntrinsic>
+    + Provides<ResourceIntrinsic>
+    + Provides<ErrCtxIntrinsic>
+    + Provides<AsyncTaskIntrinsic>
+    + Provides<WaitableIntrinsic>
+    + Provides<LiftIntrinsic>
+    + Provides<LowerIntrinsic>
+    + Provides<AsyncStreamIntrinsic>
+    + Provides<AsyncFutureIntrinsic>
+    + Provides<ComponentIntrinsic>
+    + Provides<HostIntrinsic>
+{
+    /// Code emitted once before any intrinsic, given the full set of intrinsics.
+    fn render_prelude(&self, _intrinsics: &BTreeSet<Intrinsic>, _output: &mut Source) {}
+
+    /// Render a call to `intrinsic`. Runtimes may add implicit leading operands.
+    fn call(&self, intrinsic: Intrinsic, operands: &str) -> String {
+        format!("{}({operands})", binding(self, intrinsic).local_name())
+    }
+}
+
+/// Dispatches an [`Intrinsic`] to the [`Provides`] impl for its family.
+macro_rules! dispatch {
+    ($intrinsic:expr, |$i:ident| $call:expr) => {
+        match $intrinsic {
+            Intrinsic::JsHelper($i) => $call,
+            Intrinsic::WebIdl($i) => $call,
+            Intrinsic::Conversion($i) => $call,
+            Intrinsic::String($i) => $call,
+            Intrinsic::Resource($i) => $call,
+            Intrinsic::ErrCtx($i) => $call,
+            Intrinsic::AsyncTask($i) => $call,
+            Intrinsic::Waitable($i) => $call,
+            Intrinsic::Lift($i) => $call,
+            Intrinsic::Lower($i) => $call,
+            Intrinsic::AsyncStream($i) => $call,
+            Intrinsic::AsyncFuture($i) => $call,
+            Intrinsic::Component($i) => $call,
+            Intrinsic::Host($i) => $call,
+            base => {
+                let $i = BaseIntrinsic(base);
+                $call
+            }
+        }
     };
-    let directory = url || directory_path;
-    let base = base.strip_suffix('/').unwrap_or(base);
-    if directory {
-        ensure!(
-            !base.contains(['?', '#']),
-            "cmRuntimeEsModule directory bases must not contain a query or fragment"
-        );
-        if [".js", ".mjs", ".cjs"]
-            .iter()
-            .any(|ext| base.ends_with(ext))
-        {
-            bail!(
-                "cmRuntimeEsModule now identifies a runtime directory base, not a provider file; replace the file specifier with a directory containing runtime.js and intrinsics/*.js"
-            );
-        }
-    }
-    Ok(format!(
-        "{base}/{suffix}{}",
-        if directory { ".js" } else { "" }
-    ))
 }
 
-/// Called after dependency discovery, so transitive inline calls also get their imports.
-pub(crate) fn render_imports(output: &mut Source, intrinsics: &BTreeSet<Intrinsic>, base: &str) {
-    let mut modules = BTreeMap::<&str, BTreeSet<(&str, &str)>>::new();
-    for intrinsic in intrinsics {
-        if let IntrinsicBinding::Runtime { local_name, import } = intrinsic.binding(true) {
-            modules
-                .entry(import.suffix)
-                .or_default()
-                .insert((import.export, local_name));
-        }
-    }
-    if modules.is_empty() {
-        return;
-    }
-    modules
-        .entry("runtime")
-        .or_default()
-        .insert(("CM_RUNTIME_API_VERSION", VERSION_LOCAL));
-    for (suffix, names) in modules {
-        let names = names
-            .into_iter()
-            .map(|(export, local)| format!("{export} as {local}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let specifier =
-            module_specifier(base, suffix).expect("runtime base was validated before codegen");
-        uwriteln!(
-            output,
-            "import {{ {names} }} from {};",
-            js_string_literal(&specifier)
-        );
+/// How `runtime` binds `intrinsic`.
+pub(crate) fn binding<R: IntrinsicRuntime + ?Sized>(
+    runtime: &R,
+    intrinsic: Intrinsic,
+) -> IntrinsicBinding {
+    dispatch!(intrinsic, |i| Provides::binding(runtime, i))
+}
+
+/// Render `intrinsic` with `runtime`.
+pub(crate) fn render<R: IntrinsicRuntime + ?Sized>(
+    runtime: &R,
+    intrinsic: Intrinsic,
+    output: &mut Source,
+    args: &RenderIntrinsicsArgs<'_>,
+) {
+    dispatch!(intrinsic, |i| Provides::render(runtime, i, output, args))
+}
+
+/// Select the runtime used for generated bindings.
+pub(crate) fn select(external: bool) -> &'static dyn IntrinsicRuntime {
+    if external {
+        &ExternalRuntime
+    } else {
+        &InlineRuntime
     }
 }
 
-#[cfg(all(test, feature = "external-runtime"))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::TranspileOpts;
-    use crate::intrinsics::{RenderIntrinsicsArgs, render_intrinsics, resource::ResourceIntrinsic};
 
-    #[test]
-    fn transitive_named_calls_keep_inline_dependencies_and_deduplicate_imports() {
-        let mut intrinsics = BTreeSet::from([Intrinsic::Resource(
-            ResourceIntrinsic::ResourceTransferBorrow,
-        )]);
-        let opts = TranspileOpts::builder().name("mixed".into()).build();
-        let source = render_intrinsics(
-            RenderIntrinsicsArgs::builder()
-                .intrinsics(&mut intrinsics)
-                .transpile_opts(&opts)
-                .external_runtime(true)
-                .build(),
-        );
-        assert!(source.contains("rscTableGet(_jcoResourceTableGetContext, fromTable, handle)"));
-        assert!(source.contains("function rscTableCreateBorrow("));
-        assert!(source.contains("const HANDLE_TABLES"));
-        assert!(!source.contains("function rscTableGet("));
-        assert!(!source.contains("_jcoRuntimeProvider"));
-        let mut imports = Source::default();
-        render_imports(&mut imports, &intrinsics, "custom-runtime");
-        assert_eq!(imports.matches("tableGet as rscTableGet").count(), 1);
-        assert_eq!(imports.matches("CM_RUNTIME_API_VERSION as").count(), 1);
+    const TABLE_GET: Intrinsic = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
+    const SAMPLES: [Intrinsic; 5] = [
+        Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateBorrow),
+        Intrinsic::String(StringIntrinsic::Utf8Encode),
+        Intrinsic::JsHelper(JsHelperIntrinsic::DataView),
+        Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
+        Intrinsic::HandleTables,
+    ];
+
+    fn render_with(runtime: &dyn IntrinsicRuntime, intrinsic: Intrinsic) -> String {
+        let mut intrinsics = BTreeSet::new();
+        let opts = TranspileOpts::builder().name("runtime".into()).build();
+        let args = RenderIntrinsicsArgs::builder()
+            .intrinsics(&mut intrinsics)
+            .transpile_opts(&opts)
+            .build();
+        let mut output = Source::default();
+        render(runtime, intrinsic, &mut output, &args);
+        output.into()
     }
 
     #[test]
-    fn resource_context_needs_no_unrelated_initializers() {
-        let mut intrinsics =
-            BTreeSet::from([Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet)]);
-        let opts = TranspileOpts::builder().name("resource".into()).build();
-        let source = render_intrinsics(
-            RenderIntrinsicsArgs::builder()
-                .intrinsics(&mut intrinsics)
-                .transpile_opts(&opts)
-                .external_runtime(true)
-                .build(),
-        );
-        assert_eq!(intrinsics.len(), 1);
-        assert!(source.contains("RuntimeError: WebAssembly.RuntimeError"));
-        for unrelated in [
-            "T_FLAG",
-            "HANDLE_TABLES",
-            "TextEncoder",
-            "TextDecoder",
-            "WebAssembly.Global",
-            "Suspending",
-            "new Map",
-            "new Int32Array",
-        ] {
-            assert!(!source.contains(unrelated), "{unrelated}");
-        }
-    }
-
-    #[test]
-    fn resolves_runtime_bases() {
-        for (base, expected) in [
-            ("@scope/runtime", "@scope/runtime/intrinsics/resource"),
-            ("custom-runtime/", "custom-runtime/intrinsics/resource"),
-            ("something.js", "something.js/intrinsics/resource"),
-            ("custom/nested", "custom/nested/intrinsics/resource"),
-            ("./runtime", "./runtime/intrinsics/resource.js"),
-            ("../runtime/", "../runtime/intrinsics/resource.js"),
-            ("/runtime/", "/runtime/intrinsics/resource.js"),
-            ("/", "/intrinsics/resource.js"),
-            (
-                "./runtime:version",
-                "./runtime:version/intrinsics/resource.js",
-            ),
-            (".", "./intrinsics/resource.js"),
-            (
-                "file:///C:/runtime/",
-                "file:///C:/runtime/intrinsics/resource.js",
-            ),
-            ("file:///a%20b/", "file:///a%20b/intrinsics/resource.js"),
-            (
-                "https://example.test/runtime/",
-                "https://example.test/runtime/intrinsics/resource.js",
-            ),
-            (
-                "HTTPS://example.test/runtime/",
-                "HTTPS://example.test/runtime/intrinsics/resource.js",
-            ),
-            (
-                "http://example.test/a//b",
-                "http://example.test/a//b/intrinsics/resource.js",
-            ),
-            ("./a b'\"", "./a b'\"/intrinsics/resource.js"),
-        ] {
+    fn inline_runtime_binds_every_family_inline() {
+        for intrinsic in SAMPLES.into_iter().chain([TABLE_GET]) {
             assert_eq!(
-                module_specifier(base, "intrinsics/resource").unwrap(),
-                expected
+                binding(&InlineRuntime, intrinsic),
+                IntrinsicBinding::Inline {
+                    local_name: intrinsic.name()
+                }
+            );
+        }
+        assert!(render_with(&InlineRuntime, TABLE_GET).contains("function rscTableGet("));
+    }
+
+    #[test]
+    fn external_runtime_imports_only_its_exports() {
+        assert_eq!(
+            binding(&ExternalRuntime, TABLE_GET),
+            IntrinsicBinding::Imported {
+                local_name: TABLE_GET.name()
+            }
+        );
+        assert!(render_with(&ExternalRuntime, TABLE_GET).is_empty());
+        for intrinsic in SAMPLES {
+            assert_eq!(
+                binding(&ExternalRuntime, intrinsic),
+                binding(&InlineRuntime, intrinsic)
+            );
+            assert_eq!(
+                render_with(&ExternalRuntime, intrinsic),
+                render_with(&InlineRuntime, intrinsic)
             );
         }
     }
 
     #[test]
-    fn rejects_unsupported_bases() {
-        for base in [
-            "",
-            " ",
-            "a\nb",
-            "a\0b",
-            "data:text/javascript,",
-            "ftp://example.test/a",
-            "C:\\runtime",
-            "./a?b",
-            "file:///a#b",
-            "https://example.test/a?q",
-        ] {
-            assert!(module_specifier(base, "runtime").is_err(), "{base}");
-        }
-        for base in [
-            "./provider.js",
-            "../provider.mjs/",
-            "file:///provider.cjs",
-            "https://example.test/provider.js",
-        ] {
-            assert!(
-                module_specifier(base, "runtime")
-                    .unwrap_err()
-                    .to_string()
-                    .contains("directory base")
-            );
-        }
+    fn only_external_imports_receive_context_operands() {
+        assert_eq!(
+            InlineRuntime.call(TABLE_GET, "table, handle"),
+            "rscTableGet(table, handle)"
+        );
+        assert_eq!(
+            ExternalRuntime.call(TABLE_GET, "table, handle"),
+            "rscTableGet(_jcoResourceTableGetContext, table, handle)"
+        );
+        assert_eq!(
+            ExternalRuntime.call(TABLE_GET, ""),
+            "rscTableGet(_jcoResourceTableGetContext)"
+        );
+        let borrow = SAMPLES[0];
+        assert_eq!(
+            ExternalRuntime.call(borrow, "a"),
+            InlineRuntime.call(borrow, "a")
+        );
+    }
+
+    #[test]
+    fn prelude_is_emitted_only_when_something_is_imported() {
+        let mut output = Source::default();
+        InlineRuntime.render_prelude(&BTreeSet::from([TABLE_GET]), &mut output);
+        ExternalRuntime.render_prelude(&BTreeSet::from(SAMPLES), &mut output);
+        assert!(output.is_empty());
+
+        ExternalRuntime.render_prelude(&BTreeSet::from([TABLE_GET, SAMPLES[0]]), &mut output);
+        let prelude: String = output.into();
+        assert_eq!(prelude.matches("_jcoRuntimeApiVersion !== 1").count(), 1);
+        assert_eq!(
+            prelude.matches("const _jcoResourceTableGetContext").count(),
+            1
+        );
+    }
+
+    #[test]
+    fn selection_matches_the_external_flag() {
+        assert_eq!(
+            binding(select(false), TABLE_GET),
+            binding(&InlineRuntime, TABLE_GET)
+        );
+        assert_eq!(
+            binding(select(true), TABLE_GET),
+            binding(&ExternalRuntime, TABLE_GET)
+        );
     }
 }
