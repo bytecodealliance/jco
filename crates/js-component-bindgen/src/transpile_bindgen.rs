@@ -1444,9 +1444,6 @@ impl<'a> Instantiator<'a, '_> {
         let create_implicit_thread = self.bindgen.intrinsic(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
         ));
-        let clear_thread = self
-            .bindgen
-            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentThread));
         let set_thread_meta = self
             .bindgen
             .intrinsic(Intrinsic::SetGlobalCurrentThreadMetaFn);
@@ -1456,6 +1453,7 @@ impl<'a> Instantiator<'a, '_> {
 
         let mut setup = source::Source::default();
         for component_idx in &component_indices {
+            uwriteln!(setup, "let _initTask{};", component_idx.as_u32());
             uwriteln!(setup, "let _initTaskID{};", component_idx.as_u32());
             uwriteln!(setup, "let _initThreadID{};", component_idx.as_u32());
         }
@@ -1466,12 +1464,13 @@ impl<'a> Instantiator<'a, '_> {
                 setup,
                 r#"
                 {{
-                  const {{ taskID, threadID }} = {create_implicit_thread}({{
+                  const {{ task, taskID, threadID }} = {create_implicit_thread}({{
                       componentIdx: {component_idx},
                       isAsync: false,
                       callingWasmExport: true,
                       entryFnName: '<initialize>',
                   }});
+                  _initTask{component_idx} = task;
                   _initTaskID{component_idx} = taskID;
                   _initThreadID{component_idx} = threadID;
                   {set_thread_meta}({{ componentIdx: {component_idx}, taskID, threadID }});
@@ -1488,7 +1487,12 @@ impl<'a> Instantiator<'a, '_> {
                 self.src.js_init,
                 r#"
                   {clear_thread_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx}, threadID: _initThreadID{component_idx} }});
-                  {clear_thread}({component_idx}, _initTaskID{component_idx}, _initThreadID{component_idx});
+                  // Initialization is finished: retire its task and release the
+                  // implicit thread's instance-scoped index for the first call.
+                  if (_initTask{component_idx}) {{
+                    _initTask{component_idx}.resolve([]);
+                    _initTask{component_idx}.exit({{ skipExclusiveLockCheck: true }});
+                  }}
                 "#,
             );
         }
