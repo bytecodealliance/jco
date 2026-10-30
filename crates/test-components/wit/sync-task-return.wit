@@ -1,0 +1,8 @@
+package jco:test-components;
+
+world sync-task-return {
+  import continued: func();
+  export invalid-run: func() -> u32;
+  export valid-run: func() -> u32;
+  export async-run: async func() -> u32;
+}
