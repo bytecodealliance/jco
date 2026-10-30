@@ -642,6 +642,7 @@ impl WaitableIntrinsic {
             }
 
             Self::RemoveWaitableSet => {
+                let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
@@ -651,22 +652,19 @@ impl WaitableIntrinsic {
                         {debug_log_fn}('[{remove_waitable_set_fn}()] args', args);
                         const {{ state, waitableSetRep }} = args;
                         if (!state) {{ throw new TypeError("missing component state"); }}
-                        if (!waitableSetRep) {{ throw new TypeError("missing component waitableSetRep"); }}
-
                         const ws = state.handles.get(waitableSetRep);
-                        if (!ws) {{
+                        if (!(ws instanceof {waitable_set_class})) {{
                             throw new {runtime_error_class}('cannot remove waitable set: no set present with rep [' + waitableSetRep + ']');
                         }}
                         if (ws.hasPendingEvent()) {{
-                            throw new Error('waitable set cannot be removed with pending items remaining');
+                            throw new {runtime_error_class}('waitable set cannot be removed with pending items remaining');
                         }}
 
-                        const waitableSet = state.handles.get(waitableSetRep);
                         if (ws.numWaitables() > 0) {{
-                            throw new Error('waitable set still contains waitables');
+                            throw new {runtime_error_class}('waitable set still contains waitables');
                         }}
                         if (ws.numWaiting() > 0) {{
-                            throw new Error('cannot drop waitable set with waiters');
+                            throw new {runtime_error_class}('cannot drop waitable set with waiters');
                         }}
 
                         state.handles.remove(waitableSetRep);
@@ -675,6 +673,8 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableJoin => {
+                let waitable_class = render_args.require_intrinsic(Self::WaitableClass);
+                let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
@@ -697,20 +697,20 @@ impl WaitableIntrinsic {
                         }}
 
                         if (!state.mayLeave) {{
-                            throw new Error('component instance is not marked as may leave, cannot join waitable');
+                            throw new {runtime_error_class}('component instance is not marked as may leave, cannot join waitable');
                         }}
 
                         const waitableObj = state.handles.get(waitableRep);
                         if (!waitableObj) {{
-                            throw new Error(`missing waitable obj (rep [${{waitableRep}}]), component idx [${{componentIdx}}])`);
+                            throw new {runtime_error_class}(`missing waitable obj (rep [${{waitableRep}}]), component idx [${{componentIdx}}])`);
                         }}
                         const waitable = waitableObj.getWaitable ? waitableObj.getWaitable() : waitableObj;
-                        if (!waitable.join) {{
-                            throw new Error("invalid waitable object, does not have join()");
+                        if (!(waitable instanceof {waitable_class})) {{
+                            throw new {runtime_error_class}("handle does not name a waitable");
                         }}
 
                         const waitableSet = waitableSetRep === 0 ? null : state.handles.get(waitableSetRep);
-                        if (waitableSetRep !== 0 && !waitableSet) {{
+                        if (waitableSetRep !== 0 && !(waitableSet instanceof {waitable_set_class})) {{
                             throw new {runtime_error_class}(`missing waitable set [${{waitableSetRep}}] in component idx [${{componentIdx}}]`);
                         }}
 

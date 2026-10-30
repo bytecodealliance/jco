@@ -1396,11 +1396,11 @@ impl LiftIntrinsic {
                             }}
 
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat future of borrowed type'); }}
-                            if (futureEnd.isWritable()) {{ throw new Error('only readable futures can be lifted'); }}
+                            if (futureEnd.isWritable()) {{ throw new {runtime_error_class}('only readable futures can be lifted'); }}
                             if (futureEnd.isDoneState()) {{
                                 throw new {runtime_error_class}('cannot lift future after previous read succeeded');
                             }}
-                            if (!futureEnd.isIdleState()) {{ throw new Error('futures must be in idle state'); }}
+                            if (!futureEnd.isIdleState()) {{ throw new {runtime_error_class}('futures must be in idle state'); }}
                             if (futureEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_FUTURE_IN_WAITABLE_SET:?}); }}
 
                             return [ futureEnd.promise(), ctx ];
@@ -1456,7 +1456,7 @@ impl LiftIntrinsic {
                                 streamEndWaitableIdx = waitableIdx;
                             }}
 
-                            if (!streamEndWaitableIdx) {{ throw new Error('missing stream idx'); }}
+                            if (!streamEndWaitableIdx) {{ throw new {runtime_error_class}('missing stream idx'); }}
 
                             const cstate = {get_or_create_async_state_fn}(componentIdx);
                             if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
@@ -1467,11 +1467,11 @@ impl LiftIntrinsic {
                             }}
 
                             if (ctx.isBorrowed) {{ throw new Error('cannot lift flat stream of borrowed type'); }}
-                            if (streamEnd.isWritable()) {{ throw new Error('only readable streams can be lifted'); }}
+                            if (streamEnd.isWritable()) {{ throw new {runtime_error_class}('only readable streams can be lifted'); }}
                             if (streamEnd.isDoneState()) {{
                                 throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
                             }}
-                            if (!streamEnd.isIdleState()) {{ throw new Error('streams must be in idle state'); }}
+                            if (!streamEnd.isIdleState()) {{ throw new {runtime_error_class}('streams must be in idle state'); }}
                             if (streamEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_STREAM_IN_WAITABLE_SET:?}); }}
 
                             const stream = new {external_stream_class}({{

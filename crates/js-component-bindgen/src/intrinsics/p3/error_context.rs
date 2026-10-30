@@ -275,6 +275,8 @@ impl ErrCtxIntrinsic {
             }
 
             Self::ErrorContextDebugMessage => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
                 let err_ctx_debug_msg_fn =
@@ -291,7 +293,7 @@ impl ErrCtxIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         const errCtx = cstate.handles.get(handle);
                         if (!errCtx || errCtx.globalRep === undefined) {{
-                            throw new Error(`missing error context (handle [${{handle}}]) in component idx [${{componentIdx}}] during debug msg`);
+                            throw new {runtime_error_class}(`missing error context (handle [${{handle}}]) in component idx [${{componentIdx}}] during debug msg`);
                         }}
 
                         const msg = globalTable.get(errCtx.globalRep).debugMessage;
@@ -301,6 +303,8 @@ impl ErrCtxIntrinsic {
             }
 
             Self::ErrorContextDrop => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let global_ref_count_add_fn =
                     render_args.require_intrinsic(Self::GlobalRefCountAdd);
                 let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
@@ -319,12 +323,12 @@ impl ErrCtxIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         const errCtx = cstate.handles.get(handle);
                         if (!errCtx || errCtx.globalRep === undefined) {{
-                            throw new Error(`missing error context (handle [${{handle}}]) in component idx [${{componentIdx}}] during drop`);
+                            throw new {runtime_error_class}(`missing error context (handle [${{handle}}]) in component idx [${{componentIdx}}] during drop`);
                         }}
 
                         const localErrCtxTable = {get_local_tbl_fn}(componentIdx, localTableIdx);
                         if (!localErrCtxTable.get(errCtx.localIdx)) {{
-                            throw new Error(`missing error-context with handle [${{handle}}] in component [${{componentIdx}}] during drop`);
+                            throw new {runtime_error_class}(`missing error-context with handle [${{handle}}] in component [${{componentIdx}}] during drop`);
                         }}
 
                         errCtx.refCount -= 1;

@@ -436,6 +436,7 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::GetStreamEnd => {
+                let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_stream_end_fn = self.name();
@@ -468,11 +469,11 @@ impl AsyncStreamIntrinsic {
                             throw new TypeError("must specify either waitable idx or handle to retrieve stream");
                         }}
 
-                        if (!streamEnd) {{
+                        if (!(streamEnd instanceof {stream_end_class})) {{
                             throw new {runtime_error_class}(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
                         }}
-                        if (tableIdx && streamEnd.streamTableIdx() !== tableIdx) {{
-                            throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
+                        if (streamEnd.streamTableIdx() !== tableIdx) {{
+                            throw new {runtime_error_class}(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
                         }}
 
                         return streamEnd;
@@ -483,6 +484,9 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::DeleteStreamEnd => {
+                let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let delete_stream_end_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
@@ -503,11 +507,8 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
 
                         const streamEnd = cstate.handles.get(streamEndWaitableIdx);
-                        if (!streamEnd) {{
-                            throw new Error(`missing stream end [${{streamEndWaitableIdx}}] in component handles while deleting stream`);
-                        }}
-                        if (streamEnd.streamTableIdx() !== tableIdx) {{
-                            throw new Error(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
+                        if (!(streamEnd instanceof {stream_end_class}) || streamEnd.streamTableIdx() !== tableIdx) {{
+                            throw new {runtime_error_class}('invalid stream end for table [' + tableIdx + ']');
                         }}
 
                         let removed = cstate.handles.remove(streamEnd.waitableIdx());
@@ -528,6 +529,9 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::RemoveStreamEndFromTable => {
+                let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let remove_stream_end_from_table_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
@@ -553,8 +557,8 @@ impl AsyncStreamIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
 
                         const streamEnd = cstate.handles.get(streamWaitableIdx);
-                        if (!streamEnd) {{
-                            throw new Error(`missing stream end (handle [${{streamWaitableIdx}}], table [${{tableIdx}}])`);
+                        if (!(streamEnd instanceof {stream_end_class}) || streamEnd.streamTableIdx() !== tableIdx) {{
+                            throw new {runtime_error_class}('invalid stream end for table [' + tableIdx + ']');
                         }}
                         const handle = streamEnd.handle();
 
@@ -2415,7 +2419,7 @@ impl AsyncStreamIntrinsic {
                         if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
-                        if (!streamEnd.isCopying()) {{ throw new Error('stream end is not copying, cannot cancel'); }}
+                        if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
 
                         streamEnd.setCopyState({stream_end_class}.CopyState.CANCELLING_COPY);
 
@@ -2498,7 +2502,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         if (!(streamEnd instanceof {stream_end_class})) {{
-                          throw new Error('invalid stream end class, expected [{stream_end_class}]');
+                            throw new {runtime_error_class}('invalid stream end class, expected [{stream_end_class}]');
                         }}
 
                         if (streamEnd.isCopying()) {{
