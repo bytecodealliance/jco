@@ -42,6 +42,10 @@ unsafe extern "C" {
 }
 
 impl bindings::Guest for Component {
+    async fn await_subtask() -> u32 {
+        bindings::pending_call().await
+    }
+
     fn run(case_index: u32) {
         #[cfg(target_arch = "wasm32")]
         unsafe {

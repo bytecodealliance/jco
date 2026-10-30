@@ -1023,7 +1023,7 @@ impl AsyncTaskIntrinsic {
                         if (subtask.resolveDelivered()) {{
                             throw new {runtime_error_class}('`subtask.cancel` called after terminal status delivered');
                         }}
-                        if (!isAsync && subtask.waitable().isInSet()) {{
+                        if (!isAsync && subtask.getWaitable().isInSet()) {{
                             throw new {runtime_error_class}('cannot synchronously cancel a subtask that is in a waitable set');
                         }}
 
@@ -2808,7 +2808,7 @@ impl AsyncTaskIntrinsic {
                         childTaskID() {{ return this.#childTask?.id(); }}
                         state() {{ return this.#state; }}
 
-                        waitable() {{ return this.#waitable; }}
+                        getWaitable() {{ return this.#waitable; }}
                         waitableRep() {{ return this.#waitable.idx(); }}
                         // The handle index is allocated only when the guest gets to see the
                         // subtask (an async lower that did not complete at once), and after the
