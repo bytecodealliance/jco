@@ -1,0 +1,9 @@
+package jco:test-components;
+
+world exclusive-thread-yield {
+  import progress: func(value: u32);
+  export run: async func(value: u32);
+  export callback-run: async func(value: u32);
+  export park-callback: async func() -> u32;
+  export resume-callback: func() -> u32;
+}
