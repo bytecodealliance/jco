@@ -35,6 +35,7 @@ async function setup(name: string, fail = () => assert.fail('unexpected host cal
             imports: {
                 ...new WASIShim().getImportObject(),
                 fail: { default: fail },
+                'pending-call': { default: () => new Promise((resolve) => setTimeout(() => resolve(42), 10)) },
                 payloads: { default: () => assert.fail('the payload type declaration is never called') },
             },
         },
@@ -58,6 +59,18 @@ suite('canonical handle validation in Rust components', () => {
         const { instance, cleanup } = await setup('valid-waitable-join');
         try {
             assert.isUndefined(await instance.run(INVALID_CASES.length));
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test('a pending subtask can join a waitable set and deliver its result', async () => {
+        const { instance, cleanup } = await setup('valid-subtask-join');
+        try {
+            // The SDK joins the pending import to its waitable set and unjoins
+            // and drops the subtask after receiving its completion event.
+            assert.strictEqual(await instance.awaitSubtask(), 42);
+            assert.strictEqual(await instance.awaitSubtask(), 42);
         } finally {
             await cleanup();
         }

@@ -5,5 +5,7 @@ world invalid-handle-kinds {
   // function itself is never called; only its associated ABI intrinsics are.
   import payloads: func(a: stream<u8>, b: future<u32>, c: stream<u32>, d: future<u64>);
   import fail: func();
+  import pending-call: async func() -> u32;
   export run: func(case-index: u32);
+  export await-subtask: async func() -> u32;
 }
