@@ -1,0 +1,16 @@
+package jco:test-components;
+
+// Resource returned into a caller that never invokes resource.new/drop/rep.
+interface returned-resource-source {
+  resource thing;
+  make: func() -> thing;
+}
+
+world returned-resource-callee {
+  export returned-resource-source;
+}
+
+world returned-resource-caller {
+  import returned-resource-source;
+  export run: func() -> tuple<u32, u32>;
+}
