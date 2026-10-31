@@ -99,7 +99,7 @@ suite('external runtime codegen', () => {
                 if (implementation === 'reexport') {
                     await writeFile(
                         join(packageDir, 'intrinsics/resource.js'),
-                        `export { tableGet } from ${JSON.stringify(defaultBase + 'intrinsics/resource.js')};`,
+                        `export * from ${JSON.stringify(defaultBase + 'intrinsics/resource.js')};`,
                     );
                 }
                 await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
@@ -169,7 +169,7 @@ suite('external runtime codegen', () => {
             await writeFiles(files, { baseDir: outDir });
             await writeFile(join(outDir, 'load.mjs'), "import './component.js';");
             await expect(nodeExec(join(outDir, 'load.mjs'))).rejects.toThrow(
-                missing === 'export' ? 'tableGet' : 'exports',
+                missing === 'export' ? 'does not provide an export named' : 'exports',
             );
         } finally {
             await rm(outDir, { recursive: true, force: true });

@@ -27,6 +27,7 @@ use std::fmt::Write;
 
 pub(crate) mod conversion;
 pub(crate) mod js_helper;
+pub(crate) mod resource;
 pub(crate) mod string;
 pub(crate) mod webidl;
 
@@ -37,6 +38,17 @@ pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RuntimeContext {
     ResourceTableGet,
+    HandleIndexSpaces,
+    HandleTables,
+    CallBorrows,
+    CurrentBorrows,
+    ResourceScopeCounter,
+    ResourceScopeTasks,
+    ScopeId,
+    ResourceRemove,
+    ResourceTransferOwn,
+    ResourceTransferBorrow,
+    ResourceDestructor,
     StrictNumeric,
     Bitcast32,
     Bitcast64,
@@ -52,6 +64,24 @@ impl RuntimeContext {
     pub(crate) fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
             TABLE_GET_CONTEXT,
+            "HANDLE_INDEX_SPACES",
+            "_jcoInitializeHandleIndexSpaces",
+            "HANDLE_TABLES",
+            "_jcoInitializeHandleTables",
+            "_jcoCallBorrowContext",
+            "_jcoInitializeCallBorrows",
+            "_jcoCurrentBorrowContext",
+            "_jcoInitializeCurrentBorrows",
+            "_jcoResourceScopeCounterContext",
+            "_jcoInitializeResourceScopeCounter",
+            "RESOURCE_SCOPE_TASKS",
+            "_jcoInitializeResourceScopeTasks",
+            "_jcoScopeIdContext",
+            "_jcoInitializeScopeId",
+            "_jcoResourceRemoveContext",
+            "_jcoResourceTransferOwnContext",
+            "_jcoResourceTransferBorrowContext",
+            "_jcoResourceDestructorContext",
             "_jcoStrictNumericContext",
             "_jcoBitcast32Context",
             "_jcoBitcast64Context",
@@ -72,6 +102,17 @@ impl RuntimeContext {
     pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
+            Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
+            Self::HandleTables => "HANDLE_TABLES",
+            Self::CallBorrows => "_jcoCallBorrowContext",
+            Self::CurrentBorrows => "_jcoCurrentBorrowContext",
+            Self::ResourceScopeCounter => "_jcoResourceScopeCounterContext",
+            Self::ResourceScopeTasks => "RESOURCE_SCOPE_TASKS",
+            Self::ScopeId => "_jcoScopeIdContext",
+            Self::ResourceRemove => "_jcoResourceRemoveContext",
+            Self::ResourceTransferOwn => "_jcoResourceTransferOwnContext",
+            Self::ResourceTransferBorrow => "_jcoResourceTransferBorrowContext",
+            Self::ResourceDestructor => "_jcoResourceDestructorContext",
             Self::StrictNumeric => "_jcoStrictNumericContext",
             Self::Bitcast32 => "_jcoBitcast32Context",
             Self::Bitcast64 => "_jcoBitcast64Context",
@@ -87,6 +128,41 @@ impl RuntimeContext {
     /// Initializers return narrow state, never operation tables.
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (suffix, export, local_name) = match self {
+            Self::HandleIndexSpaces => (
+                "intrinsics/resource",
+                "initializeHandleIndexSpaces",
+                "_jcoInitializeHandleIndexSpaces",
+            ),
+            Self::HandleTables => (
+                "intrinsics/resource",
+                "initializeHandleTables",
+                "_jcoInitializeHandleTables",
+            ),
+            Self::CallBorrows => (
+                "intrinsics/resource",
+                "initializeCallBorrows",
+                "_jcoInitializeCallBorrows",
+            ),
+            Self::CurrentBorrows => (
+                "intrinsics/resource",
+                "initializeCurrentBorrows",
+                "_jcoInitializeCurrentBorrows",
+            ),
+            Self::ResourceScopeCounter => (
+                "intrinsics/resource",
+                "initializeResourceScopeCounter",
+                "_jcoInitializeResourceScopeCounter",
+            ),
+            Self::ResourceScopeTasks => (
+                "intrinsics/resource",
+                "initializeResourceScopeTasks",
+                "_jcoInitializeResourceScopeTasks",
+            ),
+            Self::ScopeId => (
+                "intrinsics/resource",
+                "initializeScopeId",
+                "_jcoInitializeScopeId",
+            ),
             Self::Bitcast32 => (
                 "intrinsics/conversion",
                 "initializeBitcast32",
@@ -136,9 +212,54 @@ impl RuntimeContext {
         })
     }
 
+    pub(crate) fn dependencies(self) -> &'static [Self] {
+        match self {
+            Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
+            Self::ResourceTransferOwn => &[
+                Self::HandleIndexSpaces,
+                Self::ResourceScopeTasks,
+                Self::HandleTables,
+            ],
+            Self::ResourceTransferBorrow => &[
+                Self::HandleIndexSpaces,
+                Self::HandleTables,
+                Self::ScopeId,
+                Self::CallBorrows,
+            ],
+            Self::ResourceDestructor => &[],
+            _ => &[],
+        }
+    }
+
+    pub(crate) fn collect(self, contexts: &mut Vec<Self>) {
+        if contexts.contains(&self) {
+            return;
+        }
+        for dep in self.dependencies() {
+            dep.collect(contexts);
+        }
+        contexts.push(self);
+    }
+
     pub(crate) fn render(self, output: &mut Source, strict: bool) {
         let local = self.local_name();
         match self {
+            Self::ResourceRemove => uwriteln!(
+                output,
+                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
+            ),
+            Self::ResourceTransferOwn => uwriteln!(
+                output,
+                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS, tables: HANDLE_TABLES }};"
+            ),
+            Self::ResourceTransferBorrow => uwriteln!(
+                output,
+                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, tables: HANDLE_TABLES, scope: _jcoScopeIdContext, callBorrows: _jcoCallBorrowContext, getCurrentTask: componentIdx => {{ const meta = _getGlobalCurrentThreadMeta(componentIdx); return meta ? getCurrentTask(componentIdx, meta.taskID)?.task : undefined; }} }};"
+            ),
+            Self::ResourceDestructor => uwriteln!(
+                output,
+                "const {local} = {{ createTask: args => createNewCurrentImplicitThread(args), withTask: args => _withGlobalCurrentThreadMeta(args) }};"
+            ),
             Self::ResourceTableGet => uwriteln!(
                 output,
                 "const {TABLE_GET_CONTEXT} = {{ RuntimeError: WebAssembly.RuntimeError }};"
@@ -146,7 +267,14 @@ impl RuntimeContext {
             Self::StrictNumeric => {
                 uwriteln!(output, "const {local} = {{ strict: {strict} }};")
             }
-            Self::Bitcast32
+            Self::HandleIndexSpaces
+            | Self::HandleTables
+            | Self::CallBorrows
+            | Self::CurrentBorrows
+            | Self::ResourceScopeCounter
+            | Self::ResourceScopeTasks
+            | Self::ScopeId
+            | Self::Bitcast32
             | Self::Bitcast64
             | Self::DataViewCache
             | Self::Utf8Decoder
@@ -171,6 +299,10 @@ pub(crate) struct RuntimeInitializer {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RuntimeImportKind {
     Call,
+    Value,
+    LiveReference {
+        expression: &'static str,
+    },
     /// The binding refers to the selected context initializer's returned value.
     InitializedValue,
 }
@@ -193,21 +325,12 @@ pub(crate) struct ExternalRuntime;
 
 impl ExternalRuntime {
     /// Exports of `<base>/intrinsics/resource`.
-    fn resource_import(intrinsic: ResourceIntrinsic) -> Option<RuntimeImport> {
-        match intrinsic {
-            ResourceIntrinsic::ResourceTableGet => Some(RuntimeImport {
-                suffix: "intrinsics/resource",
-                kind: RuntimeImportKind::Call,
-                export: "tableGet",
-                context: Some(RuntimeContext::ResourceTableGet),
-            }),
-            _ => None,
-        }
-    }
-
     fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
         match intrinsic {
-            Intrinsic::Resource(i) => Self::resource_import(i),
+            Intrinsic::Resource(i) => Some(resource::resource_import(i)),
+            Intrinsic::HandleTables | Intrinsic::ScopeId => {
+                Some(resource::resource_owner_import(intrinsic))
+            }
             Intrinsic::Conversion(i) => Some(conversion::import(i)),
             Intrinsic::JsHelper(i) => js_helper::import(i),
             Intrinsic::String(i) => Some(string::import(i)),
@@ -233,13 +356,20 @@ impl ExternalRuntime {
     ) {
         let mut modules = BTreeMap::<&str, BTreeSet<(&str, &str)>>::new();
         for (intrinsic, import) in Self::imports(intrinsics) {
-            if import.kind == RuntimeImportKind::Call {
+            if matches!(
+                import.kind,
+                RuntimeImportKind::Call | RuntimeImportKind::Value
+            ) {
                 modules
                     .entry(import.suffix)
                     .or_default()
                     .insert((import.export, intrinsic.name()));
             }
-            if let Some(initializer) = import.context.and_then(RuntimeContext::initializer) {
+            let mut contexts = Vec::new();
+            if let Some(context) = import.context {
+                context.collect(&mut contexts);
+            }
+            for initializer in contexts.into_iter().filter_map(RuntimeContext::initializer) {
                 modules
                     .entry(initializer.suffix)
                     .or_default()
@@ -272,21 +402,39 @@ impl ExternalRuntime {
 
 impl Provides<ResourceIntrinsic> for ExternalRuntime {
     fn binding(&self, intrinsic: ResourceIntrinsic) -> IntrinsicBinding {
-        match Self::resource_import(intrinsic) {
-            Some(_) => IntrinsicBinding::Imported {
-                local_name: intrinsic.name(),
-            },
-            None => InlineRuntime.binding(intrinsic),
+        let _ = resource::resource_import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
         }
     }
-
     fn render(
         &self,
         intrinsic: ResourceIntrinsic,
+        _output: &mut Source,
+        args: &RenderIntrinsicsArgs<'_>,
+    ) {
+        resource::discover_inline_dependencies(Intrinsic::Resource(intrinsic), args);
+    }
+}
+
+impl Provides<BaseIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: BaseIntrinsic) -> IntrinsicBinding {
+        let i = Intrinsic::from(intrinsic);
+        if Self::import(i).is_some() {
+            IntrinsicBinding::Imported {
+                local_name: i.name(),
+            }
+        } else {
+            InlineRuntime.binding(intrinsic)
+        }
+    }
+    fn render(
+        &self,
+        intrinsic: BaseIntrinsic,
         output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
-        if Self::resource_import(intrinsic).is_none() {
+        if Self::import(intrinsic.into()).is_none() {
             InlineRuntime.render(intrinsic, output, args);
         }
     }
@@ -388,7 +536,6 @@ macro_rules! delegate_to_inline {
 }
 
 delegate_to_inline! {
-    BaseIntrinsic,
     ErrCtxIntrinsic,
     AsyncTaskIntrinsic,
     WaitableIntrinsic,
@@ -415,13 +562,21 @@ impl IntrinsicRuntime for ExternalRuntime {
                 }}
             "#,
         );
-        let mut contexts = BTreeSet::new();
+        let mut contexts = Vec::new();
         for (_, import) in imports {
-            if let Some(context) = import.context
-                && contexts.insert(context.local_name())
-            {
-                context.render(output, args.transpile_opts.strict);
+            if let Some(context) = import.context {
+                context.collect(&mut contexts);
             }
+        }
+        for context in contexts {
+            context.render(output, args.transpile_opts.strict);
+        }
+    }
+
+    fn reference(&self, intrinsic: Intrinsic) -> &'static str {
+        match Self::import(intrinsic).map(|i| i.kind) {
+            Some(RuntimeImportKind::LiveReference { expression }) => expression,
+            _ => runtime::binding(self, intrinsic).local_name(),
         }
     }
 
@@ -433,7 +588,9 @@ impl IntrinsicRuntime for ExternalRuntime {
             !matches!(
                 import,
                 Some(RuntimeImport {
-                    kind: RuntimeImportKind::InitializedValue,
+                    kind: RuntimeImportKind::InitializedValue
+                        | RuntimeImportKind::Value
+                        | RuntimeImportKind::LiveReference { .. },
                     ..
                 })
             ),
@@ -518,14 +675,22 @@ mod tests {
                 .external_runtime(true)
                 .build(),
         );
-        assert!(source.contains("rscTableGet(_jcoResourceTableGetContext, fromTable, handle)"));
-        assert!(source.contains("function rscTableCreateBorrow("));
+        assert!(source.contains("getCurrentTask: componentIdx =>"));
+        assert!(source.contains("function getCurrentTask("));
+        assert!(!source.contains("function rscTableCreateBorrow("));
         assert!(source.contains("const HANDLE_TABLES"));
         assert!(!source.contains("function rscTableGet("));
         assert!(!source.contains("_jcoRuntimeProvider"));
         let mut imports = Source::default();
         ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
-        assert_eq!(imports.matches("tableGet as rscTableGet").count(), 1);
+        assert_eq!(
+            imports
+                .matches("transferBorrow as resourceTransferBorrow")
+                .count(),
+            1
+        );
+        assert_eq!(imports.matches("initializeHandleIndexSpaces as").count(), 1);
+        assert_eq!(source.matches("const HANDLE_INDEX_SPACES =").count(), 1);
         assert_eq!(imports.matches("CM_RUNTIME_API_VERSION as").count(), 1);
     }
 
