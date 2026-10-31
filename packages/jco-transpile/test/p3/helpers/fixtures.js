@@ -17,11 +17,7 @@ export const P3_CLI_RUN_FIXTURES = [
         args: ['p3_cli_much_stdout.component', 'hello, world\n', '1'],
     },
     { path: 'cli/p3-cli.wasm', args: ['p3_cli.component', '.'] },
-    // TODO(unskip): Re-enable after preview3-shim's synchronous clock fast path is
-    // released and this package's dependency is updated. The published shim returns
-    // a Promise even for an elapsed deadline, so async lowering reports Pending;
-    // this fixture expects immediate Ready, as provided by the updated workspace shim.
-    { path: 'clocks/p3-clocks-sleep.wasm', failing: true },
+    { path: 'clocks/p3-clocks-sleep.wasm' },
     { path: 'fs/p3-file-write.wasm' },
     { path: 'fs/p3-filesystem-file-read-write.wasm' },
     { path: 'fs/p3-readdir.wasm' },
