@@ -81,6 +81,7 @@ suite('runtime package', () => {
                     'WebIdlModule',
                     'CoreModule',
                     'ComponentModule',
+                    'WaitableModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -98,6 +99,7 @@ suite('runtime package', () => {
                 './intrinsics/js-helper',
                 './intrinsics/resource',
                 './intrinsics/string',
+                './intrinsics/waitable',
                 './intrinsics/webidl',
                 './runtime',
             ]);
@@ -110,6 +112,10 @@ suite('runtime package', () => {
 
             // The independent provider needs only the published declaration, without private files.
             await writeFile(join(consumer, 'contract.d.ts'), contract);
+            await writeFile(
+                join(consumer, 'contract-exports.ts'),
+                `export default ${JSON.stringify(contractExports)};`,
+            );
             await writeFile(
                 join(consumer, 'contract-exports.ts'),
                 `export default ${JSON.stringify(contractExports)};`,

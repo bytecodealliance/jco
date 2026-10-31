@@ -154,3 +154,22 @@ core.getErrorPayload({ hasOwnProperty: Object.prototype.hasOwnProperty }, new Er
 core.base64Compile({ nodejsCompat: true }, '');
 // @ts-expect-error core function properties are immutable provider exports
 defaultCore.coinFlip = () => true;
+
+import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
+import type { WaitableModule, WaitableSetWaitContext } from '@bytecodealliance/jco-cm-runtime/runtime';
+export const defaultWaitable: WaitableModule = waitable;
+export const waitableMapEntry: RuntimeModuleContracts['intrinsics/waitable'] = waitable;
+// @ts-expect-error all named operations and constructor initializers are required
+export const missingWaitable: WaitableModule = {};
+// @ts-expect-error context-free constructors accept no universal options/context
+waitable.initializeWaitableClass({});
+// @ts-expect-error set constructors require the actual cancellation event capability
+waitable.initializeWaitableSetClass({ NONE: 0 });
+// @ts-expect-error providers cannot require private wait context state
+export const privateWaitContext: WaitableModule['waitableSetWait'] = (
+    _ctx: WaitableSetWaitContext & { privateState: number },
+) => 0;
+// @ts-expect-error per-call memory is a separate operand and cannot replace runtime capabilities
+waitable.waitableSetWait({ componentIdx: 0, isAsync: true, getMemoryFn: () => ({ buffer: new ArrayBuffer(8) }) }, 1, 0);
+// @ts-expect-error public operation properties are readonly
+defaultWaitable.waitableJoin = () => {};

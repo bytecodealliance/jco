@@ -250,8 +250,17 @@ export function setAllError(states: Pick<ComponentAsyncStates, 'values'>) {
 export function initializeComponentAsyncStateClass(
     context: ComponentAsyncStateContext,
 ): ComponentAsyncStateConstructor {
-    const { RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, cannotEnter, deadlock } =
-        context;
+    const {
+        RuntimeError,
+        RepTable,
+        indexSpaces,
+        instanceFlags,
+        storeTrap,
+        normalization,
+        cannotEnter,
+        deadlock,
+        Waitable,
+    } = context;
     class ComponentAsyncState {
         static EVENT_HANDLER_EVENTS = ['backpressure-change'];
 
@@ -916,10 +925,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         createWaitable(args?: { target?: unknown }) {
-            if (!context.createWaitable) {
-                throw new TypeError('creating waitables requires createWaitable');
-            }
-            return context.createWaitable({ target: args?.target });
+            return new Waitable({ target: args?.target });
         }
     }
     return ComponentAsyncState;

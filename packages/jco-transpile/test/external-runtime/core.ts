@@ -17,7 +17,7 @@ async function writeProvider(dir: string, core: string) {
     await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
     await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
     await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    for (const suffix of ['conversion', 'js-helper', 'string', 'webidl', 'resource', 'component']) {
+    for (const suffix of ['conversion', 'js-helper', 'string', 'webidl', 'resource', 'component', 'waitable']) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),
             'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',

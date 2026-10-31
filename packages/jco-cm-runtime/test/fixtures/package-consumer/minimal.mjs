@@ -25,6 +25,17 @@ const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-ru
 const { clampGuest, typeCheckValidI32, initializeTaskRegisters } =
     await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
 const { initializeStoreTrap, checkMayLeave } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/component');
+const { initializeWaitableClass, initializeWaitableSetClass } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/waitable');
+const Waitable = initializeWaitableClass(),
+    WaitableSet = initializeWaitableSetClass({ TASK_CANCELLED: 3 });
+const w = new Waitable({}),
+    set = new WaitableSet(0);
+w.join(set);
+w.drop();
+if (set.numWaitables() !== 0 || initializeWaitableClass() === Waitable) {
+    throw new Error('waitable capability leak');
+}
 if (
     initializeStoreTrap().error !== null ||
     checkMayLeave({ RuntimeError: Error, instanceFlags: { get: () => ({ value: 1 }) } }, 0) !== undefined

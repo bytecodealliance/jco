@@ -1,0 +1,1327 @@
+{
+    "schema": 1,
+    "inputCheckpoint": "cca7d81630a7772ed2078b2e379f96816ff2e43b9fbc3a008820c934393709e0",
+    "inputSha256": "1a813d5046d05e6280e004b8f2b00c11daaf8806e7b07652160330323937669b",
+    "method": "seeded xorshift32 full-word index sampling; 10000 process-cluster resamples",
+    "medianConvention": "upper middle value for even process counts, unchanged",
+    "sources": {
+        "report.ts": "/** Metrics are adapter costs in nanoseconds, excluding process launch and core compilation. */\nexport interface Values {\n    inline: Record<string, number>;\n    external: Record<string, number>;\n}\nexport const parity = {\n    raw: { ratio: 1.05, slack: 256 },\n    gzip: { ratio: 1.05, slack: 128 },\n    brotli: { ratio: 1.05, slack: 128 },\n    parse: { ratio: 1.25, slack: 25_000 },\n    evaluate: { ratio: 1.25, slack: 25_000 },\n    instantiate: { ratio: 1.25, slack: 50_000 },\n    call: { ratio: 1.25, slack: 250 },\n} as const;\nexport function parityLosses(values: Values) {\n    const keys = Object.keys(values.inline).toSorted();\n    if (!keys.length || keys.join() !== Object.keys(values.external).toSorted().join()) {\n        throw new Error('Both modes must have the same nonempty metric set');\n    }\n    return keys.filter((key) => {\n        const budget = parity[key as keyof typeof parity];\n        const inline = values.inline[key],\n            external = values.external[key];\n        if (!budget || ![inline, external].every((value) => Number.isFinite(value) && value > 0)) {\n            throw new Error(`Invalid metric ${key}`);\n        }\n        return external > inline * budget.ratio + budget.slack;\n    });\n}\nexport function regressionLosses(values: Values, baseline: Values, kind: 'size' | 'performance') {\n    parityLosses(values);\n    parityLosses(baseline);\n    return Object.keys(values.inline).flatMap((metric) => {\n        const inline = values.inline[metric],\n            external = values.external[metric];\n        const oldInline = baseline.inline[metric],\n            oldExternal = baseline.external[metric];\n        if (![oldInline, oldExternal].every((value) => Number.isFinite(value) && value > 0)) {\n            return [`${metric}: missing baseline`];\n        }\n        if (kind === 'size') {\n            return [\n                ...(inline > oldInline * 1.05 + 128 ? [`${metric}: absolute inline growth`] : []),\n                ...(external > oldExternal * 1.05 + 128 ? [`${metric}: absolute external growth`] : []),\n                ...(external / inline > (oldExternal / oldInline) * 1.05 + 128 / inline\n                    ? [`${metric}: relative growth`]\n                    : []),\n            ];\n        }\n        const budget = parity[metric as keyof typeof parity];\n        return external > inline * Math.max(budget.ratio, (oldExternal / oldInline) * 1.35) + budget.slack\n            ? [`${metric}: relative timing regression`]\n            : [];\n    });\n}\nexport const median = (values: number[]) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];\n\n/** Seeded percentile bootstrap over independent PROCESS medians, not inner samples. */\nexport function processInterval(values: number[]) {\n    if (values.length < 5 || values.length > 10 || values.some((value) => !Number.isFinite(value) || value <= 0)) {\n        throw new Error('Expected five to ten finite independent process ratios');\n    }\n    let seed = 20261021;\n    const bootstrap = Array.from({ length: 10_000 }, () =>\n        median(\n            values.map(() => {\n                // The old LCG's low bit alternated, forcing five even and five\n                // odd indices in every ten-cluster resample. Use mixed bits\n                // and a full-word fraction instead of those low bits.\n                seed ^= seed << 13;\n                seed ^= seed >>> 17;\n                seed ^= seed << 5;\n                return values[Math.floor(((seed >>> 0) / 0x1_0000_0000) * values.length)];\n            }),\n        ),\n    ).sort((a, b) => a - b);\n    return {\n        median: median(values),\n        range: [Math.min(...values), Math.max(...values)],\n        ci95: [bootstrap[250], bootstrap[9749]],\n    };\n}\n\nexport function validateMeasurement(\n    result: { medians: Values; pairedRatios: Record<string, number>; samples?: unknown; coldNative?: unknown },\n    sampleCount: number,\n) {\n    parityLosses(result.medians);\n    const axes = Object.keys(result.medians.inline).sort();\n    if (\n        !result.samples ||\n        typeof result.samples !== 'object' ||\n        !result.coldNative ||\n        typeof result.coldNative !== 'object'\n    ) {\n        throw new Error('Missing raw samples or cold observations');\n    }\n    const samples = result.samples as Record<'inline' | 'external', Record<string, number[]>>;\n    const cold = result.coldNative as Record<string, number>;\n    for (const mode of ['inline', 'external'] as const) {\n        if (!samples[mode] || !Number.isFinite(cold[mode]) || cold[mode] <= 0) {\n            throw new Error('Invalid mode observations');\n        }\n        const selected = Object.entries(samples[mode]).filter(([, values]) => Array.isArray(values) && values.length);\n        if (\n            selected\n                .map(([axis]) => axis)\n                .sort()\n                .join() !== axes.join()\n        ) {\n            throw new Error('Missing or unexpected sample axes');\n        }\n        for (const [axis, values] of selected) {\n            if (values.length !== sampleCount || values.some((value) => !Number.isFinite(value) || value <= 0)) {\n                throw new Error('Incomplete or invalid raw samples');\n            }\n            if (median(values) !== result.medians[mode][axis]) {\n                throw new Error('Medians do not match raw samples');\n            }\n        }\n    }\n    if (Object.keys(result.pairedRatios).sort().join() !== axes.join()) {\n        throw new Error('Missing paired ratios');\n    }\n    for (const axis of axes) {\n        const ratios = samples.inline[axis].map((value, i) => samples.external[axis][i] / value);\n        if (result.pairedRatios[axis] !== median(ratios)) {\n            throw new Error('Paired ratios do not match raw samples');\n        }\n    }\n}\n\nexport function timingFinding(estimate: ReturnType<typeof processInterval>, noise: number) {\n    if (estimate.median <= 0.95 && estimate.ci95[1] < 1 && 1 - estimate.median > noise) {\n        return 'material improvement';\n    }\n    if (estimate.median >= 1.05 && estimate.ci95[0] > 1 && estimate.median - 1 > noise) {\n        return 'material regression';\n    }\n    return 'inconclusive relative to process uncertainty and identical-code noise';\n}\n",
+        "reanalyze.mjs": "// Recompute derived uncertainty without changing measurements or recorded gates.\nimport assert from 'node:assert/strict';\nimport { createHash } from 'node:crypto';\nimport { readFile, writeFile } from 'node:fs/promises';\nimport { resolve } from 'node:path';\nimport { assertCompleteReports } from './matrix.mjs';\nimport { parityLosses, processInterval, timingFinding } from './report.ts';\n\nconst [input, output] = process.argv.slice(2);\nassert(\n    input && output && resolve(input) !== resolve(output),\n    'Provide distinct input-result and output-analysis paths',\n);\nconst inputSource = await readFile(input, 'utf8');\nconst result = JSON.parse(inputSource);\nassert.equal(result.schema, 2);\nassert.equal(result.complete, true);\nassertCompleteReports(result.expectedReports, result.reports);\nconst hash = (source) => createHash('sha256').update(source).digest('hex');\nconst sources = {};\nfor (const name of ['report.ts', 'reanalyze.mjs']) {\n    sources[name] = await readFile(new URL(name, import.meta.url), 'utf8');\n}\nconst reports = {};\nfor (const [id, report] of Object.entries(result.reports)) {\n    assert.equal(report.raw.length, result.settings.processCount);\n    reports[id] = {\n        uncertainty: Object.fromEntries(\n            Object.keys(report.performance.inline).map((axis) => [\n                axis,\n                processInterval(report.raw.map((run) => run.pairedRatios[axis])),\n            ]),\n        ),\n    };\n}\nfor (const [id, report] of Object.entries(reports)) {\n    const controlId = id.slice(0, id.lastIndexOf('--')) + '--noise';\n    const control = reports[controlId];\n    assert(control, `Missing identical-code noise control: ${controlId}`);\n    report.timingFindings = Object.fromEntries(\n        Object.entries(report.uncertainty).map(([axis, estimate]) => {\n            const bounds = control.uncertainty[axis].ci95;\n            const noise = Math.max(Math.abs(bounds[0] - 1), Math.abs(bounds[1] - 1));\n            return [axis, { finding: timingFinding(estimate, noise), noise }];\n        }),\n    );\n}\nconst parityAchieved = Object.values(result.reports).every(\n    (report) => parityLosses(report.size).length + parityLosses(report.performance).length === 0,\n);\nassert.equal(parityAchieved, result.parityAchieved, 'Reanalysis must preserve recorded parity');\nawait writeFile(\n    output,\n    JSON.stringify(\n        {\n            schema: 1,\n            inputCheckpoint: result.checkpointKey,\n            inputSha256: hash(inputSource),\n            method: 'seeded xorshift32 full-word index sampling; 10000 process-cluster resamples',\n            medianConvention: 'upper middle value for even process counts, unchanged',\n            sources,\n            sourceSha256: Object.fromEntries(Object.entries(sources).map(([name, source]) => [name, hash(source)])),\n            processCount: result.settings.processCount,\n            parityAchieved,\n            reports,\n        },\n        null,\n        2,\n    ) + '\\n',\n    { flag: 'wx' },\n);\n"
+    },
+    "sourceSha256": {
+        "report.ts": "3a901fa6cd442f94b4a946423aedc19489312637ddee1db02d67f04966e5e11d",
+        "reanalyze.mjs": "93a5de07f771fb80e22f5c36c3a82994e2424cb7a6a964431bc75fe2f1b54f2e"
+    },
+    "processCount": 10,
+    "parityAchieved": false,
+    "reports": {
+        "rolldown--file--empty": {
+            "uncertainty": {
+                "parse": {
+                    "median": 0.9879470170960826,
+                    "range": [0.9443539816104441, 1.0362599492138527],
+                    "ci95": [0.9620837281117163, 1.0154145280484626]
+                },
+                "evaluate": {
+                    "median": 1.0008430166323043,
+                    "range": [0.9202905064087197, 1.1234854280288442],
+                    "ci95": [0.9397715248233256, 1.0405331385796732]
+                },
+                "instantiate": {
+                    "median": 0.9937666458884554,
+                    "range": [0.9071896684645153, 1.0646327268276683],
+                    "ci95": [0.9729044900158452, 1.0585563099009891]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.03184141456588829
+                }
+            }
+        },
+        "rolldown--file--noise": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0268823048190956,
+                    "range": [0.9727942281680837, 1.10505615584434],
+                    "ci95": [0.9922688312016603, 1.0493721409171093]
+                },
+                "evaluate": {
+                    "median": 1.0191793588884113,
+                    "range": [0.8307670191359707, 1.054099779666176],
+                    "ci95": [0.943216855087792, 1.0458677138945363]
+                },
+                "instantiate": {
+                    "median": 0.9795510454923655,
+                    "range": [0.9092169092291256, 1.0315204964833244],
+                    "ci95": [0.9681585854341117, 1.0246059826238376]
+                },
+                "call": {
+                    "median": 1.0093249016733423,
+                    "range": [0.9647110460412736, 1.0217783857666531],
+                    "ci95": [0.9858250546722669, 1.0163073391122457]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.03184141456588829
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.01630733911224569
+                }
+            }
+        },
+        "rolldown--file--numbers": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0842945491519909,
+                    "range": [1.05577191543046, 1.8123157876885907],
+                    "ci95": [1.0720218086672493, 1.0969885588133472]
+                },
+                "evaluate": {
+                    "median": 1.2470548279614972,
+                    "range": [1.1961244737713297, 1.7053796663916962],
+                    "ci95": [1.2029121993629766, 1.318659263710464]
+                },
+                "instantiate": {
+                    "median": 1.061234377051291,
+                    "range": [1.0175397814548122, 1.2409345436484356],
+                    "ci95": [1.04199309702512, 1.0808929169225383]
+                },
+                "call": {
+                    "median": 1.0022323024444089,
+                    "range": [0.9444929023986419, 1.027112446696506],
+                    "ci95": [0.9765375455814911, 1.0213372272324917]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.03184141456588829
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.01630733911224569
+                }
+            }
+        },
+        "rolldown--file--variants": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0748415419498252,
+                    "range": [1.041357673345025, 1.1458316891455143],
+                    "ci95": [1.0557732262680632, 1.118339629749265]
+                },
+                "evaluate": {
+                    "median": 1.2697312338144096,
+                    "range": [1.2222165803468295, 1.3593329519251198],
+                    "ci95": [1.238548431675891, 1.3422094203921635]
+                },
+                "instantiate": {
+                    "median": 1.0528748237504637,
+                    "range": [0.9685161548663112, 1.1065134833385524],
+                    "ci95": [1.027954477840477, 1.0833850844013206]
+                },
+                "call": {
+                    "median": 1.0097006979685765,
+                    "range": [0.9672430772888285, 1.071167535269179],
+                    "ci95": [0.9957499062099723, 1.0503214446167322]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.03184141456588829
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.01630733911224569
+                }
+            }
+        },
+        "rolldown--file--strings": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0719019434597938,
+                    "range": [1.0609956901088828, 1.1152692110795772],
+                    "ci95": [1.0660061408526071, 1.0967070315633884]
+                },
+                "evaluate": {
+                    "median": 1.2343661028307855,
+                    "range": [1.1461757573431541, 1.288386084228095],
+                    "ci95": [1.1836952441131692, 1.2712400305547158]
+                },
+                "instantiate": {
+                    "median": 1.0502441627132832,
+                    "range": [1.0196575200084117, 1.0892346627933178],
+                    "ci95": [1.0371010364242816, 1.083304557591264]
+                },
+                "call": {
+                    "median": 0.9946125094144351,
+                    "range": [0.9645118232726257, 1.02681876153946],
+                    "ci95": [0.9796173504276849, 1.0066793271560506]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.03184141456588829
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.01630733911224569
+                }
+            }
+        },
+        "rolldown--file--adder": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0914010111060077,
+                    "range": [1.019547551647923, 1.1345265595008547],
+                    "ci95": [1.0616509016431286, 1.1107827460258437]
+                },
+                "evaluate": {
+                    "median": 1.1382237701358875,
+                    "range": [1.003553339355922, 1.2543410014023206],
+                    "ci95": [1.046866982154617, 1.21505115540717]
+                },
+                "instantiate": {
+                    "median": 1.1410245643497798,
+                    "range": [1.0282716534799585, 1.250393864973813],
+                    "ci95": [1.0919230045621537, 1.1922418929269538]
+                },
+                "call": {
+                    "median": 0.9881025310009736,
+                    "range": [0.9586488015188219, 1.0229667052871088],
+                    "ci95": [0.9755668750509644, 1.015414826109349]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.03184141456588829
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.01630733911224569
+                }
+            }
+        },
+        "rolldown--file--resource": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.120222413176548,
+                    "range": [1.054452367107485, 1.1489058656811608],
+                    "ci95": [1.1033776955316936, 1.1361860346291426]
+                },
+                "evaluate": {
+                    "median": 1.155196861098748,
+                    "range": [1.069154043621989, 1.184955636743154],
+                    "ci95": [1.1213066316465048, 1.1741456755306312]
+                },
+                "instantiate": {
+                    "median": 1.2037179533267695,
+                    "range": [1.1195409347750531, 1.2783340765008575],
+                    "ci95": [1.1557507987220599, 1.2411277829858862]
+                },
+                "call": {
+                    "median": 1.001944191665486,
+                    "range": [0.9869021818629857, 1.034598707879039],
+                    "ci95": [0.9881714432891036, 1.0334254494126272]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.03184141456588829
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.01630733911224569
+                }
+            }
+        },
+        "rolldown--file--sharing": {
+            "uncertainty": {
+                "parse": {
+                    "median": 0.8951404268645581,
+                    "range": [0.867291436397021, 0.9471747068665926],
+                    "ci95": [0.8674161461884126, 0.8963470678038303]
+                },
+                "evaluate": {
+                    "median": 1.1402161834474118,
+                    "range": [1.0556033411688461, 1.2016628999150338],
+                    "ci95": [1.0933702298935388, 1.1644311656377957]
+                },
+                "instantiate": {
+                    "median": 1.1976539268117747,
+                    "range": [1.1020071074607147, 1.333813594830859],
+                    "ci95": [1.1420190535529928, 1.2276488023661511]
+                },
+                "call": {
+                    "median": 0.9773907010266575,
+                    "range": [0.9399439548257765, 1.0010568554110704],
+                    "ci95": [0.9614844285610025, 0.9992260916828946]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material improvement",
+                    "noise": 0.049372140917109286
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05678314491220804
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.03184141456588829
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.01630733911224569
+                }
+            }
+        },
+        "rolldown--package--empty": {
+            "uncertainty": {
+                "parse": {
+                    "median": 0.9883207052844374,
+                    "range": [0.9306976624312838, 1.0189941981358275],
+                    "ci95": [0.9390072640558362, 0.9975173538755613]
+                },
+                "evaluate": {
+                    "median": 1.0077665713826613,
+                    "range": [0.8702588870828051, 1.1292671535326968],
+                    "ci95": [0.9519119058450934, 1.0730486362309015]
+                },
+                "instantiate": {
+                    "median": 0.999483337640158,
+                    "range": [0.9363439827017266, 1.0548783571921718],
+                    "ci95": [0.9503658924617653, 1.043299386252757]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05719662875351572
+                }
+            }
+        },
+        "rolldown--package--noise": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0551840480451045,
+                    "range": [0.9414870809913891, 1.1154066806905039],
+                    "ci95": [1.0136953789558998, 1.0725156768318287]
+                },
+                "evaluate": {
+                    "median": 0.9862123175614345,
+                    "range": [0.8819991407684631, 1.0537809862869763],
+                    "ci95": [0.9620500358015095, 1.0444252847497253]
+                },
+                "instantiate": {
+                    "median": 0.9918734223933767,
+                    "range": [0.9346632981983002, 1.0679576178237005],
+                    "ci95": [0.9577939486764009, 1.0571966287535157]
+                },
+                "call": {
+                    "median": 1.007629318940779,
+                    "range": [0.9620693411661235, 1.027677463798665],
+                    "ci95": [1.0008477536978069, 1.0225398816693076]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05719662875351572
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02253988166930765
+                }
+            }
+        },
+        "rolldown--package--numbers": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0728041211955757,
+                    "range": [1.049570720598919, 1.100711599995979],
+                    "ci95": [1.0656407878200234, 1.0967265726853053]
+                },
+                "evaluate": {
+                    "median": 1.2250759163456628,
+                    "range": [1.1469786855765354, 1.3040703587751983],
+                    "ci95": [1.1990713001757685, 1.281580445744769]
+                },
+                "instantiate": {
+                    "median": 1.0671624829820152,
+                    "range": [1.0012485357110172, 1.1123631624064303],
+                    "ci95": [1.0546935898790155, 1.0937340124283588]
+                },
+                "call": {
+                    "median": 0.9863758276135478,
+                    "range": [0.9589427887159341, 1.0499551336083792],
+                    "ci95": [0.974740403199305, 1.0329610217862424]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.05719662875351572
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02253988166930765
+                }
+            }
+        },
+        "rolldown--package--variants": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0690133525250167,
+                    "range": [1.0278383408848204, 1.0892364975216493],
+                    "ci95": [1.0405591470912199, 1.0883052828452477]
+                },
+                "evaluate": {
+                    "median": 1.2530700825759142,
+                    "range": [1.1352149370385962, 1.3623542719548154],
+                    "ci95": [1.2147672552177595, 1.3323272832491724]
+                },
+                "instantiate": {
+                    "median": 1.0285319043159564,
+                    "range": [0.9593489236715138, 1.1008581376561835],
+                    "ci95": [1.0174717247761522, 1.0875921780252191]
+                },
+                "call": {
+                    "median": 0.9873233210945966,
+                    "range": [0.9506890649480542, 1.0266884318272058],
+                    "ci95": [0.9735877534851833, 1.01367342136381]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05719662875351572
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02253988166930765
+                }
+            }
+        },
+        "rolldown--package--strings": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.10034804057514,
+                    "range": [1.0605413907033538, 1.1170895173245232],
+                    "ci95": [1.0904241131588643, 1.109471898085165]
+                },
+                "evaluate": {
+                    "median": 1.2243475274719307,
+                    "range": [1.213030583283676, 1.3692671817040256],
+                    "ci95": [1.2147066726417362, 1.3092655446311359]
+                },
+                "instantiate": {
+                    "median": 1.041224777899324,
+                    "range": [0.9896289640195554, 1.1211922470921367],
+                    "ci95": [1.0195091947501587, 1.1209598657603752]
+                },
+                "call": {
+                    "median": 0.9894098929392345,
+                    "range": [0.9615618239730883, 1.0370431261448039],
+                    "ci95": [0.9820081682190706, 1.0146260075496194]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05719662875351572
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02253988166930765
+                }
+            }
+        },
+        "rolldown--package--adder": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0964033760801688,
+                    "range": [1.0523447518554592, 1.159073484012639],
+                    "ci95": [1.081194608669201, 1.13016008336377]
+                },
+                "evaluate": {
+                    "median": 1.1067954726368834,
+                    "range": [0.9619888844788144, 1.2223315396378847],
+                    "ci95": [1.0466583841166577, 1.1772042375399077]
+                },
+                "instantiate": {
+                    "median": 1.1760533029498523,
+                    "range": [1.0702382197660354, 1.2363153566621976],
+                    "ci95": [1.1232875970881282, 1.2006365436189468]
+                },
+                "call": {
+                    "median": 1.026477423755853,
+                    "range": [0.9683763248599477, 1.0561289250395212],
+                    "ci95": [0.9790297364845223, 1.028121972476927]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.05719662875351572
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02253988166930765
+                }
+            }
+        },
+        "rolldown--package--resource": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.1372885430858075,
+                    "range": [1.0691699199527753, 1.162094655226077],
+                    "ci95": [1.1088036826943302, 1.1575377220556264]
+                },
+                "evaluate": {
+                    "median": 1.1690107138926498,
+                    "range": [1.0180907542821576, 1.3538487590980586],
+                    "ci95": [1.122033760088975, 1.224490229398298]
+                },
+                "instantiate": {
+                    "median": 1.201162569551744,
+                    "range": [1.0078181965488646, 1.2645215096490745],
+                    "ci95": [1.0778900880166775, 1.25758469080019]
+                },
+                "call": {
+                    "median": 1.0107204756839003,
+                    "range": [0.9714484731309952, 1.0561331722196263],
+                    "ci95": [0.991969273360001, 1.049657769110345]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material regression",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.05719662875351572
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02253988166930765
+                }
+            }
+        },
+        "rolldown--package--sharing": {
+            "uncertainty": {
+                "parse": {
+                    "median": 0.9003263996875105,
+                    "range": [0.8701056167991424, 0.9122309586438688],
+                    "ci95": [0.8913635832473716, 0.9094522476827811]
+                },
+                "evaluate": {
+                    "median": 1.129447089266314,
+                    "range": [1.0490375185101573, 1.1848941148256695],
+                    "ci95": [1.09901371551843, 1.1584728940629405]
+                },
+                "instantiate": {
+                    "median": 1.1934764712856194,
+                    "range": [1.1616743734272745, 1.3613544936455093],
+                    "ci95": [1.1756859967985394, 1.2545641562714762]
+                },
+                "call": {
+                    "median": 0.9719342713901266,
+                    "range": [0.9247665999599506, 1.0033558649047807],
+                    "ci95": [0.9618453377388921, 0.9992816152539638]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "material improvement",
+                    "noise": 0.07251567683182869
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.04442528474972529
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.05719662875351572
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02253988166930765
+                }
+            }
+        },
+        "rollup--file--empty": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0099440491467142,
+                    "range": [0.8441632814715457, 1.0914817097535012],
+                    "ci95": [0.9513824764775661, 1.0441707710617634]
+                },
+                "evaluate": {
+                    "median": 0.9600660207490656,
+                    "range": [0.8809849521207638, 1.037360699109746],
+                    "ci95": [0.947010350944559, 1.0211319367875649]
+                },
+                "instantiate": {
+                    "median": 1.0039372231649382,
+                    "range": [0.8901425178144796, 1.054866448519718],
+                    "ci95": [0.9441201473514321, 1.0376837549461133]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.054061347482221134
+                }
+            }
+        },
+        "rollup--file--noise": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0056852667750424,
+                    "range": [0.9033943576842585, 1.204757375748619],
+                    "ci95": [0.9745438911576063, 1.1502400911532233]
+                },
+                "evaluate": {
+                    "median": 1.031879888873724,
+                    "range": [0.9440128975532207, 1.0936843684377198],
+                    "ci95": [1.0087296025635448, 1.0517971624976767]
+                },
+                "instantiate": {
+                    "median": 0.980986333930427,
+                    "range": [0.80484618901705, 1.0947608200381371],
+                    "ci95": [0.9710949463871446, 1.0540613474822211]
+                },
+                "call": {
+                    "median": 1.00887776510238,
+                    "range": [0.6648109007341841, 1.0301193774664639],
+                    "ci95": [0.9896842742761289, 1.025256425427968]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.054061347482221134
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02525642542796791
+                }
+            }
+        },
+        "rollup--file--numbers": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0651594830011637,
+                    "range": [1.0315225784067694, 1.174080689107642],
+                    "ci95": [1.056963961596267, 1.0805063899638934]
+                },
+                "evaluate": {
+                    "median": 1.254392741266877,
+                    "range": [1.1962562749933974, 1.3290797724921986],
+                    "ci95": [1.2292123686145895, 1.293976990746411]
+                },
+                "instantiate": {
+                    "median": 1.0666249151312326,
+                    "range": [1.0187458140479817, 1.200920778960969],
+                    "ci95": [1.045135519306151, 1.0818305828580466]
+                },
+                "call": {
+                    "median": 0.9807709908099855,
+                    "range": [0.9668551446500246, 1.045164343595237],
+                    "ci95": [0.9736237461800056, 1.0186257864312476]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.054061347482221134
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02525642542796791
+                }
+            }
+        },
+        "rollup--file--variants": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0619500923516514,
+                    "range": [1.0436943003298302, 1.1009690772250298],
+                    "ci95": [1.0561065920572117, 1.0920735597455713]
+                },
+                "evaluate": {
+                    "median": 1.2594558725916667,
+                    "range": [1.121650336441483, 1.3662660126849846],
+                    "ci95": [1.1562778934849367, 1.3209368501702599]
+                },
+                "instantiate": {
+                    "median": 1.052752269401722,
+                    "range": [1.0075880312816563, 1.074717438401198],
+                    "ci95": [1.0205658782494504, 1.070847160775658]
+                },
+                "call": {
+                    "median": 1.0146729756666548,
+                    "range": [0.9894352208615961, 1.049835587188833],
+                    "ci95": [1.003046440183189, 1.033548329133197]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.054061347482221134
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02525642542796791
+                }
+            }
+        },
+        "rollup--file--strings": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0654867339094984,
+                    "range": [1.047746714421034, 1.109838742932811],
+                    "ci95": [1.0606395736429928, 1.1042214312989422]
+                },
+                "evaluate": {
+                    "median": 1.218193722637149,
+                    "range": [1.165524686914824, 1.3180367007535445],
+                    "ci95": [1.2024982268052073, 1.2459932538951786]
+                },
+                "instantiate": {
+                    "median": 1.0739786938568157,
+                    "range": [1.0274211159659945, 1.1077853290971105],
+                    "ci95": [1.036473404065271, 1.1050643812320815]
+                },
+                "call": {
+                    "median": 0.9998382816913266,
+                    "range": [0.9629447048700691, 1.0228412884872438],
+                    "ci95": [0.9702047171101167, 1.0184964263120915]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.054061347482221134
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02525642542796791
+                }
+            }
+        },
+        "rollup--file--adder": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0648323424006518,
+                    "range": [1.0214207854733737, 1.106458745545772],
+                    "ci95": [1.0543941791556204, 1.1056819191594005]
+                },
+                "evaluate": {
+                    "median": 1.1086868768450373,
+                    "range": [1.0561543050303142, 1.224848679387222],
+                    "ci95": [1.068718920203061, 1.1276409222424728]
+                },
+                "instantiate": {
+                    "median": 1.1646159222613137,
+                    "range": [1.060489067828154, 1.2039301657369772],
+                    "ci95": [1.0988916309476118, 1.2014474751138007]
+                },
+                "call": {
+                    "median": 0.9951249064888243,
+                    "range": [0.9547123215282508, 1.0522138788570736],
+                    "ci95": [0.9783658982048673, 1.034804205435761]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.054061347482221134
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02525642542796791
+                }
+            }
+        },
+        "rollup--file--resource": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0813159715334253,
+                    "range": [0.9840232660683076, 1.1201144580472358],
+                    "ci95": [1.0568958692951005, 1.1113334319837784]
+                },
+                "evaluate": {
+                    "median": 1.1502718622498453,
+                    "range": [1.0063747632256255, 1.2837787212798852],
+                    "ci95": [1.1075654910143446, 1.2111992092673778]
+                },
+                "instantiate": {
+                    "median": 1.1559658727909548,
+                    "range": [1.0308391285738636, 1.2224930793695843],
+                    "ci95": [1.0727592025055102, 1.2057367125793]
+                },
+                "call": {
+                    "median": 0.99738013582889,
+                    "range": [0.9599985616073531, 1.034896004738076],
+                    "ci95": [0.9790486205319786, 1.020739353451286]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.054061347482221134
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02525642542796791
+                }
+            }
+        },
+        "rollup--file--sharing": {
+            "uncertainty": {
+                "parse": {
+                    "median": 0.8908770867100624,
+                    "range": [0.8675760377312102, 0.9214464711377446],
+                    "ci95": [0.8869904434836108, 0.896512012371943]
+                },
+                "evaluate": {
+                    "median": 1.1508979818571536,
+                    "range": [1.0817059532019366, 1.2258321288688547],
+                    "ci95": [1.134280303028389, 1.1882973953398457]
+                },
+                "instantiate": {
+                    "median": 1.1849489023206299,
+                    "range": [1.120695784481269, 1.2464862819296145],
+                    "ci95": [1.1466474946648173, 1.2446153900837356]
+                },
+                "call": {
+                    "median": 0.9669954893632448,
+                    "range": [0.9508318891146037, 0.9903851246381392],
+                    "ci95": [0.9544879400642345, 0.9848739426484322]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.15024009115322334
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.05179716249767674
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.054061347482221134
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02525642542796791
+                }
+            }
+        },
+        "rollup--package--empty": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0294068805178032,
+                    "range": [0.9115855537521711, 1.0636186304370214],
+                    "ci95": [1.0103779661789507, 1.0632562611386533]
+                },
+                "evaluate": {
+                    "median": 1.0315334235621476,
+                    "range": [0.9226108659486014, 1.171015420735766],
+                    "ci95": [0.9935902533682613, 1.1256346829839698]
+                },
+                "instantiate": {
+                    "median": 0.9841451221248494,
+                    "range": [0.9266441821262306, 1.032798968123351],
+                    "ci95": [0.9591981436117548, 1.0313260498098962]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.029663646521239206
+                }
+            }
+        },
+        "rollup--package--noise": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0062547934812638,
+                    "range": [0.9796094684565725, 1.4525093298857374],
+                    "ci95": [0.9891291479866251, 1.1941280923078663]
+                },
+                "evaluate": {
+                    "median": 1.0189229249021068,
+                    "range": [0.9276768830056855, 1.1010044836824069],
+                    "ci95": [0.9609695414690044, 1.0879705582402934]
+                },
+                "instantiate": {
+                    "median": 0.9941551825860754,
+                    "range": [0.8749242883318239, 1.0182926829249406],
+                    "ci95": [0.9703363534787608, 1.0068353306680755]
+                },
+                "call": {
+                    "median": 1.0001624050083555,
+                    "range": [0.9445445494722022, 1.0170126134702084],
+                    "ci95": [0.9714751842480407, 1.0142203879075882]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.029663646521239206
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02852481575195931
+                }
+            }
+        },
+        "rollup--package--numbers": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0705085902678235,
+                    "range": [1.0414112135637696, 1.1001802487830552],
+                    "ci95": [1.0613942222057857, 1.0905157167559385]
+                },
+                "evaluate": {
+                    "median": 1.2578132531259996,
+                    "range": [1.2007779499793192, 1.332128565899517],
+                    "ci95": [1.229538289638167, 1.3166865385748472]
+                },
+                "instantiate": {
+                    "median": 1.0609255733853127,
+                    "range": [1.0244166141094406, 1.0790625829095417],
+                    "ci95": [1.029139175846963, 1.072985792373715]
+                },
+                "call": {
+                    "median": 0.9920991988018275,
+                    "range": [0.966715330131688, 1.0548987845742144],
+                    "ci95": [0.9803696143647069, 1.0518540753710954]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.029663646521239206
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02852481575195931
+                }
+            }
+        },
+        "rollup--package--variants": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0691195802671922,
+                    "range": [1.0509533910511577, 1.0949043538819125],
+                    "ci95": [1.0630030197646188, 1.0773728479823423]
+                },
+                "evaluate": {
+                    "median": 1.2494608195545638,
+                    "range": [1.1599403009416345, 1.3817991043786662],
+                    "ci95": [1.2290458444516943, 1.3201652149027556]
+                },
+                "instantiate": {
+                    "median": 1.061653804495076,
+                    "range": [1.0074728387471494, 1.1197886847944543],
+                    "ci95": [1.024825445357295, 1.1117946744694158]
+                },
+                "call": {
+                    "median": 1.0108011805155177,
+                    "range": [0.9860928973935984, 1.0846944659719904],
+                    "ci95": [0.9950499379228717, 1.0297502689459332]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.029663646521239206
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02852481575195931
+                }
+            }
+        },
+        "rollup--package--strings": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0708856327052076,
+                    "range": [1.0226908795130392, 1.0857813259054216],
+                    "ci95": [1.0540095550872401, 1.0754861527102133]
+                },
+                "evaluate": {
+                    "median": 1.2220709662966271,
+                    "range": [1.122516075126829, 1.3128210709619328],
+                    "ci95": [1.1866056940579517, 1.2843157995930872]
+                },
+                "instantiate": {
+                    "median": 1.0470359086240086,
+                    "range": [0.9954815014919394, 1.1438530979449206],
+                    "ci95": [1.0140945509818247, 1.0746164440217925]
+                },
+                "call": {
+                    "median": 0.9986612404395758,
+                    "range": [0.9429864422995194, 1.0197157763146873],
+                    "ci95": [0.976964868657376, 1.013851851529848]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.029663646521239206
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02852481575195931
+                }
+            }
+        },
+        "rollup--package--adder": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0818243954733238,
+                    "range": [1.0001631823577115, 1.0994095189534678],
+                    "ci95": [1.0354245047941961, 1.0905580051932084]
+                },
+                "evaluate": {
+                    "median": 1.14238169321828,
+                    "range": [1.0302589527170092, 1.1694500565327772],
+                    "ci95": [1.0627762488523866, 1.1650894877590265]
+                },
+                "instantiate": {
+                    "median": 1.165384955361069,
+                    "range": [1.1095486274438153, 1.2415496261140992],
+                    "ci95": [1.1458335604137924, 1.2153132598969623]
+                },
+                "call": {
+                    "median": 1.0034525939596892,
+                    "range": [0.9730545392493736, 1.044307076870253],
+                    "ci95": [0.9865590444506845, 1.0283156781993663]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.029663646521239206
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02852481575195931
+                }
+            }
+        },
+        "rollup--package--resource": {
+            "uncertainty": {
+                "parse": {
+                    "median": 1.0892243032716322,
+                    "range": [1.0385976355173447, 1.1229904129793213],
+                    "ci95": [1.046804061454824, 1.1218390348467764]
+                },
+                "evaluate": {
+                    "median": 1.1618810761901432,
+                    "range": [1.1189091234476725, 1.2409692141097184],
+                    "ci95": [1.137025448474728, 1.2159570901790826]
+                },
+                "instantiate": {
+                    "median": 1.1819058570418004,
+                    "range": [1.0881497430387903, 1.2666592728146266],
+                    "ci95": [1.1180908260201405, 1.23121830917484]
+                },
+                "call": {
+                    "median": 1.023310477566648,
+                    "range": [0.9717217146248824, 1.037531740747738],
+                    "ci95": [0.9833226199549422, 1.0346709939953056]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.029663646521239206
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02852481575195931
+                }
+            }
+        },
+        "rollup--package--sharing": {
+            "uncertainty": {
+                "parse": {
+                    "median": 0.8972574597318166,
+                    "range": [0.8793032754958378, 0.9343148501906406],
+                    "ci95": [0.8807763404323237, 0.9273506345852609]
+                },
+                "evaluate": {
+                    "median": 1.1184821237850846,
+                    "range": [1.0643407599618415, 1.1616444073456005],
+                    "ci95": [1.0923116482393729, 1.1459993146564247]
+                },
+                "instantiate": {
+                    "median": 1.2082626497530753,
+                    "range": [1.0826642646594753, 1.248068823014409],
+                    "ci95": [1.1534626000365447, 1.2314536134797132]
+                },
+                "call": {
+                    "median": 0.9789939863384332,
+                    "range": [0.9506752056748294, 1.018885218245599],
+                    "ci95": [0.9700171341767688, 0.992797681787344]
+                }
+            },
+            "timingFindings": {
+                "parse": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.19412809230786632
+                },
+                "evaluate": {
+                    "finding": "material regression",
+                    "noise": 0.08797055824029343
+                },
+                "instantiate": {
+                    "finding": "material regression",
+                    "noise": 0.029663646521239206
+                },
+                "call": {
+                    "finding": "inconclusive relative to process uncertainty and identical-code noise",
+                    "noise": 0.02852481575195931
+                }
+            }
+        }
+    }
+}
