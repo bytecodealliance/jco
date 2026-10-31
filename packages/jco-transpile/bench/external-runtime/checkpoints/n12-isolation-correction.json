@@ -1,0 +1,142 @@
+{
+    "observedAt": "2026-10-22T03:24:09.295Z",
+    "earliestParentSuite": {
+        "log": ".llm/replay/N08/newbase-n08-external-full-initial.log",
+        "startUTC": "2026-10-21 20:20:29"
+    },
+    "workers": [
+        {
+            "pid": 708,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 53770,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/cli__p3-cli-hello-stdout-post-return/p3-cli-hello-stdout-post-return/p3-cli-hello-stdout-post-return.js",
+            "rssKiB": 129136,
+            "startedUTC": "2026-10-21 20:21:33"
+        },
+        {
+            "pid": 710,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 54000,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/cli__p3-cli-much-stdout/p3-cli-much-stdout/p3-cli-much-stdout.js",
+            "rssKiB": 128868,
+            "startedUTC": "2026-10-21 20:21:33"
+        },
+        {
+            "pid": 716,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 53654,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/cli__p3-cli-hello-stdout/p3-cli-hello-stdout/p3-cli-hello-stdout.js",
+            "rssKiB": 129092,
+            "startedUTC": "2026-10-21 20:21:33"
+        },
+        {
+            "pid": 839,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 54372,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/fs__p3-file-write/p3-file-write/p3-file-write.js",
+            "rssKiB": 132512,
+            "startedUTC": "2026-10-21 20:21:36"
+        },
+        {
+            "pid": 842,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 54389,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/fs__p3-filesystem-file-read-write/p3-filesystem-file-read-write/p3-filesystem-file-read-write.js",
+            "rssKiB": 128852,
+            "startedUTC": "2026-10-21 20:21:36"
+        },
+        {
+            "pid": 2024,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 57176,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/http__p3-http-outbound-request-large-post/p3-http-outbound-request-large-post/p3-http-outbound-request-large-post.js",
+            "rssKiB": 133320,
+            "startedUTC": "2026-10-21 20:22:40"
+        },
+        {
+            "pid": 2141,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 55664,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/http__p3-http-outbound-request-post/p3-http-outbound-request-post/p3-http-outbound-request-post.js",
+            "rssKiB": 134704,
+            "startedUTC": "2026-10-21 20:22:42"
+        },
+        {
+            "pid": 2147,
+            "state": "S",
+            "parent": 1,
+            "cpuTicks": 55985,
+            "cwd": "/home/agent/workspace/jco/packages/jco-transpile",
+            "runner": "/home/agent/workspace/jco/packages/jco-transpile/test/p3/cli-runner.js",
+            "fixture": "file:///home/agent/workspace/jco/packages/jco-transpile/test/output/p3-cli-fixtures/http__p3-http-outbound-request-put/p3-http-outbound-request-put/p3-http-outbound-request-put.js",
+            "rssKiB": 129728,
+            "startedUTC": "2026-10-21 20:22:42"
+        }
+    ],
+    "terminalStates": [
+        {
+            "pid": 708,
+            "state": "gone"
+        },
+        {
+            "pid": 710,
+            "state": "gone"
+        },
+        {
+            "pid": 716,
+            "state": "gone"
+        },
+        {
+            "pid": 839,
+            "state": "gone"
+        },
+        {
+            "pid": 842,
+            "state": "gone"
+        },
+        {
+            "pid": 2024,
+            "state": "gone"
+        },
+        {
+            "pid": 2141,
+            "state": "gone"
+        },
+        {
+            "pid": 2147,
+            "state": "gone"
+        }
+    ],
+    "affectedCheckpoints": ["N08", "N09", "N10", "N11"],
+    "correction": "Earlier no-functional-process/isolation statements were too broad. Elevated /proc audit found these old live PPID1 workspace fixture workers. Their timing/memory-pressure contribution cannot be reconstructed. Preserve original observations and deterministic size/native constructor evidence; require clean frozen-artifact remeasurement in N14.",
+    "abortedN12": {
+        "run": "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-ibtIQW",
+        "latestStatus": "failed",
+        "timedConfigCount": 0,
+        "timedResultCount": 0,
+        "manifestExists": false,
+        "discarded": true,
+        "reason": "preflight detected eight preexisting orphan CLI fixture processes; shell did not stop after failed assertion; aborted before accepted recording"
+    }
+}

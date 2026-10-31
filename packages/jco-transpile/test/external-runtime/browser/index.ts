@@ -64,6 +64,53 @@ suite('external runtime browser', () => {
     }
 
     for (const provider of ['default', 'custom'] as const) {
+        test.concurrent.each(['sync-lowered-async-callee', 'deferred-subtask-start'])(
+            `browser drives ${provider} named host calls: %s`,
+            async (name) => {
+                await withBrowser(async (browser, serverPort, outDir) => {
+                    const { files } = await transpile(
+                        fileURLToPath(new URL(`../../fixtures/components/p3/${name}.wat`, import.meta.url)),
+                        {
+                            name: 'host',
+                            instantiation: 'sync',
+                            asyncMode: 'jspi',
+                            nodejsCompat: false,
+                            base64Cutoff: 0,
+                            cmRuntimeEsModule:
+                                provider === 'default' ? '@bytecodealliance/jco-cm-runtime' : './runtime/',
+                        },
+                    );
+                    await writeFiles(files, { baseDir: outDir });
+                    if (provider === 'custom') {
+                        await cp(CUSTOM_RUNTIME, join(outDir, 'runtime'), { recursive: true });
+                    }
+                    const deferred = name === 'deferred-subtask-start';
+                    const result = await runBrowserCase({
+                        browser,
+                        serverPort,
+                        module: CASE_MODULE,
+                        exportName: 'runHost',
+                        args: [
+                            {
+                                componentPath: '/tmpdir/host.js',
+                                corePaths: Object.keys(files).filter((path) => path.endsWith('.wasm')),
+                                deferred,
+                            },
+                        ],
+                    });
+                    assert.deepEqual(result, {
+                        values: deferred
+                            ? [
+                                  [1, 0],
+                                  [1, 0],
+                              ]
+                            : [42, 42],
+                        completed: deferred ? [2, 2] : [],
+                    });
+                });
+            },
+        );
+
         test.concurrent(`transpiles and loads ${provider} named exports entirely in the browser`, async () => {
             await withBrowser(async (browser, serverPort, outDir) => {
                 await writeFile(

@@ -26,8 +26,8 @@ async function writeProvider(dir: string, source: string) {
         'core',
         'component',
         'error-context',
-        ,
         'async-task',
+        'host',
     ]) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),
@@ -53,7 +53,7 @@ export function waitableSetNew(context, componentIdx) {
  calls.push('new'); contexts.push(context); return defaults.waitableSetNew(context, componentIdx);
 }
 export function waitableSetPoll(context, memory, rep, ptr) {
- if (this !== null || Object.keys(context).sort().join() !== 'RuntimeError,WaitableSet,events,lookup,storeEventInComponentMemory,taskLookup') throw new Error('invalid poll context/receiver');
+ if (this !== null || Object.keys(context).sort().join() !== 'RuntimeError,WaitableSet,events,lookup,taskLookup') throw new Error('invalid poll context/receiver');
  calls.push('poll'); return defaults.waitableSetPoll(context, memory, rep, ptr);
 }
 export function waitableSetDrop(context, componentIdx, rep) {
@@ -83,7 +83,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.notInclude(source, 'createWaitable: args =>');
                     assert.include(source, 'taskLookup: _jcoTaskLookupContext');
                     assert.notInclude(source, 'function getCurrentTask(');
-                    assert.include(source, 'storeEventInComponentMemory: args =>');
+                    assert.notInclude(source, 'storeEventInComponentMemory: args =>');
                 }
                 const bindings = await import(pathToFileURL(join(dir, 'waitable.js')).href);
                 const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/waitable.js')).href);

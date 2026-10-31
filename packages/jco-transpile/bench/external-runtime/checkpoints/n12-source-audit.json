@@ -1,0 +1,65 @@
+{
+    "compiledBodyComparisons": {
+        "initializeAsyncTaskClass": true,
+        "initializeAsyncSubtaskClass": true,
+        "driverLoop": true,
+        "unpackCallbackResult": true,
+        "prepareCall": true,
+        "asyncStartCall": true,
+        "syncStartCall": true,
+        "storeEventInComponentMemory": true
+    },
+    "driverComparisons": {
+        "unpackCallbackResult": {
+            "emittedBodyTokens": 92,
+            "unchanged": true
+        },
+        "driverLoop": {
+            "emittedBodyTokens": 997,
+            "unchanged": true
+        }
+    },
+    "classComparisons": {
+        "initializeAsyncTaskClass": {
+            "emittedBodyTokens": 5441,
+            "unchanged": true
+        },
+        "initializeAsyncSubtaskClass": {
+            "emittedBodyTokens": 2344,
+            "unchanged": true
+        }
+    },
+    "hostComparisons": {
+        "prepareCall": {
+            "emittedBodyTokens": 510,
+            "matchesReviewedContextTransformation": true
+        },
+        "asyncStartCall": {
+            "emittedBodyTokens": 2121,
+            "matchesReviewedContextTransformation": true
+        },
+        "syncStartCall": {
+            "emittedBodyTokens": 1035,
+            "matchesReviewedContextTransformation": true
+        },
+        "storeEventInComponentMemory": {
+            "emittedBodyTokens": 168,
+            "matchesReviewedContextTransformation": true
+        }
+    },
+    "historicalHostSha256": "2a40df4927e158fed06fbf99d4b017bd25aaf61f1fefeb4e56e86a122aa49fbc",
+    "n11TaskSha256": "e9e4bfff8568a6491e4e99c8ff23b8993563872b28754f0c29ff123d0b97b08e",
+    "currentTaskSha256": "71657ed1341f30bf07d6ac51ede1396c79a8f34da508c759d3714dbfbbd71318",
+    "currentDriverSha256": "ec052f38f0d676e4d645a85ae3c83079bda4e558ac6627ec0bf8a9c036e04a0e",
+    "currentHostSha256": "3db39049ea8f0afbc7ca1d6e5fd966c18325229f5094032a789b96caaee5be84",
+    "reviewedPortScriptSha256": "00dfa94d5651b83b1ac520e713d35c33f6c2c68c00e42a75d112744af3542d7d",
+    "normalization": "Parsed emitted-JavaScript body tokens; whitespace/comments, trailing object commas and non-elision array trailing commas only; array elisions retained",
+    "intentionalHostAdaptations": [
+        "Factory removed; data/capability contexts replace lexical namespace references; pure defaults use static imports",
+        "Preserve actual inline promising method receiver/lazy getter/cache instead of detached historical helper",
+        "Remove two historical TS-only empty-component guards to preserve current inline read/error order",
+        "Explicit ...params preserves ten metadata operands before core arguments with a new context prefix",
+        "May-block false fallback reproduces false.value as undefined without invalid TypeScript access"
+    ],
+    "exclusions": "Does not infer equal allocation size or performance. Context identity, JSPI receiver/cache/laziness, constructors, event writes and lifecycle ordering have independent runtime/generated/browser coverage."
+}

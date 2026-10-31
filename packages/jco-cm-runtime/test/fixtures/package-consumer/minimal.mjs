@@ -17,6 +17,9 @@ for (const key of [
     });
 }
 await import('@bytecodealliance/jco-cm-runtime/runtime');
+const host = await import('@bytecodealliance/jco-cm-runtime/intrinsics/host');
+if (Object.keys(host).sort().join() !== 'asyncStartCall,prepareCall,storeEventInComponentMemory,syncStartCall')
+    {throw new Error('host metadata import failed');}
 const { tableGet } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/resource');
 const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
 const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
