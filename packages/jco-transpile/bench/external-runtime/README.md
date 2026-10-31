@@ -65,6 +65,7 @@ checkpointKey = sha256(
         bindings: environment.bindingSourceHashes,
         compilerArtifacts,
         runtimeArtifacts,
+        shimArtifacts,
     }),
 );
 ```
@@ -75,7 +76,7 @@ checkpointKey = sha256(
   Markdown and baseline JSON files are excluded.
 - `versions`, `node`, and `lock` identify tools, Node, and the lockfile contents.
 - `fixtureHashes` hashes input fixture bytes; `bindings` hashes all generator `.rs` files by sorted relative path.
-- Artifact maps hash the built generator JS/Wasm, runtime package metadata, and runtime JS.
+- Artifact maps hash the built generator JS/Wasm, runtime package metadata and JS, and preview2-shim JS.
 
 File digests hash the exact bytes.
 The outer digest uses compact `JSON.stringify` output in the insertion order above, without a trailing newline.

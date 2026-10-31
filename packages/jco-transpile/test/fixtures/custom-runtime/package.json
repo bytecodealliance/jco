@@ -3,6 +3,7 @@
     "type": "module",
     "exports": {
         "./runtime": "./runtime.js",
-        "./intrinsics/resource": "./intrinsics/resource.js"
+        "./intrinsics/resource": "./intrinsics/resource.js",
+        "./intrinsics/conversion": "./intrinsics/conversion.js"
     }
 }

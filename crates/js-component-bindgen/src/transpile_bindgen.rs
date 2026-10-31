@@ -5585,6 +5585,7 @@ impl<'a> Instantiator<'a, '_> {
             skip_fn_call_task_management: false,
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
+            external_runtime: self.bindgen.cm_runtime_es_module.is_some(),
             valid_lifting_optimization: self.bindgen.opts.valid_lifting_optimization,
             flags_as_bigint: self.bindgen.opts.flags_as_bigint,
             enum_values_screaming_snake_case: self.bindgen.opts.enum_values_screaming_snake_case,
