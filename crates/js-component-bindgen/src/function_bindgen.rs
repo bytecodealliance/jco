@@ -162,6 +162,10 @@ pub struct FunctionBindgen<'a> {
     /// Set of intrinsics
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
 
+    /// Select contextual named runtime calls instead of inline implementations.
+    #[builder(default)]
+    pub external_runtime: bool,
+
     /// Whether to perform valid lifting optimization
     pub valid_lifting_optimization: bool,
     /// Whether WIT flags are represented as bigint values.
@@ -428,6 +432,11 @@ impl FunctionBindgen<'_> {
         intrinsic.name().to_string()
     }
 
+    fn intrinsic_call(&mut self, intrinsic: Intrinsic, operands: &str) -> String {
+        self.intrinsics.insert(intrinsic);
+        crate::intrinsics::runtime::select(self.external_runtime).call(intrinsic, operands)
+    }
+
     // Task-only templates may be built unconditionally, but must only be emitted
     // when task management is enabled.
     fn task_intrinsic(&mut self, intrinsic: Intrinsic) -> String {
@@ -676,30 +685,27 @@ impl FunctionBindgen<'_> {
     fn bitcast(&mut self, cast: &Bitcast, op: &str) -> String {
         match cast {
             Bitcast::I32ToF32 => {
-                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToF32));
-                format!("{cvt}({op})")
+                self.intrinsic_call(Intrinsic::Conversion(ConversionIntrinsic::I32ToF32), op)
             }
             Bitcast::F32ToI32 => {
-                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::F32ToI32));
-                format!("{cvt}({op})")
+                self.intrinsic_call(Intrinsic::Conversion(ConversionIntrinsic::F32ToI32), op)
             }
             Bitcast::I64ToF64 => {
-                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I64ToF64));
-                format!("{cvt}({op})")
+                self.intrinsic_call(Intrinsic::Conversion(ConversionIntrinsic::I64ToF64), op)
             }
             Bitcast::F64ToI64 => {
-                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::F64ToI64));
-                format!("{cvt}({op})")
+                self.intrinsic_call(Intrinsic::Conversion(ConversionIntrinsic::F64ToI64), op)
             }
             Bitcast::I32ToI64 => format!("BigInt({op})"),
             Bitcast::I64ToI32 => format!("Number({op})"),
-            Bitcast::I64ToF32 => {
-                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToF32));
-                format!("{cvt}(Number({op}))")
-            }
+            Bitcast::I64ToF32 => self.intrinsic_call(
+                Intrinsic::Conversion(ConversionIntrinsic::I32ToF32),
+                &format!("Number({op})"),
+            ),
             Bitcast::F32ToI64 => {
-                let cvt = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::F32ToI32));
-                format!("BigInt({cvt}({op}))")
+                let call =
+                    self.intrinsic_call(Intrinsic::Conversion(ConversionIntrinsic::F32ToI32), op);
+                format!("BigInt({call})")
             }
             Bitcast::None
             | Bitcast::P64ToI64
@@ -1071,43 +1077,67 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::I32FromU8 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint8));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToUint8),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::I32FromS8 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt8));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToInt8),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::I32FromU16 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint16));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToUint16),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::I32FromS16 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt16));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToInt16),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::I32FromU32 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToUint32));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToUint32),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::I32FromS32 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::I64FromU64 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigUint64));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToBigUint64),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::I64FromS64 => {
-                let conv = self.intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToBigInt64));
-                results.push(format!("{conv}({op})", op = operands[0]))
+                let call = self.intrinsic_call(
+                    Intrinsic::Conversion(ConversionIntrinsic::ToBigInt64),
+                    &operands[0],
+                );
+                results.push(call)
             }
 
             Instruction::F32FromCoreF32 | Instruction::F64FromCoreF64 => {

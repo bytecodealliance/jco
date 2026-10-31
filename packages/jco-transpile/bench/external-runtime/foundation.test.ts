@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { cpus, platform, arch } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { assert, test } from 'vitest';
 import { buildPair, installRuntime, optimize } from './build.js';
-import { bundlers, resolutions, scenarios } from './cases.js';
+import { bundlers, resolutions, scenarios, importControls } from './cases.js';
 import { measure, type Measurement } from './measure.js';
 import {
     median,
@@ -40,7 +41,7 @@ test('complete named-runtime smoke matrix', async () => {
     const coverage = JSON.parse(await readFile(join(here, 'coverage.json'), 'utf8'));
     const versions = Object.fromEntries(
         await Promise.all(
-            ['rolldown', 'rollup', 'oxc-minify', 'typescript'].map(async (name) => [
+            ['rolldown', 'rollup', 'oxc-minify', 'typescript', '@bytecodealliance/preview2-shim'].map(async (name) => [
                 name,
                 JSON.parse(
                     await readFile(new URL('../../node_modules/' + name + '/package.json', import.meta.url), 'utf8'),
@@ -71,6 +72,15 @@ test('complete named-runtime smoke matrix', async () => {
     const runtimeArtifacts: Record<string, string> = {
         package: hash(await readFile(new URL('../package.json', defaultRuntimeUrl))),
     };
+    const shimDirectory = dirname(
+        createRequire(import.meta.url).resolve('@bytecodealliance/preview2-shim/instantiation'),
+    );
+    const shimArtifacts: Record<string, string> = {};
+    for (const name of (await readdir(shimDirectory, { recursive: true }))
+        .filter((name) => name.endsWith('.js'))
+        .sort()) {
+        shimArtifacts[name] = hash(await readFile(join(shimDirectory, name)));
+    }
     for (const name of [
         'runtime.js',
         'index.js',
@@ -84,13 +94,14 @@ test('complete named-runtime smoke matrix', async () => {
     const environment = {
         compilerArtifacts,
         runtimeArtifacts,
+        shimArtifacts,
         node: process.version,
         rust: (await exec('rustc', ['--version'])).stdout.trim(),
         versions,
         platform: platform(),
         arch: arch(),
         cpu: cpus()[0]?.model,
-        flags: process.execArgv,
+        controllerFlags: process.execArgv,
         debug: process.env.JCO_DEBUG ?? null,
         lockHash: hash(await readFile(new URL('../../../../pnpm-lock.yaml', import.meta.url))),
         bindingSourceHashes: await sourceHashes(
@@ -120,46 +131,51 @@ test('complete named-runtime smoke matrix', async () => {
             const controlDir = join(output, `controls-${bundler}-${resolution}`);
             await mkdir(controlDir, { recursive: true });
             await installRuntime(controlDir);
-            const specifier =
-                resolution === 'file'
-                    ? new URL('intrinsics/resource.js', defaultRuntimeUrl).href
-                    : '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
-            for (const used of [false, true]) {
-                const entry = join(controlDir, `entry-${used}.mjs`);
-                await writeFile(
-                    entry,
-                    `import { tableGet } from ${JSON.stringify(specifier)};\n` +
-                        (used
-                            ? 'export function answer() { return tableGet({ RuntimeError: WebAssembly.RuntimeError }, [1073741824, 0, 7, 4294967338], 1).rep; }'
-                            : 'export const answer = 42;'),
-                );
-                const result = await optimize(entry, bundler);
-                const bundle = join(controlDir, `bundle-${used}.mjs`);
-                await writeFile(bundle, result.code);
-                const binding = await import(pathToFileURL(bundle).href);
-                assert.equal(used ? binding.answer() : binding.answer, 42);
-                if (!used) {
-                    assert.isBelow(Buffer.byteLength(result.code), 100);
-                }
-                let allocations;
-                if (used) {
-                    const trace = join(controlDir, 'allocations.json');
-                    await exec(process.execPath, [join(here, 'trace.mjs'), pathToFileURL(bundle).href, trace]);
-                    allocations = JSON.parse(await readFile(trace, 'utf8'));
-                    assert.deepEqual(
-                        Object.values(allocations),
-                        Object.values(allocations).map(() => 0),
-                        'tableGet must not initialize unrelated families',
+            for (const control of importControls) {
+                const specifier =
+                    resolution === 'file'
+                        ? new URL(control.suffix + '.js', defaultRuntimeUrl).href
+                        : '@bytecodealliance/jco-cm-runtime/' + control.suffix;
+                for (const used of [false, true]) {
+                    const entry = join(controlDir, `entry-${control.id}-${used}.mjs`);
+                    await writeFile(
+                        entry,
+                        `import { ${control.names.join(', ')} } from ${JSON.stringify(specifier)};\n` +
+                            (used
+                                ? control.setup + ` export function answer() { return ${control.answer}; }`
+                                : 'export const answer = 42;'),
                     );
+                    const result = await optimize(entry, bundler);
+                    const bundle = join(controlDir, `bundle-${control.id}-${used}.mjs`);
+                    await writeFile(bundle, result.code);
+                    const binding = await import(pathToFileURL(bundle).href);
+                    assert.equal(used ? binding.answer() : binding.answer, 42);
+                    if (!used) {
+                        assert.isBelow(Buffer.byteLength(result.code), 100);
+                    }
+                    let allocations;
+                    if (used) {
+                        const trace = join(controlDir, `allocations-${control.id}.json`);
+                        await exec(process.execPath, [join(here, 'trace.mjs'), pathToFileURL(bundle).href, trace]);
+                        allocations = JSON.parse(await readFile(trace, 'utf8'));
+                        const expected = Object.fromEntries(
+                            Object.keys(allocations).map((key) => [
+                                key,
+                                (control.allocations as Record<string, number>)[key] ?? 0,
+                            ]),
+                        );
+                        assert.deepEqual(allocations, expected, `${control.id} must initialize only selected storage`);
+                    }
+                    controls.push({
+                        bundler,
+                        resolution,
+                        operation: control.id,
+                        used,
+                        bytes: Buffer.byteLength(result.code),
+                        modules: result.modules,
+                        allocations,
+                    });
                 }
-                controls.push({
-                    bundler,
-                    resolution,
-                    used,
-                    bytes: Buffer.byteLength(result.code),
-                    modules: result.modules,
-                    allocations,
-                });
             }
             for (const scenario of scenarios) {
                 const pair = await buildPair(scenario.components, bundler, resolution, output);
@@ -196,6 +212,7 @@ test('complete named-runtime smoke matrix', async () => {
             bindings: environment.bindingSourceHashes,
             compilerArtifacts,
             runtimeArtifacts,
+            shimArtifacts,
         }),
     );
     await writeFile(
@@ -278,7 +295,7 @@ test('complete named-runtime smoke matrix', async () => {
         await writeFile(join(output, `${graph.id}.json`), JSON.stringify(reports[graph.id], null, 2) + '\n');
     }
     assert.equal(Object.keys(reports).length, bundlers.length * resolutions.length * scenarios.length);
-    assert.equal(controls.length, bundlers.length * resolutions.length * 2);
+    assert.equal(controls.length, bundlers.length * resolutions.length * importControls.length * 2);
     assertCompleteReports(
         graphs.map(({ id }) => id),
         reports,
@@ -311,7 +328,7 @@ test('complete named-runtime smoke matrix', async () => {
                 schema: 2,
                 complete: true,
                 expectedReports: graphs.map(({ id }) => id).sort(),
-                expectedControls: bundlers.length * resolutions.length * 2,
+                expectedControls: bundlers.length * resolutions.length * importControls.length * 2,
                 checkpointKey,
                 baselinePath,
                 environment,

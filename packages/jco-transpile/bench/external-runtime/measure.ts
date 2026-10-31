@@ -36,16 +36,29 @@ export async function measure(
             memoryMode,
         }),
     );
-    await exec(
-        process.execPath,
-        [
-            '--expose-gc',
-            '--experimental-vm-modules',
-            ...(!('Suspending' in WebAssembly) ? ['--experimental-wasm-jspi'] : []),
-            fileURLToPath(new URL('./runner.mjs', import.meta.url)),
-            config,
-        ],
-        { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },
-    );
+    try {
+        await exec(
+            process.execPath,
+            [
+                '--expose-gc',
+                '--experimental-vm-modules',
+                ...(!('Suspending' in WebAssembly) ? ['--experimental-wasm-jspi'] : []),
+                fileURLToPath(new URL('./runner.mjs', import.meta.url)),
+                config,
+            ],
+            { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },
+        );
+    } catch (error) {
+        const failure = error as Error & { stdout?: string; stderr?: string };
+        const stderr = join(pair.inline.dir, `failure-${suffix}.stderr.log`);
+        await writeFile(stderr, failure.stderr ?? '');
+        await writeFile(join(pair.inline.dir, `failure-${suffix}.stdout.log`), failure.stdout ?? '');
+        const detail = (failure.stderr ?? '')
+            .split('\n')
+            .filter((line) => line.length < 1800)
+            .slice(-22)
+            .join('\n');
+        throw new Error(`Benchmark child failed; full stderr: ${stderr}\n${detail || failure.message.split('\n')[0]}`);
+    }
     return JSON.parse(await readFile(output, 'utf8'));
 }

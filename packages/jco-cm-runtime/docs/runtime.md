@@ -4,7 +4,8 @@
 
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
-`tableGet` from `intrinsics/resource`. Only implemented subpaths are published.
+`tableGet` from `intrinsics/resource` and selected conversions from
+`intrinsics/conversion`. Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
 | Base                               | Resource import                                        | Version import                             |
@@ -26,8 +27,8 @@ map each public subpath to its `.js` file. HTTP servers must serve the whole
 runtime directory tree with JavaScript MIME types.
 
 Bindings check version 1 before use. Missing subpaths or named exports fail
-through the native ES module loader. The current externalized operation is
-`tableGet`; other intrinsics remain inline during migration.
+through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
+operations (20/274 logical intrinsic variants); other families remain inline during migration.
 
 ## Implementing an alternative runtime
 
@@ -43,7 +44,8 @@ const conformance: ResourceModule = resource;
 ```
 
 Export `CM_RUNTIME_API_VERSION = 1` from your `runtime.js`. Expose `./runtime`
-and `./intrinsics/resource` in your package's `exports` map, with their matching
+and the implemented `./intrinsics/resource` and `./intrinsics/conversion` subpaths
+in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
 Function-property signatures support strict parameter checking. Type-only
@@ -55,6 +57,6 @@ Test the installed package and its behavior, especially traps and shared state.
 Providers may re-export selected default functions. Those functions retain their
 own statically imported dependencies: overriding a sibling export does not
 intercept its calls. There is no mutable namespace receiver or implicit override
-registry. Context-free operations, when added, will take no dummy context argument.
+registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.

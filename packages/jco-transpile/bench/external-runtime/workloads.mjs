@@ -1,7 +1,12 @@
 import assert from 'node:assert/strict';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-export function importsFor() {
-    return {};
+export function importsFor(id) {
+    const imports = id === 'numbers' || id === 'variants' ? new WASIShim().getImportObject() : {};
+    if (id === 'numbers' || id === 'variants') {
+        imports[`test:${id}/test`] = new Proxy({}, { get: () => (value) => value });
+    }
+    return imports;
 }
 
 /** Independent known answers also validate every timed checksum. */
@@ -16,6 +21,37 @@ export async function workload(id, instance) {
         case 'adder':
             assert.equal(instance.add.add(17, 25), 42);
             return { call: (i) => instance.add.add(i & 255, 1), async: false };
+        case 'numbers':
+            assert.equal(instance.test.roundtripU64(2n ** 64n - 1n), 2n ** 64n - 1n);
+            assert.equal(instance.test.roundtripS64(-(2n ** 63n)), -(2n ** 63n));
+            assert.equal(instance.test.roundtripF32(1.25), 1.25);
+            assert.equal(instance.test.roundtripF64(-Math.PI), -Math.PI);
+            assert.equal(instance.test.roundtripChar('🚀'), '🚀');
+            return { call: (i) => Number(instance.test.roundtripU64(BigInt(i & 255))), async: false };
+        case 'variants': {
+            assert.equal(instance.test.roundtripOption(undefined), undefined);
+            assert.equal(instance.test.roundtripOption(42), 42);
+            const input = [
+                { tag: 'a', val: 1 },
+                { tag: 'a', val: 2 },
+                { tag: 'a', val: 3 },
+                { tag: 'a', val: 4n },
+                { tag: 'a', val: 5n },
+                { tag: 'a', val: 6 },
+            ];
+            assert.deepEqual(instance.test.variantCasts(input), input);
+            return {
+                call: (i) => {
+                    const value = i & 255;
+                    input[0].val = value;
+                    input[3].val = BigInt(value);
+                    input[5].val = value + 6;
+                    const result = instance.test.variantCasts(input);
+                    return Number(result[0].val) + Number(result[3].val) + Number(result[5].val);
+                },
+                async: false,
+            };
+        }
         case 'resource':
             assert.equal(instance.run(42), 42);
             assert.equal(instance.run(7), 7);
@@ -27,6 +63,10 @@ export async function workload(id, instance) {
 
 export function expectedResult(id, i) {
     switch (id) {
+        case 'numbers':
+            return i & 255;
+        case 'variants':
+            return (i & 255) * 3 + 6;
         case 'noise':
             return (i & 255) + 1;
         case 'adder':

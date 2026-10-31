@@ -27,10 +27,13 @@ after builds and functional suites stop. Select an installed Rust toolchain with
 `RUSTUP_TOOLCHAIN` if the local `stable` wrapper tries to update itself.
 
 The matrix covers a truly empty component, a code-only scalar noise control, adder, resource create/read/drop and
-two independent resource components sharing one bundle. Rolldown and Rollup each
+two independent resource components sharing one bundle. N02 also includes the
+existing numbers and variant-bitcast components, with varying verified checksums. Rolldown and Rollup each
 resolve both file URLs and actual package exports. Used and unused `tableGet`
 imports execute known answers; an instrumented child confirms that the used
-operation constructs no scratch arrays, codecs or maps. Both modes must have
+operation constructs no scratch arrays, codecs or maps. Conversion controls verify
+that scalar imports allocate no scratch, while each bitcast initializer constructs
+only its selected pair of views. Both modes must have
 identical core Wasm digests. The empty component and scalar control must be byte-identical in both modes;
 the scalar control calibrates noise on all timing axes. Every timed workload validates varying inputs and
 an independent checksum, including both components in the sharing workload.

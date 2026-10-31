@@ -16,10 +16,17 @@ import { assert, vi } from 'vitest';
 
 const exec = promisify(syncExec);
 
-import { componentize } from '@bytecodealliance/componentize-js';
+import { componentize as componentizeGuest } from '@bytecodealliance/componentize-js';
 
 import { transpileBytes, writeFiles } from './transpilation.js';
 import type { TranspilationOptions } from '../src/transpile.js';
+import { ensureWitFilesystemPreopen } from '../src/preopens.js';
+
+/** Componentize's splicer shares the shim and needs a root mount before its first WIT read. */
+export const componentize: typeof componentizeGuest = (...args: unknown[]) => {
+    ensureWitFilesystemPreopen();
+    return Reflect.apply(componentizeGuest, undefined, args) as ReturnType<typeof componentizeGuest>;
+};
 
 /** Stable path to the jco's fixture directory containing WIT files */
 export const JCO_WIT_FIXTURE_DIR = fileURLToPath(new URL('../../jco/test/fixtures/wit', import.meta.url));
