@@ -3,3 +3,6 @@ dist
 
 # generated components
 test/fixtures/generated/*
+
+# Benchmark output
+bench/output/
