@@ -7,7 +7,7 @@ import { suite, test, assert, expect, beforeAll, vi } from 'vitest';
 
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
-import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime/intrinsics/resource.js';
+import { writeCustomRuntime } from '../../../external-runtime/helpers.js';
 import upstreamManifest from '../../../fixtures/wast/upstream-manifest.json' with { type: 'json' };
 import type { TranspilationOptions } from '../../../../src/transpile.js';
 
@@ -239,11 +239,14 @@ suite('component-model WAST', () => {
                 }
 
                 const instrumentRuntime = relPath === 'async/passing-resources.wast';
+                let cmRuntimeEsModule: string | undefined;
                 if (instrumentRuntime) {
-                    resetTableGetCallCount();
+                    const providerDir = await getTmpDir();
+                    cleanups.push(() => rm(providerDir, { recursive: true, force: true }));
+                    cmRuntimeEsModule = (await writeCustomRuntime(providerDir)).href;
                 }
-                const cmRuntimeEsModule = instrumentRuntime
-                    ? new URL('../../../fixtures/custom-runtime/', import.meta.url).href
+                const customRuntime = cmRuntimeEsModule
+                    ? await import(new URL('intrinsics/resource.js', cmRuntimeEsModule).href)
                     : undefined;
                 const extraArgs = {
                     ...transpile,
@@ -331,7 +334,7 @@ suite('component-model WAST', () => {
                 });
                 if (instrumentRuntime) {
                     assert.isAbove(
-                        tableGetCallCount,
+                        customRuntime.tableGetCallCount,
                         0,
                         'resource.rep should call resource.tableGet on the selected runtime provider',
                     );

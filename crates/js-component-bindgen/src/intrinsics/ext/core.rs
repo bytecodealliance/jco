@@ -1,9 +1,8 @@
 //! Central metadata for named core operations and selected state/constructor owners.
-use super::super::{
-    Intrinsic, RenderIntrinsicsArgs, component::ComponentIntrinsic,
-    p3::async_task::AsyncTaskIntrinsic,
+use super::super::{Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic};
+use super::{
+    ComponentContext, RuntimeContext, RuntimeImport, RuntimeImportKind, RuntimeInitializer,
 };
-use super::{RuntimeContext, RuntimeImport, RuntimeImportKind, RuntimeInitializer};
 use crate::intrinsics::runtime::IntrinsicRuntime;
 use crate::{source::Source, uwriteln};
 use std::fmt::Write;
@@ -205,7 +204,12 @@ impl CoreContext {
             Self::RepTableClass => &[RuntimeContext::ResourceTableGet],
             Self::GlobalBufferManager => &[RuntimeContext::Core(Self::BufferManagerClass)],
             Self::FetchCompile => &[RuntimeContext::Core(Self::FileCompileCache)],
-            Self::SuspendingImport => &[RuntimeContext::Core(Self::GlobalCurrentTaskMeta)],
+            Self::SuspendingImport => &[
+                RuntimeContext::Core(Self::GlobalCurrentTaskMeta),
+                RuntimeContext::Component(ComponentContext::MayLeave),
+                RuntimeContext::Component(ComponentContext::RecordTrap),
+                RuntimeContext::Component(ComponentContext::StateLookup),
+            ],
             Self::ConditionalSuspending => &[RuntimeContext::Core(Self::ConditionalSuspendingWasm)],
             _ => &[],
         }
@@ -248,15 +252,6 @@ impl CoreContext {
                 let call = |intrinsic: Intrinsic, operands| {
                     super::ExternalRuntime.call(intrinsic, operands)
                 };
-                let check = call(ComponentIntrinsic::CheckMayLeave.into(), "componentIdx");
-                let record = call(
-                    ComponentIntrinsic::RecordTrap.into(),
-                    "componentIdx, error, convertsRangeErrors",
-                );
-                let state = call(
-                    ComponentIntrinsic::GetOrCreateAsyncState.into(),
-                    "componentIdx",
-                );
                 let task = call(
                     AsyncTaskIntrinsic::GetCurrentThread.into(),
                     "componentIdx, threadID, taskID",
@@ -266,7 +261,7 @@ impl CoreContext {
                 ));
                 uwriteln!(
                     output,
-                    "const {local} = {{ registers: CURRENT_TASK_META, RuntimeError: WebAssembly.RuntimeError, checkMayLeave: componentIdx => {check}, recordTrap: (componentIdx, error, convertsRangeErrors) => {record}, throwIfInterrupted: componentIdx => {state}.throwIfInterrupted(), getCurrentThread: (componentIdx, threadID, taskID) => {task}, currentTaskMayBlock: () => {block}.value }};"
+                    "const {local} = {{ registers: CURRENT_TASK_META, RuntimeError: WebAssembly.RuntimeError, mayLeave: _jcoComponentMayLeaveContext, traps: _jcoComponentRecordTrapContext, states: _jcoComponentStateLookupContext, getCurrentThread: (componentIdx, threadID, taskID) => {task}, currentTaskMayBlock: () => {block}.value }};"
                 );
             }
             _ => unreachable!("all other core contexts have selected initializers"),
@@ -275,219 +270,230 @@ impl CoreContext {
 }
 
 pub(crate) fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
-    use RuntimeImportKind as K;
     let (export, context, kind) = match intrinsic {
-        Intrinsic::PromiseWithResolversPonyfill => ("promiseWithResolvers", None, K::Call),
-        Intrinsic::DebugLog => ("debugLog", None, K::Call),
-        Intrinsic::CoinFlip => ("coinFlip", None, K::Call),
-        Intrinsic::TypeCheckValidI32 => ("typeCheckValidI32", None, K::Call),
+        Intrinsic::PromiseWithResolversPonyfill => {
+            ("promiseWithResolvers", None, RuntimeImportKind::Call)
+        }
+        Intrinsic::DebugLog => ("debugLog", None, RuntimeImportKind::Call),
+        Intrinsic::CoinFlip => ("coinFlip", None, RuntimeImportKind::Call),
+        Intrinsic::TypeCheckValidI32 => ("typeCheckValidI32", None, RuntimeImportKind::Call),
         Intrinsic::TypeCheckAsyncFn => (
             "typeCheckAsyncFn",
             Some(CoreContext::AsyncFunctionCtor),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
-        Intrinsic::Base64Compile => ("base64Compile", Some(CoreContext::Base64Compile), K::Call),
-        Intrinsic::ClampGuest => ("clampGuest", None, K::Call),
-        Intrinsic::FetchCompile => ("fetchCompile", Some(CoreContext::FetchCompile), K::Call),
+        Intrinsic::Base64Compile => (
+            "base64Compile",
+            Some(CoreContext::Base64Compile),
+            RuntimeImportKind::Call,
+        ),
+        Intrinsic::ClampGuest => ("clampGuest", None, RuntimeImportKind::Call),
+        Intrinsic::FetchCompile => (
+            "fetchCompile",
+            Some(CoreContext::FetchCompile),
+            RuntimeImportKind::Call,
+        ),
         Intrinsic::DisposeHostValue => (
             "disposeHostValue",
             Some(CoreContext::SymbolDispose),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
-        Intrinsic::FinalizationRegistryCreate => ("finalizationRegistryCreate", None, K::Call),
+        Intrinsic::FinalizationRegistryCreate => {
+            ("finalizationRegistryCreate", None, RuntimeImportKind::Call)
+        }
         Intrinsic::GetErrorPayload => (
             "getErrorPayload",
             Some(CoreContext::HasOwnProperty),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::GetErrorPayloadString => (
             "getErrorPayloadString",
             Some(CoreContext::HasOwnProperty),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
-        Intrinsic::ThrowInvalidBool => ("throwInvalidBool", None, K::Call),
-        Intrinsic::ThrowUninitialized => ("throwUninitialized", None, K::Call),
+        Intrinsic::ThrowInvalidBool => ("throwInvalidBool", None, RuntimeImportKind::Call),
+        Intrinsic::ThrowUninitialized => ("throwUninitialized", None, RuntimeImportKind::Call),
         Intrinsic::InstantiateCore => (
             "instantiateCore",
             Some(CoreContext::SelectedWebAssembly),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::RegisterGlobalMemoryForComponent => (
             "registerMemory",
             Some(CoreContext::GlobalComponentMemoryMap),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::LookupMemoriesForComponent => (
             "lookupMemories",
             Some(CoreContext::GlobalComponentMemoryMap),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::GetGlobalCurrentTaskMetaFn => (
             "getCurrentTaskMeta",
             Some(CoreContext::GlobalCurrentTaskMeta),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::SetGlobalCurrentTaskMetaFn => (
             "setCurrentTaskMeta",
             Some(CoreContext::GlobalCurrentTaskMeta),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::WithGlobalCurrentTaskMetaFn => (
             "withCurrentTaskMeta",
             Some(CoreContext::GlobalCurrentTaskMeta),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::WithGlobalCurrentTaskMetaFnAsync => (
             "withCurrentTaskMetaAsync",
             Some(CoreContext::GlobalCurrentTaskMeta),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::ClearGlobalCurrentTaskMetaFn => (
             "clearCurrentTaskMeta",
             Some(CoreContext::GlobalCurrentTaskMeta),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::SuspendingImportWrapperFn => (
             "suspendingImport",
             Some(CoreContext::SuspendingImport),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending1I32ToI32Fn => (
             "conditionalSuspending1I32ToI32",
             Some(CoreContext::ConditionalSuspending),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending2I32ToI32Fn => (
             "conditionalSuspending2I32ToI32",
             Some(CoreContext::ConditionalSuspending),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending3I32ToI32Fn => (
             "conditionalSuspending3I32ToI32",
             Some(CoreContext::ConditionalSuspending),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending3I32ToVoidFn => (
             "conditionalSuspending3I32ToVoid",
             Some(CoreContext::ConditionalSuspending),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
         Intrinsic::GlobalAsyncDeterminism => (
             "initializeAsyncDeterminism",
             Some(CoreContext::GlobalAsyncDeterminism),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
-        Intrinsic::ConstantI32Max => ("i32Max", None, K::Value),
-        Intrinsic::ConstantI32Min => ("i32Min", None, K::Value),
+        Intrinsic::ConstantI32Max => ("i32Max", None, RuntimeImportKind::Value),
+        Intrinsic::ConstantI32Min => ("i32Min", None, RuntimeImportKind::Value),
         Intrinsic::SymbolCabiDispose => (
             "initializeSymbolCabiDispose",
             Some(CoreContext::SymbolCabiDispose),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolCabiLower => (
             "initializeSymbolCabiLower",
             Some(CoreContext::SymbolCabiLower),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolResourceHandle => (
             "initializeSymbolResourceHandle",
             Some(CoreContext::SymbolResourceHandle),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolResourceRep => (
             "initializeSymbolResourceRep",
             Some(CoreContext::SymbolResourceRep),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolDispose => (
             "initializeSymbolDispose",
             Some(CoreContext::SymbolDispose),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolAsyncIterator => (
             "initializeSymbolAsyncIterator",
             Some(CoreContext::SymbolAsyncIterator),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolIterator => (
             "initializeSymbolIterator",
             Some(CoreContext::SymbolIterator),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::AsyncFunctionCtor => (
             "initializeAsyncFunctionConstructor",
             Some(CoreContext::AsyncFunctionCtor),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::PlatformReadableStreamClass => (
             "initializeReadableStream",
             Some(CoreContext::PlatformReadableStreamClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::ComponentError => (
             "initializeComponentErrorClass",
             Some(CoreContext::ComponentError),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::WebAssemblyRuntimeError => (
             "initializeRuntimeErrorConstructor",
             Some(CoreContext::WebAssemblyRuntimeError),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::ManagedBufferClass => (
             "initializeManagedBufferClass",
             Some(CoreContext::ManagedBufferClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::BufferManagerClass => (
             "initializeBufferManagerClass",
             Some(CoreContext::BufferManagerClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::RepTableClass => (
             "initializeRepTableClass",
             Some(CoreContext::RepTableClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::HasOwnProperty => (
             "initializeHasOwnProperty",
             Some(CoreContext::HasOwnProperty),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::FactTrapMessages => (
             "initializeFactTrapMessages",
             Some(CoreContext::FactTrapMessages),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::GlobalBufferManager => (
             "initializeBufferManager",
             Some(CoreContext::GlobalBufferManager),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::AsyncEventCodeEnum => (
             "initializeAsyncEventCodes",
             Some(CoreContext::AsyncEventCodeEnum),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::GlobalComponentMemoryMap => (
             "initializeComponentMemoryMap",
             Some(CoreContext::GlobalComponentMemoryMap),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::GlobalCurrentTaskMeta => (
             "initializeTaskRegisters",
             Some(CoreContext::GlobalCurrentTaskMeta),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::ConditionalSuspendingWasm => (
             "initializeConditionalSuspendingWasm",
             Some(CoreContext::ConditionalSuspendingWasm),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::IsLE => (
             "initializeEndianness",
             Some(CoreContext::IsLE),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         _ => return None,
     };
@@ -505,9 +511,6 @@ pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     }
     if intrinsic == Intrinsic::SuspendingImportWrapperFn {
         for dependency in [
-            Intrinsic::Component(ComponentIntrinsic::CheckMayLeave),
-            Intrinsic::Component(ComponentIntrinsic::RecordTrap),
-            Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
             Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread),
             Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
         ] {

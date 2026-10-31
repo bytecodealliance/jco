@@ -13,12 +13,13 @@ function providerSource() {
     const url = new URL('intrinsics/resource.js', defaultRuntimeUrl).href;
     return `import * as defaults from ${JSON.stringify(url)};
 export * from ${JSON.stringify(url)};
-export const counters = [], scopeMaps = [], tables = [], calls = [];
+export const counters = [], scopeMaps = [], tables = [], calls = [], destructorStores = [];
 export function initializeResourceScopeCounter() { const state = defaults.initializeResourceScopeCounter(); counters.push(state); return state; }
 export function initializeResourceScopeTasks() { const state = defaults.initializeResourceScopeTasks(); scopeMaps.push(state); return state; }
 export function initializeHandleTables() { const state = defaults.initializeHandleTables(); tables.push(state); return state; }
 export function callDestructor(context, args) {
-  if (Object.keys(context).sort().join() !== 'createTask,registers') throw new Error('broad destructor context');
+  if (Object.keys(context).sort().join() !== 'createTask,registers,storeTrap') throw new Error('broad destructor context');
+  destructorStores.push(context.storeTrap);
   calls.push('callDestructor'); return defaults.callDestructor(context, args);
 }
 export function tableRemove(context, table, handle) {
@@ -36,6 +37,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
                 await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
                 await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
+                await writeFile(
+                    join(dir, 'provider/intrinsics/component.js'),
+                    'export * from ' + JSON.stringify(new URL('intrinsics/component.js', defaultRuntimeUrl).href) + ';',
+                );
                 await writeFile(
                     join(dir, 'provider/intrinsics/core.js'),
                     'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
@@ -87,6 +92,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     }
                     assert.isAbove(counter.value, 100);
                     assert.deepEqual([...scopeTasks.keys()], initialScopes);
+                    const store = provider.destructorStores.at(-1);
+                    assert.isFalse(store.stopped);
+                    instance._util.stop();
+                    assert.isTrue(store.stopped, 'destructors observe the instance shutdown state');
                 }
                 assert.include(provider.calls, 'callDestructor');
                 assert.include(provider.calls, 'tableRemove');
