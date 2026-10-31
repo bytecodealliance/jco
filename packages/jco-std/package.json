@@ -739,7 +739,7 @@
     "@noble/hashes": "1.8.0",
     "acorn": "8.17.0",
     "acorn-walk": "8.3.5",
-    "minimatch": "10.2.6",
+    "minimatch": "11.0.1",
     "punycode": "2.3.1",
     "readable-stream": "4.7.0",
     "urlpattern-polyfill": "10.1.0",
