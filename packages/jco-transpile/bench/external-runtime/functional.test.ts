@@ -1,0 +1,90 @@
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { assert, test } from 'vitest';
+import { buildPair, installRuntime, optimize } from './build.js';
+import { bundlers, resolutions, scenarios } from './cases.js';
+import { measure } from './measure.js';
+import { sourceHashes } from './provenance.js';
+import { defaultRuntimeUrl } from '../../test/transpilation.js';
+
+for (const bundler of bundlers) {
+    for (const resolution of resolutions) {
+        test(`${bundler}/${resolution}: unused exports are removed and used exports execute`, async () => {
+            const dir = await mkdtemp(join(tmpdir(), 'jco-runtime-exports-'));
+            try {
+                await installRuntime(dir);
+                const specifier =
+                    resolution === 'file'
+                        ? new URL('intrinsics/resource.js', defaultRuntimeUrl).href
+                        : '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
+                for (const used of [false, true]) {
+                    const entry = join(dir, `entry-${used}.mjs`);
+                    await writeFile(
+                        entry,
+                        `import { tableGet } from ${JSON.stringify(specifier)};\n` +
+                            (used
+                                ? 'export const answer = () => tableGet({ RuntimeError: WebAssembly.RuntimeError }, [1073741824, 0, 7, 4294967338], 1).rep;'
+                                : 'export const answer = 42;'),
+                    );
+                    const { code } = await optimize(entry, bundler);
+                    const bundle = join(dir, `bundle-${used}.mjs`);
+                    await writeFile(bundle, code);
+                    const binding = await import(pathToFileURL(bundle).href);
+                    assert.equal(used ? binding.answer() : binding.answer, 42);
+                    if (!used) {
+                        assert.isBelow(Buffer.byteLength(code), 100);
+                    }
+                }
+            } finally {
+                await rm(dir, { recursive: true, force: true });
+            }
+        });
+        for (const scenario of scenarios) {
+            test(`${bundler}/${resolution}/${scenario.id}: matching inputs and known answers`, async () => {
+                const pair = await buildPair(scenario.components, bundler, resolution);
+                try {
+                    assert.deepEqual(pair.inline.wasm, pair.external.wasm);
+                    assert.deepEqual(pair.inline.fixtureDigests, pair.external.fixtureDigests);
+                    const checked = await measure(pair, true);
+                    assert.deepEqual(checked.verified, [...scenario.components]);
+                    if (scenario.id === 'empty' || scenario.id === 'noise') {
+                        assert.equal(
+                            await readFile(pair.inline.bundle, 'utf8'),
+                            await readFile(pair.external.bundle, 'utf8'),
+                        );
+                    }
+                } finally {
+                    await pair.cleanup();
+                }
+            });
+        }
+    }
+}
+
+test('coverage names the runtime API actually being measured', async () => {
+    const coverage = JSON.parse(await readFile(new URL('./coverage.json', import.meta.url), 'utf8'));
+    const runtime = await import(new URL('runtime.js', defaultRuntimeUrl).href);
+    assert.equal(coverage.apiVersion, runtime.CM_RUNTIME_API_VERSION);
+    assert.deepEqual(coverage.mapped, ['Resource(ResourceTableGet)']);
+});
+
+test('source provenance detects changes to either runtime and nested family mappings', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-runtime-provenance-'));
+    try {
+        await mkdir(join(dir, 'ext'));
+        const root = pathToFileURL(dir + '/');
+        for (const name of ['runtime.rs', 'inline.rs', 'ext.rs', 'ext/resource.rs']) {
+            await writeFile(join(dir, name), name);
+        }
+        const original = await sourceHashes(root);
+        assert.deepEqual(Object.keys(original), ['ext.rs', 'ext/resource.rs', 'inline.rs', 'runtime.rs']);
+        for (const name of Object.keys(original)) {
+            await writeFile(join(dir, name), name + ' changed');
+            assert.notEqual((await sourceHashes(root))[name], original[name]);
+        }
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
