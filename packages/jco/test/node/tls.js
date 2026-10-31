@@ -2,7 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
-import { nodeBuiltinPlugin } from "../../src/node-builtins/index.js";
+import { nodeBuiltinPlugin, nodeGlobals } from "../../src/node-builtins/index.js";
 import { bundleNodeGuestExportsWrapper } from "../../src/cmd/componentize.js";
 import { TLS_WIT_REQUIREMENT, HTTP_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
 import { exec, getTmpDir, jcoPath, setupAsyncTest } from "../helpers.js";
@@ -71,6 +71,7 @@ async function documentationExample(backend) {
         [...TLS_WIT_REQUIREMENT.guestExports, ...HTTP_WIT_REQUIREMENT.guestExports],
         {
             external: [/^jco:node\//],
+            inject: nodeGlobals(),
             plugins: [
                 nodeBuiltinPlugin(
                     { imports: [], exports: [] },
@@ -149,5 +150,6 @@ test.skipIf(!hasJspi).concurrent(
     () => documentationExample("starlingmonkey"),
     60_000,
 );
-// TODO(unskip): Restore when componentize-qjs can link shared WASI TLS/IO resource types.
+// TODO(unskip): Restore QuickJS once the TLS guest report completes instead of timing out.
+// Shared WASI TLS/IO resource linking is no longer the blocker.
 test.skip("TLS documentation echo examples execute in QuickJS", () => documentationExample("quickjs"), 60_000);
