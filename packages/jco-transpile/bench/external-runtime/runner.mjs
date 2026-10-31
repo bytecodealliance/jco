@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
 import { expectedResult, importsFor, workload } from './workloads.mjs';
+import { memoryAccounting } from './memory-accounting.mjs';
 
 const median = (values) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
 
@@ -15,6 +16,7 @@ export async function main(config) {
         flags: process.execArgv,
         debug: process.env.JCO_DEBUG ?? null,
         jspi: 'Suspending' in WebAssembly,
+        memoryAccounting,
     };
 
     // Prepare both runtime modes before collecting observations.
