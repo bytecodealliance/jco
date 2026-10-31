@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 
 import { assert, suite, test } from 'vitest';
 
-import { transpileBytes } from '../../src/index.js';
+import { transpileBytes } from '../transpilation.js';
 import { parse } from '../../src/wasm-tools.js';
 
 import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';

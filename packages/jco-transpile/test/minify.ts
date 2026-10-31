@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 
-import { transpileBytes } from '../src/transpile.js';
+import { transpileBytes } from './transpilation.js';
 
 // Exercise the real minifier with malformed generator output. Parser diagnostics
 // must reach the caller instead of publishing an empty module without exports.

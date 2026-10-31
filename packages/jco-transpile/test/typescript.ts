@@ -8,7 +8,7 @@ import { suite, test, assert } from 'vitest';
 import ts from 'typescript-compiler-api';
 
 import { componentNew, componentEmbed } from '../src/wasm-tools.js';
-import { transpileBytes, generateGuestTypes } from '../src/index.js';
+import { transpileBytes, generateGuestTypes } from './transpilation.js';
 import { getTmpDir } from './helpers.js';
 
 const typescriptFixturesDir = fileURLToPath(new URL('./fixtures/typescript/', import.meta.url));

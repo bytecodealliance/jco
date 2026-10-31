@@ -6,7 +6,7 @@ import { assert, suite, test } from 'vitest';
 
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { transpileBytes } from '../src/index.js';
+import { transpileBytes } from './transpilation.js';
 import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 import { getTmpDir, setupAsyncTest } from './helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';

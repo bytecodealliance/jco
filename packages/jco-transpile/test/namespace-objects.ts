@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { assert, expect, suite, test } from 'vitest';
 
-import { transpileBytes } from '../src/transpile.js';
+import { transpileBytes } from './transpilation.js';
 import { generateHostTypes } from '../src/typegen.js';
 import { componentEmbed, componentNew } from '../src/wasm-tools.js';
 import { getTmpDir, setupAsyncTest } from './helpers.js';
