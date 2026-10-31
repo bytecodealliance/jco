@@ -18,3 +18,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - `intrinsics/lift`: lift.
 - `intrinsics/lower`: lower.
 - `intrinsics/future`: future.
+- `intrinsics/stream`: stream.

@@ -859,9 +859,9 @@ impl AsyncStreamIntrinsic {
                                 throw new Error(`unsupported stream copy result [${{result}}]`);
                             }}
                             if (buffer.processed >= {managed_buffer_class}.MAX_LENGTH) {{
-                                 throw new Error(`processed count [${{buf.length}}] greater than max length`);
+                                 throw new Error(`processed count [${{buffer.processed}}] greater than max length`);
                             }}
-                            if (buffer.length > 2**28) {{ throw new Error('buffer uses reserved space'); }}
+                            if (buffer.capacity > 2**28) {{ throw new Error('buffer uses reserved space'); }}
 
                             const packedResult = (Number(buffer.processed) << 4) | result;
                             const event = {{ code: eventCode, payload0: streamEnd.waitableIdx(), payload1: packedResult }};
@@ -1382,7 +1382,7 @@ impl AsyncStreamIntrinsic {
                                 if (this.#isHostOwned && this.hasPendingEvent()) {{
                                     // Host owned writes are just-in-time writes for an already pending guest read.
                                     // The guest read path consumes the pending event, so waiting here can deadlock.
-                                    copyPromise.catch(err => reject(err));
+                                    Promise.resolve(copyPromise).catch(err => reject(err));
                                     this.#result = null;
                                     resolve();
                                     return await promise;
@@ -2125,7 +2125,7 @@ impl AsyncStreamIntrinsic {
                             if (!this.#isWritable) {{ throw new Error("stream is not marked as writable and cannot be written to"); }}
 
                             const objects = [...arguments];
-                            if (!objects.length !== 1) {{
+                            if (objects.length !== 1) {{
                                 throw new Error("only single object writes are currently supported");
                             }}
                             const obj = objects[0];
@@ -2622,7 +2622,7 @@ impl AsyncStreamIntrinsic {
                 output.push_str(&format!(
                     r#"
                       function {is_stream_lowerable_object}(obj) {{
-                          if (typeof obj !== 'object') {{ return false; }}
+                          if (obj === null || typeof obj !== 'object') {{ return false; }}
                           return obj instanceof {external_stream_class}
                                || {async_iterator_symbol} in obj
                                || {iterator_symbol} in obj

@@ -16,6 +16,7 @@
         "./intrinsics/host": "./intrinsics/host.js",
         "./intrinsics/lift": "./intrinsics/lift.js",
         "./intrinsics/lower": "./intrinsics/lower.js",
-        "./intrinsics/future": "./intrinsics/future.js"
+        "./intrinsics/future": "./intrinsics/future.js",
+        "./intrinsics/stream": "./intrinsics/stream.js"
     }
 }

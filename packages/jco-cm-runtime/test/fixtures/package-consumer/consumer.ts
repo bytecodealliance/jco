@@ -12,6 +12,7 @@ import * as host from '@bytecodealliance/jco-cm-runtime/intrinsics/host';
 import * as lift from '@bytecodealliance/jco-cm-runtime/intrinsics/lift';
 import * as lower from '@bytecodealliance/jco-cm-runtime/intrinsics/lower';
 import * as future from '@bytecodealliance/jco-cm-runtime/intrinsics/future';
+import * as stream from '@bytecodealliance/jco-cm-runtime/intrinsics/stream';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -36,6 +37,7 @@ const publicModules: Record<string, Record<string, unknown>> = {
     LiftModule: lift,
     LowerModule: lower,
     FutureModule: future,
+    StreamModule: stream,
 };
 
 const constants = new Set([

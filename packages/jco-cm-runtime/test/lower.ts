@@ -1,3 +1,5 @@
+import { create as createStream } from './stream-helpers.js';
+import { createStream as createStreamPair } from '../src/intrinsics/stream.js';
 import { expect, test } from 'vitest';
 import * as lower from '../src/intrinsics/lower.js';
 import * as lift from '../src/intrinsics/lift.js';
@@ -16,7 +18,6 @@ import type {
     LowerVariantMeta,
     LowerFutureContext,
     LowerStreamContext,
-    LowerReadEnd,
     LocalErrorContext,
 } from '../src/runtime.js';
 const strict = { strict: true };
@@ -215,7 +216,7 @@ test.concurrent('owned resources honor the explicit caller capability and reject
     expect(() => fn({ ...cursor({}), componentIdx: 1 })).toThrow(/component index mismatch/);
     expect(() => lower.lowerFlatBorrow(cursor({}))).toThrow(/borrowed resources is not supported/);
 });
-test.concurrent('future and stream lowering look up live state lazily and write handle zero-pointer results', () => {
+test.concurrent('future and stream lowering share live state and write handle zero-pointer results', () => {
     const selected = createFuture();
     const { lookup } = selected;
     const resourceRep = Symbol();
@@ -239,37 +240,37 @@ test.concurrent('future and stream lowering look up live state lazily and write 
     expect(fn(ctx)).toBe(17);
     expect(selected.futures.size()).toBe(1);
     expect(new DataView(ctx.memory!.buffer).getUint32(0, true)).toBe(17);
-    const readEnd: LowerReadEnd = { waitableIdx: () => 23, setHostInjectFn: () => {}, setHostDropFn: () => {} };
-    class External {}
-    class Internal {
-        readEnd() {
-            return readEnd;
-        }
-    }
+    const streams = createStream(),
+        state = streams.addTable(0, 3);
+    const pair = createStreamPair(streams.creation, state, {
+        tableIdx: 3,
+        elemMeta: { align32: 1, size32: 1, isNumeric: true },
+    });
     const stream: LowerStreamContext = {
         numeric: strict,
-        lookup,
-        resourceRep,
-        getGlobal: () => new Map([[9, new Internal()]]),
-        getExternalClass: () => External,
-        getInternalClass: () => Internal,
-        isLowerable: () => false,
-        create: () => {
-            throw Error('must reuse internal stream');
-        },
-        genRead: () => {
-            throw Error('must reuse internal stream');
-        },
-        genHostInject: () => {
-            throw Error('must reuse internal stream');
-        },
+        lookup: streams.lookup,
+        resourceRep: streams.core.symbolResourceRep,
+        streams: streams.streams,
+        InternalStream: streams.InternalStream,
+        lowerable: streams.lowerable,
+        creation: streams.creation,
+        source: streams.source,
+        injection: streams.injection,
     };
-    const value = Object.assign(new External(), { [resourceRep]: 9 }),
+    const value = new streams.Stream({
+            globalRep: pair.readEnd.globalStreamMapRep(),
+            isReadable: true,
+            isWritable: false,
+            readFn: (opts) => pair.readEnd.read(opts),
+        }),
         streamCtx = cursor(value);
     expect(
         lower.lowerFlatStream(stream, { componentIdx: 0, streamTableIdx: 3, elemMeta: { align32: 4 } })(streamCtx),
-    ).toBe(23);
-    expect(new DataView(streamCtx.memory!.buffer).getUint32(0, true)).toBe(23);
+    ).toBe(pair.readEndWaitableIdx);
+    expect(new DataView(streamCtx.memory!.buffer).getUint32(0, true)).toBe(pair.readEndWaitableIdx);
+    pair.readEnd.drop();
+    pair.writeEnd.getPendingEvent();
+    pair.writeEnd.drop();
 });
 test.concurrent('error-context lift/lower transfers ownership and releases exhausted local/global handles', () => {
     const { errorContext, core, lookup, component } = createErrorContext();

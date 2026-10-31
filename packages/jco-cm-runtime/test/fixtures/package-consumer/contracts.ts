@@ -320,3 +320,14 @@ new FutureValue(42);
 futureModule.initializeFutures({ registry: [] });
 void futureContract;
 void userFuture;
+
+import * as stream from '@bytecodealliance/jco-cm-runtime/intrinsics/stream';
+import type { StreamModule } from '@bytecodealliance/jco-cm-runtime/runtime';
+const streamContract: RuntimeModuleContracts['intrinsics/stream'] = stream;
+const streamModule: StreamModule = stream;
+const queue = streamModule.initializePendingValueQueueClass;
+// @ts-expect-error the queue needs the actual operation tracking owner
+queue({ registry: [] });
+// @ts-expect-error the source context retains selected constructor and symbols
+streamModule.genReadFnFromLowerableStream({ disposeSymbol: Symbol() }, []);
+void streamContract;

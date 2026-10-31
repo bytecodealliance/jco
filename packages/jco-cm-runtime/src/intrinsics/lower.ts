@@ -20,7 +20,11 @@ import type {
     LowerErrorContext,
     LocalErrorContext,
     HostFuture,
+    HostStream,
 } from '../runtime.js';
+import { createStream } from './stream-state.js';
+import { isStreamLowerableObject, genReadFnFromLowerableStream } from './stream-source.js';
+import { genStreamHostInjectFn } from './stream-injection.js';
 import { createFuture } from './future-state.js';
 import { isFutureLowerableObject, genFutureHostInjectFn } from './future-operations.js';
 import { debugLog } from './core-debug.js';
@@ -825,41 +829,41 @@ export function lowerFlatStream(_context: LowerStreamContext, meta: LowerStreamM
 
         let globalRep;
         let waitableIdx;
-        if (stream instanceof _context.getExternalClass()) {
-            globalRep = (stream as Record<symbol, unknown>)[_context.resourceRep];
-            const internalStream = _context.getGlobal().get(globalRep as number);
-            if (!internalStream || !(internalStream instanceof _context.getInternalClass())) {
+        if (stream instanceof _context.lowerable.Stream) {
+            globalRep = (stream as unknown as Record<symbol, unknown>)[_context.resourceRep];
+            const internalStream = _context.streams.get(globalRep as number);
+            if (!internalStream || !(internalStream instanceof _context.InternalStream)) {
                 throw new Error(`failed to find internal stream with rep [${globalRep}]`);
             }
             waitableIdx = internalStream.readEnd().waitableIdx();
-        } else if (_context.isLowerable(stream)) {
+        } else if (isStreamLowerableObject(_context.lowerable, stream)) {
             globalRep = (stream as Record<symbol, unknown>)[_context.resourceRep];
 
             if (globalRep) {
-                const hostStream = _context.getGlobal().get(globalRep as number);
+                const hostStream = _context.streams.get(globalRep as number);
                 if (!hostStream) {
                     throw new Error(`missing host stream with global rep [${globalRep}]`);
                 }
-                waitableIdx = hostStream.getStreamEndWaitableIdx!();
+                waitableIdx = (hostStream as HostStream).getStreamEndWaitableIdx();
             } else {
                 const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
                 if (!cstate) {
                     throw new Error(`missing async state for component [${componentIdx}]`);
                 }
 
-                const { writeEnd, readEnd } = _context.create(cstate, {
+                const { writeEnd, readEnd } = createStream(_context.creation, cstate, {
                     tableIdx: streamTableIdx,
                     elemMeta,
                 });
 
-                const readFn = _context.genRead(stream);
-                const hostInjectFn = _context.genHostInject({
+                const readFn = genReadFnFromLowerableStream(_context.source, stream);
+                const hostInjectFn = genStreamHostInjectFn(_context.injection, {
                     readFn,
                     hostWriteEnd: writeEnd,
                     readEnd,
                 });
                 readEnd.setHostInjectFn(hostInjectFn);
-                readEnd.setHostDropFn(readFn.drop);
+                readEnd.setHostDropFn(readFn.drop!);
 
                 waitableIdx = readEnd.waitableIdx();
             }

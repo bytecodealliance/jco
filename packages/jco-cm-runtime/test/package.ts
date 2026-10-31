@@ -88,6 +88,7 @@ suite('runtime package', () => {
                     'LiftModule',
                     'LowerModule',
                     'FutureModule',
+                    'StreamModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -110,6 +111,7 @@ suite('runtime package', () => {
                 './intrinsics/lift',
                 './intrinsics/lower',
                 './intrinsics/resource',
+                './intrinsics/stream',
                 './intrinsics/string',
                 './intrinsics/waitable',
                 './intrinsics/webidl',
@@ -124,34 +126,6 @@ suite('runtime package', () => {
 
             // The independent provider needs only the published declaration, without private files.
             await writeFile(join(consumer, 'contract.d.ts'), contract);
-            await writeFile(
-                join(consumer, 'contract-exports.ts'),
-                `export default ${JSON.stringify(contractExports)};`,
-            );
-            await writeFile(
-                join(consumer, 'contract-exports.ts'),
-                `export default ${JSON.stringify(contractExports)};`,
-            );
-            await writeFile(
-                join(consumer, 'contract-exports.ts'),
-                `export default ${JSON.stringify(contractExports)};`,
-            );
-            await writeFile(
-                join(consumer, 'contract-exports.ts'),
-                `export default ${JSON.stringify(contractExports)};`,
-            );
-            await writeFile(
-                join(consumer, 'contract-exports.ts'),
-                `export default ${JSON.stringify(contractExports)};`,
-            );
-            await writeFile(
-                join(consumer, 'contract-exports.ts'),
-                `export default ${JSON.stringify(contractExports)};`,
-            );
-            await writeFile(
-                join(consumer, 'contract-exports.ts'),
-                `export default ${JSON.stringify(contractExports)};`,
-            );
             await writeFile(
                 join(consumer, 'contract-exports.ts'),
                 `export default ${JSON.stringify(contractExports)};`,

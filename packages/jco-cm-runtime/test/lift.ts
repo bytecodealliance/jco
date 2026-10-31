@@ -1,18 +1,12 @@
+import { create as createStream } from './stream-helpers.js';
+import { createStream as createStreamPair } from '../src/intrinsics/stream.js';
 import { expect, test } from 'vitest';
 import * as lift from '../src/intrinsics/lift.js';
 import { initializeUtf8Decoder, initializeUtf16Decoder } from '../src/intrinsics/string.js';
 import { create as createErrorContext } from './error-context-helpers.js';
 import { create as createFuture } from './future-helpers.js';
 import { createFuture as createFuturePair } from '../src/intrinsics/future-state.js';
-import type {
-    TaskLiftContext,
-    TaskLiftFn,
-    LiftVariantMeta,
-    LiftFutureContext,
-    LiftStreamContext,
-    LiftStreamEndpoint,
-    LiftExternalStreamOptions,
-} from '../src/runtime.js';
+import type { TaskLiftContext, TaskLiftFn, LiftVariantMeta, LiftFutureContext } from '../src/runtime.js';
 
 function direct(params: unknown[]): TaskLiftContext {
     return { componentIdx: 0, params, useDirectParams: true };
@@ -207,7 +201,6 @@ test.concurrent('owned resources use their lazy class and explicit live resource
 
 test.concurrent('future and stream bridges stay lazy, preserve endpoint identity and retain pending completions', async () => {
     const selected = createFuture();
-    const { lookup } = selected;
     const state = selected.addTable(0, 2);
     const pair = createFuturePair(selected.creation, state, { tableIdx: 2, elemMeta: { align32: 4, isNumeric: true } });
     const read = pair.readEnd;
@@ -225,9 +218,6 @@ test.concurrent('future and stream bridges stay lazy, preserve endpoint identity
         ...selected.ends,
         tables: { 2: { componentIdx: 0, table: null } },
     } as unknown as LiftFutureContext;
-    class SelectedTrap extends Error {}
-    let writable = false,
-        idle = true;
     expect(() =>
         lift.liftFlatFuture(malformed, { componentIdx: 0, futureTableIdx: 2 })(direct([read.waitableIdx()])),
     ).toThrow(/table \[2\]/);
@@ -236,46 +226,34 @@ test.concurrent('future and stream bridges stay lazy, preserve endpoint identity
     expect(await received).toBe(42);
     read.drop();
     pair.writeEnd.drop();
-    let dropped: unknown;
-    let options: LiftExternalStreamOptions | undefined;
-    const end: LiftStreamEndpoint = {
-        isWritable: () => writable,
-        isReadable: () => true,
-        isDoneState: () => false,
-        isIdleState: () => idle,
-        isInSet: () => false,
-        globalStreamMapRep: () => 23,
-        write: (v) => v,
-        read: (opts) => opts,
-        drop: (opts) => {
-            dropped = opts;
-        },
-    };
-    class External {
-        constructor(opts: LiftExternalStreamOptions) {
-            options = opts;
-        }
-    }
-    const stream: LiftStreamContext = {
-        RuntimeError: SelectedTrap,
-        lookup,
-        getTables: () => ({ 3: { componentIdx: 0, table: {} } }),
-        getEnd: () => end,
-        getExternalStream: () => External,
-    };
-    const streamLift = lift.liftFlatStream(stream, { componentIdx: 0, streamTableIdx: 3 });
+    const streams = createStream(),
+        streamState = streams.addTable(0, 3);
+    const pairStream = createStreamPair(streams.creation, streamState, {
+        tableIdx: 3,
+        elemMeta: { align32: 1, size32: 1, isNumeric: true },
+    });
+    class SelectedTrap extends Error {}
+    const streamLift = lift.liftFlatStream(
+        { ...streams.ends, RuntimeError: SelectedTrap, Stream: streams.Stream },
+        { componentIdx: 0, streamTableIdx: 3 },
+    );
     expect(() => streamLift(direct([0]))).toThrow(SelectedTrap);
-    writable = true;
-    expect(() => streamLift(direct([17]))).toThrow(SelectedTrap);
-    writable = false;
-    idle = false;
-    expect(() => streamLift(direct([17]))).toThrow(SelectedTrap);
-    idle = true;
-    const lifted = streamLift(direct([17]))[0];
-    expect(lifted).toBeInstanceOf(External);
-    expect(options!.globalRep).toBe(23);
-    options!.dropFn();
-    expect(dropped).toEqual({ allowPendingEvent: true });
+    expect(() => streamLift(direct([pairStream.writeEndWaitableIdx]))).toThrow(SelectedTrap);
+    pairStream.readEnd.setCopyState(streams.StreamEnd.CopyState.ASYNC_COPYING);
+    expect(() => streamLift(direct([pairStream.readEndWaitableIdx]))).toThrow(SelectedTrap);
+    pairStream.readEnd.setCopyState(streams.StreamEnd.CopyState.IDLE);
+    const lifted = lift.liftFlatStream(
+        { ...streams.ends, Stream: streams.Stream },
+        { componentIdx: 0, streamTableIdx: 3 },
+    )(direct([pairStream.readEndWaitableIdx]))[0];
+    expect(lifted).toBeInstanceOf(streams.Stream);
+    expect((lifted as Record<symbol, unknown>)[streams.core.symbolResourceRep]).toBe(
+        pairStream.readEnd.globalStreamMapRep(),
+    );
+    (lifted as Record<symbol, () => void>)[streams.core.symbolDispose]();
+    expect(pairStream.readEnd.isDropped()).toBe(true);
+    pairStream.writeEnd.getPendingEvent();
+    pairStream.writeEnd.drop();
 });
 
 test.concurrent('error-context lifting transfers local ownership to the actual global table', () => {
