@@ -1,4 +1,4 @@
-# Named external runtime smoke measurements
+# Named external runtime measurements
 
 Build the local transpiler/vendor and the Component Model runtime first. Validate
 the complete smoke matrix without collecting timing samples:
@@ -14,14 +14,19 @@ The public runtime API remains version 1. Timing comparisons are a separate run:
 
 ```sh
 pnpm --filter @bytecodealliance/jco-transpile types:check:bench:external-runtime
+pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime:verify
 pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime:smoke --record
 pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime:smoke
+pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime --record
+pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime
 pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime:parity
 ```
 
-N01 supplies the early smoke matrix. `bench:external-runtime` currently runs this
-same matrix; N13 expands it to the full historical portfolio. Investigation and
-matched factory comparisons follow at N14. These commands are separate from
+N13 restores the full historical portfolio. The default and parity commands run
+all 17 scenarios through both bundlers and both resolutions: 68 reports. Explicit
+`--smoke` keeps the original eight-scenario, 32-report matrix. Both selections
+require every declared report and all 360 used/unused import controls; partial
+recording is refused. Investigation and matched factory comparisons follow at N14. These commands are separate from
 normal, LTS and extended functional discovery. Run them serially on an idle machine
 after builds and functional suites stop. Select an installed Rust toolchain with
 `RUSTUP_TOOLCHAIN` if the local `stable` wrapper tries to update itself.
@@ -38,8 +43,10 @@ selected DataView cache control: importing the no-op allocates nothing, and the
 cache initializes one empty view and refreshes once on first memory use. Repeated
 access to the same buffer reuses that view. Both modes must have
 identical core Wasm digests. The empty component and scalar control must be byte-identical in both modes;
-the scalar control calibrates noise on all timing axes. Every timed workload validates varying inputs and
-an independent checksum, including both components in the sharing workload.
+the scalar control calibrates noise on all timing axes. Every timed workload validates
+returned values against independent expected answers, including both components in
+the sharing workload. Numeric, bitcast, string, list, record and future workloads
+vary their payloads; fixed-protocol cases retain their fixture's known result.
 
 N04 adds the existing string component, including its actual WASI and string host
 imports. The workload verifies Unicode/BOM round trips and the host-import
@@ -137,7 +144,15 @@ control's noise. Other timing differences remain inconclusive. Constructor traci
 runs separately from timing. Memory runs in a separate process per mode, warms up,
 retains 64 stores in an explicit global until after GC and validation, and records
 heap/external/ArrayBuffer deltas. Negative observations invalidate the diagnostic;
-these exclude native/Wasm allocations and are not memory-footprint claims or gates.
+they are not complete process-memory claims or gates. The counters overlap and
+must not be added together. In the measured Node 24 environment, external accounting
+includes WebAssembly linear memory while ArrayBuffer accounting does not fully
+represent it. A retained 16 MiB Wasm memory raised external by approximately 16 MiB
+and left ArrayBuffer accounting unchanged. Earlier blanket native/Wasm exclusions
+were too broad; the original counter values stay unchanged. Native code, stacks,
+allocator overhead, reserved address space and total RSS are not fully measured.
+The separate `node --expose-gc bench/external-runtime/memory-accounting-probe.mjs`
+diagnostic reproduces this counterexample; accounting details depend on the engine.
 
 Each invocation creates a fresh `bench/output/external-runtime-named/run-*` archive,
 including generated inputs, bundles, graphs, hashes, raw samples and a manifest.
@@ -150,7 +165,8 @@ validate the rewritten trait-based generator. A changed generator requires a fre
 checkpoint. New snapshots live in `named-baselines/<checkpoint hash>.json`. Their schema keys
 coverage, fixture/options, resolution matrix, toolchain, lockfile and benchmark
 implementation. A coverage change creates a fresh reviewed checkpoint. Recording
-requires the complete matrix and is refused in CI or with filters. It occurs only
+requires the complete selected matrix and is refused in CI or with filters. An
+existing checkpoint baseline cannot be overwritten. It occurs only
 after all correctness and integrity tests pass. Missing data and failed runs never
 publish a complete summary. Historical factory baselines remain unchanged at
 `11f17e35`/`b5931a41` and are not used as current measurements.
@@ -188,3 +204,43 @@ not inferred from them. The raw-register control uses a selected constructor
 witness; native cross-realm globals have separate functional tests. The checkpoint
 hashes the nested task descriptor and current compiler/runtime. Prior inline
 measurements do not replace this revision's paired measurements.
+
+## Full portfolio and CI
+
+The full catalog retains the twelve historical component cases: adder, numbers,
+strings, lists, records, variants, flavorful, resource ownership/drop, waitable
+events, sync-lowered async guest calls, streams and futures. The independent
+resource fixture, empty component and scalar noise control remain. Aggregates
+cover two resource components and the historical eight-component portfolio
+(adder/numbers/strings/lists/records/variants/flavorful/resources).
+
+List workloads verify subarray offsets and stable guest allocation counts; record
+and flavorful workloads check nested values. Resources check actual drop counts;
+async and future calls check known results and timed checksums. The zero-length
+stream case leaves a read pending, so it supplies lifecycle/initialization evidence
+without a reusable warm-call or payload-throughput claim. Broader payload and
+steady-state async/stream/future work remains N14/N19.
+
+`bench:external-runtime:verify` runs real bundled known answers and integrity
+canaries separately from timing. The normal/LTS/extended configurations do not
+discover benchmark files. CI runs strict types, this preflight and the complete
+strict-parity command once on Ubuntu/Node 24/inline, after functional suites.
+It checks Linux `/proc` for remaining workspace fixture, Vitest, compiler,
+browser and benchmark workers before timing; completing a command alone does
+not establish process isolation. This read-only audit never stops processes.
+It uploads raw artifacts even if parity fails. CI never records or silently uses
+a baseline from a different producer/toolchain fingerprint; documented parity
+losses can therefore produce an explicit failed comparison step. Local regression
+acceptance continues to require the exact reviewed checkpoint.
+
+The original N12 reached the historical 166-variant set and added context-free event
+writing, selected prepare traps and lazy start-capability controls. Its 360
+used/unused combinations remain in both matrices. The trait-based rewrite also
+includes the new base's thread operations; `coverage.json` records its selected
+variants. Source fingerprints include the complete trait, inline and external
+implementation trees rather than the original metadata layout. An elevated process audit found
+eight orphan workers from the initial N08 run; N08–N11 observations retain an
+isolation limitation and require clean frozen-artifact repair during N14. N12
+collected both clean cohorts after verified cleanup. On this long-running local
+workspace, use the elevated process view when checking for old test workers; the
+sandbox process view missed them.

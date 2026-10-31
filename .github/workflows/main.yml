@@ -322,6 +322,28 @@ jobs:
         run: |
           pnpm --filter '@bytecodealliance/jco-transpile' run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
+      # Both runtime modes are built explicitly. Keep measurements outside the
+      # functional suites and run this complete portfolio once in the matrix.
+      - name: Compare bundled inline and named runtimes
+        id: external-runtime-bench
+        if: matrix.runtime == 'inline' && matrix.os == 'ubuntu-22.04' && matrix.node == '24.x'
+        timeout-minutes: 45
+        working-directory: packages/jco-transpile
+        run: |
+          pnpm run types:check:bench:external-runtime
+          pnpm run bench:external-runtime:verify
+          node scripts/assert-external-runtime-bench-idle.mjs
+          # CI has its own producer/toolchain fingerprint; never substitute a
+          # local regression baseline or record one implicitly. Parity is strict.
+          pnpm run bench:external-runtime:parity
+
+      - name: Upload bundled runtime measurements
+        if: always() && matrix.runtime == 'inline' && matrix.os == 'ubuntu-22.04' && matrix.node == '24.x'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: external-runtime-bench
+          path: packages/jco-transpile/bench/output/external-runtime-named
+
   test-wasi-deno:
     runs-on: "ubuntu-latest"
     needs:

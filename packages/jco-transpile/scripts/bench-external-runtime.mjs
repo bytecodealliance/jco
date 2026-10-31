@@ -1,15 +1,14 @@
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { assertCompleteReports } from '../bench/external-runtime/matrix.mjs';
+import { assertCompleteReports, expectedReportIds, portfolioFromArgs } from '../bench/external-runtime/matrix.mjs';
+import { publishBaseline } from '../bench/external-runtime/recording.mjs';
 
 const args = process.argv.slice(2);
+const portfolio = portfolioFromArgs(args);
 const record = args.includes('--record');
 const parity = args.includes('--parity');
-if (args.some((arg) => !['--smoke', '--record', '--parity'].includes(arg))) {
-    throw new Error('Smoke recording requires the complete matrix, without filters');
-}
 if (record && (parity || process.env.CI)) {
     throw new Error('Recording is disabled in CI and parity runs');
 }
@@ -31,6 +30,7 @@ try {
             stdio: 'inherit',
             env: {
                 ...process.env,
+                JCO_EXTERNAL_RUNTIME_BENCH_PORTFOLIO: portfolio,
                 JCO_EXTERNAL_RUNTIME_BENCH_RUN: runDir,
                 JCO_EXTERNAL_RUNTIME_BENCH_RECORD: record ? '1' : '0',
                 JCO_EXTERNAL_RUNTIME_BENCH_GATE: parity ? 'parity' : 'baseline',
@@ -48,9 +48,15 @@ try {
     }
     const result = JSON.parse(await readFile(join(runDir, 'result.json'), 'utf8'));
     if (!result.complete || result.controls.length !== result.expectedControls) {
-        throw new Error('Incomplete smoke controls');
+        throw new Error('Incomplete import controls');
     }
-    assertCompleteReports(result.expectedReports, result.reports);
+    if (
+        result.settings.portfolio !== portfolio ||
+        [...result.expectedReports].sort().join() !== expectedReportIds(portfolio).sort().join()
+    ) {
+        throw new Error('Result does not match the complete declared ' + portfolio + ' portfolio');
+    }
+    assertCompleteReports(expectedReportIds(portfolio), result.reports);
     const entries = Object.entries(result.reports);
     const ratio = (report, axis) => {
         const estimate = report.uncertainty[axis];
@@ -60,7 +66,7 @@ try {
         ['inline', 'external'].filter((mode) => !report.memory[mode].valid).map((mode) => `${id}/${mode}`),
     );
     const lines = [
-        '# Named runtime smoke checkpoint',
+        '# Named runtime ' + portfolio + ' checkpoint',
         '',
         `Coverage: ${result.settings.coverage.mapped.length} variants. Checkpoint: ${result.checkpointKey}.`,
         '',
@@ -90,32 +96,23 @@ try {
                 .map(([axis, v]) => `- ${id}/${axis}: ${v.finding}.`),
         ),
         '',
-        `Invalid memory diagnostics (negative GC deltas; excluded from evidence): ${invalidMemory.join(', ') || 'none'}. Memory is diagnostic and excludes native/Wasm memory.`,
+        `Invalid memory diagnostics (negative GC deltas; excluded from evidence): ${invalidMemory.join(', ') || 'none'}. Heap/external/ArrayBuffer counters are diagnostic, overlap and do not measure complete process memory. External accounting may include WebAssembly linear memory.`,
         '',
-        'Cold native ESM import + initialization observations are separate in JSON; they exclude process launch and core compilation. Browser timing and full historical portfolio are later checkpoints. Inline remains the production default.',
+        'Cold native ESM import + initialization of the complete bundle is a separate diagnostic; it excludes process launch, core compilation and host-import setup. Browser timing and matched historical factory comparisons follow at N14. Inline remains the production default.',
         '',
     ];
+    if (record) {
+        await publishBaseline(result.baselinePath, {
+            schema: 2,
+            checkpointKey: result.checkpointKey,
+            environment: result.environment,
+            settings: result.settings,
+            reports: Object.fromEntries(entries.map(([id, r]) => [id, { size: r.size, performance: r.performance }])),
+        });
+    }
     await writeFile(join(runDir, 'summary.md'), lines.join('\n'));
     await writeFile(join(runDir, 'summary.json'), JSON.stringify(result, null, 2) + '\n');
-    if (record) {
-        await mkdir(dirname(result.baselinePath), { recursive: true });
-        await writeFile(
-            result.baselinePath,
-            JSON.stringify(
-                {
-                    schema: 2,
-                    checkpointKey: result.checkpointKey,
-                    environment: result.environment,
-                    settings: result.settings,
-                    reports: Object.fromEntries(
-                        entries.map(([id, r]) => [id, { size: r.size, performance: r.performance }]),
-                    ),
-                },
-                null,
-                2,
-            ) + '\n',
-        );
-    }
+
     await writeFile(
         join(output, 'latest.json'),
         JSON.stringify(
@@ -130,7 +127,7 @@ try {
             2,
         ) + '\n',
     );
-    console.log(`Named runtime smoke: ${runDir}; parity: ${result.parityAchieved}`);
+    console.log(`Named runtime ${portfolio}: ${runDir}; parity: ${result.parityAchieved}`);
 } catch (error) {
     const failure = { status: 'failed', runDir, args, code: code || 1, error: String(error) };
     await writeFile(join(runDir, 'failure.json'), JSON.stringify(failure, null, 2) + '\n');
