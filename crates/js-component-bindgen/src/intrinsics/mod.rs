@@ -13,7 +13,7 @@ pub(crate) mod runtime;
 use runtime::IntrinsicRuntime;
 
 pub(crate) mod ext;
-use ext::{TABLE_GET_CONTEXT, VERSION_LOCAL};
+use ext::{RuntimeContext, VERSION_LOCAL};
 
 pub(crate) mod inline;
 
@@ -2861,13 +2861,17 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
     }
 
     let mut output = Source::default();
-    runtime.render_prelude(args.intrinsics, &mut output);
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I32ToF32))
+    runtime.render_prelude(args, &mut output);
+    let inline_conversion = |intrinsic| {
+        let intrinsic = Intrinsic::Conversion(intrinsic);
+        args.intrinsics.contains(&intrinsic)
+            && matches!(
+                runtime::binding(runtime, intrinsic),
+                runtime::IntrinsicBinding::Inline { .. }
+            )
+    };
+    if inline_conversion(ConversionIntrinsic::F32ToI32)
+        || inline_conversion(ConversionIntrinsic::I32ToF32)
     {
         output.push_str(
             "
@@ -2877,12 +2881,8 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         );
     }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F64ToI64))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I64ToF64))
+    if inline_conversion(ConversionIntrinsic::F64ToI64)
+        || inline_conversion(ConversionIntrinsic::I64ToF64)
     {
         output.push_str(
             "
@@ -2985,6 +2985,7 @@ impl Intrinsic {
         JsHelperIntrinsic::get_global_names()
             .into_iter()
             .chain(ConversionIntrinsic::get_global_names())
+            .chain(RuntimeContext::get_global_names())
             .chain(WebIdlIntrinsic::get_global_names())
             .chain(StringIntrinsic::get_global_names())
             .chain(ResourceIntrinsic::get_global_names())
@@ -3014,7 +3015,6 @@ impl Intrinsic {
                 "instantiateCore",
                 "isLE",
                 VERSION_LOCAL,
-                TABLE_GET_CONTEXT,
                 "scopeId",
                 "symbolCabiDispose",
                 "symbolCabiLower",

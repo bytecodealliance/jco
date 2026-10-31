@@ -73,7 +73,12 @@ suite('runtime package', () => {
             const contract = await readFile(join(installed, 'dist/runtime.d.ts'), 'utf8');
             expect(contract).not.toMatch(/\b(?:import|from)\s*['"({]/);
             const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
-            expect(Object.keys(manifest.exports).sort()).toEqual(['.', './intrinsics/resource', './runtime']);
+            expect(Object.keys(manifest.exports).sort()).toEqual([
+                '.',
+                './intrinsics/conversion',
+                './intrinsics/resource',
+                './runtime',
+            ]);
             expect(manifest.sideEffects).toBe(false);
             const rust = await readFile(
                 new URL('../../../crates/js-component-bindgen/src/intrinsics/ext.rs', import.meta.url),

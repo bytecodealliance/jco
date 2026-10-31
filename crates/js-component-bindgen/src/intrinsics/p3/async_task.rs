@@ -3220,8 +3220,11 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let driver_loop_fn = render_args.require_intrinsic(Self::DriverLoop);
                 let i32_typecheck = render_args.require_intrinsic(Intrinsic::TypeCheckValidI32);
-                let to_int32_fn = render_args
-                    .require_intrinsic(Intrinsic::Conversion(ConversionIntrinsic::ToInt32));
+                let to_int32 =
+                    |operand| render_args.intrinsic_call(ConversionIntrinsic::ToInt32, operand);
+                let event_code_i32 = to_int32("eventCode");
+                let index_i32 = to_int32("index");
+                let result_i32 = to_int32("result");
                 let unpack_callback_result_fn =
                     render_args.require_intrinsic(Self::UnpackCallbackResult);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -3432,9 +3435,9 @@ impl AsyncTaskIntrinsic {
                                 }});
 
                                 const callbackRes = task.runCallbackFn(
-                                    {to_int32_fn}(eventCode),
-                                    {to_int32_fn}(index),
-                                    {to_int32_fn}(result),
+                                    {event_code_i32},
+                                    {index_i32},
+                                    {result_i32},
                                 );
                                 if (callbackRes && typeof callbackRes.then === 'function') {{
                                     return callbackRes.then(continueWithCallbackResult, handleError);

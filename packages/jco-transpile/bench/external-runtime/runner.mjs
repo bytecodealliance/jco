@@ -9,6 +9,12 @@ import { expectedResult, importsFor, workload } from './workloads.mjs';
 
 const median = (values) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
 const config = JSON.parse(await readFile(process.argv[2], 'utf8'));
+const environment = {
+    node: process.version,
+    flags: process.execArgv,
+    debug: process.env.JCO_DEBUG ?? null,
+    jspi: 'Suspending' in WebAssembly,
+};
 const order = config.memoryMode
     ? [config.memoryMode]
     : config.processIndex % 2
@@ -45,7 +51,7 @@ for (const mode of order) {
 }
 const verified = [...config.inline.parts];
 if (config.verifyOnly) {
-    await writeFile(config.output, JSON.stringify({ verified }));
+    await writeFile(config.output, JSON.stringify({ verified, environment }));
     process.exit(0);
 }
 if (config.memoryMode) {
@@ -71,7 +77,7 @@ if (config.memoryMode) {
     );
     await writeFile(
         config.output,
-        JSON.stringify({ mode, stores: 64, deltas, valid: Object.values(deltas).every((n) => n >= 0) }),
+        JSON.stringify({ mode, stores: 64, deltas, valid: Object.values(deltas).every((n) => n >= 0), environment }),
     );
     process.exit(0);
 }
@@ -153,6 +159,7 @@ await writeFile(
     config.output,
     JSON.stringify({
         processIndex: config.processIndex,
+        environment,
         sampleCount: config.sampleCount,
         order,
         verified,

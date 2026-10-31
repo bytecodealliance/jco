@@ -4,3 +4,4 @@ Each page describes a public intrinsic module and the capabilities and state its
 See the [runtime API](../runtime.md) for module resolution, versioning and provider conformance.
 
 - [`intrinsics/resource`](resource.md): resource table.
+- [`intrinsics/conversion`](conversion.md): conversion.

@@ -25,6 +25,8 @@ use crate::{names::js_string_literal, source::Source, uwriteln};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+pub(crate) mod conversion;
+
 pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
 pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
@@ -32,23 +34,69 @@ pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RuntimeContext {
     ResourceTableGet,
+    StrictNumeric,
+    Bitcast32,
+    Bitcast64,
 }
 
 impl RuntimeContext {
+    pub(crate) fn get_global_names() -> impl IntoIterator<Item = &'static str> {
+        [
+            TABLE_GET_CONTEXT,
+            "_jcoStrictNumericContext",
+            "_jcoBitcast32Context",
+            "_jcoBitcast64Context",
+            "_jcoInitializeBitcast32",
+            "_jcoInitializeBitcast64",
+        ]
+    }
+
     pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
+            Self::StrictNumeric => "_jcoStrictNumericContext",
+            Self::Bitcast32 => "_jcoBitcast32Context",
+            Self::Bitcast64 => "_jcoBitcast64Context",
         }
     }
 
-    pub(crate) fn render(self, output: &mut Source) {
+    /// Initializers return narrow state, never operation tables.
+    pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
+        let (export, local_name) = match self {
+            Self::Bitcast32 => ("initializeBitcast32", "_jcoInitializeBitcast32"),
+            Self::Bitcast64 => ("initializeBitcast64", "_jcoInitializeBitcast64"),
+            _ => return None,
+        };
+        Some(RuntimeInitializer {
+            suffix: "intrinsics/conversion",
+            export,
+            local_name,
+        })
+    }
+
+    pub(crate) fn render(self, output: &mut Source, strict: bool) {
+        let local = self.local_name();
         match self {
             Self::ResourceTableGet => uwriteln!(
                 output,
                 "const {TABLE_GET_CONTEXT} = {{ RuntimeError: WebAssembly.RuntimeError }};"
             ),
+            Self::StrictNumeric => {
+                uwriteln!(output, "const {local} = {{ strict: {strict} }};")
+            }
+            Self::Bitcast32 | Self::Bitcast64 => {
+                let initialize = self.initializer().unwrap().local_name;
+                uwriteln!(output, "const {local} = {initialize}();")
+            }
         }
     }
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) struct RuntimeInitializer {
+    pub(crate) suffix: &'static str,
+    pub(crate) export: &'static str,
+    pub(crate) local_name: &'static str,
 }
 
 /// A named call export. Context requirements are separate from the public name.
@@ -61,9 +109,9 @@ pub(crate) struct RuntimeImport {
 }
 
 /// Imports what the external runtime implements and delegates the rest to
-/// [`InlineRuntime`]. To move an intrinsic into the runtime package, return its
-/// import from the family's `*_import` table and give that family an explicit
-/// [`Provides`] impl.
+/// [`InlineRuntime`]. To move an intrinsic into the runtime package, describe its
+/// import in the corresponding external-runtime module and give that family an
+/// explicit [`Provides`] impl.
 #[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct ExternalRuntime;
 
@@ -83,6 +131,7 @@ impl ExternalRuntime {
     fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
         match intrinsic {
             Intrinsic::Resource(i) => Self::resource_import(i),
+            Intrinsic::Conversion(i) => Some(conversion::import(i)),
             _ => None,
         }
     }
@@ -108,6 +157,12 @@ impl ExternalRuntime {
                 .entry(import.suffix)
                 .or_default()
                 .insert((import.export, intrinsic.name()));
+            if let Some(initializer) = import.context.and_then(RuntimeContext::initializer) {
+                modules
+                    .entry(initializer.suffix)
+                    .or_default()
+                    .insert((initializer.export, initializer.local_name));
+            }
         }
         if modules.is_empty() {
             return;
@@ -155,6 +210,25 @@ impl Provides<ResourceIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<ConversionIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: ConversionIntrinsic) -> IntrinsicBinding {
+        // Exhaustive import selection keeps new conversion variants from silently
+        // falling back to inline code.
+        let _ = conversion::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+
+    fn render(
+        &self,
+        _intrinsic: ConversionIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -181,7 +255,6 @@ delegate_to_inline! {
     BaseIntrinsic,
     JsHelperIntrinsic,
     WebIdlIntrinsic,
-    ConversionIntrinsic,
     StringIntrinsic,
     ErrCtxIntrinsic,
     AsyncTaskIntrinsic,
@@ -195,7 +268,8 @@ delegate_to_inline! {
 }
 
 impl IntrinsicRuntime for ExternalRuntime {
-    fn render_prelude(&self, intrinsics: &BTreeSet<Intrinsic>, output: &mut Source) {
+    fn render_prelude(&self, args: &RenderIntrinsicsArgs<'_>, output: &mut Source) {
+        let intrinsics = &*args.intrinsics;
         let mut imports = Self::imports(intrinsics).peekable();
         if imports.peek().is_none() {
             return;
@@ -213,7 +287,7 @@ impl IntrinsicRuntime for ExternalRuntime {
             if let Some(context) = import.context
                 && contexts.insert(context.local_name())
             {
-                context.render(output);
+                context.render(output, args.transpile_opts.strict);
             }
         }
     }

@@ -3,13 +3,12 @@ import { join, resolve } from 'node:path';
 import { env } from 'node:process';
 import { pathToFileURL } from 'node:url';
 
-import { componentize } from '@bytecodealliance/componentize-js';
 import puppeteer, { type Browser } from 'puppeteer';
 import { afterAll, assert, beforeAll, suite, test } from 'vitest';
 
 import { defaultRuntimeUrl, externalRuntime, transpileBytes, writeFiles } from '../transpilation.js';
 import { WEBIDL_FIXTURES_DIR, COMPONENT_FIXTURES_DIR } from '../common.js';
-import { getTmpDir, runBrowserCase, setupAsyncTest, startTestWebServer } from '../helpers.js';
+import { componentize, getTmpDir, runBrowserCase, setupAsyncTest, startTestWebServer } from '../helpers.js';
 
 const TRANSPILE_CASE_MODULE = '/jco-transpile/test/fixtures/browser/transpile.js';
 const JSPI_CASE_MODULE = '/jco-transpile/test/fixtures/browser/jspi.js';
