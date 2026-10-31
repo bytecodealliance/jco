@@ -1,10 +1,11 @@
 // Test-only assembly of actual selected owners and narrow operation contexts.
+import { initializeWaitableClass } from '../src/intrinsics/waitable.js';
 import * as operations from '../src/intrinsics/component.js';
 import type { ComponentTask, ComponentThread, ComponentWaitable } from '../src/runtime.js';
 import { createTestIntrinsics, type CoreTestOptions } from './core-test-helpers.js';
 interface ComponentTestOptions extends CoreTestOptions {
     componentTrapMessages?: { core?: Readonly<Record<string, string>>; cannotEnter?: string };
-    componentContext?: { createWaitable(args: { target?: unknown }): ComponentWaitable };
+    Waitable?: new (args: { target?: unknown }) => ComponentWaitable;
 }
 export function create(options: ComponentTestOptions = {}) {
     const { core, resource } = createTestIntrinsics(options);
@@ -26,7 +27,7 @@ export function create(options: ComponentTestOptions = {}) {
         normalization,
         cannotEnter: options.componentTrapMessages?.cannotEnter ?? 'wasm trap: cannot enter component instance',
         deadlock,
-        createWaitable: options.componentContext?.createWaitable,
+        Waitable: options.Waitable ?? initializeWaitableClass(),
     });
     const lookup = { asyncState, ComponentAsyncState };
     const record = { RuntimeError: core.RuntimeError, registers: core.currentTaskMeta, lookup };
@@ -56,7 +57,7 @@ export function create(options: ComponentTestOptions = {}) {
         backpressureDec: (idx: number) => operations.backpressureDec(lookup, idx),
         setAllError: () => operations.setAllError(asyncState),
     };
-    return { core, resource, component };
+    return { core, resource, component, lookup };
 }
 type ComponentIntrinsics = ReturnType<typeof create>['component'];
 export function clearDeadlockCheck(component: ComponentIntrinsics) {

@@ -5,6 +5,7 @@ import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource'
 import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
 import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
 import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
+import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -22,6 +23,7 @@ const publicModules: Record<string, Record<string, unknown>> = {
     WebIdlModule: webidl,
     CoreModule: core,
     ComponentModule: component,
+    WaitableModule: waitable,
 };
 
 const constants = new Set([
@@ -95,6 +97,9 @@ const normalization = {
     messages: components.initializeCoreTrapMessages({ unreachable: 'compiler unreachable' }),
 };
 const deadlock = { RuntimeError: Error, storeTrap, storeAsyncState, asyncState };
+const waitables: RuntimeModuleContracts['intrinsics/waitable'] = waitable;
+const Waitable = waitables.initializeWaitableClass();
+const WaitableSet = waitables.initializeWaitableSetClass(core.initializeAsyncEventCodes());
 const State = components.initializeComponentAsyncStateClass({
     RuntimeError: Error,
     RepTable: Rep,
@@ -104,8 +109,24 @@ const State = components.initializeComponentAsyncStateClass({
     normalization,
     deadlock,
     cannotEnter: 'cannot enter',
+    Waitable,
 });
 const state = components.getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);
+const waitableContext = {
+    RuntimeError: Error,
+    lookup: { asyncState, ComponentAsyncState: State },
+    Waitable,
+    WaitableSet,
+};
+const setRep = waitables.waitableSetNew(waitableContext, 0);
+const w = state.createWaitable({ target: 'packed' });
+const wRep = state.handles.insert(w);
+waitables.waitableJoin(waitableContext, 0, wRep, setRep);
+if (!(w instanceof Waitable) || !(state.handles.get(setRep) instanceof WaitableSet) || !w.isInSet()) {
+    throw new Error('waitable constructor consumer failed');
+}
+w.drop();
+waitables.removeWaitableSet({ RuntimeError: Error, WaitableSet }, { state, waitableSetRep: setRep });
 instanceFlags.set(0, { value: 1 });
 custom.checkMayLeave({ RuntimeError: Error, instanceFlags }, 0);
 const receiver = { answer: 42 };
