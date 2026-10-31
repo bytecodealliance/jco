@@ -916,9 +916,7 @@ impl JsBindgen<'_> {
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
-        runtime::binding(self.runtime(), intrinsic)
-            .local_name()
-            .to_string()
+        self.runtime().reference(intrinsic).to_string()
     }
 
     fn intrinsic_call(&mut self, intrinsic: Intrinsic, operands: &str) -> String {
@@ -1620,54 +1618,51 @@ impl<'a> Instantiator<'a, '_> {
         let resource_idx = resource_table_ty.unwrap_concrete_ty();
         let component_idx = resource_table_ty.unwrap_concrete_instance().as_u32();
 
-        let (is_imported, maybe_dtor) = if let Some(resource_idx) =
-            self.component.defined_resource_index(resource_idx)
-        {
-            let resource_def = self
-                .component
-                .initializers
-                .iter()
-                .find_map(|i| match i {
-                    GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
-                    _ => None,
-                })
-                .unwrap();
+        let (is_imported, maybe_dtor) =
+            if let Some(resource_idx) = self.component.defined_resource_index(resource_idx) {
+                let resource_def = self
+                    .component
+                    .initializers
+                    .iter()
+                    .find_map(|i| match i {
+                        GlobalInitializer::Resource(r) if r.index == resource_idx => Some(r),
+                        _ => None,
+                    })
+                    .unwrap();
 
-            if let Some(dtor) = &resource_def.dtor {
-                let dtor = self.core_def(dtor);
-                let maybe_dtor = if self
-                    .context_components
-                    .borrow()
-                    .contains(&resource_table_ty.unwrap_concrete_instance())
-                {
-                    let call_resource_destructor = self.bindgen.intrinsic(Intrinsic::Resource(
-                        ResourceIntrinsic::ResourceDestructorCall,
-                    ));
-                    format!(
-                        "\n{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {}, rep }});",
-                        dtor,
-                    )
+                if let Some(dtor) = &resource_def.dtor {
+                    let dtor = self.core_def(dtor);
+                    let maybe_dtor = if self
+                        .context_components
+                        .borrow()
+                        .contains(&resource_table_ty.unwrap_concrete_instance())
+                    {
+                        let call = self.bindgen.intrinsic_call(
+                            Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall),
+                            &format!("{{ componentIdx: {component_idx}, dtor: {dtor}, rep }}"),
+                        );
+                        format!("\n{call};")
+                    } else {
+                        format!("\n{dtor}(rep);")
+                    };
+                    (false, maybe_dtor)
                 } else {
-                    format!("\n{dtor}(rep);")
-                };
-                (false, maybe_dtor)
+                    (false, "".into())
+                }
             } else {
-                (false, "".into())
-            }
-        } else {
-            (true, "".into())
-        };
+                (true, "".into())
+            };
 
         let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
         let rsc_table_flag = self
             .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
-        let rsc_table_remove = self
-            .bindgen
-            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-
         // Create the relevant handle table
         let rtid = resource_table_idx.as_u32();
+        let rsc_table_remove = self.bindgen.intrinsic_call(
+            Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+            &format!("handleTable{rtid}, handle"),
+        );
         if is_imported {
             // imported
             uwriteln!(
@@ -1701,7 +1696,7 @@ impl<'a> Instantiator<'a, '_> {
                    handleTable{rtid}._createdReps = new Set();
                    handleTable{rtid}._componentIdx = {component_idx};
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
-                       const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
+                       const {{ rep }} = {rsc_table_remove};{maybe_dtor}
                    }});
                 "#,
             );
@@ -3475,13 +3470,22 @@ impl<'a> Instantiator<'a, '_> {
             } => {
                 self.ensure_resource_table(*resource_ty_idx);
                 let rid = resource_ty_idx.as_u32();
-                let rsc_table_create_own = self.bindgen.intrinsic(Intrinsic::Resource(
-                    ResourceIntrinsic::ResourceTableCreateOwn,
-                ));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {rsc_table_create_own}.bind(null, handleTable{rid});"
+                let rsc_table_create_own = self.bindgen.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateOwn),
+                    &format!("handleTable{rid}, rep"),
                 );
+                if self.bindgen.cm_runtime_es_module.is_some() {
+                    uwriteln!(
+                        self.src.js,
+                        "const trampoline{i} = rep => {rsc_table_create_own};"
+                    );
+                } else {
+                    let name = ResourceIntrinsic::ResourceTableCreateOwn.name();
+                    uwriteln!(
+                        self.src.js,
+                        "const trampoline{i} = {name}.bind(null, handleTable{rid});"
+                    );
+                }
             }
 
             Trampoline::ResourceRep {
@@ -3535,13 +3539,8 @@ impl<'a> Instantiator<'a, '_> {
                             .borrow()
                             .contains(&component_instance)
                         {
-                            let call_resource_destructor = self.bindgen.intrinsic(
-                                Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall),
-                            );
                             let component_idx = component_instance.as_u32();
-                            format!(
-                                "{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }});"
-                            )
+                            self.bindgen.intrinsic_call(Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall), &format!("{{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }}")) + ";"
                         } else {
                             format!("{dtor}(handleEntry.rep);")
                         }
@@ -3581,13 +3580,14 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 };
 
-                let rsc_table_remove = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+                let rsc_table_remove = self.bindgen.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+                    &format!("handleTable{tid}, handle"),
+                );
                 uwrite!(
                     self.src.js,
                     "function trampoline{i}(handle) {{
-                        const handleEntry = {rsc_table_remove}(handleTable{tid}, handle);
+                        const handleEntry = {rsc_table_remove};
                         if (handleEntry.own) {{
                             {dtor}
                         }}
@@ -3597,23 +3597,43 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ResourceTransferOwn => {
-                let resource_transfer = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTransferOwn));
-                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
+                let resource_transfer = self.bindgen.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTransferOwn),
+                    "handle, fromTid, toTid",
+                );
+                if self.bindgen.cm_runtime_es_module.is_some() {
+                    uwriteln!(
+                        self.src.js,
+                        "const trampoline{i} = (handle, fromTid, toTid) => {resource_transfer};"
+                    );
+                } else {
+                    let name = ResourceIntrinsic::ResourceTransferOwn.name();
+                    uwriteln!(self.src.js, "const trampoline{i} = {name};");
+                }
             }
 
             Trampoline::ResourceTransferBorrow => {
-                let resource_transfer =
-                    self.bindgen
-                        .intrinsic(if self.bindgen.opts.valid_lifting_optimization {
-                            Intrinsic::Resource(
-                                ResourceIntrinsic::ResourceTransferBorrowValidLifting,
-                            )
-                        } else {
-                            Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrow)
-                        });
-                uwriteln!(self.src.js, "const trampoline{i} = {resource_transfer};");
+                let resource_transfer = self.bindgen.intrinsic_call(
+                    if self.bindgen.opts.valid_lifting_optimization {
+                        Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrowValidLifting)
+                    } else {
+                        Intrinsic::Resource(ResourceIntrinsic::ResourceTransferBorrow)
+                    },
+                    "handle, fromTid, toTid",
+                );
+                if self.bindgen.cm_runtime_es_module.is_some() {
+                    uwriteln!(
+                        self.src.js,
+                        "const trampoline{i} = (handle, fromTid, toTid) => {resource_transfer};"
+                    );
+                } else {
+                    let name = if self.bindgen.opts.valid_lifting_optimization {
+                        ResourceIntrinsic::ResourceTransferBorrowValidLifting.name()
+                    } else {
+                        ResourceIntrinsic::ResourceTransferBorrow.name()
+                    };
+                    uwriteln!(self.src.js, "const trampoline{i} = {name};");
+                }
             }
 
             Trampoline::TaskReturn {
@@ -7382,9 +7402,11 @@ pub fn gen_flat_lift_fn_js_expr(
                                 let empty_func = JsHelperIntrinsic::EmptyFunc.name();
                                 let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
                                 let symbol_dispose = Intrinsic::SymbolDispose.name();
-                                let rsc_table_remove =
-                                    ResourceIntrinsic::ResourceTableRemove.name();
                                 let tid = tid.as_u32();
+                                let rsc_table_remove = instantiator.bindgen.runtime().call(
+                                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+                                    &format!("handleTable{tid}, handle"),
+                                );
                                 let rsc_own_flag = ResourceIntrinsic::ResourceTableOwnFlag.name();
                                 let component_idx = component_idx.as_u32();
 
@@ -7404,7 +7426,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                           }} else {{
                                               captureTable{rid}.delete(rep);
                                           }}
-                                          {rsc_table_remove}(handleTable{tid}, handle);
+                                          {rsc_table_remove};
                                           return resourceObj;
                                       }}
                                      "#
@@ -7414,11 +7436,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                         .as_ref()
                                         .map(|dtor| {
                                             let dtor_call = if *needs_task_context {
-                                                let call_resource_destructor =
-                                                    ResourceIntrinsic::ResourceDestructorCall.name();
-                                                format!(
-                                                    "{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }});"
-                                                )
+                                                instantiator.bindgen.runtime().call(Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall), &format!("{{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }}")) + ";"
                                             } else {
                                                 format!("{dtor}(handleEntry.rep);")
                                             };
@@ -7431,7 +7449,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                                        writable: true,
                                                        value: function() {{
                                                            finalizationRegistry{tid}.unregister(resourceObj);
-                                                           const handleEntry = {rsc_table_remove}(handleTable{tid}, handle);
+                                                           const handleEntry = {rsc_table_remove};
                                                            resourceObj[{symbol_dispose}] = {empty_func};
                                                            resourceObj[{symbol_resource_handle}] = undefined;
                                                            {dtor_call}
@@ -8019,9 +8037,10 @@ pub fn gen_flat_lower_fn_js_expr(
                     if *imported {
                         // If imported (and from the host), we must ensure that the incoming object is of the right
                         // instance, then add it to the capture table w/ the right resource ID,
-                        let create_own_fn = instantiator.bindgen.intrinsic(Intrinsic::Resource(
-                            ResourceIntrinsic::ResourceTableCreateOwn,
-                        ));
+                        let create_own_fn = instantiator.bindgen.intrinsic_call(
+                            Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateOwn),
+                            &format!("handleTable{table_idx}, rep"),
+                        );
                         format!(
                             r#"
                               function lowerImportedOwnedHost_{local_name}(obj) {{
@@ -8032,7 +8051,7 @@ pub fn gen_flat_lower_fn_js_expr(
                                   if (!handle) {{
                                     const rep = (obj[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
                                     captureTable{rid}.set(rep, obj);
-                                    handle = {create_own_fn}(handleTable{table_idx}, rep);
+                                    handle = {create_own_fn};
                                   }}
                                   return handle;
                               }}

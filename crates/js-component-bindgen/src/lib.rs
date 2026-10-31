@@ -580,9 +580,7 @@ mod tests {
         .unwrap();
         let source = generated_javascript(&transpiled);
 
-        let import_position = source
-            .find("import { tableGet as rscTableGet } from \"./custom-runtime/intrinsics/resource.js\";")
-            .unwrap();
+        let import_position = source.find("tableGet as rscTableGet").unwrap();
         let instantiate_position = source.find("export function instantiate(").unwrap();
         let realm_position = source.find("const WebAssembly = options?").unwrap();
         let context_position = source
