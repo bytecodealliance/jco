@@ -66,6 +66,10 @@
         "./intrinsics/error-context": {
             "types": "./dist/intrinsics/error-context.d.ts",
             "default": "./dist/intrinsics/error-context.js"
+        },
+        "./intrinsics/async-task": {
+            "types": "./dist/intrinsics/async-task.d.ts",
+            "default": "./dist/intrinsics/async-task.js"
         }
     },
     "scripts": {

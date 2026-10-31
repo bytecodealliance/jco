@@ -43,6 +43,12 @@ for (const external of [false, true]) {
                             ';',
                     );
                     await writeFile(
+                        join(dir, 'provider/intrinsics/async-task.js'),
+                        'export * from ' +
+                            JSON.stringify(new URL('intrinsics/async-task.js', defaultRuntimeUrl).href) +
+                            ';',
+                    );
+                    await writeFile(
                         join(dir, 'provider/intrinsics/waitable.js'),
                         'export * from ' +
                             JSON.stringify(new URL('intrinsics/waitable.js', defaultRuntimeUrl).href) +

@@ -1436,8 +1436,9 @@ impl AsyncFutureIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_new_fn = render_args.require_intrinsic(Self::FutureNew);
                 let create_future_fn = render_args.require_intrinsic(Self::CreateFuture);
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -1449,7 +1450,7 @@ impl AsyncFutureIntrinsic {
                         {debug_log_fn}('[{future_new_fn}()] args', {{ ctx }});
                         const {{ componentIdx, futureTableIdx, elemMeta }} = ctx;
 
-                        const taskMeta = {current_task_get_fn}(componentIdx);
+                        const taskMeta = {current_task_get_fn}componentIdx);
                         if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
@@ -1517,8 +1518,9 @@ impl AsyncFutureIntrinsic {
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let event_code_enum = render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
@@ -1574,7 +1576,7 @@ impl AsyncFutureIntrinsic {
                         // pointers at or above 2GiB come in as negative values
                         ptr >>>= 0;
 
-                        const taskMeta = {current_task_get_fn}(componentIdx);
+                        const taskMeta = {current_task_get_fn}componentIdx);
                         if (!taskMeta) {{ throw new Error('missing task metadata during future operation'); }}
 
                         const task = taskMeta.task;
@@ -1674,8 +1676,9 @@ impl AsyncFutureIntrinsic {
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
@@ -1726,7 +1729,7 @@ impl AsyncFutureIntrinsic {
                             if (!futureEnd.hasPendingEvent()) {{
                                 if (isAsync) {{ return {async_blocked_const}; }}
 
-                                const taskMeta = {current_task_get_fn}(componentIdx);
+                                const taskMeta = {current_task_get_fn}componentIdx);
                                 if (!taskMeta?.task) {{ throw new Error('missing current task while cancelling future'); }}
                                 return taskMeta.task
                                     .suspendUntil({{ readyFn: () => futureEnd.hasPendingEvent() }})

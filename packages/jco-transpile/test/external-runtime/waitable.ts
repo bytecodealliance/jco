@@ -26,6 +26,8 @@ async function writeProvider(dir: string, source: string) {
         'core',
         'component',
         'error-context',
+        ,
+        'async-task',
     ]) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),
@@ -51,11 +53,11 @@ export function waitableSetNew(context, componentIdx) {
  calls.push('new'); contexts.push(context); return defaults.waitableSetNew(context, componentIdx);
 }
 export function waitableSetPoll(context, memory, rep, ptr) {
- if (this !== null || Object.keys(context).sort().join() !== 'RuntimeError,WaitableSet,events,getCurrentTask,lookup,storeEventInComponentMemory') throw new Error('invalid poll context/receiver');
+ if (this !== null || Object.keys(context).sort().join() !== 'RuntimeError,WaitableSet,events,lookup,storeEventInComponentMemory,taskLookup') throw new Error('invalid poll context/receiver');
  calls.push('poll'); return defaults.waitableSetPoll(context, memory, rep, ptr);
 }
 export function waitableSetDrop(context, componentIdx, rep) {
- if (this !== null || Object.keys(context).sort().join() !== 'RuntimeError,WaitableSet,getCurrentTask,lookup') throw new Error('invalid drop context/receiver');
+ if (this !== null || Object.keys(context).sort().join() !== 'RuntimeError,WaitableSet,lookup,taskLookup') throw new Error('invalid drop context/receiver');
  calls.push('drop'); return defaults.waitableSetDrop(context, componentIdx, rep);
 }`;
 }
@@ -79,7 +81,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.notInclude(source, 'class Waitable');
                     assert.notInclude(source, 'function waitableSet');
                     assert.notInclude(source, 'createWaitable: args =>');
-                    assert.include(source, 'getCurrentTask: componentIdx => getCurrentTask(componentIdx)');
+                    assert.include(source, 'taskLookup: _jcoTaskLookupContext');
+                    assert.notInclude(source, 'function getCurrentTask(');
                     assert.include(source, 'storeEventInComponentMemory: args =>');
                 }
                 const bindings = await import(pathToFileURL(join(dir, 'waitable.js')).href);
@@ -152,10 +155,13 @@ test.concurrent.each([false, true])('generated waitable mismatch diagnostics (ex
             new TextDecoder().decode(files['diagnostic.js']) +
                 `
 export function testPollMismatch() {
- const previous = getCurrentTask;
- getCurrentTask = () => ({ componentIdx: 77 });
+ const previous = ASYNC_TASKS_BY_COMPONENT_IDX.get(0);
+ ASYNC_TASKS_BY_COMPONENT_IDX.set(0, [{ id: 111n, componentIdx: 77, task: { id: () => 111n } }]);
  try { return waitableSetPoll(${context}{ componentIdx: 0 }, 1, 0); }
- finally { getCurrentTask = previous; }
+ finally {
+  if (previous === undefined) ASYNC_TASKS_BY_COMPONENT_IDX.delete(0);
+  else ASYNC_TASKS_BY_COMPONENT_IDX.set(0, previous);
+ }
 }
 `,
         );

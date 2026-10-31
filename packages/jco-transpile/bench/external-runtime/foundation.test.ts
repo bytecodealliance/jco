@@ -112,6 +112,7 @@ test(
                     'runtime/component.rs',
                     'runtime/waitable.rs',
                     'runtime/error_context.rs',
+                    'runtime/async_task.rs',
                 ].map(async (name) => [
                     name,
                     hash(

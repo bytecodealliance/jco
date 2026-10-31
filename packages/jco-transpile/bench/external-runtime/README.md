@@ -175,3 +175,16 @@ The output must be a new file. It embeds the analysis sources and hashes its inp
 The corrected process-cluster sampler uses mixed full-word random indices; this
 avoids the ten-process low-bit parity correlation found during N06. Original
 reports remain unchanged; label reanalysis separately from fresh collection.
+
+N11 expands coverage to 162 variants and adds seven task controls: the blocked
+value, independent owners, pure lookup, selected raw register instances,
+creation/lookup/clearing through structural task views, subtask class selection
+and task class/resource-scope sharing. All 336 used/unused combinations run with
+the complete portfolio. Class controls use actual selected component, resource,
+core and waitable owners and verify that initialization does not invoke the lazy
+future predicate. Counts cover only the native constructors traced by the harness;
+ordinary class instances, arrays, objects, closures and Promise internals are
+not inferred from them. The raw-register control uses a selected constructor
+witness; native cross-realm globals have separate functional tests. The checkpoint
+hashes the nested task descriptor and current compiler/runtime. Prior inline
+measurements do not replace this revision's paired measurements.

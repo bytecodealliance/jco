@@ -6,7 +6,7 @@ use super::{
 use crate::{
     intrinsics::{
         Intrinsic, RenderIntrinsicsArgs,
-        p3::{async_task::AsyncTaskIntrinsic, host::HostIntrinsic, waitable::WaitableIntrinsic},
+        p3::{host::HostIntrinsic, waitable::WaitableIntrinsic},
     },
     source::Source,
     uwriteln,
@@ -78,14 +78,24 @@ impl WaitableContext {
         match self {
             Self::Class => &[],
             Self::SetClass => &[Core(CoreContext::AsyncEventCodeEnum)],
-            Self::New | Self::Wait => &[C(ComponentContext::StateLookup), W(Self::SetClass)],
+            Self::New => &[C(ComponentContext::StateLookup), W(Self::SetClass)],
+            Self::Wait => &[
+                C(ComponentContext::StateLookup),
+                W(Self::SetClass),
+                RuntimeContext::Task(super::TaskContext::Lookup),
+            ],
             Self::Poll => &[
+                RuntimeContext::Task(super::TaskContext::Lookup),
                 C(ComponentContext::StateLookup),
                 W(Self::SetClass),
                 Core(CoreContext::AsyncEventCodeEnum),
             ],
             Self::Remove => &[W(Self::SetClass)],
-            Self::Drop => &[C(ComponentContext::StateLookup), W(Self::SetClass)],
+            Self::Drop => &[
+                C(ComponentContext::StateLookup),
+                W(Self::SetClass),
+                RuntimeContext::Task(super::TaskContext::Lookup),
+            ],
             Self::Join => &[
                 C(ComponentContext::StateLookup),
                 W(Self::Class),
@@ -105,18 +115,18 @@ impl WaitableContext {
             uwriteln!(output, "const {local} = {initialize}({args});");
             return;
         }
-        // These lazy capabilities are removed when task (N11) and host (N12) migrate.
+        // Only the event-writing bridge remains, until host operations migrate at N12.
         let properties = match self {
             Self::New => "lookup: _jcoComponentStateLookupContext, WaitableSet",
             Self::Wait => {
-                "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, getCurrentTask: componentIdx => getCurrentTask(componentIdx), storeEventInComponentMemory: args => _storeEventInComponentMemory(args)"
+                "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, taskLookup: _jcoTaskLookupContext, storeEventInComponentMemory: args => _storeEventInComponentMemory(args)"
             }
             Self::Poll => {
-                "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, getCurrentTask: componentIdx => getCurrentTask(componentIdx), storeEventInComponentMemory: args => _storeEventInComponentMemory(args), events: ASYNC_EVENT_CODE"
+                "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, taskLookup: _jcoTaskLookupContext, storeEventInComponentMemory: args => _storeEventInComponentMemory(args), events: ASYNC_EVENT_CODE"
             }
             Self::Remove => "RuntimeError: WebAssembly.RuntimeError, WaitableSet",
             Self::Drop => {
-                "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, getCurrentTask: componentIdx => getCurrentTask(componentIdx)"
+                "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, taskLookup: _jcoTaskLookupContext"
             }
             Self::Join => {
                 "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, Waitable, WaitableSet"
@@ -177,16 +187,6 @@ pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     if matches!(
         intrinsic,
         Intrinsic::Waitable(
-            WaitableIntrinsic::WaitableSetWait
-                | WaitableIntrinsic::WaitableSetPoll
-                | WaitableIntrinsic::WaitableSetDrop
-        )
-    ) {
-        args.require_intrinsic(AsyncTaskIntrinsic::GetCurrentTask);
-    }
-    if matches!(
-        intrinsic,
-        Intrinsic::Waitable(
             WaitableIntrinsic::WaitableSetWait | WaitableIntrinsic::WaitableSetPoll
         )
     ) {
@@ -197,7 +197,10 @@ pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {
     use super::*;
-    use crate::{TranspileOpts, intrinsics::render_intrinsics};
+    use crate::{
+        TranspileOpts,
+        intrinsics::{p3::async_task::AsyncTaskIntrinsic, render_intrinsics},
+    };
     use std::collections::BTreeSet;
 
     fn generated(intrinsic: WaitableIntrinsic) -> (String, BTreeSet<Intrinsic>) {
@@ -236,11 +239,12 @@ mod tests {
     }
 
     #[test]
-    fn waitable_operations_keep_only_remaining_inline_task_and_host_dependencies() {
+    fn waitable_operations_share_task_owners_and_keep_only_the_host_bridge() {
         let (source, intrinsics) = generated(WaitableIntrinsic::WaitableSetPoll);
-        assert!(intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask)));
+        assert!(!intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask)));
+        assert!(!source.contains("function getCurrentTask("));
         assert!(intrinsics.contains(&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)));
-        assert!(source.contains("getCurrentTask: componentIdx => getCurrentTask(componentIdx)"));
+        assert!(source.contains("taskLookup: _jcoTaskLookupContext"));
         assert!(
             source.contains(
                 "storeEventInComponentMemory: args => _storeEventInComponentMemory(args)"
