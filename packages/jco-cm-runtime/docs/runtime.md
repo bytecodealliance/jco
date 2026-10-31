@@ -13,7 +13,8 @@ and waitable constructors/operations from `intrinsics/waitable`.
 Error-context storage and operations use `intrinsics/error-context`;
 tasks, subtasks and their state use `intrinsics/async-task`;
 guest-to-guest host calls and event writing use `intrinsics/host`;
-flat lifting helpers use `intrinsics/lift` and lowering helpers use `intrinsics/lower`.
+flat lifting helpers use `intrinsics/lift`, lowering helpers use `intrinsics/lower`,
+and future classes, tables and operations use `intrinsics/future`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -39,8 +40,8 @@ Bindings check version 1 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 17 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(224/274 logical intrinsic variants, including all 16 component, eight waitable,
-eleven error-context, 25 async-task, four host, 29 lift and 29 lower variants);
+(248/274 logical intrinsic variants, including all 16 component, eight waitable,
+eleven error-context, 25 async-task, four host, 29 lift, 29 lower and 24 future variants);
 other families remain inline during migration.
 
 ## Implementing an alternative runtime

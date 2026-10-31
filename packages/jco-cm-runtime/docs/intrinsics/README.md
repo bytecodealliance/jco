@@ -16,3 +16,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - [`intrinsics/host`](host.md): host-call.
 - [`intrinsics/lift`](lift.md): lift.
 - [`intrinsics/lower`](lower.md): lower.
+- [`intrinsics/future`](future.md): future.

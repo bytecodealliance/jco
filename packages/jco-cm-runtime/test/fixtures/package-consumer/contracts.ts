@@ -307,3 +307,16 @@ lowerModule.lowerFlatU32({ componentIdx: 0, vals: [42] });
 // @ts-expect-error selected encoder is a narrow capability, not an option bag
 lowerModule.lowerFlatStringUTF8({ strict: true }, { componentIdx: 0, vals: ['text'] });
 void lowerContract;
+
+import * as future from '@bytecodealliance/jco-cm-runtime/intrinsics/future';
+import type { FutureModule } from '@bytecodealliance/jco-cm-runtime/runtime';
+const futureContract: RuntimeModuleContracts['intrinsics/future'] = future;
+const futureModule: FutureModule = future;
+const FutureValue = futureModule.initializeFutureValueClass();
+const userFuture = new FutureValue(() => ({ value: 42 }));
+// @ts-expect-error selected class construction requires a lazy start operation
+new FutureValue(42);
+// @ts-expect-error state owner initialization receives the actual selected table constructor
+futureModule.initializeFutures({ registry: [] });
+void futureContract;
+void userFuture;

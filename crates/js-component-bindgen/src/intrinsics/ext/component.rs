@@ -343,6 +343,11 @@ mod tests {
             Intrinsic::AsyncStream(AsyncStreamIntrinsic::PendingValueQueueClass),
         ] {
             let (source, _) = generated_intrinsics([selected]);
+            if matches!(selected, Intrinsic::AsyncFuture(_)) {
+                assert!(source.contains("tracking: _jcoComponentHostOperationContext"));
+                assert!(!source.contains("function _genFutureHostInjectFn("));
+                continue;
+            }
             assert!(
                 source.contains("_trackHostOperation(_jcoComponentHostOperationContext, () =>")
             );

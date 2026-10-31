@@ -2,7 +2,8 @@ import { expect, test } from 'vitest';
 import * as lift from '../src/intrinsics/lift.js';
 import { initializeUtf8Decoder, initializeUtf16Decoder } from '../src/intrinsics/string.js';
 import { create as createErrorContext } from './error-context-helpers.js';
-import { create as createComponent } from './component-helpers.js';
+import { create as createFuture } from './future-helpers.js';
+import { createFuture as createFuturePair } from '../src/intrinsics/future-state.js';
 import type {
     TaskLiftContext,
     TaskLiftFn,
@@ -205,51 +206,36 @@ test.concurrent('owned resources use their lazy class and explicit live resource
 });
 
 test.concurrent('future and stream bridges stay lazy, preserve endpoint identity and retain pending completions', async () => {
-    const { lookup } = createComponent();
+    const selected = createFuture();
+    const { lookup } = selected;
+    const state = selected.addTable(0, 2);
+    const pair = createFuturePair(selected.creation, state, { tableIdx: 2, elemMeta: { align32: 4, isNumeric: true } });
+    const read = pair.readEnd;
+    const promise = read.promise();
+    const fn = lift.liftFlatFuture(selected.ends, { componentIdx: 0, futureTableIdx: 2 });
+    expect(read.getPendingBufferMeta().buffer).toBeUndefined();
+    expect(fn(direct([read.waitableIdx()]))[0]).toBe(promise);
+    read.setCopyState(selected.FutureEnd.CopyState.DONE);
+    expect(() => fn(direct([read.waitableIdx()]))).toThrow(/previous read succeeded/);
+    read.setCopyState(selected.FutureEnd.CopyState.IDLE);
+    read.getWaitable().join({ addWaitable() {}, removeWaitable() {} });
+    expect(() => fn(direct([read.waitableIdx()]))).toThrow(/waitable set/);
+    read.getWaitable().join(null);
+    const malformed = {
+        ...selected.ends,
+        tables: { 2: { componentIdx: 0, table: null } },
+    } as unknown as LiftFutureContext;
     class SelectedTrap extends Error {}
-    let done = false,
-        inSet = false,
-        writable = false,
+    let writable = false,
         idle = true;
-    let reads = 0;
-    const promise = Promise.resolve(42);
-    const future: LiftFutureContext = {
-        RuntimeError: SelectedTrap,
-        lookup,
-        getTables: () => {
-            reads++;
-            return { 2: { componentIdx: 0, table: {} } };
-        },
-        getEnd: () => ({
-            isWritable: () => writable,
-            isDoneState: () => done,
-            isIdleState: () => idle,
-            isInSet: () => inSet,
-            promise: () => promise,
-        }),
-    };
-    const fn = lift.liftFlatFuture(future, { componentIdx: 0, futureTableIdx: 2 });
-    expect(reads).toBe(0);
-    expect(fn(direct([17]))[0]).toBe(promise);
-    expect(await promise).toBe(42);
-    writable = true;
-    expect(() => fn(direct([17]))).toThrow(SelectedTrap);
-    writable = false;
-    idle = false;
-    expect(() => fn(direct([17]))).toThrow(SelectedTrap);
-    idle = true;
-    done = true;
-    expect(() => fn(direct([17]))).toThrow(/previous read succeeded/);
-    done = false;
-    inSet = true;
-    expect(() => fn(direct([17]))).toThrow(/waitable set/);
-    inSet = false;
     expect(() =>
-        lift.liftFlatFuture(
-            { ...future, getTables: () => ({ 2: { componentIdx: 0, table: null } }) },
-            { componentIdx: 0, futureTableIdx: 2 },
-        )(direct([17])),
+        lift.liftFlatFuture(malformed, { componentIdx: 0, futureTableIdx: 2 })(direct([read.waitableIdx()])),
     ).toThrow(/table \[2\]/);
+    const received = Promise.resolve(promise);
+    await pair.writeEnd.hostWrite({ value: 42, stringEncoding: 'utf8' });
+    expect(await received).toBe(42);
+    read.drop();
+    pair.writeEnd.drop();
     let dropped: unknown;
     let options: LiftExternalStreamOptions | undefined;
     const end: LiftStreamEndpoint = {

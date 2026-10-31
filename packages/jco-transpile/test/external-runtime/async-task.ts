@@ -77,6 +77,7 @@ async function writeProvider(dir: string, source: string) {
         'host',
         'lift',
         'lower',
+        'future',
     ]) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),
@@ -90,7 +91,7 @@ function providerSource() {
     return `import * as defaults from ${JSON.stringify(taskUrl)};
 export * from ${JSON.stringify(taskUrl)};
 export const calls = [], classes = [], subclasses = [], maps = [], ids = [], components = [], contexts = [], initialIDs = [];
-export let futureReads = 0;
+export const futureValues = [];
 export function initializeTasksByComponent() { const owner = defaults.initializeTasksByComponent(); maps.push(owner); return owner; }
 export function initializeCurrentTaskIds() { const owner = defaults.initializeCurrentTaskIds(); ids.push(owner); return owner; }
 export function initializeCurrentComponentIdxs() { const owner = defaults.initializeCurrentComponentIdxs(); components.push(owner); return owner; }
@@ -99,10 +100,11 @@ export function initializeAsyncSubtaskClass(context) {
  const constructor = defaults.initializeAsyncSubtaskClass(context); subclasses.push(constructor); return constructor;
 }
 export function initializeAsyncTaskClass(context) {
- if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncSubtask,RuntimeError,Waitable,clearing,determinism,events,isFutureValue,lookup,postReturn,registers,scopeCounter,scopeTasks,traps') throw new Error('invalid task class capabilities');
+ if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncSubtask,FutureValue,RuntimeError,Waitable,clearing,determinism,events,lookup,postReturn,registers,scopeCounter,scopeTasks,traps') throw new Error('invalid task class capabilities');
  if (!subclasses.includes(context.AsyncSubtask) || !maps.includes(context.clearing.tasks) || !ids.includes(context.clearing.taskIds) || !components.includes(context.clearing.componentIdxs)) throw new Error('detached task owners');
  contexts.push(context);
- const constructor = defaults.initializeAsyncTaskClass({ ...context, isFutureValue(value) { futureReads++; return context.isFutureValue(value); } });
+ futureValues.push(context.FutureValue);
+ const constructor = defaults.initializeAsyncTaskClass(context);
  initialIDs.push(constructor._ID); classes.push(constructor); return constructor;
 }
 function checkLookup(context) {
@@ -155,7 +157,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     ]) {
                         assert.notInclude(source, omitted);
                     }
-                    assert.include(source, 'value => value instanceof FutureValue');
+                    assert.notInclude(source, 'value => value instanceof FutureValue');
+                    assert.include(source, 'const FutureValue = _jcoInitializeFutureValueClass();');
                     assert.include(source, 'scopeCounter: _jcoResourceScopeCounterContext');
                 }
                 await writeFiles(files, { baseDir: dir });
@@ -170,7 +173,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     provider.initialIDs,
                     instances.map(() => 0n),
                 );
-                assert.strictEqual(provider.futureReads, 0);
+                assert.lengthOf(provider.futureValues, instances.length);
+                for (const FutureValue of provider.futureValues) {
+                    assert.isFunction(FutureValue);
+                }
                 for (const [index, instance] of instances.entries()) {
                     const context = provider.contexts[index];
                     const initialScopes = [...context.scopeTasks.keys()];
@@ -188,6 +194,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 assert.includeMembers(provider.calls, ['create', 'get', 'set']);
                 if (instances.length === 2) {
                     assert.notStrictEqual(provider.classes[0], provider.classes[1]);
+                    assert.notStrictEqual(provider.futureValues[0], provider.futureValues[1]);
                     assert.notStrictEqual(provider.subclasses[0], provider.subclasses[1]);
                     assert.notStrictEqual(provider.maps[0], provider.maps[1]);
                 }

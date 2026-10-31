@@ -31,6 +31,8 @@ mod component;
 pub(crate) mod conversion;
 mod core;
 mod error_context;
+mod future;
+pub(crate) use future::FutureContext;
 mod host;
 mod lift;
 mod lower;
@@ -61,6 +63,7 @@ pub(crate) enum RuntimeContext {
     Host(HostContext),
     Lift(LiftContext),
     Lower(LowerContext),
+    Future(FutureContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -130,6 +133,7 @@ impl RuntimeContext {
         .chain(HostContext::get_global_names())
         .chain(LiftContext::get_global_names())
         .chain(LowerContext::get_global_names())
+        .chain(FutureContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -142,6 +146,7 @@ impl RuntimeContext {
             Self::Host(context) => context.local_name(),
             Self::Lift(context) => context.local_name(),
             Self::Lower(context) => context.local_name(),
+            Self::Future(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -177,6 +182,7 @@ impl RuntimeContext {
             Self::Host(context) => return context.initializer(),
             Self::Lift(context) => return context.initializer(),
             Self::Lower(context) => return context.initializer(),
+            Self::Future(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -271,6 +277,7 @@ impl RuntimeContext {
             Self::Host(context) => context.dependencies(),
             Self::Lift(context) => context.dependencies(),
             Self::Lower(context) => context.dependencies(),
+            Self::Future(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -314,6 +321,7 @@ impl RuntimeContext {
             Self::Host(context) => context.render(output, args),
             Self::Lift(context) => context.render(output, args),
             Self::Lower(context) => context.render(output, args),
+            Self::Future(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -402,6 +410,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::AsyncFuture(i) => Some(future::import(i)),
             Intrinsic::Lower(i) => Some(lower::import(i)),
             Intrinsic::Lift(i) => Some(lift::import(i)),
             Intrinsic::Host(i) => Some(host::import(i)),
@@ -491,11 +500,10 @@ impl Provides<ResourceIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        intrinsic: ResourceIntrinsic,
+        _intrinsic: ResourceIntrinsic,
         _output: &mut Source,
-        args: &RenderIntrinsicsArgs<'_>,
+        _args: &RenderIntrinsicsArgs<'_>,
     ) {
-        async_task::discover(Intrinsic::Resource(intrinsic), args);
     }
 }
 
@@ -521,7 +529,6 @@ impl Provides<BaseIntrinsic> for ExternalRuntime {
             InlineRuntime.render(intrinsic, output, args);
         } else {
             core::discover(i, args);
-            async_task::discover(i, args);
             if i.conditional_suspending_wasm().is_some() {
                 output.push_str(&i.register_conditional_suspending_js(args));
             }
@@ -667,7 +674,6 @@ impl Provides<AsyncTaskIntrinsic> for ExternalRuntime {
         args: &RenderIntrinsicsArgs<'_>,
     ) {
         if async_task::import(intrinsic).is_some() {
-            async_task::discover(intrinsic.into(), args);
         } else {
             InlineRuntime.render(intrinsic, output, args);
         }
@@ -682,11 +688,10 @@ impl Provides<HostIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        intrinsic: HostIntrinsic,
+        _intrinsic: HostIntrinsic,
         _output: &mut Source,
-        args: &RenderIntrinsicsArgs<'_>,
+        _args: &RenderIntrinsicsArgs<'_>,
     ) {
-        async_task::discover(intrinsic.into(), args);
     }
 }
 
@@ -722,6 +727,32 @@ impl Provides<LowerIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<AsyncFutureIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: AsyncFutureIntrinsic) -> IntrinsicBinding {
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        _intrinsic: AsyncFutureIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
+}
+
+pub(crate) fn uses_context(intrinsics: &BTreeSet<Intrinsic>, requested: RuntimeContext) -> bool {
+    let mut contexts = Vec::new();
+    for intrinsic in intrinsics {
+        if let Some(context) = ExternalRuntime::import(*intrinsic).and_then(|import| import.context)
+        {
+            context.collect(&mut contexts);
+        }
+    }
+    contexts.contains(&requested)
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -746,7 +777,6 @@ macro_rules! delegate_to_inline {
 
 delegate_to_inline! {
     AsyncStreamIntrinsic,
-    AsyncFutureIntrinsic,
 }
 
 impl IntrinsicRuntime for ExternalRuntime {
