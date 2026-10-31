@@ -20,6 +20,24 @@ test.concurrent.each([0, 42])('rejects two equally wrong constant implementation
         await rm(dir, { recursive: true, force: true });
     }
 });
+test.concurrent('rejects string corruption confined to timed payloads in both modes', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-string-metrics-canary-'));
+    try {
+        const bundle = join(dir, 'stub.mjs');
+        await writeFile(
+            bundle,
+            `export function create0() {
+            return { testImports() {}, roundtrip(value) {
+                return value.startsWith('café 🚀 ') ? value + 'x' : value;
+            } };
+        }`,
+        );
+        const artifact = { dir, bundle, parts: ['strings'] as const, wasm: { bytes: 0, files: {} } };
+        await expect(measure({ inline: artifact, external: artifact })).rejects.toThrow(/checksum/);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
 test.concurrent('rejects missing/nonfinite metrics and reports parity independently', () => {
     assert.throws(() => parityLosses({ inline: {}, external: {} }));
     assert.throws(() => parityLosses({ inline: { parse: 1 }, external: {} }));

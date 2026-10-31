@@ -6,6 +6,8 @@ for (const key of [
     'Map',
     'DataView',
     'ArrayBuffer',
+    'Uint8Array',
+    'Uint16Array',
     'Int32Array',
     'Float32Array',
     'BigInt64Array',

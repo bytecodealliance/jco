@@ -1875,17 +1875,18 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                         _ => unreachable!("unsupported encoding {}", self.encoding),
                     };
-                let encode = self.intrinsic(encode_intrinsic);
 
                 let tmp = self.tmp();
-                let memory = self.memory.as_ref().unwrap();
+                let memory = self.memory.unwrap();
                 let str = String::from("cabi_realloc");
                 let realloc = self.realloc.unwrap_or(&str);
                 let s = &operands[0];
+                let encode =
+                    self.intrinsic_call(encode_intrinsic, &format!("{s}, {realloc}, {memory}"));
                 uwriteln!(
                     self.src,
                     r#"
-                      var encodeRes = {call_prefix}{encode}({s}, {realloc}, {memory});
+                      var encodeRes = {call_prefix}{encode};
                       var ptr{tmp} = encodeRes.ptr;
                       var len{tmp} = {encoded_len};
                     "#,

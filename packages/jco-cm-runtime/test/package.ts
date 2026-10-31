@@ -78,6 +78,7 @@ suite('runtime package', () => {
                 './intrinsics/conversion',
                 './intrinsics/js-helper',
                 './intrinsics/resource',
+                './intrinsics/string',
                 './runtime',
             ]);
             expect(manifest.sideEffects).toBe(false);

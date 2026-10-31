@@ -5,6 +5,7 @@ export const components = [
     { id: 'noise', path: 'noise.mjs' },
     { id: 'numbers', path: '../../test/fixtures/components/runtime/numbers.component.wasm' },
     { id: 'variants', path: '../../test/fixtures/components/runtime/variants.component.wasm' },
+    { id: 'strings', path: '../../test/fixtures/components/runtime/strings.component.wasm' },
     { id: 'adder', path: '../../test/fixtures/components/adder.component.wasm' },
     { id: 'resource', path: '../../test/fixtures/components/runtime/external-runtime-resource.component.wat' },
 ] as const;
@@ -23,6 +24,46 @@ export function componentPath(id: ComponentId) {
 
 /** Keep selected scratch families separate from scalar-only runtime imports. */
 export const importControls = [
+    {
+        id: 'string-char',
+        suffix: 'intrinsics/string',
+        names: ['validateGuestChar'],
+        setup: '',
+        answer: 'validateGuestChar(42).charCodeAt(0)',
+        allocations: {},
+    },
+    {
+        id: 'utf8-decoder',
+        suffix: 'intrinsics/string',
+        names: ['initializeUtf8Decoder'],
+        setup: 'const decoder = initializeUtf8Decoder();',
+        answer: 'decoder.decode(new Uint8Array([42])).charCodeAt(0)',
+        allocations: { TextDecoder: 1, Uint8Array: 1 },
+    },
+    {
+        id: 'utf16-decoder',
+        suffix: 'intrinsics/string',
+        names: ['initializeUtf16Decoder'],
+        setup: 'const decoder = initializeUtf16Decoder();',
+        answer: 'decoder.decode(new Uint8Array([42, 0])).charCodeAt(0)',
+        allocations: { TextDecoder: 1, Uint8Array: 1 },
+    },
+    {
+        id: 'utf8-encoder',
+        suffix: 'intrinsics/string',
+        names: ['initializeUtf8Encoder', 'utf8Encode'],
+        setup: 'const encoder = initializeUtf8Encoder(); const memory = { buffer: new ArrayBuffer(8) };',
+        answer: 'utf8Encode(encoder, "*", () => 0, memory).len + 41',
+        allocations: { TextEncoder: 1, ArrayBuffer: 1, Uint8Array: 1 },
+    },
+    {
+        id: 'utf16-encoding',
+        suffix: 'intrinsics/string',
+        names: ['initializeUtf16Encoding'],
+        setup: 'const context = initializeUtf16Encoding();',
+        answer: 'typeof context.littleEndian === "boolean" ? 42 : 0',
+        allocations: { Uint8Array: 1, Uint16Array: 1 },
+    },
     {
         id: 'empty-func',
         suffix: 'intrinsics/js-helper',

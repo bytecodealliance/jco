@@ -2,9 +2,19 @@ import assert from 'node:assert/strict';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 export function importsFor(id) {
-    const imports = id === 'numbers' || id === 'variants' ? new WASIShim().getImportObject() : {};
+    const imports = ['numbers', 'variants', 'strings'].includes(id) ? new WASIShim().getImportObject() : {};
     if (id === 'numbers' || id === 'variants') {
         imports[`test:${id}/test`] = new Proxy({}, { get: () => (value) => value });
+    }
+    if (id === 'strings') {
+        imports['test:strings/imports'] = {
+            takeBasic(value) {
+                assert.equal(value, 'latin utf16');
+            },
+            returnUnicode() {
+                return '🚀🚀🚀 𠈄𓀀';
+            },
+        };
     }
     return imports;
 }
@@ -28,6 +38,24 @@ export async function workload(id, instance) {
             assert.equal(instance.test.roundtripF64(-Math.PI), -Math.PI);
             assert.equal(instance.test.roundtripChar('🚀'), '🚀');
             return { call: (i) => Number(instance.test.roundtripU64(BigInt(i & 255))), async: false };
+        case 'strings':
+            instance.testImports();
+            // This historical C fixture asserts nonempty input. Empty-string ABI
+            // behavior is covered by unit and generated-component conformance.
+            for (const value of ['str', 'café 中文 🚀', '\ufeffbom']) {
+                assert.equal(instance.roundtrip(value), value);
+            }
+            return {
+                call: (i) => {
+                    const result = instance.roundtrip('café 🚀 ' + (i & 255));
+                    let hash = 0;
+                    for (let j = 0; j < result.length; j++) {
+                        hash = (Math.imul(hash, 31) + result.charCodeAt(j)) >>> 0;
+                    }
+                    return hash;
+                },
+                async: false,
+            };
         case 'variants': {
             assert.equal(instance.test.roundtripOption(undefined), undefined);
             assert.equal(instance.test.roundtripOption(42), 42);
@@ -65,6 +93,13 @@ export function expectedResult(id, i) {
     switch (id) {
         case 'numbers':
             return i & 255;
+        case 'strings': {
+            let hash = 4119313438;
+            for (const digit of String(i & 255)) {
+                hash = (Math.imul(hash, 31) + digit.charCodeAt(0)) >>> 0;
+            }
+            return hash;
+        }
         case 'variants':
             return (i & 255) * 3 + 6;
         case 'noise':

@@ -67,3 +67,17 @@ jsHelperModule.dataView({ buffer: new ArrayBuffer(8) });
 jsHelperModule.dataView({ privateView: true }, { buffer: new ArrayBuffer(8) });
 // @ts-expect-error memory must expose an ArrayBuffer-like buffer
 jsHelperModule.dataView(dataViewContext, { buffer: 'not a buffer' });
+
+import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
+import type { StringModule, StringEncodeInto } from '@bytecodealliance/jco-cm-runtime/runtime';
+const strings: StringModule = string;
+const encoder = strings.initializeUtf8Encoder();
+strings.utf8Encode(encoder, 'é', () => 0, { buffer: new ArrayBuffer(8) });
+strings.utf16Encode(strings.initializeUtf16Encoding(), 'x', () => 0, { buffer: new ArrayBuffer(8) });
+// @ts-expect-error encoder is an explicit capability, not an implicit provider dependency
+strings.utf8Encode('x', () => 0, { buffer: new ArrayBuffer(8) });
+// @ts-expect-error UTF16 encoding receives only its endianness capability
+strings.utf16Encode({ encoder }, 'x', () => 0, { buffer: new ArrayBuffer(8) });
+// @ts-expect-error a codec must supply its method with the structural call signature
+const invalidEncoder: StringEncodeInto = { encodeInto: (input: number) => input };
+void invalidEncoder;

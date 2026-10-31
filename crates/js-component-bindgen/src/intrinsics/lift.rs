@@ -656,8 +656,10 @@ impl LiftIntrinsic {
                 let lift_flat_string_utf16_fn =
                     render_args.require_intrinsic(Self::LiftFlatStringUtf16);
                 let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
-                let compact_decode = render_args
-                    .require_intrinsic(Intrinsic::String(StringIntrinsic::CompactUtf16Decode));
+                let compact_decode = render_args.intrinsic_call(
+                    Intrinsic::String(StringIntrinsic::CompactUtf16Decode),
+                    "ctx.memory, ptr, len",
+                );
                 output.push_str(&format!(r#"
                     function {lift_flat_string_any_fn}(ctx) {{
                         switch (ctx.stringEncoding) {{
@@ -668,7 +670,7 @@ impl LiftIntrinsic {
                             case 'compact-utf16': {{
                                 const [ptr, ptrCtx] = {lift_u32}(ctx);
                                 const [len, newCtx] = {lift_u32}(ptrCtx);
-                                return [{compact_decode}(ctx.memory, ptr, len), newCtx];
+                                return [{compact_decode}, newCtx];
                             }}
                             default:
                                 throw new Error(`missing/unrecognized/unsupported string encoding [${{ctx.stringEncoding}}]`);

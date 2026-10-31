@@ -5,6 +5,7 @@
         "./runtime": "./runtime.js",
         "./intrinsics/resource": "./intrinsics/resource.js",
         "./intrinsics/conversion": "./intrinsics/conversion.js",
-        "./intrinsics/js-helper": "./intrinsics/js-helper.js"
+        "./intrinsics/js-helper": "./intrinsics/js-helper.js",
+        "./intrinsics/string": "./intrinsics/string.js"
     }
 }

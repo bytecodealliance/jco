@@ -41,12 +41,26 @@ identical core Wasm digests. The empty component and scalar control must be byte
 the scalar control calibrates noise on all timing axes. Every timed workload validates varying inputs and
 an independent checksum, including both components in the sharing workload.
 
+N04 adds the existing string component, including its actual WASI and string host
+imports. The workload verifies Unicode/BOM round trips and the host-import
+protocol, then hashes every returned UTF-16 code unit for varying string payloads;
+expected hashes start from an independently fixed prefix checksum. Separate
+string-character, UTF-8/UTF-16 decoder, UTF-8 encoder/allocation and UTF-16
+endianness controls trace only selected codecs and views. Constructor tracing now
+also counts Uint8Array and Uint16Array, separately from timing.
+State inventories include initialized codec values as well as context objects;
+the string graph must record its selected UTF-8 encoder and decoder owners.
+
 All bundles and correctness checks finish before timing starts. Defaults are five
 fresh processes per matrix entry, each with 15 alternating paired samples after
 common warmup/calibration. Scenario order rotates deterministically (seed 20261021).
 `JCO_EXTERNAL_RUNTIME_BENCH_PROCESSES=10` expands an unresolved comparison;
 `JCO_EXTERNAL_RUNTIME_BENCH_SAMPLES` may increase samples above 15. Preserve the
 initial run when expanding; never retain only a favorable retry.
+The whole-matrix harness deadline scales with entry/process/sample counts (30
+seconds per entry at five processes and 15 samples, with a ten-minute minimum).
+It is recorded separately from the unchanged two-minute child deadline and all
+statistical/size acceptance budgets.
 
 Raw, gzip level 9 and Brotli quality 11 are separate axes. Fresh unique source is
 parsed in `vm.SourceTextModule`; the next axis includes linking and evaluation.
