@@ -1,0 +1,1011 @@
+{
+    "schema": 2,
+    "checkpointKey": "035fccabc8f76fd3d71193bf80b8677d7dc937557460e7b27d1da299f85e2028",
+    "environment": {
+        "compilerArtifacts": {
+            "js-component-bindgen-component.core.wasm": "3bb8bb8751c4ecf6b526c79f7505559c6609ed972fd37a36d4d2ed51d7459cf9",
+            "js-component-bindgen-component.core2.wasm": "ebae15314fd9c91874ef7f6ed9d32a84da100787c0ac28355062edfb9179cc3f",
+            "js-component-bindgen-component.js": "84ee962c101f37b2846d70446e1722d33703d56d31061f503fffe9e38670e834"
+        },
+        "runtimeArtifacts": {
+            "package": "cc314e7b3c2e98fe9da2106860bcd4b1e803208100bd8be7b4ffc14c0c15b337",
+            "runtime.js": "c9a5052f01ce4209e22d94fbcbc4870543df7e8fa2bc97006d1dc7a9f3d32d7e",
+            "index.js": "4a060fc3c19867ed266a24537f3402e63bc148a686cd57baf3dce10afa7639b2",
+            "intrinsics/conversion.js": "c7171116f11060abfe5bccfc82d019161e333a2fdd9a534a949e785b16743a27",
+            "intrinsics/js-helper.js": "1fa55e7a5cc4254266aaa5c0b48e656671e83e3885b0d88d0489dd83682abd13",
+            "intrinsics/resource.js": "de0d9f699da9985a2fb7ef0db2a9045569c6dd301d76867c4178edf01f80a905",
+            "intrinsics/string.js": "efd57983b085083f18b1564c290e9472dbfee77072bdadc2e4a1b65ae114177d",
+            "intrinsics/webidl.js": "cb355a273e297c388c4a73465768d0f06180f054206c14dd618b755793507532"
+        },
+        "shimArtifacts": {
+            "helpers/filesystem.js": "864bb5e91cc1ad968ea662408d39aaa07b59979f359fbd216c79c8c8bc40aabc",
+            "instantiation.js": "4e66885b9509e5a02bda8550858fc7b61691d960c5640b34456483fbbce70c8e"
+        },
+        "node": "v24.21.0",
+        "rust": "rustc 1.99.0 (b940084d7 2026-09-28)",
+        "versions": {
+            "rolldown": "1.2.13",
+            "rollup": "4.64.1",
+            "oxc-minify": "0.151.0",
+            "typescript": "7.0.2",
+            "@bytecodealliance/preview2-shim": "0.30.0"
+        },
+        "platform": "linux",
+        "arch": "x64",
+        "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+        "controllerFlags": [
+            "--experimental-import-meta-resolve",
+            "--require",
+            "/home/agent/workspace/jco/node_modules/.pnpm/vitest@4.1.11_@types+node@24.13.3_vite@7.3.6_@types+node@24.13.3_jiti@2.6.1_lightningcss@1.33.0_/node_modules/vitest/suppress-warnings.cjs",
+            "--conditions",
+            "node",
+            "--conditions",
+            "development"
+        ],
+        "debug": null,
+        "lockHash": "ba39fb53d61ca8981b7e0a588cefd372132561b7d9f7f9adbc4d3af70bf51d40",
+        "mappingSourceHash": "8f1839c9b8e767239aedcceb66f29772cf7554eca0d05281f7fd6a88040e04e5"
+    },
+    "settings": {
+        "processCount": 5,
+        "sampleCount": 15,
+        "matrixTimeoutMs": 960000,
+        "seed": 20261021,
+        "gzip": 9,
+        "brotli": 11,
+        "strict": false,
+        "instantiation": "sync",
+        "asyncMode": "jspi",
+        "base64Cutoff": 0,
+        "debug": "dynamic",
+        "minimumMaterialImprovement": 0.05,
+        "uncertainty": "seeded percentile process-cluster bootstrap, 10000 resamples",
+        "comparison": "same-revision inline/named",
+        "coverage": {
+            "schema": 2,
+            "apiVersion": 2,
+            "mapped": [
+                "Resource(ResourceTableGet)",
+                "Conversion(I32ToF32)",
+                "Conversion(F32ToI32)",
+                "Conversion(I64ToF64)",
+                "Conversion(F64ToI64)",
+                "Conversion(ToInt8)",
+                "Conversion(ToUint8)",
+                "Conversion(ToInt16)",
+                "Conversion(ToUint16)",
+                "Conversion(ToInt32)",
+                "Conversion(ToUint32)",
+                "Conversion(ToBigInt64)",
+                "Conversion(ToBigUint64)",
+                "Conversion(I32ToChar)",
+                "Conversion(ToString)",
+                "Conversion(ToResultString)",
+                "Conversion(IsValidNumericPrimitive)",
+                "Conversion(RequireValidNumericPrimitive)",
+                "Conversion(MergeBigInt64)",
+                "Conversion(SplitBigInt64)",
+                "JsHelper(EmptyFunc)",
+                "JsHelper(DataView)",
+                "String(Utf16Decoder)",
+                "String(Utf16Encode)",
+                "String(Utf16EncodeAsync)",
+                "String(Utf16ValidatingCopy)",
+                "String(GlobalTextDecoderUtf8)",
+                "String(GlobalTextEncoderUtf8)",
+                "String(Utf8Encode)",
+                "String(Utf8EncodeAsync)",
+                "String(ValidateGuestChar)",
+                "String(ValidateHostChar)",
+                "WebIdl(GlobalThisIdlProxy)",
+                "Resource(ResourceTableFlag)",
+                "Resource(HandleIndexSpaces)",
+                "Resource(GetHandleIndexSpace)",
+                "Resource(ResourceTableCreateBorrow)",
+                "Resource(ResourceTableCreateOwn)",
+                "Resource(ResourceTableEnsureBorrowDrop)",
+                "Resource(ResourceTableRemove)",
+                "Resource(ResourceCallBorrows)",
+                "Resource(ResourceScopeCounter)",
+                "Resource(ResourceScopeTasks)",
+                "Resource(ResourceTransferBorrow)",
+                "Resource(ResourceTransferBorrowValidLifting)",
+                "Resource(ResourceTransferOwn)",
+                "Resource(CurResourceBorrows)",
+                "Resource(ResourceDestructorCall)",
+                "HandleTables",
+                "ScopeId"
+            ]
+        }
+    },
+    "reports": {
+        "rolldown--file--empty": {
+            "size": {
+                "inline": {
+                    "raw": 773,
+                    "gzip": 462,
+                    "brotli": 394
+                },
+                "external": {
+                    "raw": 773,
+                    "gzip": 462,
+                    "brotli": 394
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 457613.99999992136,
+                    "evaluate": 120908.99999998328,
+                    "instantiate": 41855.00000005504
+                },
+                "external": {
+                    "parse": 459511.00000002043,
+                    "evaluate": 121686.00000001106,
+                    "instantiate": 41272.99999998968
+                }
+            }
+        },
+        "rolldown--file--noise": {
+            "size": {
+                "inline": {
+                    "raw": 103,
+                    "gzip": 104,
+                    "brotli": 79
+                },
+                "external": {
+                    "raw": 103,
+                    "gzip": 104,
+                    "brotli": 79
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 304317.9999999666,
+                    "evaluate": 100542.00000001857,
+                    "instantiate": 21545.000000003256,
+                    "call": 46.58775711059585
+                },
+                "external": {
+                    "parse": 306902.9999999202,
+                    "evaluate": 101450.9999999973,
+                    "instantiate": 20984.999999996035,
+                    "call": 42.180271148681804
+                }
+            }
+        },
+        "rolldown--file--numbers": {
+            "size": {
+                "inline": {
+                    "raw": 172091,
+                    "gzip": 25357,
+                    "brotli": 20994
+                },
+                "external": {
+                    "raw": 174045,
+                    "gzip": 26269,
+                    "brotli": 21732
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 7801696.999999876,
+                    "evaluate": 102209.00000012989,
+                    "instantiate": 1470369.0000001187,
+                    "call": 28383.878906250047
+                },
+                "external": {
+                    "parse": 8193476.999999803,
+                    "evaluate": 98154.00000002228,
+                    "instantiate": 1560856.9999999418,
+                    "call": 31295.081054687478
+                }
+            }
+        },
+        "rolldown--file--variants": {
+            "size": {
+                "inline": {
+                    "raw": 181673,
+                    "gzip": 28522,
+                    "brotli": 23559
+                },
+                "external": {
+                    "raw": 183912,
+                    "gzip": 29225,
+                    "brotli": 24168
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 8746755.000000121,
+                    "evaluate": 95937.00000004901,
+                    "instantiate": 1663308.0000001427,
+                    "call": 38597.235351562456
+                },
+                "external": {
+                    "parse": 8614170.999999715,
+                    "evaluate": 108613.00000033225,
+                    "instantiate": 1582309.0000000093,
+                    "call": 37425.296874999956
+                }
+            }
+        },
+        "rolldown--file--strings": {
+            "size": {
+                "inline": {
+                    "raw": 132535,
+                    "gzip": 23250,
+                    "brotli": 19761
+                },
+                "external": {
+                    "raw": 134394,
+                    "gzip": 23995,
+                    "brotli": 20350
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 6535933,
+                    "evaluate": 87662.9999997931,
+                    "instantiate": 1319476.9999997788,
+                    "call": 39739.94335937503
+                },
+                "external": {
+                    "parse": 7135627.000000114,
+                    "evaluate": 103239.0000000305,
+                    "instantiate": 1415541.9999999595,
+                    "call": 37003.14941406257
+                }
+            }
+        },
+        "rolldown--file--adder": {
+            "size": {
+                "inline": {
+                    "raw": 40452,
+                    "gzip": 11346,
+                    "brotli": 10254
+                },
+                "external": {
+                    "raw": 41355,
+                    "gzip": 11688,
+                    "brotli": 10543
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2842178.0000001034,
+                    "evaluate": 91989.00000001231,
+                    "instantiate": 342986.9999999937,
+                    "call": 31070.04003906244
+                },
+                "external": {
+                    "parse": 2820911.0000000237,
+                    "evaluate": 88007.99999994524,
+                    "instantiate": 377927.99999988347,
+                    "call": 29389.83886718749
+                }
+            }
+        },
+        "rolldown--file--resource": {
+            "size": {
+                "inline": {
+                    "raw": 42942,
+                    "gzip": 11888,
+                    "brotli": 10726
+                },
+                "external": {
+                    "raw": 44028,
+                    "gzip": 12284,
+                    "brotli": 11094
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2800197.0000000256,
+                    "evaluate": 88033.9999998796,
+                    "instantiate": 321997.0000000103,
+                    "call": 30701.564453124996
+                },
+                "external": {
+                    "parse": 2954263.9999999665,
+                    "evaluate": 98826.00000003094,
+                    "instantiate": 335085.00000016287,
+                    "call": 30549.324218750007
+                }
+            }
+        },
+        "rolldown--file--sharing": {
+            "size": {
+                "inline": {
+                    "raw": 85876,
+                    "gzip": 22653,
+                    "brotli": 10754
+                },
+                "external": {
+                    "raw": 86227,
+                    "gzip": 22818,
+                    "brotli": 11123
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 4867762.000000085,
+                    "evaluate": 97017.99999993455,
+                    "instantiate": 542363.000000023,
+                    "call": 65121.66308593725
+                },
+                "external": {
+                    "parse": 4966155.000000072,
+                    "evaluate": 107072.00000001649,
+                    "instantiate": 596603.0000001865,
+                    "call": 64577.763671874956
+                }
+            }
+        },
+        "rolldown--package--empty": {
+            "size": {
+                "inline": {
+                    "raw": 773,
+                    "gzip": 462,
+                    "brotli": 394
+                },
+                "external": {
+                    "raw": 773,
+                    "gzip": 462,
+                    "brotli": 394
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 471553.99999996915,
+                    "evaluate": 113505.99999991573,
+                    "instantiate": 44413.00000007686
+                },
+                "external": {
+                    "parse": 478398.9999999676,
+                    "evaluate": 125525.00000003874,
+                    "instantiate": 42221.000000040476
+                }
+            }
+        },
+        "rolldown--package--noise": {
+            "size": {
+                "inline": {
+                    "raw": 103,
+                    "gzip": 104,
+                    "brotli": 79
+                },
+                "external": {
+                    "raw": 103,
+                    "gzip": 104,
+                    "brotli": 79
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 290926.0000000131,
+                    "evaluate": 93106.00000003433,
+                    "instantiate": 22362.000000157423,
+                    "call": 49.796009063720646
+                },
+                "external": {
+                    "parse": 349489.00000006234,
+                    "evaluate": 108964.0000000145,
+                    "instantiate": 23289.999999974498,
+                    "call": 50.17433547973606
+                }
+            }
+        },
+        "rolldown--package--numbers": {
+            "size": {
+                "inline": {
+                    "raw": 172091,
+                    "gzip": 25357,
+                    "brotli": 20994
+                },
+                "external": {
+                    "raw": 174045,
+                    "gzip": 26269,
+                    "brotli": 21732
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 8070025.999999984,
+                    "evaluate": 89066.00000000253,
+                    "instantiate": 1503073.0000003132,
+                    "call": 30821.00146484373
+                },
+                "external": {
+                    "parse": 8272417.000000132,
+                    "evaluate": 109272.00000003268,
+                    "instantiate": 1521899.000000076,
+                    "call": 29179.650390624978
+                }
+            }
+        },
+        "rolldown--package--variants": {
+            "size": {
+                "inline": {
+                    "raw": 181673,
+                    "gzip": 28522,
+                    "brotli": 23559
+                },
+                "external": {
+                    "raw": 183912,
+                    "gzip": 29225,
+                    "brotli": 24168
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 8248572.999999851,
+                    "evaluate": 91793.00000005242,
+                    "instantiate": 1728143.0000000454,
+                    "call": 40840.81152343755
+                },
+                "external": {
+                    "parse": 8714699.999999993,
+                    "evaluate": 107194.00000016321,
+                    "instantiate": 1669611.9999999155,
+                    "call": 37613.58398437498
+                }
+            }
+        },
+        "rolldown--package--strings": {
+            "size": {
+                "inline": {
+                    "raw": 132535,
+                    "gzip": 23250,
+                    "brotli": 19761
+                },
+                "external": {
+                    "raw": 134394,
+                    "gzip": 23995,
+                    "brotli": 20350
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 6789227.999999639,
+                    "evaluate": 90237.999999772,
+                    "instantiate": 1211355.999999796,
+                    "call": 38943.8642578126
+                },
+                "external": {
+                    "parse": 8019306.0000001425,
+                    "evaluate": 119378.99999975343,
+                    "instantiate": 1375845.9999999104,
+                    "call": 39075.97265624974
+                }
+            }
+        },
+        "rolldown--package--adder": {
+            "size": {
+                "inline": {
+                    "raw": 40452,
+                    "gzip": 11346,
+                    "brotli": 10254
+                },
+                "external": {
+                    "raw": 41355,
+                    "gzip": 11688,
+                    "brotli": 10543
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2892012.0000000224,
+                    "evaluate": 94109.00000000311,
+                    "instantiate": 360572.0000000474,
+                    "call": 31049.748046874993
+                },
+                "external": {
+                    "parse": 2925801.9999999763,
+                    "evaluate": 92881.99999991775,
+                    "instantiate": 367868.9999999278,
+                    "call": 28605.986328124945
+                }
+            }
+        },
+        "rolldown--package--resource": {
+            "size": {
+                "inline": {
+                    "raw": 42942,
+                    "gzip": 11888,
+                    "brotli": 10726
+                },
+                "external": {
+                    "raw": 44028,
+                    "gzip": 12284,
+                    "brotli": 11094
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2732711.0000001085,
+                    "evaluate": 94395.99999996062,
+                    "instantiate": 309977.0000000035,
+                    "call": 29379.279296875004
+                },
+                "external": {
+                    "parse": 2769910.9999998654,
+                    "evaluate": 89187.99999992189,
+                    "instantiate": 292406.99999991193,
+                    "call": 29121.578124999825
+                }
+            }
+        },
+        "rolldown--package--sharing": {
+            "size": {
+                "inline": {
+                    "raw": 85876,
+                    "gzip": 22653,
+                    "brotli": 10754
+                },
+                "external": {
+                    "raw": 86227,
+                    "gzip": 22818,
+                    "brotli": 11123
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 4891950.999999835,
+                    "evaluate": 100181.0000000205,
+                    "instantiate": 563353.0000000064,
+                    "call": 68399.19921874981
+                },
+                "external": {
+                    "parse": 5013874.999999871,
+                    "evaluate": 94568.9999998649,
+                    "instantiate": 566295.9999999658,
+                    "call": 68886.92382812512
+                }
+            }
+        },
+        "rollup--file--empty": {
+            "size": {
+                "inline": {
+                    "raw": 722,
+                    "gzip": 438,
+                    "brotli": 368
+                },
+                "external": {
+                    "raw": 722,
+                    "gzip": 438,
+                    "brotli": 368
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 435882.9999999898,
+                    "evaluate": 117997.00000005942,
+                    "instantiate": 37218.99999999323
+                },
+                "external": {
+                    "parse": 463179.0000000251,
+                    "evaluate": 116445.99999999627,
+                    "instantiate": 40707.99999999508
+                }
+            }
+        },
+        "rollup--file--noise": {
+            "size": {
+                "inline": {
+                    "raw": 83,
+                    "gzip": 89,
+                    "brotli": 65
+                },
+                "external": {
+                    "raw": 83,
+                    "gzip": 89,
+                    "brotli": 65
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 279649.9999999469,
+                    "evaluate": 103565.00000000323,
+                    "instantiate": 20520.00000003318,
+                    "call": 47.291324615478246
+                },
+                "external": {
+                    "parse": 311595.0000000112,
+                    "evaluate": 99794.99999997189,
+                    "instantiate": 21019.99999996451,
+                    "call": 50.04992675781191
+                }
+            }
+        },
+        "rollup--file--numbers": {
+            "size": {
+                "inline": {
+                    "raw": 170346,
+                    "gzip": 25182,
+                    "brotli": 20877
+                },
+                "external": {
+                    "raw": 171206,
+                    "gzip": 25780,
+                    "brotli": 21328
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 9160966.000000143,
+                    "evaluate": 104744.9999998662,
+                    "instantiate": 1662604.999999985,
+                    "call": 37154.01757812509
+                },
+                "external": {
+                    "parse": 10658114.000000069,
+                    "evaluate": 113183.9999998192,
+                    "instantiate": 1774687.9999999693,
+                    "call": 35701.87988281281
+                }
+            }
+        },
+        "rollup--file--variants": {
+            "size": {
+                "inline": {
+                    "raw": 179373,
+                    "gzip": 28353,
+                    "brotli": 23475
+                },
+                "external": {
+                    "raw": 180605,
+                    "gzip": 28757,
+                    "brotli": 23818
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 8166457.000000036,
+                    "evaluate": 91149.00000008674,
+                    "instantiate": 1541518.99999988,
+                    "call": 35684.05957031251
+                },
+                "external": {
+                    "parse": 8295754.000000215,
+                    "evaluate": 95339.00000008088,
+                    "instantiate": 1564928.9999998927,
+                    "call": 34421.327148437485
+                }
+            }
+        },
+        "rollup--file--strings": {
+            "size": {
+                "inline": {
+                    "raw": 130976,
+                    "gzip": 23104,
+                    "brotli": 19651
+                },
+                "external": {
+                    "raw": 131898,
+                    "gzip": 23575,
+                    "brotli": 20004
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 7186669.999999936,
+                    "evaluate": 102851.00000010061,
+                    "instantiate": 1643098.000000009,
+                    "call": 46759.28515624994
+                },
+                "external": {
+                    "parse": 7376916.000000165,
+                    "evaluate": 104831.9999999876,
+                    "instantiate": 1428793.0000000414,
+                    "call": 42898.39062500001
+                }
+            }
+        },
+        "rollup--file--adder": {
+            "size": {
+                "inline": {
+                    "raw": 40170,
+                    "gzip": 11245,
+                    "brotli": 10167
+                },
+                "external": {
+                    "raw": 40223,
+                    "gzip": 11303,
+                    "brotli": 10209
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2510300.000000143,
+                    "evaluate": 92617.00000001838,
+                    "instantiate": 352169.0000000035,
+                    "call": 28836.63183593743
+                },
+                "external": {
+                    "parse": 2523775.000000114,
+                    "evaluate": 83566.0000000189,
+                    "instantiate": 345217.00000004785,
+                    "call": 26901.01757812502
+                }
+            }
+        },
+        "rollup--file--resource": {
+            "size": {
+                "inline": {
+                    "raw": 42628,
+                    "gzip": 11787,
+                    "brotli": 10637
+                },
+                "external": {
+                    "raw": 42839,
+                    "gzip": 11916,
+                    "brotli": 10749
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2753018.999999995,
+                    "evaluate": 93481.99999976714,
+                    "instantiate": 315991.00000016735,
+                    "call": 28970.08496093756
+                },
+                "external": {
+                    "parse": 3157512.999999881,
+                    "evaluate": 94878.99999999172,
+                    "instantiate": 346126.0000000266,
+                    "call": 32419.62988281255
+                }
+            }
+        },
+        "rollup--file--sharing": {
+            "size": {
+                "inline": {
+                    "raw": 85248,
+                    "gzip": 22433,
+                    "brotli": 10674
+                },
+                "external": {
+                    "raw": 85590,
+                    "gzip": 22575,
+                    "brotli": 11021
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 4460724.9999999115,
+                    "evaluate": 88952.99999994677,
+                    "instantiate": 468639.0000001666,
+                    "call": 65069.08007812484
+                },
+                "external": {
+                    "parse": 5128546.0000001425,
+                    "evaluate": 100821.99999988006,
+                    "instantiate": 555372.000000034,
+                    "call": 63019.277343749905
+                }
+            }
+        },
+        "rollup--package--empty": {
+            "size": {
+                "inline": {
+                    "raw": 722,
+                    "gzip": 438,
+                    "brotli": 368
+                },
+                "external": {
+                    "raw": 722,
+                    "gzip": 438,
+                    "brotli": 368
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 436577.00000005664,
+                    "evaluate": 124904.000000015,
+                    "instantiate": 40952.00000000432
+                },
+                "external": {
+                    "parse": 436198.9999999878,
+                    "evaluate": 114598.00000000087,
+                    "instantiate": 40124.999999989086
+                }
+            }
+        },
+        "rollup--package--noise": {
+            "size": {
+                "inline": {
+                    "raw": 83,
+                    "gzip": 89,
+                    "brotli": 65
+                },
+                "external": {
+                    "raw": 83,
+                    "gzip": 89,
+                    "brotli": 65
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 290475.9999998987,
+                    "evaluate": 91473.00000006452,
+                    "instantiate": 19784.9999999562,
+                    "call": 49.292774200439695
+                },
+                "external": {
+                    "parse": 285562.0000000272,
+                    "evaluate": 92739.99999993521,
+                    "instantiate": 19135.000000005675,
+                    "call": 41.1344909667967
+                }
+            }
+        },
+        "rollup--package--numbers": {
+            "size": {
+                "inline": {
+                    "raw": 170346,
+                    "gzip": 25182,
+                    "brotli": 20877
+                },
+                "external": {
+                    "raw": 171206,
+                    "gzip": 25780,
+                    "brotli": 21328
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 8467341.999999916,
+                    "evaluate": 92611.99999991732,
+                    "instantiate": 1397452.9999999276,
+                    "call": 28888.133789062522
+                },
+                "external": {
+                    "parse": 8595620.999999937,
+                    "evaluate": 101404.99999988606,
+                    "instantiate": 1406611.9999999956,
+                    "call": 30527.967285156275
+                }
+            }
+        },
+        "rollup--package--variants": {
+            "size": {
+                "inline": {
+                    "raw": 179373,
+                    "gzip": 28353,
+                    "brotli": 23475
+                },
+                "external": {
+                    "raw": 180605,
+                    "gzip": 28757,
+                    "brotli": 23818
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 8212563.000000046,
+                    "evaluate": 92615.00000002343,
+                    "instantiate": 1553498.000000218,
+                    "call": 38065.52050781242
+                },
+                "external": {
+                    "parse": 8153938.000000153,
+                    "evaluate": 93521.00000023711,
+                    "instantiate": 1559908.0000001776,
+                    "call": 37322.016601562646
+                }
+            }
+        },
+        "rollup--package--strings": {
+            "size": {
+                "inline": {
+                    "raw": 130976,
+                    "gzip": 23104,
+                    "brotli": 19651
+                },
+                "external": {
+                    "raw": 131898,
+                    "gzip": 23575,
+                    "brotli": 20004
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 6284763.999999995,
+                    "evaluate": 92951.9999999684,
+                    "instantiate": 1284114.9999999288,
+                    "call": 36293.805664062704
+                },
+                "external": {
+                    "parse": 6789024.99999981,
+                    "evaluate": 99059.00000001112,
+                    "instantiate": 1342083.9999999998,
+                    "call": 38285.371093749854
+                }
+            }
+        },
+        "rollup--package--adder": {
+            "size": {
+                "inline": {
+                    "raw": 40170,
+                    "gzip": 11245,
+                    "brotli": 10167
+                },
+                "external": {
+                    "raw": 40223,
+                    "gzip": 11303,
+                    "brotli": 10209
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2674704.9999999036,
+                    "evaluate": 93199.999999797,
+                    "instantiate": 372264.0000000865,
+                    "call": 31522.79492187493
+                },
+                "external": {
+                    "parse": 2651875.999999902,
+                    "evaluate": 97543.99999997077,
+                    "instantiate": 362842.99999988434,
+                    "call": 32016.608398437453
+                }
+            }
+        },
+        "rollup--package--resource": {
+            "size": {
+                "inline": {
+                    "raw": 42628,
+                    "gzip": 11787,
+                    "brotli": 10637
+                },
+                "external": {
+                    "raw": 42839,
+                    "gzip": 11916,
+                    "brotli": 10749
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 2875702.0000000466,
+                    "evaluate": 92523.00000002833,
+                    "instantiate": 296060.00000012503,
+                    "call": 28339.652343750022
+                },
+                "external": {
+                    "parse": 2826841.0000000587,
+                    "evaluate": 90590.00000002015,
+                    "instantiate": 303470.0000000612,
+                    "call": 29897.745117187456
+                }
+            }
+        },
+        "rollup--package--sharing": {
+            "size": {
+                "inline": {
+                    "raw": 85248,
+                    "gzip": 22433,
+                    "brotli": 10674
+                },
+                "external": {
+                    "raw": 85590,
+                    "gzip": 22575,
+                    "brotli": 11021
+                }
+            },
+            "performance": {
+                "inline": {
+                    "parse": 4451963.999999976,
+                    "evaluate": 90565.99999985337,
+                    "instantiate": 504581.00000014383,
+                    "call": 69769.78125
+                },
+                "external": {
+                    "parse": 4968386.000000009,
+                    "evaluate": 96379.00000006994,
+                    "instantiate": 549267.9999999837,
+                    "call": 63797.377929687646
+                }
+            }
+        }
+    }
+}

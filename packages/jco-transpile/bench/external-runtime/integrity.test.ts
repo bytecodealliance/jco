@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +8,50 @@ import { assert, expect, test } from 'vitest';
 import { measure } from './measure.js';
 import { parityLosses, processInterval, regressionLosses } from './report.js';
 const exec = promisify(execFile);
+
+test.concurrent('ten-process bootstrap does not force balanced index parity', () => {
+    // Independent resampling of five ones and five twos must allow either
+    // median. Alternating even/odd indices falsely collapsed this to [2, 2].
+    const alternating = [1, 2, 1, 2, 1, 2, 1, 2, 1, 2];
+    const grouped = [1, 1, 1, 1, 1, 2, 2, 2, 2, 2];
+    assert.deepEqual(processInterval(alternating).ci95, [1, 2]);
+    assert.deepEqual(processInterval(grouped).ci95, [1, 2]);
+    assert.deepEqual(processInterval(alternating), processInterval(alternating));
+});
+
+test.concurrent('reanalysis preserves source results and refuses to overwrite artifacts', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-reanalysis-canary-'));
+    try {
+        const input = join(dir, 'result.json');
+        const output = join(dir, 'analysis.json');
+        const source = JSON.stringify({
+            schema: 2,
+            complete: true,
+            checkpointKey: 'canary',
+            expectedReports: ['test--file--noise'],
+            settings: { processCount: 10 },
+            parityAchieved: true,
+            reports: {
+                'test--file--noise': {
+                    size: { inline: { raw: 100 }, external: { raw: 100 } },
+                    performance: { inline: { parse: 100 }, external: { parse: 100 } },
+                    raw: Array.from({ length: 10 }, (_, i) => ({ pairedRatios: { parse: i % 2 ? 2 : 1 } })),
+                },
+            },
+        });
+        await writeFile(input, source);
+        const script = fileURLToPath(new URL('./reanalyze.mjs', import.meta.url));
+        await exec(process.execPath, [script, input, output]);
+        const analysis = await readFile(output, 'utf8');
+        assert.deepEqual(JSON.parse(analysis).reports['test--file--noise'].uncertainty.parse.ci95, [1, 2]);
+        await expect(exec(process.execPath, [script, input, input])).rejects.toThrow(/distinct/);
+        await expect(exec(process.execPath, [script, input, output])).rejects.toThrow(/EEXIST/);
+        assert.equal(await readFile(input, 'utf8'), source);
+        assert.equal(await readFile(output, 'utf8'), analysis);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
 
 test.concurrent.each([0, 42])('rejects two equally wrong constant implementations (%s)', async (answer) => {
     const dir = await mkdtemp(join(tmpdir(), 'jco-metrics-canary-'));

@@ -680,11 +680,14 @@ impl Intrinsic {
                 let handle_tables = args.require_intrinsic(Intrinsic::HandleTables);
                 let table_flag = args
                     .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
-                let table_remove = args
-                    .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-                let table_create_own = args.require_intrinsic(Intrinsic::Resource(
-                    ResourceIntrinsic::ResourceTableCreateOwn,
-                ));
+                let table_remove = args.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+                    &format!("{handle_tables}[tableIdx], handle"),
+                );
+                let table_create_own = args.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateOwn),
+                    "table, resource.rep",
+                );
                 output.push_str(&format!(
                     r#"
                     class {managed_buffer_class} {{
@@ -795,7 +798,7 @@ impl Intrinsic {
                                         componentIdx: this.#componentIdx,
                                         stringEncoding: this.#elemMeta.stringEncoding,
                                         liftResource: opts.transferResources ? (handle, tableIdx) => {{
-                                            const {{ rep }} = {table_remove}({handle_tables}[tableIdx], handle);
+                                            const {{ rep }} = {table_remove};
                                             return {{ rep }};
                                         }} : undefined,
                                     }};
@@ -852,7 +855,7 @@ impl Intrinsic {
                                                 table._createdReps = new Set();
                                                 {handle_tables}[tableIdx] = table;
                                             }}
-                                            return {table_create_own}(table, resource.rep);
+                                            return {table_create_own};
                                         }} : undefined,
                                     }}
                                     for (const v of values) {{
@@ -2816,7 +2819,7 @@ impl RenderIntrinsicsArgs<'_> {
             .lock()
             .expect("intrinsic dependency collector lock should not be poisoned")
             .insert(intrinsic);
-        runtime::binding(self.runtime(), intrinsic).local_name()
+        self.runtime().reference(intrinsic)
     }
 
     fn take_discovered_intrinsics(&self) -> BTreeSet<Intrinsic> {

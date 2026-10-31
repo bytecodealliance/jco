@@ -64,8 +64,13 @@ export function processInterval(values: number[]) {
     const bootstrap = Array.from({ length: 10_000 }, () =>
         median(
             values.map(() => {
-                seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-                return values[seed % values.length];
+                // The old LCG's low bit alternated, forcing five even and five
+                // odd indices in every ten-cluster resample. Use mixed bits
+                // and a full-word fraction instead of those low bits.
+                seed ^= seed << 13;
+                seed ^= seed >>> 17;
+                seed ^= seed << 5;
+                return values[Math.floor(((seed >>> 0) / 0x1_0000_0000) * values.length)];
             }),
         ),
     ).sort((a, b) => a - b);

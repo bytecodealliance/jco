@@ -59,6 +59,14 @@ portfolio still uses explicit instantiation, so its WebIDL imports come from
 supplied imports rather than the direct-module global adapter; direct WebIDL
 behavior is covered by the functional Node/browser cases.
 
+N06 adds resource cells, table-owner and shared-allocator controls. Cell and table
+initializers allocate no traced constructors. Allocating two resource kinds for
+one component and removing an owned handle selects exactly two Maps (allocator
+and scope-task lookup), with no task, scratch or codec initialization. The mapped
+set now includes all resources plus the shared handle-table and scope owners
+(50 variants). Real component graphs record the selected owner initializers and
+remaining inline task dependencies separately.
+
 All bundles and correctness checks finish before timing starts. Defaults are five
 fresh processes per matrix entry, each with 15 alternating paired samples after
 common warmup/calibration. Scenario order rotates deterministically (seed 20261021).
@@ -113,3 +121,15 @@ Strict parity budgets are inline +5% +256 raw bytes, +5% +128 compressed bytes,
 and +25% +250 ns calls. Cold import and memory are diagnostic, without acceptance
 budgets. Never re-record merely to hide a regression. Inline remains the production
 default; passing a baseline gate does not establish parity.
+
+To recompute uncertainty from a preserved complete result without changing its
+measurements or parity gates (using the validated Node 24 toolchain):
+
+```sh
+node bench/external-runtime/reanalyze.mjs bench/output/external-runtime-named/run-EXAMPLE/result.json /tmp/fresh-analysis.json
+```
+
+The output must be a new file. It embeds the analysis sources and hashes its input.
+The corrected process-cluster sampler uses mixed full-word random indices; this
+avoids the ten-process low-bit parity correlation found during N06. Original
+reports remain unchanged; label reanalysis separately from fresh collection.

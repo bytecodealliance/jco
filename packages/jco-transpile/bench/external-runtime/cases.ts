@@ -25,6 +25,41 @@ export function componentPath(id: ComponentId) {
 /** Keep selected scratch families separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        suffix: 'intrinsics/resource',
+        id: 'resource-cells',
+        names: [
+            'initializeScopeId',
+            'initializeResourceScopeCounter',
+            'initializeCallBorrows',
+            'initializeCurrentBorrows',
+        ],
+        setup: 'const scope = initializeScopeId(), counter = initializeResourceScopeCounter(), calls = initializeCallBorrows(), current = initializeCurrentBorrows();',
+        answer: 'scope.value === 0 && counter.value === 0 && calls.borrows.length === 0 && current.borrows.length === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
+        suffix: 'intrinsics/resource',
+        id: 'resource-allocator',
+        names: [
+            'initializeHandleIndexSpaces',
+            'tableCreateOwn',
+            'tableCreateBorrow',
+            'tableRemove',
+            'initializeResourceScopeTasks',
+        ],
+        setup: 'const indexSpaces = initializeHandleIndexSpaces(); const scopeTasks = initializeResourceScopeTasks(); const context = { RuntimeError: WebAssembly.RuntimeError, indexSpaces, scopeTasks }; const a = Object.assign([1073741824, 0], { _componentIdx: 0, _createdReps: new Set() }), b = Object.assign([1073741824, 0], { _componentIdx: 0, _createdReps: new Set() });',
+        answer: '(tableCreateOwn(indexSpaces, a, 42) === 1 && tableCreateBorrow(indexSpaces, b, 7, 3) === 2 && tableRemove(context, a, 1).rep === 42) ? 42 : 0',
+        allocations: { Map: 2 },
+    },
+    {
+        suffix: 'intrinsics/resource',
+        id: 'resource-tables',
+        names: ['initializeHandleTables'],
+        setup: 'const tables = initializeHandleTables();',
+        answer: 'Object.keys(tables).length === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
         id: 'webidl-cache',
         suffix: 'intrinsics/webidl',
         names: ['initializeWebIdlProxyCache'],
