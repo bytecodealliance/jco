@@ -173,6 +173,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/async-task': AsyncTaskModule;
     readonly 'intrinsics/host': HostModule;
     readonly 'intrinsics/lift': LiftModule;
+    readonly 'intrinsics/lower': LowerModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -1114,6 +1115,10 @@ export type TaskLiftFn = (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
 
 export interface TaskLowerContext {
     componentIdx: number;
+    params?: unknown[];
+    useDirectParams?: boolean;
+    storageLen?: number;
+    lowerResource?: (value: unknown, tableIdx: number) => number;
     vals: unknown[];
     memory?: RuntimeMemory | null;
     realloc?: StringRealloc | null;
@@ -1894,4 +1899,158 @@ export interface LiftModule {
         errCtxTableIdx: number,
         ctx: TaskLiftContext,
     ) => [unknown, TaskLiftContext];
+}
+
+export interface LowerRecordMeta {
+    readonly fieldMetas: readonly (readonly [string, TaskLowerFn, number, number])[];
+    readonly size32: number;
+    readonly align32: number;
+}
+export type LowerVariantCaseMeta = readonly [string, TaskLowerFn | null, number, number, number | null];
+export interface LowerVariantMeta {
+    readonly caseMetas: readonly LowerVariantCaseMeta[];
+    readonly variantSize32: number;
+    readonly variantAlign32: number;
+    readonly variantPayloadOffset32: number;
+    readonly payloadMaybeNull?: boolean;
+}
+export interface LowerListMeta {
+    readonly elemLowerFn: TaskLowerFn;
+    readonly knownLen?: number;
+    readonly size32?: number;
+    readonly align32?: number;
+    readonly elemSize32: number;
+    readonly elemAlign32: number;
+}
+export interface LowerMapMeta {
+    readonly keyLowerFn: TaskLowerFn;
+    readonly valueLowerFn: TaskLowerFn;
+    readonly entrySize32: number;
+    readonly entryAlign32: number;
+    readonly valueOffset32: number;
+}
+export interface LowerTupleMeta {
+    readonly elemLowerMetas: readonly (readonly [TaskLowerFn, number, number])[];
+    readonly size32: number;
+    readonly align32: number;
+}
+export interface LowerOwnMeta {
+    readonly lowerFn: (value: unknown) => number;
+    readonly componentIdx: number;
+    readonly tableIdx: number;
+}
+export interface LowerStringContext {
+    readonly utf8: StringEncodeInto;
+    readonly utf16: Utf16EncodingContext;
+}
+export interface LowerElementMeta {
+    stringEncoding?: string;
+    [key: string]: unknown;
+}
+export interface LowerFutureMeta {
+    readonly componentIdx: number;
+    readonly futureTableIdx: number;
+    readonly elemMeta: LowerElementMeta;
+    readonly futureNestingLevel?: number;
+}
+export interface LowerStreamMeta {
+    readonly componentIdx: number;
+    readonly streamTableIdx: number;
+    readonly elemMeta: LowerElementMeta;
+}
+export interface LowerReadEnd {
+    readonly waitableIdx: () => number;
+    readonly setHostInjectFn: (fn: unknown) => void;
+    readonly setHostDropFn: (fn: (reason?: unknown) => unknown) => void;
+}
+export interface LowerCreatedFuture {
+    readonly writeEnd: unknown;
+    readonly writeEndWaitableIdx: number;
+    readonly readEnd: LowerReadEnd;
+    readonly readEndWaitableIdx: number;
+}
+export interface LowerCreatedStream {
+    readonly writeEnd: unknown;
+    readonly readEnd: LowerReadEnd;
+}
+export interface LowerStoredFuture {
+    readonly getFutureEndWaitableIdx: () => number;
+}
+export interface LowerStoredStream {
+    readonly readEnd?: () => LowerReadEnd;
+    readonly getStreamEndWaitableIdx?: () => number;
+}
+export interface LowerInternalStream {
+    readonly readEnd: () => LowerReadEnd;
+}
+export interface LowerStreamReadFn {
+    (): Promise<IteratorResult<unknown>>;
+    readonly drop: (reason?: unknown) => unknown;
+}
+/** Specific pending-family capabilities are lazy until their own conversions replace the bridges. */
+export interface LowerFutureContext {
+    readonly numeric: StrictNumericContext;
+    readonly lookup: ComponentStateLookupContext;
+    readonly resourceRep: symbol;
+    readonly getNestedSymbol: () => symbol;
+    readonly getGlobal: () => Pick<RepTable<LowerStoredFuture>, 'get'>;
+    readonly isLowerable: (value: unknown) => boolean;
+    readonly create: (
+        state: ComponentAsyncState,
+        options: { tableIdx: number; elemMeta: LowerElementMeta },
+    ) => LowerCreatedFuture;
+    readonly genHostInject: (options: { promise: unknown; stringEncoding?: string; hostWriteEnd: unknown }) => unknown;
+}
+export interface LowerStreamContext {
+    readonly numeric: StrictNumericContext;
+    readonly lookup: ComponentStateLookupContext;
+    readonly resourceRep: symbol;
+    readonly getGlobal: () => Pick<RepTable<LowerStoredStream>, 'get'>;
+    readonly getExternalClass: () => abstract new (...args: never[]) => object;
+    readonly getInternalClass: () => abstract new (...args: never[]) => LowerInternalStream;
+    readonly isLowerable: (value: unknown) => boolean;
+    readonly create: (
+        state: ComponentAsyncState,
+        options: { tableIdx: number; elemMeta: LowerElementMeta },
+    ) => LowerCreatedStream;
+    readonly genRead: (value: unknown) => LowerStreamReadFn;
+    readonly genHostInject: (options: {
+        readFn: LowerStreamReadFn;
+        hostWriteEnd: unknown;
+        readEnd: LowerReadEnd;
+    }) => unknown;
+}
+export interface LowerErrorContext extends ErrorContextNewContext {
+    readonly numeric: StrictNumericContext;
+}
+export interface LowerModule {
+    readonly lowerFlatBool: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatS8: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatU8: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatS16: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatU16: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatS32: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatU32: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatS64: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatU64: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatFloat32: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatFloat64: (context: StrictNumericContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatChar: (ctx: TaskLowerContext) => void;
+    readonly lowerFlatStringAny: (context: LowerStringContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatStringUTF16: (context: Utf16EncodingContext, ctx: TaskLowerContext) => void;
+    readonly lowerFlatStringUTF8: (context: StringEncodeInto, ctx: TaskLowerContext) => void;
+    readonly lowerFlatRecord: (meta: LowerRecordMeta) => TaskLowerFn;
+    readonly lowerFlatVariant: (context: StrictNumericContext, meta: LowerVariantMeta) => TaskLowerFn;
+    readonly lowerFlatList: (context: StrictNumericContext, meta: LowerListMeta) => TaskLowerFn;
+    readonly lowerFlatMap: (context: StrictNumericContext, meta: LowerMapMeta) => TaskLowerFn;
+    readonly lowerFlatTuple: (meta: LowerTupleMeta) => TaskLowerFn;
+    readonly lowerFlatFlags: (context: LiftFlagsContext, meta: LiftFlagsMeta) => TaskLowerFn;
+    readonly lowerFlatEnum: (context: StrictNumericContext, meta: LowerVariantMeta) => TaskLowerFn;
+    readonly lowerFlatOption: (context: StrictNumericContext, meta: LowerVariantMeta) => TaskLowerFn;
+    readonly lowerFlatResult: (context: StrictNumericContext, meta: LowerVariantMeta) => TaskLowerFn;
+    readonly lowerFlatOwn: (context: StrictNumericContext, meta: LowerOwnMeta) => TaskLowerFn;
+    readonly lowerFlatBorrow: (ctx: TaskLowerContext) => never;
+    readonly lowerFlatFuture: (context: LowerFutureContext, meta: LowerFutureMeta) => TaskLowerFn;
+    readonly lowerFlatStream: (context: LowerStreamContext, meta: LowerStreamMeta) => TaskLowerFn;
+    readonly lowerFlatErrorContext: (context: LowerErrorContext, errCtxTableIdx: number, ctx: TaskLowerContext) => void;
 }

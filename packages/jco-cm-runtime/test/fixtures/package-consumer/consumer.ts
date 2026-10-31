@@ -10,6 +10,7 @@ import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error
 import * as asyncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/async-task';
 import * as host from '@bytecodealliance/jco-cm-runtime/intrinsics/host';
 import * as lift from '@bytecodealliance/jco-cm-runtime/intrinsics/lift';
+import * as lower from '@bytecodealliance/jco-cm-runtime/intrinsics/lower';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -32,6 +33,7 @@ const publicModules: Record<string, Record<string, unknown>> = {
     AsyncTaskModule: asyncTask,
     HostModule: host,
     LiftModule: lift,
+    LowerModule: lower,
 };
 
 const constants = new Set([

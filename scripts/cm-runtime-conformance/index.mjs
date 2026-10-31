@@ -1,3 +1,4 @@
+import { testLowerIntrinsics } from './lower.mjs';
 import { testLiftIntrinsics } from './lift.mjs';
 import { testHostIntrinsics } from './host.mjs';
 import { testAsyncTaskIntrinsics } from './async-task.mjs';
@@ -18,6 +19,7 @@ export const DEFAULT_RUNTIME_BASE = '@bytecodealliance/jco-cm-runtime';
 const TEST_GROUPS = new Map([
     ['runtime', testRuntimeExports],
     ['resource', testResourceIntrinsics],
+    ['lower', testLowerIntrinsics],
     ['lift', testLiftIntrinsics],
     ['host', testHostIntrinsics],
     ['async-task', testAsyncTaskIntrinsics],

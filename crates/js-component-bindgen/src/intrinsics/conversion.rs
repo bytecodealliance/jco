@@ -318,11 +318,11 @@ impl ConversionIntrinsic {
             Self::I32ToChar => {
                 output.push_str("
                     function i32ToChar(n) {
-                        if (!n || typeof n !== 'number') { throw new Error('invalid i32'); }
+                        if (typeof n !== 'number' || !Number.isInteger(n)) { throw new Error('invalid i32'); }
                         if (n < 0) { throw new Error('i32 must be greater than zero'); }
                         if (n >= 0x110000) { throw new Error('invalid i32, out of range'); }
                         if (0xD800 <= n && n <= 0xDFFF) { throw new Error('invalid i32 out of range'); }
-                        return String.fromCharCode(n);
+                        return String.fromCodePoint(n);
                     }
                 ");
             }
