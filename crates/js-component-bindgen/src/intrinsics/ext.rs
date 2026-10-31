@@ -28,6 +28,8 @@ use std::fmt::Write;
 mod component;
 pub(crate) mod conversion;
 mod core;
+mod error_context;
+use error_context::ErrCtxContext;
 mod waitable;
 use component::ComponentContext;
 use core::CoreContext;
@@ -46,6 +48,7 @@ pub(crate) enum RuntimeContext {
     Core(CoreContext),
     Component(ComponentContext),
     Waitable(WaitableContext),
+    ErrCtx(ErrCtxContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -110,6 +113,7 @@ impl RuntimeContext {
         .chain(CoreContext::get_global_names())
         .chain(ComponentContext::get_global_names())
         .chain(WaitableContext::get_global_names())
+        .chain(ErrCtxContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -117,6 +121,7 @@ impl RuntimeContext {
             Self::Core(context) => context.local_name(),
             Self::Component(context) => context.local_name(),
             Self::Waitable(context) => context.local_name(),
+            Self::ErrCtx(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -147,6 +152,7 @@ impl RuntimeContext {
             Self::Core(context) => return context.initializer(),
             Self::Component(context) => return context.initializer(),
             Self::Waitable(context) => return context.initializer(),
+            Self::ErrCtx(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -236,6 +242,7 @@ impl RuntimeContext {
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
+            Self::ErrCtx(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -271,6 +278,7 @@ impl RuntimeContext {
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),
+            Self::ErrCtx(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -359,6 +367,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::ErrCtx(i) => Some(error_context::import(i)),
             Intrinsic::Waitable(i) => Some(waitable::import(i)),
             Intrinsic::Component(i) => Some(component::import(i)),
             Intrinsic::Resource(i) => Some(resource::resource_import(i)),
@@ -586,6 +595,22 @@ impl Provides<WaitableIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<ErrCtxIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: ErrCtxIntrinsic) -> IntrinsicBinding {
+        let _ = error_context::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        _intrinsic: ErrCtxIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -609,7 +634,6 @@ macro_rules! delegate_to_inline {
 }
 
 delegate_to_inline! {
-    ErrCtxIntrinsic,
     AsyncTaskIntrinsic,
     LiftIntrinsic,
     LowerIntrinsic,

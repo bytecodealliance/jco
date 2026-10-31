@@ -1319,16 +1319,16 @@ impl LowerIntrinsic {
                 let lower_flat_error_context_fn = self.name();
                 let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
                 let create_local_handle_fn =
-                    render_args.require_intrinsic(ErrCtxIntrinsic::CreateLocalHandle);
+                    render_args.intrinsic_call_prefix(ErrCtxIntrinsic::CreateLocalHandle);
                 let err_ctx_global_ref_count_add_fn =
-                    render_args.require_intrinsic(ErrCtxIntrinsic::GlobalRefCountAdd);
+                    render_args.intrinsic_call_prefix(ErrCtxIntrinsic::GlobalRefCountAdd);
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let global_tbl =
                     render_args.require_intrinsic(ErrCtxIntrinsic::ComponentGlobalTable);
                 let get_local_tbl_fn =
-                    render_args.require_intrinsic(ErrCtxIntrinsic::GetLocalTable);
+                    render_args.intrinsic_call_prefix(ErrCtxIntrinsic::GetLocalTable);
 
                 // NOTE: at this point the error context has already been lowered into the appropriate
                 // place for us via error context transfer.
@@ -1350,16 +1350,16 @@ impl LowerIntrinsic {
                             if (!removed) {{
                                 throw new Error(`failed to remove err ctx [${{globalErrCtx.waitableIdx}}], component [${{globalErrCtx.componentIdx}}]`);
                             }}
-                            const prevLocalErrCtxTable = {get_local_tbl_fn}(globalErrCtx.componentIdx, globalErrCtx.localTableIdx);
+                            const prevLocalErrCtxTable = {get_local_tbl_fn}globalErrCtx.componentIdx, globalErrCtx.localTableIdx);
                             prevLocalErrCtxTable.remove(globalErrCtx.localIdx)
                         }}
 
                         // Insert the error context into the destination tables
-                        const localErrCtxTable = {get_local_tbl_fn}(componentIdx, errCtxTableIdx, {{ upsert: true }});
+                        const localErrCtxTable = {get_local_tbl_fn}componentIdx, errCtxTableIdx, {{ upsert: true }});
 
                         let handle = localErrCtxTable.get(componentIdx, errCtxTableIdx, );
                         if (handle === undefined) {{
-                            const {{ waitableIdx, localIdx }} = {create_local_handle_fn}(
+                            const {{ waitableIdx, localIdx }} = {create_local_handle_fn}
                                 componentIdx,
                                 localErrCtxTable,
                                 errCtxGlobalRep,
@@ -1374,7 +1374,7 @@ impl LowerIntrinsic {
                             localErrCtx.localTableIdx = errCtxTableIdx;
                         }}
 
-                        {err_ctx_global_ref_count_add_fn}(errCtxGlobalRep, -1);
+                        {err_ctx_global_ref_count_add_fn}errCtxGlobalRep, -1);
 
                         {lower_u32_fn}({{ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx }});
                     }}

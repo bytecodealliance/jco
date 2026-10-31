@@ -10,6 +10,7 @@ string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
 from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
 and waitable constructors/operations from `intrinsics/waitable`.
+Error-context storage and operations use `intrinsics/error-context`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
