@@ -7,3 +7,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - [`intrinsics/conversion`](conversion.md): conversion.
 - [`intrinsics/js-helper`](js-helper.md): javascript helper.
 - [`intrinsics/string`](string.md): string.
+- [`intrinsics/webidl`](webidl.md): webidl.

@@ -25,6 +25,22 @@ export function componentPath(id: ComponentId) {
 /** Keep selected scratch families separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        id: 'webidl-cache',
+        suffix: 'intrinsics/webidl',
+        names: ['initializeWebIdlProxyCache'],
+        setup: 'const context = initializeWebIdlProxyCache();',
+        answer: 'Object.keys(context).join() === "proxy" && context.proxy === undefined ? 42 : 0',
+        allocations: {},
+    },
+    {
+        id: 'webidl-proxy',
+        suffix: 'intrinsics/webidl',
+        names: ['initializeWebIdlProxyCache', 'globalThisIdlProxy'],
+        setup: 'const context = initializeWebIdlProxyCache();',
+        answer: 'globalThisIdlProxy(context) === globalThisIdlProxy(context) && Reflect.has(context.proxy, "URL") ? 42 : 0',
+        allocations: { Symbol: 2, Proxy: 1 },
+    },
+    {
         id: 'string-char',
         suffix: 'intrinsics/string',
         names: ['validateGuestChar'],

@@ -2,8 +2,12 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 const counts = {};
+// Instrumentation wrappers themselves must not increment the Proxy counter.
+const InstrumentationProxy = globalThis.Proxy;
 for (const key of [
     'Map',
+    'Proxy',
+    'Symbol',
     'DataView',
     'ArrayBuffer',
     'Uint8Array',
@@ -17,7 +21,11 @@ for (const key of [
 ]) {
     const original = globalThis[key];
     counts[key] = 0;
-    globalThis[key] = new Proxy(original, {
+    globalThis[key] = new InstrumentationProxy(original, {
+        apply(target, receiver, args) {
+            counts[key]++;
+            return Reflect.apply(target, receiver, args);
+        },
         construct(target, args, receiver) {
             counts[key]++;
             return Reflect.construct(target, args, receiver);

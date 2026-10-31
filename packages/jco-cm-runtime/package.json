@@ -46,6 +46,10 @@
         "./intrinsics/string": {
             "types": "./dist/intrinsics/string.d.ts",
             "default": "./dist/intrinsics/string.js"
+        },
+        "./intrinsics/webidl": {
+            "types": "./dist/intrinsics/webidl.d.ts",
+            "default": "./dist/intrinsics/webidl.js"
         }
     },
     "scripts": {

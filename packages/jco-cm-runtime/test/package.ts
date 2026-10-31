@@ -79,6 +79,7 @@ suite('runtime package', () => {
                 './intrinsics/js-helper',
                 './intrinsics/resource',
                 './intrinsics/string',
+                './intrinsics/webidl',
                 './runtime',
             ]);
             expect(manifest.sideEffects).toBe(false);

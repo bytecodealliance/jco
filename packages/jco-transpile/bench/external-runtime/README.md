@@ -51,6 +51,14 @@ also counts Uint8Array and Uint16Array, separately from timing.
 State inventories include initialized codec values as well as context objects;
 the string graph must record its selected UTF-8 encoder and decoder owners.
 
+N05 adds used/unused WebIDL cache and proxy controls. Empty-cache initialization
+must access no Proxy/Symbol capability; first adapter use creates exactly two
+private symbols and one proxy, and repeated use reuses it. Tracing uses a captured
+native Proxy to keep instrumentation wrappers out of its own counts. The component
+portfolio still uses explicit instantiation, so its WebIDL imports come from
+supplied imports rather than the direct-module global adapter; direct WebIDL
+behavior is covered by the functional Node/browser cases.
+
 All bundles and correctness checks finish before timing starts. Defaults are five
 fresh processes per matrix entry, each with 15 alternating paired samples after
 common warmup/calibration. Scenario order rotates deterministically (seed 20261021).
