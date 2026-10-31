@@ -32,8 +32,10 @@ pub(crate) mod conversion;
 mod core;
 mod error_context;
 mod host;
+mod lift;
 use error_context::ErrCtxContextIntrinsic;
 use host::HostContextIntrinsic;
+use lift::LiftContextIntrinsic;
 mod waitable;
 use component::ComponentContextIntrinsic;
 use core::CoreContextIntrinsic;
@@ -63,6 +65,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     Task(TaskContextIntrinsic),
     /// Context intrinsics for host operations.
     Host(HostContextIntrinsic),
+    /// Context intrinsics for canonical lifting.
+    Lift(LiftContextIntrinsic),
     /// Capabilities for the `tableGet` resource-table helper.
     ResourceTableGet,
     /// The per-component resource handle index spaces returned by `initializeHandleIndexSpaces`.
@@ -151,6 +155,7 @@ impl RuntimeContextIntrinsic {
         .chain(ErrCtxContextIntrinsic::get_global_names())
         .chain(TaskContextIntrinsic::get_global_names())
         .chain(HostContextIntrinsic::get_global_names())
+        .chain(LiftContextIntrinsic::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -161,6 +166,7 @@ impl RuntimeContextIntrinsic {
             Self::ErrCtx(context) => context.local_name(),
             Self::Task(context) => context.local_name(),
             Self::Host(context) => context.local_name(),
+            Self::Lift(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::InitializeHandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::InitializeHandleTables => "HANDLE_TABLES",
@@ -194,6 +200,7 @@ impl RuntimeContextIntrinsic {
             Self::ErrCtx(context) => return context.initializer(),
             Self::Task(context) => return context.initializer(),
             Self::Host(context) => return context.initializer(),
+            Self::Lift(context) => return context.initializer(),
             Self::InitializeHandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -286,6 +293,7 @@ impl RuntimeContextIntrinsic {
             Self::ErrCtx(context) => context.dependencies(),
             Self::Task(context) => context.dependencies(),
             Self::Host(context) => context.dependencies(),
+            Self::Lift(context) => context.dependencies(),
             Self::ResourceTableRemove => &[
                 Self::InitializeHandleIndexSpaces,
                 Self::InitializeResourceScopeTasks,
@@ -331,6 +339,7 @@ impl RuntimeContextIntrinsic {
             Self::ErrCtx(context) => context.render(output, args),
             Self::Task(context) => context.render(output, args),
             Self::Host(context) => context.render(output, args),
+            Self::Lift(context) => context.render(output, args),
             Self::ResourceTableRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -419,6 +428,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::Lift(i) => Some(lift::import(i)),
             Intrinsic::Host(i) => Some(host::import(i)),
             Intrinsic::AsyncTask(i) => async_task::import(i),
             Intrinsic::ErrCtx(i) => Some(error_context::import(i)),
@@ -715,6 +725,22 @@ impl Provides<HostIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<LiftIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: LiftIntrinsic) -> IntrinsicBinding {
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        intrinsic: LiftIntrinsic,
+        _output: &mut Source,
+        args: &RenderIntrinsicsArgs<'_>,
+    ) {
+        lift::discover(intrinsic.into(), args);
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -738,7 +764,6 @@ macro_rules! delegate_to_inline {
 }
 
 delegate_to_inline! {
-    LiftIntrinsic,
     LowerIntrinsic,
     AsyncStreamIntrinsic,
     AsyncFutureIntrinsic,

@@ -1457,7 +1457,7 @@ impl LiftIntrinsic {
                             }}
                             const {{ table }} = futureMeta;
                             if (componentIdx === undefined || !table) {{
-                                throw new Error(`invalid global future table state for table [${{tableIdx}}]`);
+                                throw new Error(`invalid global future table state for table [${{futureTableIdx}}]`);
                             }}
 
                             let futureEndWaitableIdx;
@@ -1528,7 +1528,7 @@ impl LiftIntrinsic {
                             }}
                             const {{ table }} = streamMeta;
                             if (componentIdx === undefined || !table) {{
-                                throw new Error(`invalid global stream table state for table [${{tableIdx}}]`);
+                                throw new Error(`invalid global stream table state for table [${{streamTableIdx}}]`);
                             }}
 
                             let streamEndWaitableIdx;
