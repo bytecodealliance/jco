@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-b8129ab9.js";
+            window.path_to_searchindex_js = "searchindex-cb18df26.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-7cd18f1d.js"></script>
@@ -5774,6 +5774,12 @@ WIT stream was dropped:</p>
 <h2 id="zero-length-reads-are-readiness-probes"><a class="header" href="#zero-length-reads-are-readiness-probes">Zero-length reads are readiness probes</a></h2>
 <p>A component can read zero elements to wait until data or end-of-stream is
 observable without consuming an element.</p>
+<p>For streams with a payload type, the guest buffer pointer must be aligned and
+in bounds even for a zero-length read or write. An empty buffer may point exactly
+at the end of memory. Streams without a payload type ignore the pointer.
+The same-instance restriction on non-numeric payloads also applies whenever both
+ends supply buffers, even when either buffer is empty. These checks follow
+<a href="https://github.com/WebAssembly/component-model/pull/755">component-model PR #755</a>.</p>
 <p>Jco may pull one host chunk to answer that readiness query, but the values
 must remain available for a later non-empty read.</p>
 <p>This has two practical consequences:</p>
