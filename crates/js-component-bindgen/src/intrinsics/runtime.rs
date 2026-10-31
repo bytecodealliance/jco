@@ -150,7 +150,7 @@ mod tests {
     const SAMPLES: [Intrinsic; 5] = [
         Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateBorrow),
         Intrinsic::String(StringIntrinsic::Utf8Encode),
-        Intrinsic::JsHelper(JsHelperIntrinsic::DataView),
+        Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn),
         Intrinsic::Base64Compile,
         Intrinsic::HandleTables,
     ];

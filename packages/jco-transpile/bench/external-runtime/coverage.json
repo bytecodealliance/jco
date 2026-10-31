@@ -21,6 +21,8 @@
         "Conversion(RequireValidNumericPrimitive)",
         "Conversion(IsValidNumericPrimitive)",
         "Conversion(MergeBigInt64)",
-        "Conversion(SplitBigInt64)"
+        "Conversion(SplitBigInt64)",
+        "JsHelper(EmptyFunc)",
+        "JsHelper(DataView)"
     ]
 }

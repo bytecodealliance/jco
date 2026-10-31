@@ -1,3 +1,4 @@
+import { testJsHelperIntrinsics } from './js-helper.mjs';
 import { testConversionIntrinsics } from './conversion.mjs';
 import { createRuntimeLoader } from './loader.mjs';
 import { testResourceIntrinsics } from './resource.mjs';
@@ -9,6 +10,7 @@ export const DEFAULT_RUNTIME_BASE = '@bytecodealliance/jco-cm-runtime';
 const TEST_GROUPS = new Map([
     ['runtime', testRuntimeExports],
     ['resource', testResourceIntrinsics],
+    ['js-helper', testJsHelperIntrinsics],
     ['conversion', testConversionIntrinsics],
 ]);
 export const DEFAULT_GROUPS = Object.freeze([...TEST_GROUPS.keys()]);

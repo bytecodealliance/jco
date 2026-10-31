@@ -38,6 +38,7 @@ export interface ResourceModule {
 export interface RuntimeModuleContracts {
     readonly 'intrinsics/resource': ResourceModule;
     readonly 'intrinsics/conversion': ConversionModule;
+    readonly 'intrinsics/js-helper': JsHelperModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -78,4 +79,15 @@ export interface ConversionModule {
     readonly requireValidNumericPrimitive: (type: string, value: unknown) => true;
     readonly splitInt64: (value: bigint) => [number, number];
     readonly mergeInt64: (low: number, high: number) => bigint;
+}
+
+/** Mutable view owner shared by all selected memory loads/stores in one instantiation. */
+export interface DataViewCacheContext {
+    view: DataView;
+}
+
+export interface JsHelperModule {
+    readonly emptyFunc: (...args: unknown[]) => void;
+    readonly initializeDataViewCache: () => DataViewCacheContext;
+    readonly dataView: (context: DataViewCacheContext, memory: { readonly buffer: ArrayBufferLike }) => DataView;
 }
