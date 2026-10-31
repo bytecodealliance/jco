@@ -19,15 +19,22 @@ for (const bundler of bundlers) {
             try {
                 await installRuntime(dir);
                 for (const control of importControls) {
-                    const specifier =
-                        resolution === 'file'
-                            ? new URL(control.suffix + '.js', defaultRuntimeUrl).href
-                            : '@bytecodealliance/jco-cm-runtime/' + control.suffix;
+                    const groups = [control, ...('imports' in control ? control.imports : [])];
+                    const imports = groups
+                        .map((group) => {
+                            const specifier =
+                                resolution === 'file'
+                                    ? new URL(group.suffix + '.js', defaultRuntimeUrl).href
+                                    : '@bytecodealliance/jco-cm-runtime/' + group.suffix;
+                            return `import { ${group.names.join(', ')} } from ${JSON.stringify(specifier)};`;
+                        })
+                        .join('\n');
                     for (const used of [false, true]) {
                         const entry = join(dir, `entry-${control.id}-${used}.mjs`);
                         await writeFile(
                             entry,
-                            `import { ${control.names.join(', ')} } from ${JSON.stringify(specifier)};\n` +
+                            imports +
+                                '\n' +
                                 (used
                                     ? control.setup + ` export function answer() { return ${control.answer}; }`
                                     : 'export const answer = 42;'),

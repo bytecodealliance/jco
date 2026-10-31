@@ -33,7 +33,7 @@ export function createTestIntrinsics(options: CoreTestOptions = {}) {
     const resourceContext = { RuntimeError, indexSpaces, tables, scopeTasks };
     const ManagedBuffer = operations.initializeManagedBufferClass(resourceContext);
     const BufferManager = operations.initializeBufferManagerClass(ManagedBuffer);
-    const registers = operations.initializeTaskRegisters();
+    const registers = options.coreContext?.traps.registers ?? operations.initializeTaskRegisters();
     const memoryMap = operations.initializeComponentMemoryMap();
     const asyncConstructor = operations.initializeAsyncFunctionConstructor();
     const ownProperty = operations.initializeHasOwnProperty();
@@ -114,6 +114,7 @@ export function createTestIntrinsics(options: CoreTestOptions = {}) {
     return {
         core,
         resource: {
+            indexSpaces,
             tableFlag: resources.tableFlag,
             state: { handleTables: tables },
             getHandleIndexSpace: (key: number | ResourceTable) => resources.getHandleIndexSpace(indexSpaces, key),

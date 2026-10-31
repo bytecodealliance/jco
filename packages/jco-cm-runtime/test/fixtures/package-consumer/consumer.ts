@@ -1,8 +1,10 @@
+import expectedExports from './contract-exports.js';
 import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-runtime';
 import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
 import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
 import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
 import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
+import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -12,6 +14,33 @@ import type {
     ConversionModule,
     RuntimeModuleContracts,
 } from '@bytecodealliance/jco-cm-runtime/runtime';
+const publicModules: Record<string, Record<string, unknown>> = {
+    ResourceModule: resource,
+    ConversionModule: conversion,
+    JsHelperModule: jsHelper,
+    StringModule: string,
+    WebIdlModule: webidl,
+    CoreModule: core,
+    ComponentModule: component,
+};
+
+const constants = new Set([
+    'ResourceModule.tableFlag',
+    'ResourceModule.tableOwn',
+    'CoreModule.i32Min',
+    'CoreModule.i32Max',
+]);
+for (const [name, exports] of Object.entries(expectedExports)) {
+    const actual = publicModules[name];
+    if (Object.keys(actual).sort().join() !== [...exports].sort().join()) {
+        throw new Error(name + ' JS/type exports differ');
+    }
+    for (const key of exports) {
+        if (typeof actual[key] !== (constants.has(name + '.' + key) ? 'number' : 'function')) {
+            throw new Error(name + '.' + key + ' has the wrong JavaScript export kind');
+        }
+    }
+}
 const defaultModule: ResourceModule = resource;
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
 const registers = custom.initializeTaskRegisters();
@@ -56,6 +85,43 @@ if (defaultCore.lookupMemories(memoryMap, { componentIdx: 0, memoryIdx: 0 }) !==
 const indexSpaces = defaultModule.initializeHandleIndexSpaces();
 const scopeTasks = defaultModule.initializeResourceScopeTasks();
 const removal = { RuntimeError: Error, indexSpaces, scopeTasks };
+const components: RuntimeModuleContracts['intrinsics/component'] = component;
+const instanceFlags = components.initializeInstanceFlags();
+const storeTrap = custom.initializeStoreTrap();
+const storeAsyncState = components.initializeStoreAsyncState();
+const asyncState = components.initializeComponentAsyncStates();
+const normalization = {
+    RuntimeError: Error,
+    messages: components.initializeCoreTrapMessages({ unreachable: 'compiler unreachable' }),
+};
+const deadlock = { RuntimeError: Error, storeTrap, storeAsyncState, asyncState };
+const State = components.initializeComponentAsyncStateClass({
+    RuntimeError: Error,
+    RepTable: Rep,
+    indexSpaces,
+    instanceFlags,
+    storeTrap,
+    normalization,
+    deadlock,
+    cannotEnter: 'cannot enter',
+});
+const state = components.getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);
+instanceFlags.set(0, { value: 1 });
+custom.checkMayLeave({ RuntimeError: Error, instanceFlags }, 0);
+const receiver = { answer: 42 };
+const guarded = components.guardMayLeave({ RuntimeError: Error, instanceFlags }, 0, function (this: typeof receiver) {
+    return this.answer;
+});
+if (
+    !(state instanceof State) ||
+    !(state.handles instanceof Rep) ||
+    guarded.call(receiver) !== 42 ||
+    storeTrap.error !== null ||
+    storeAsyncState.pendingHostOperations !== 0 ||
+    components.trackHostOperation({ ...deadlock, symbolDispose: core.initializeSymbolDispose() }, () => 42) !== 42
+) {
+    throw new Error('component consumer failed');
+}
 const table = Object.assign([defaultModule.tableFlag, 0], { _componentIdx: 0, _createdReps: new Set<number>() });
 const handle = defaultModule.tableCreateOwn(indexSpaces, table, 42);
 if (

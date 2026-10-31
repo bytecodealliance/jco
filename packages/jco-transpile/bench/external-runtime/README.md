@@ -78,6 +78,17 @@ These are isolated import controls, separate from real component graphs.
 The checkpoint records hashes of both the central descriptor source and its
 nested core descriptor module, in addition to the actual compiler artifacts.
 
+N08 expands coverage to 118 variants and adds five component controls. Empty
+component owners create two Maps; the may-leave and trap-message controls create
+one each. Synchronous host-operation tracking creates only its state Map and
+returns the synchronous result unchanged. Selected component-class construction
+uses actual prerequisites from the core and resource subpaths: six Maps and one
+private representation-table symbol, with no waitable, codec or scratch storage.
+Controls can import explicit prerequisites from multiple public subpaths under
+the same file/package resolution policy. The manifest also hashes the nested
+component descriptor source. The paired inline backpressure fix is part of this
+checkpoint's same-revision comparison; older inline bundle hashes can change.
+
 All bundles and correctness checks finish before timing starts. Defaults are five
 fresh processes per matrix entry, each with 15 alternating paired samples after
 common warmup/calibration. Scenario order rotates deterministically (seed 20261021).

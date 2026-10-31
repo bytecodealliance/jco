@@ -54,6 +54,10 @@
         "./intrinsics/core": {
             "types": "./dist/intrinsics/core.d.ts",
             "default": "./dist/intrinsics/core.js"
+        },
+        "./intrinsics/component": {
+            "types": "./dist/intrinsics/component.d.ts",
+            "default": "./dist/intrinsics/component.js"
         }
     },
     "scripts": {

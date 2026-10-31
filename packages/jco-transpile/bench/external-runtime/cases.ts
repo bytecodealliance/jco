@@ -25,6 +25,68 @@ export function componentPath(id: ComponentId) {
 /** Keep selected scratch families separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        suffix: 'intrinsics/component',
+        id: 'component-owners',
+        names: [
+            'initializeInstanceFlags',
+            'initializeStoreTrap',
+            'initializeStoreAsyncState',
+            'initializeComponentAsyncStates',
+        ],
+        setup: 'const flags = initializeInstanceFlags(), trap = initializeStoreTrap(), store = initializeStoreAsyncState(), states = initializeComponentAsyncStates();',
+        answer: 'flags.size === 0 && states.size === 0 && trap.error === null && store.deadlockCheck === null && store.pendingHostOperations === 0 ? 42 : 0',
+        allocations: { Map: 2 },
+    },
+    {
+        suffix: 'intrinsics/component',
+        id: 'component-may-leave',
+        names: ['initializeInstanceFlags', 'checkMayLeave'],
+        setup: 'const instanceFlags = initializeInstanceFlags(); instanceFlags.set(0, { value: 1 }); const context = { RuntimeError: Error, instanceFlags };',
+        answer: 'checkMayLeave(context, 0) === undefined ? 42 : 0',
+        allocations: { Map: 1 },
+    },
+    {
+        suffix: 'intrinsics/component',
+        id: 'component-trap-messages',
+        names: ['initializeCoreTrapMessages', 'normalizeCoreTrap'],
+        setup: 'const messages = initializeCoreTrapMessages({ engine: "42" }); const context = { RuntimeError: Error, messages };',
+        answer: 'Number(normalizeCoreTrap(context, new Error("engine")).message)',
+        allocations: { Map: 1 },
+    },
+    {
+        suffix: 'intrinsics/component',
+        id: 'component-host-operation',
+        names: [
+            'initializeStoreTrap',
+            'initializeStoreAsyncState',
+            'initializeComponentAsyncStates',
+            'trackHostOperation',
+        ],
+        setup: 'const context = { RuntimeError: Error, storeTrap: initializeStoreTrap(), storeAsyncState: initializeStoreAsyncState(), asyncState: initializeComponentAsyncStates(), symbolDispose: Symbol.dispose };',
+        answer: 'trackHostOperation(context, () => 42) === 42 && context.storeAsyncState.pendingHostOperations === 0 ? 42 : 0',
+        allocations: { Map: 1 },
+    },
+    {
+        suffix: 'intrinsics/component',
+        id: 'component-selected-class',
+        names: [
+            'initializeInstanceFlags',
+            'initializeStoreTrap',
+            'initializeStoreAsyncState',
+            'initializeComponentAsyncStates',
+            'initializeCoreTrapMessages',
+            'initializeComponentAsyncStateClass',
+            'getOrCreateAsyncState',
+        ],
+        imports: [
+            { suffix: 'intrinsics/core', names: ['initializeRepTableClass'] },
+            { suffix: 'intrinsics/resource', names: ['initializeHandleIndexSpaces'] },
+        ],
+        setup: 'const RuntimeError = Error, RepTable = initializeRepTableClass({ RuntimeError }), indexSpaces = initializeHandleIndexSpaces(), instanceFlags = initializeInstanceFlags(), storeTrap = initializeStoreTrap(), storeAsyncState = initializeStoreAsyncState(), asyncState = initializeComponentAsyncStates(); const normalization = { RuntimeError, messages: initializeCoreTrapMessages({}) }, deadlock = { RuntimeError, storeTrap, storeAsyncState, asyncState }; const State = initializeComponentAsyncStateClass({ RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, deadlock, cannotEnter: "cannot enter" }); const state = getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);',
+        answer: 'state instanceof State && state.handles instanceof RepTable && state.handles.get(state.handles.insert(42)) === 42 && state.getBackpressure() === 0 ? 42 : 0',
+        allocations: { Map: 6, Symbol: 1 },
+    },
+    {
         suffix: 'intrinsics/core',
         id: 'core-scalar',
         names: ['clampGuest', 'typeCheckValidI32', 'i32Min', 'i32Max'],

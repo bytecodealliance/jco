@@ -455,7 +455,7 @@ impl WaitableIntrinsic {
 
             Self::WaitableSetNew => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
@@ -464,7 +464,7 @@ impl WaitableIntrinsic {
                     function {waitable_set_new_fn}(componentIdx) {{
                         {debug_log_fn}('[{waitable_set_new_fn}()] args', {{ componentIdx }});
 
-                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        const state = {get_or_create_async_state_fn}componentIdx);
                         if (!state) {{throw new Error(`missing async state for component idx [${{componentIdx}}]`); }}
 
                         const wset = new {waitable_set_class}(componentIdx);
@@ -486,7 +486,7 @@ impl WaitableIntrinsic {
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let store_event_in_component_memory_fn = render_args
                     .require_intrinsic(Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory));
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let waitable_set_class = render_args.require_intrinsic(Self::WaitableSetClass);
@@ -513,7 +513,7 @@ impl WaitableIntrinsic {
 
                         const memory = getMemoryFn();
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         const wset = cstate.handles.get(waitableSetRep);
                         if (!(wset instanceof {waitable_set_class})) {{
                             throw new {runtime_error_class}(`non-waitable set returned from component state handles @ [${{waitableSetRep}}]`);
@@ -545,7 +545,7 @@ impl WaitableIntrinsic {
                 let waitable_set_poll_fn = render_args.require_intrinsic(Self::WaitableSetPoll);
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let store_event_in_component_memory_fn =
@@ -578,7 +578,7 @@ impl WaitableIntrinsic {
                             throw Error(`task component idx [${{task.componentIdx()}}] does not match generated [${{componentIdx}}]`);
                         }}
 
-                        const cstate = {get_or_create_async_state_fn}(task.componentIdx());
+                        const cstate = {get_or_create_async_state_fn}task.componentIdx());
                         // (the index must name a waitable set, as for `waitable-set.wait`)
                         const wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
                         if (!(wset instanceof {waitable_set_class})) {{
@@ -619,7 +619,7 @@ impl WaitableIntrinsic {
                 let waitable_set_drop_fn = render_args.require_intrinsic(Self::WaitableSetDrop);
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let remove_waitable_set_fn = render_args.require_intrinsic(Self::RemoveWaitableSet);
@@ -633,7 +633,7 @@ impl WaitableIntrinsic {
                             throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentIdx + ']');
                         }}
 
-                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        const state = {get_or_create_async_state_fn}componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
                         {remove_waitable_set_fn}({{ state, waitableSetRep }});
@@ -679,7 +679,7 @@ impl WaitableIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let waitable_join_fn = render_args.require_intrinsic(Self::WaitableJoin);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 output.push_str(&format!(r#"
@@ -691,7 +691,7 @@ impl WaitableIntrinsic {
                             waitableRep,
                         }});
 
-                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        const state = {get_or_create_async_state_fn}componentIdx);
                         if (!state) {{
                            throw new Error(`invalid/missing async state for component instance [${{componentIdx}}]`);
                         }}

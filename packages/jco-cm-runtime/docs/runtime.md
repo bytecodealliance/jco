@@ -8,7 +8,7 @@ resource operations and storage initializers from `intrinsics/resource`, selecte
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
-from `intrinsics/core`.
+from `intrinsics/core`, and component state/scheduling from `intrinsics/component`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -34,7 +34,7 @@ Bindings check version 1 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 17 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(102/274 logical intrinsic variants);
+(118/274 logical intrinsic variants, including all 16 component variants);
 other families remain inline during migration.
 
 ## Implementing an alternative runtime
@@ -53,7 +53,7 @@ const conformance: ResourceModule = resource;
 Export `CM_RUNTIME_API_VERSION = 1` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
 `./intrinsics/js-helper`, `./intrinsics/string`, `./intrinsics/webidl` and
-`./intrinsics/core` subpaths
+`./intrinsics/core` and `./intrinsics/component` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.

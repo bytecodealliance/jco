@@ -1353,7 +1353,7 @@ impl LiftIntrinsic {
             Self::LiftFlatFuture => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_future_fn = self.name();
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let global_future_table_map =
@@ -1397,7 +1397,7 @@ impl LiftIntrinsic {
 
                             if (futureEndWaitableIdx === undefined) {{ throw new Error('missing future idx'); }}
 
-                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            const cstate = {get_or_create_async_state_fn}componentIdx);
                             if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
                             const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
@@ -1422,7 +1422,7 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStream => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let external_stream_class = render_args.require_intrinsic(Intrinsic::AsyncStream(
@@ -1468,7 +1468,7 @@ impl LiftIntrinsic {
 
                             if (!streamEndWaitableIdx) {{ throw new {runtime_error_class}('missing stream idx'); }}
 
-                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            const cstate = {get_or_create_async_state_fn}componentIdx);
                             if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
                             const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
@@ -1520,7 +1520,7 @@ impl LiftIntrinsic {
                 let err_ctx_ref_count_add_fn =
                     render_args.require_intrinsic(ErrCtxIntrinsic::GlobalRefCountAdd);
                 let lift_flat_error_fn = self.name();
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -1544,7 +1544,7 @@ impl LiftIntrinsic {
                             throw new Error(`missing  error ctx (handle [${{val}}], component [${{ctx.componentIdx}}], error context table [${{errCtxTableIdx}}])`);
                         }}
 
-                        const cstate = {get_or_create_async_state_fn}(ctx.componentIdx);
+                        const cstate = {get_or_create_async_state_fn}ctx.componentIdx);
                         const errCtx = cstate.handles.get(handle);
                         if (!errCtx || errCtx.globalRep === undefined || errCtx.refCount === undefined) {{
                             throw new Error(`malformed error context (handle [${{handle}}], component [${{ctx.componentIdx}}])`);

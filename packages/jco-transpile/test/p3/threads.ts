@@ -93,7 +93,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Threads (WASI P3)', 
         // and `cooperative-threading.ts` a spawned thread's; this checks that the
         // trampolines record a trap against the instance)
         const source = await transpiledSource('cooperative-threading/raw-trap.wat', 'thread-guards');
-        assert.match(source, /_guardTrap\(\d+, threadNewIndirect\.bind\(/);
-        assert.match(source, /_guardTrap\(\d+, threadResumeLater\.bind\(/);
+        assert.match(source, /_guardTrap\((?:_jcoComponentRecordTrapContext, )?\d+, threadNewIndirect\.bind\(/);
+        assert.match(source, /_guardTrap\((?:_jcoComponentRecordTrapContext, )?\d+, threadResumeLater\.bind\(/);
     });
 });

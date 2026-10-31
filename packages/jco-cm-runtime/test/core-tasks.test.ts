@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { createTestIntrinsics, type CoreBridgeCapabilities as CoreContext } from './core-test-helpers.js';
+import { create as createComponent } from './component-helpers.js';
 function create(coreContext?: CoreContext) {
     return createTestIntrinsics({ coreContext }).core;
 }
@@ -83,21 +84,36 @@ test.concurrent('clear validates the task identity before changing state', async
 function bridge(mayBlock: boolean) {
     const traps: unknown[] = [];
     const checks: string[] = [];
-    const context: CoreContext = {
-        checkMayLeave: () => {
-            checks.push('leave');
-        },
-        getCurrentThread: () => ({ task: { mayBlock: () => mayBlock } }),
-        currentTaskMayBlock: () => 0,
-        recordTrap: (_componentIdx, error) => {
+    const { component, core } = createComponent();
+    const state = component.getOrCreateAsyncState(0);
+    component.instanceFlags.set(0, { value: 1 });
+    const getFlags = component.instanceFlags.get.bind(component.instanceFlags);
+    component.instanceFlags.get = (idx) => {
+        checks.push('leave');
+        return getFlags(idx);
+    };
+    const markTrapped = state.markTrapped.bind(state);
+    Object.defineProperty(state, 'markTrapped', {
+        value: (error: unknown) => {
             traps.push(error);
-            return error;
+            return markTrapped(error);
         },
-        throwIfInterrupted: () => {
+    });
+    Object.defineProperty(state, 'throwIfInterrupted', {
+        configurable: true,
+        value: () => {
             checks.push('interrupted');
         },
+    });
+    const states = { asyncState: component.asyncState, ComponentAsyncState: component.ComponentAsyncState };
+    const context: CoreContext = {
+        mayLeave: { RuntimeError: core.RuntimeError, instanceFlags: component.instanceFlags },
+        traps: { RuntimeError: core.RuntimeError, registers: core.currentTaskMeta, lookup: states },
+        states,
+        getCurrentThread: () => ({ task: { mayBlock: () => mayBlock } }),
+        currentTaskMayBlock: () => 0,
     };
-    return { context, traps, checks };
+    return { context, traps, checks, state };
 }
 
 test.concurrent('suspending imports reject blocking synchronous tasks and observe rejected thenables', async () => {
@@ -128,7 +144,7 @@ test.concurrent.each([false, true])(
                 core.setCurrentTaskMeta(callee);
                 await Promise.resolve();
                 if (fail) {
-                    throw new Error('guest trapped');
+                    throw new WebAssembly.RuntimeError('guest trapped');
                 }
                 return 42;
             },
@@ -146,13 +162,13 @@ test.concurrent.each([false, true])(
 );
 
 test.concurrent('suspending imports check interruptions before resuming guest code', async () => {
-    const { context, traps } = bridge(true);
-    const core = create({
-        ...context,
-        throwIfInterrupted: () => {
-            throw new Error('store trapped');
+    const { context, traps, state } = bridge(true);
+    Object.defineProperty(state, 'throwIfInterrupted', {
+        value: () => {
+            throw new WebAssembly.RuntimeError('store trapped');
         },
     });
+    const core = create(context);
     core.setCurrentTaskMeta({ componentIdx: 0, taskID: 1n, threadID: 1 });
     await expect(core.suspendingImport(0, async () => 42)()).rejects.toThrow('store trapped');
     expect(traps).toHaveLength(1);
