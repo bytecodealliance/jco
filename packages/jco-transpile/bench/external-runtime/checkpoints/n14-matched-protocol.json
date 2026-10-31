@@ -1,0 +1,146 @@
+{
+  "schema": 1,
+  "status": "predeclared before accepted matched timing",
+  "factoryRef": "b5931a41f6222359628b451e647078ab2e04d536",
+  "coverage": 166,
+  "requiredCohorts": [
+    5,
+    10
+  ],
+  "inputAnchorSha256": "de0e88f10dafb7394b2f4defb438b38c6257e20ee539f3ce8ea6364b0de92fb0",
+  "cohorts": [
+    {
+      "schema": 1,
+      "portfolio": "full",
+      "comparison": "matched 166-operation old-inline/current-inline/factory/named",
+      "requiredCohorts": [
+        5,
+        10
+      ],
+      "processCount": 5,
+      "sampleCount": 15,
+      "seed": 20261021,
+      "modeOrder": "Williams orders; process/sample phase rotation, four orders per cycle",
+      "scenarioOrder": "(scenario index + seed + process index) modulo 68",
+      "calibration": {
+        "targetNs": 15000000,
+        "maxCalls": 262144,
+        "commonAcrossModes": true
+      },
+      "debug": "dynamic",
+      "debugEnvironment": null,
+      "minimumMaterialEffect": 0.05,
+      "uncertainty": "seeded percentile process-cluster bootstrap, 10000 resamples",
+      "noise": "maximum absolute endpoint deviation from 1 in identical scalar control CI",
+      "parity": {
+        "raw": {
+          "ratio": 1.05,
+          "slack": 256
+        },
+        "gzip": {
+          "ratio": 1.05,
+          "slack": 128
+        },
+        "brotli": {
+          "ratio": 1.05,
+          "slack": 128
+        },
+        "parse": {
+          "ratio": 1.25,
+          "slack": 25000
+        },
+        "evaluate": {
+          "ratio": 1.25,
+          "slack": 25000
+        },
+        "instantiate": {
+          "ratio": 1.25,
+          "slack": 50000
+        },
+        "call": {
+          "ratio": 1.25,
+          "slack": 250
+        }
+      },
+      "childTimeoutMs": 120000,
+      "matrixTimeoutMs": 4440000,
+      "memory": {
+        "stores": 64,
+        "independentProcessPerMode": true,
+        "diagnosticOnly": true
+      },
+      "coldNative": "bundle ESM import + initialize; excludes launch, core compilation and shim/import setup; diagnostic only",
+      "normalization": "(named/current-inline)/(factory/old-inline), alongside all direct paired ratios",
+      "recording": false
+    },
+    {
+      "schema": 1,
+      "portfolio": "full",
+      "comparison": "matched 166-operation old-inline/current-inline/factory/named",
+      "requiredCohorts": [
+        5,
+        10
+      ],
+      "processCount": 10,
+      "sampleCount": 15,
+      "seed": 20261021,
+      "modeOrder": "Williams orders; process/sample phase rotation, four orders per cycle",
+      "scenarioOrder": "(scenario index + seed + process index) modulo 68",
+      "calibration": {
+        "targetNs": 15000000,
+        "maxCalls": 262144,
+        "commonAcrossModes": true
+      },
+      "debug": "dynamic",
+      "debugEnvironment": null,
+      "minimumMaterialEffect": 0.05,
+      "uncertainty": "seeded percentile process-cluster bootstrap, 10000 resamples",
+      "noise": "maximum absolute endpoint deviation from 1 in identical scalar control CI",
+      "parity": {
+        "raw": {
+          "ratio": 1.05,
+          "slack": 256
+        },
+        "gzip": {
+          "ratio": 1.05,
+          "slack": 128
+        },
+        "brotli": {
+          "ratio": 1.05,
+          "slack": 128
+        },
+        "parse": {
+          "ratio": 1.25,
+          "slack": 25000
+        },
+        "evaluate": {
+          "ratio": 1.25,
+          "slack": 25000
+        },
+        "instantiate": {
+          "ratio": 1.25,
+          "slack": 50000
+        },
+        "call": {
+          "ratio": 1.25,
+          "slack": 250
+        }
+      },
+      "childTimeoutMs": 120000,
+      "matrixTimeoutMs": 8520000,
+      "memory": {
+        "stores": 64,
+        "independentProcessPerMode": true,
+        "diagnosticOnly": true
+      },
+      "coldNative": "bundle ESM import + initialize; excludes launch, core compilation and shim/import setup; diagnostic only",
+      "normalization": "(named/current-inline)/(factory/old-inline), alongside all direct paired ratios",
+      "recording": false
+    }
+  ],
+  "controls": {
+    "entries": 360,
+    "traceScope": "Selected native constructors only; not ordinary objects/arrays/functions/classes/Promises or complete allocations"
+  },
+  "scope": "Primary dynamic-debug full68 four-mode Node comparison. Both cohorts mandatory regardless of first results. Browser/context/lazy-initialization/debug-disabled/counterfactual studies remain separately required; inline remains production default."
+}

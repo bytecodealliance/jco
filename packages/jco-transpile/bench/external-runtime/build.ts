@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { createRequire } from 'node:module';
@@ -40,8 +40,21 @@ export interface BundleExperiment {
     assumePureReads?: boolean;
     define?: Record<string, string>;
     transform?: (code: string, id: string) => string;
+    /** Isolated package under test; never substitute current metadata for a frozen runtime. */
+    runtimePackageDirectory?: string;
 }
 export async function optimize(entry: string, bundler: Bundler, treeshake = true, experiment: BundleExperiment = {}) {
+    let selectedDirectory = runtimeDirectory;
+    let selectedSideEffects = runtimeSideEffects;
+    if (experiment.runtimePackageDirectory) {
+        const directory = await realpath(experiment.runtimePackageDirectory);
+        const metadata = JSON.parse(await readFile(join(directory, 'package.json'), 'utf8'));
+        if (metadata.name !== '@bytecodealliance/jco-cm-runtime') {
+            throw new Error(`Unexpected runtime package: ${metadata.name}`);
+        }
+        selectedDirectory = join(directory, 'dist');
+        selectedSideEffects = metadata.sideEffects !== false;
+    }
     const options = {
         input: entry,
         treeshake:
@@ -56,9 +69,16 @@ export async function optimize(entry: string, bundler: Bundler, treeshake = true
                     return experiment.transform?.(code, id);
                 },
                 resolveId(id: string, importer?: string) {
-                    if (id.startsWith('@bytecodealliance/jco-cm-runtime/') && importer) {
+                    if (
+                        (id === '@bytecodealliance/jco-cm-runtime' ||
+                            id.startsWith('@bytecodealliance/jco-cm-runtime/')) &&
+                        importer
+                    ) {
                         const path = createRequire(importer).resolve(id);
-                        return { id: path, moduleSideEffects: runtimeSideEffects };
+                        if (!path.startsWith(selectedDirectory + sep)) {
+                            throw new Error(`Runtime resolved outside the selected package: ${path}`);
+                        }
+                        return { id: path, moduleSideEffects: selectedSideEffects };
                     }
                     const path = id.startsWith('file:')
                         ? fileURLToPath(id)
@@ -67,8 +87,8 @@ export async function optimize(entry: string, bundler: Bundler, treeshake = true
                           : id.startsWith('.') && importer
                             ? resolve(dirname(importer), id)
                             : undefined;
-                    if (path?.startsWith(runtimeDirectory + sep)) {
-                        return { id: path, moduleSideEffects: runtimeSideEffects };
+                    if (path?.startsWith(selectedDirectory + sep)) {
+                        return { id: path, moduleSideEffects: selectedSideEffects };
                     }
                     if (id.startsWith('file:')) {
                         return fileURLToPath(id);
@@ -127,15 +147,26 @@ export async function optimize(entry: string, bundler: Bundler, treeshake = true
         await build.close();
     }
 }
-async function buildArtifact(
+export interface ArtifactBuildOptions {
+    runtimePackageDirectory?: string;
+    runtimeFileSpecifier?: string;
+    /** Diagnostic producer; defaults to the production Node API with the options below. */
+    generate?: (
+        fixture: string,
+        name: string,
+        runtimeSpecifier?: string,
+    ) => Promise<{ files: Record<string, Uint8Array> }>;
+}
+export async function buildArtifact(
     dir: string,
     mode: Mode,
     parts: readonly ComponentId[],
     bundler: Bundler,
     resolution: Resolution,
+    options: ArtifactBuildOptions = {},
 ): Promise<Artifact> {
     await mkdir(dir, { recursive: true });
-    await installRuntime(dir);
+    await installRuntime(dir, options.runtimePackageDirectory);
     const graph = { imports: [] as string[], contexts: [] as string[], initializers: [] as string[] };
     const fixtureDigests: Record<string, string> = {};
     const files: Record<string, string> = {};
@@ -149,22 +180,25 @@ async function buildArtifact(
         fixtureDigests[id] = createHash('sha256')
             .update(await readFile(fixture))
             .digest('hex');
+        const runtimeSpecifier =
+            mode === 'external'
+                ? resolution === 'file'
+                    ? (options.runtimeFileSpecifier ?? defaultRuntimeUrl.href)
+                    : '@bytecodealliance/jco-cm-runtime'
+                : undefined;
         const result =
             id === 'noise'
                 ? { files: { [`${name}.js`]: new Uint8Array(await readFile(fixture)) } }
-                : await transpile(fixture, {
-                      name,
-                      instantiation: 'sync',
-                      wasiShim: false,
-                      base64Cutoff: 0,
-                      asyncMode: 'jspi',
-                      cmRuntimeEsModule:
-                          mode === 'external'
-                              ? resolution === 'file'
-                                  ? defaultRuntimeUrl.href
-                                  : '@bytecodealliance/jco-cm-runtime'
-                              : undefined,
-                  });
+                : options.generate
+                  ? await options.generate(fixture, name, runtimeSpecifier)
+                  : await transpile(fixture, {
+                        name,
+                        instantiation: 'sync',
+                        wasiShim: false,
+                        base64Cutoff: 0,
+                        asyncMode: 'jspi',
+                        cmRuntimeEsModule: runtimeSpecifier,
+                    });
         const partDir = join(dir, prefix);
         await writeFiles(result.files, { baseDir: partDir });
         for (const [path, bytes] of Object.entries(result.files)) {
@@ -192,9 +226,10 @@ export function create${i}(load, imports) { return instantiate${i}(name => load(
     const entry = join(dir, 'entry.js');
     await writeFile(entry, exports.join('\n'));
     const start = performance.now();
-    const result = await optimize(entry, bundler);
+    const experiment = { runtimePackageDirectory: options.runtimePackageDirectory };
+    const result = await optimize(entry, bundler, true, experiment);
     const bundleMs = performance.now() - start;
-    const unshaken = await optimize(entry, bundler, false);
+    const unshaken = await optimize(entry, bundler, false, experiment);
     const bundle = join(dir, 'bundle.mjs');
     await writeFile(bundle, result.code);
     return {
@@ -217,10 +252,10 @@ export function create${i}(load, imports) { return instantiate${i}(name => load(
         wasm: { bytes: wasmBytes, files },
     };
 }
-export async function installRuntime(dir: string) {
+export async function installRuntime(dir: string, packageDirectory = dirname(runtimeDirectory)) {
     const namespace = join(dir, 'node_modules/@bytecodealliance');
     await mkdir(namespace, { recursive: true });
-    await symlink(dirname(runtimeDirectory), join(namespace, 'jco-cm-runtime'), 'junction');
+    await symlink(packageDirectory, join(namespace, 'jco-cm-runtime'), 'junction');
 }
 
 export async function buildPair(

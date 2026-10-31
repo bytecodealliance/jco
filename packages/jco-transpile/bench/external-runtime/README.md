@@ -31,6 +31,13 @@ normal, LTS and extended functional discovery. Run them serially on an idle mach
 after builds and functional suites stop. Select an installed Rust toolchain with
 `RUSTUP_TOOLCHAIN` if the local `stable` wrapper tries to update itself.
 
+N14's separate `bench:external-runtime:investigate` command consumes the verified
+four-mode matrix and an independent bundle-hash anchor. It runs serially outside
+Vitest, with mandatory complete five- and ten-process cohorts and both inline
+controls. See the [input preparation and collection instructions](investigation/README.md).
+It preserves failures and raw samples, refuses recording/filters and keeps
+browser/allocation investigations separate from accepted timing.
+
 The matrix covers a truly empty component, a code-only scalar noise control, adder, resource create/read/drop and
 two independent resource components sharing one bundle. N02 also includes the
 existing numbers and variant-bitcast components, with varying verified checksums. Rolldown and Rollup each
