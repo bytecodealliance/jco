@@ -3,7 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { transpileBytes, generateHostTypes } from '../src/index.js';
+import { transpileBytes, generateHostTypes } from './transpilation.js';
 import { componentNew, componentEmbed } from '../src/wasm-tools.js';
 
 import { suite, test, assert } from 'vitest';

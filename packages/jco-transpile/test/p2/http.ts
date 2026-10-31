@@ -7,7 +7,7 @@ import { componentize } from '@bytecodealliance/componentize-js';
 
 import { suite, test } from 'vitest';
 
-import { transpile, writeFiles } from '../../src//index.js';
+import { transpile, writeFiles } from '../transpilation.js';
 
 import { getTmpDir, runTSCodegen, getRandomPort, nodeExec } from '../helpers.js';
 

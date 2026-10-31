@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { assert, suite, test } from 'vitest';
 
-import { transpile, writeFiles } from '../../../src/index.js';
+import { transpile, writeFiles } from '../../transpilation.js';
 import { parse } from '../../../src/wasm-tools.js';
 import { runBrowserCase } from '../../helpers.js';
 import { withBrowser } from './helpers.js';

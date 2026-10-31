@@ -28,7 +28,7 @@ let shimModules;
  * @param {string[]} componentPaths - URLs of components to transpile, resolved against this module
  * @returns {Promise<Array<{ path: string, ok: boolean, exports?: string[], error?: string }>>}
  */
-export async function transpile(componentPaths) {
+export async function transpile(componentPaths, cmRuntimeEsModule) {
     shimModules ??= Object.fromEntries(
         await Promise.all(SHIM_SPECIFIERS.map(async (specifier) => [specifier, await import(specifier)])),
     );
@@ -36,7 +36,7 @@ export async function transpile(componentPaths) {
     const results = [];
     for (const componentPath of componentPaths) {
         try {
-            const exports = await transpileOne(componentPath);
+            const exports = await transpileOne(componentPath, cmRuntimeEsModule);
             results.push({ path: componentPath, ok: true, exports });
         } catch (error) {
             results.push({ path: componentPath, ok: false, error: error?.stack ?? String(error) });
@@ -45,7 +45,7 @@ export async function transpile(componentPaths) {
     return results;
 }
 
-async function transpileOne(componentPath) {
+async function transpileOne(componentPath, cmRuntimeEsModule) {
     const componentUrl = new URL(componentPath, import.meta.url);
     const response = await fetch(componentUrl);
     if (!response.ok) {
@@ -62,6 +62,7 @@ async function transpileOne(componentPath) {
         instantiation: { tag: 'async' },
         base64Cutoff: 1_000_000,
         map: WASI_MAP,
+        cmRuntimeEsModule,
     });
     const source = output.files.find(([name]) => name === 'test.js')?.[1];
     if (!source) {

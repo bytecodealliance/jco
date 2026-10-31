@@ -69,7 +69,10 @@
         "test": "vitest run -c test/vitest.ts",
         "test:extended": "vitest run -c test/vitest.extended.ts",
         "test:lts": "vitest run -c test/vitest.lts.ts",
-        "prepack": "pnpm run build:release"
+        "prepack": "pnpm run build:release",
+        "test:external-runtime": "node scripts/test-external-runtime.mjs -c test/vitest.ts",
+        "test:lts:external-runtime": "node scripts/test-external-runtime.mjs -c test/vitest.lts.ts",
+        "test:extended:external-runtime": "node scripts/test-external-runtime.mjs -c test/vitest.extended.ts"
     },
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.31.0",

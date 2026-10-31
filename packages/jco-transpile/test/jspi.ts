@@ -6,7 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { suite, test, assert, expect } from 'vitest';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { transpile, writeFiles } from '../src/index.js';
+import { writeFiles } from '../src/index.js';
+import { transpile } from './transpilation.js';
 
 import { getTmpDir, setupAsyncTest } from './helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR } from './common.js';

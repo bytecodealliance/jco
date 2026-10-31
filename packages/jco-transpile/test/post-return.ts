@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { assert, describe, expect, test } from 'vitest';
 
-import { transpileBytes, writeFiles } from '../src/index.js';
+import { transpileBytes, writeFiles } from './transpilation.js';
 import type { TranspilationOptions } from '../src/transpile.js';
 import { parse } from '../src/wasm-tools.js';
 import { COMPONENT_FIXTURES_DIR } from './common.js';
