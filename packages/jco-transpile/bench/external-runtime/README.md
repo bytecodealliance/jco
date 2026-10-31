@@ -11,15 +11,15 @@ Run measurements on an otherwise idle machine, after builds and functional tests
 
 ```sh
 cd packages/jco-transpile
-pnpm test:bench:external-runtime            # Bundled correctness checks; no baseline needed
-pnpm bench:external-runtime:smoke           # Smoke matrix; checks its recorded baseline
-pnpm bench:external-runtime:parity          # Smoke matrix; checks inline/external budgets
+pnpm bench:external-runtime:verify          # Bundled correctness checks; no baseline needed
+pnpm bench:external-runtime:smoke           # Smaller matrix; checks its recorded baseline
+pnpm bench:external-runtime                 # Full matrix; checks its recorded baseline
+pnpm bench:external-runtime:parity          # Full matrix; checks inline/external budgets
 node scripts/bench-external-runtime.mjs --smoke --record
 ```
 
-This revision provides the smoke matrix; `bench:external-runtime` selects the same scenarios.
-Recording requires a complete matrix and is disabled in CI and parity mode.
-Recording can replace an existing file for the same key; review the resulting diff.
+Omit `--smoke` when recording the full matrix.
+Recording requires a complete matrix, is disabled in CI and parity mode, and never overwrites an existing baseline.
 A missing matching baseline fails ordinary runs; use `--parity` to check parity without one.
 Recording observations does not establish parity.
 
@@ -70,7 +70,7 @@ checkpointKey = sha256(
 );
 ```
 
-- `coverage` is parsed `coverage.json`; `settings` includes sampling and transpilation options.
+- `coverage` is parsed `coverage.json`; `settings` includes the portfolio, sampling, and transpilation options.
 - `implementation` hashes compact JSON mapping sorted benchmark `.ts`/`.mjs` paths to their UTF-8 contents,
   followed by `scripts/bench-external-runtime.mjs`.
   Markdown and baseline JSON files are excluded.
