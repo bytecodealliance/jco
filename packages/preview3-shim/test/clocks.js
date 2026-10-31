@@ -28,18 +28,22 @@ describe("monotonic clock tests", () => {
     expect(waitForSpy).toHaveResolved();
   });
 
-  test("returns immediately if waitUntil target ≤ now", async () => {
+  test("returns synchronously if waitUntil target ≤ now", () => {
     const waitUntilSpy = vi.fn(monotonicClock.waitUntil.bind(monotonicClock));
     vi.spyOn(monotonicClock, "now").mockReturnValue(500n);
 
-    await waitUntilSpy(400n);
-    expect(waitUntilSpy).toHaveResolved();
+    expect(waitUntilSpy(400n)).toBeUndefined();
+    expect(waitUntilSpy(500n)).toBeUndefined();
   });
 
   test("waitUntil works when destructured from monotonicClock", async () => {
     vi.spyOn(monotonicClock, "now").mockReturnValue(500n);
     const { waitUntil } = monotonicClock;
-    await expect(waitUntil(400n)).resolves.toBeUndefined();
+    expect(waitUntil(400n)).toBeUndefined();
+  });
+
+  test("returns synchronously for zero duration", () => {
+    expect(monotonicClock.waitFor(0n)).toBeUndefined();
   });
 
   test("waits until target time in waitUntil", async () => {
