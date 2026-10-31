@@ -1,5 +1,50 @@
 # Changelog
 
+## [2.18.0] - 2026-10-31
+
+### 🚀 Features
+
+- _(bindgen)_ import named runtime exports with trap contexts by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ preserve async host import ordering by @vados-cosmonic
+
+- _(bindgen)_ align zero-length stream semantics with component model by @vados-cosmonic in #2362
+
+- _(bindgen)_ retain exclusive task locks across core thread yields by @vados-cosmonic
+
+- _(bindgen)_ reject task.return from synchronous canonical lifts by @vados-cosmonic
+
+- _(bindgen)_ transfer future resources between component tables by @vados-cosmonic
+
+- _(bindgen)_ avoid suspending immediately completed stream writes by @vados-cosmonic
+
+- _(bindgen)_ support compact strings in async payloads and errors by @vados-cosmonic
+
+- _(bindgen)_ release initialization tasks and thread indices by @vados-cosmonic
+
+- _(bindgen)_ expose subtask waitables for handle validation by @vados-cosmonic in #2353
+
+- _(bindgen)_ trap on invalid canonical handle kinds by @vados-cosmonic
+
+- _(bindgen)_ reject unresolved callback exits before teardown by @vados-cosmonic
+
+- _(bindgen)_ initialize resource tables used only by transfers by @vados-cosmonic
+
+- _(bindgen)_ preserve thread context across realloc by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ split inline and external intrinsic runtimes by @vados-cosmonic
+
+- _(bindgen)_ keep the named runtime API at v1 by @vados-cosmonic
+
+
+
+
 ## [2.17.0] - 2026-10-28
 
 ### 🚀 Features
