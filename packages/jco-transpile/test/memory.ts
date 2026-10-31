@@ -8,7 +8,7 @@ import { version } from 'node:process';
 import { suite, test, assert } from 'vitest';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { transpileBytes } from '../src/index.js';
+import { transpileBytes } from './transpilation.js';
 
 import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 import { readComponentBytes, nodeExec, setupAsyncTest } from './helpers.js';

@@ -233,8 +233,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     needs:
       - build
+    env:
+      JCO_TEST_RUNTIME: ${{ matrix.runtime }}
     strategy:
       matrix:
+        runtime:
+          - inline
+          - external
         os:
           - ubuntu-22.04 # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
           - macos-latest

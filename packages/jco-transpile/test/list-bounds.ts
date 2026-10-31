@@ -2,7 +2,7 @@ import { Buffer } from 'node:buffer';
 
 import { assert, suite, test } from 'vitest';
 
-import { transpileBytes } from '../src/index.js';
+import { transpileBytes } from './transpilation.js';
 import { parse } from '../src/wasm-tools.js';
 
 const COMPONENT = `(component

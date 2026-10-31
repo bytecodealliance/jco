@@ -7,7 +7,7 @@ import { promisify } from 'node:util';
 
 import { afterAll, beforeAll, suite, test, assert } from 'vitest';
 
-import { transpile, writeFiles } from '../../src/index.js';
+import { transpile, writeFiles } from '../transpilation.js';
 import { ensureFile, getTmpDir } from '../helpers.js';
 import { EXTENDED_TEST_COMPONENTS_DIR } from '../common.js';
 

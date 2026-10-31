@@ -18,7 +18,7 @@ const exec = promisify(syncExec);
 
 import { componentize } from '@bytecodealliance/componentize-js';
 
-import { transpileBytes, writeFiles } from '../src/index.js';
+import { transpileBytes, writeFiles } from './transpilation.js';
 import type { TranspilationOptions } from '../src/transpile.js';
 
 /** Stable path to the jco's fixture directory containing WIT files */

@@ -4,7 +4,7 @@ import { join, basename } from 'node:path';
 
 import { suite, test, assert } from 'vitest';
 
-import { transpile, transpileBytes } from '../../src/index.js';
+import { transpile, transpileBytes } from '../transpilation.js';
 import { parse } from '../../src/wasm-tools.js';
 
 import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
