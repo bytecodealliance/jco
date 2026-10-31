@@ -72,9 +72,27 @@ suite('runtime package', () => {
             );
             const contract = await readFile(join(installed, 'dist/runtime.d.ts'), 'utf8');
             expect(contract).not.toMatch(/\b(?:import|from)\s*['"({]/);
+            const contractExports = Object.fromEntries(
+                [
+                    'ResourceModule',
+                    'ConversionModule',
+                    'JsHelperModule',
+                    'StringModule',
+                    'WebIdlModule',
+                    'CoreModule',
+                    'ComponentModule',
+                ].map((name) => {
+                    const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
+                    expect(body, `${name} must remain a public standalone interface`).toBeDefined();
+                    const names = [...body!.matchAll(/^    readonly (\w+):/gm)].map((match) => match[1]);
+                    expect(names.length).toBeGreaterThan(0);
+                    return [name, names];
+                }),
+            );
             const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
             expect(Object.keys(manifest.exports).sort()).toEqual([
                 '.',
+                './intrinsics/component',
                 './intrinsics/conversion',
                 './intrinsics/core',
                 './intrinsics/js-helper',
@@ -92,6 +110,10 @@ suite('runtime package', () => {
 
             // The independent provider needs only the published declaration, without private files.
             await writeFile(join(consumer, 'contract.d.ts'), contract);
+            await writeFile(
+                join(consumer, 'contract-exports.ts'),
+                `export default ${JSON.stringify(contractExports)};`,
+            );
             for (const mode of ['NodeNext', 'Bundler']) {
                 await exec(process.execPath, [tsc, '-p', `tsconfig.${mode.toLowerCase()}.json`], { cwd: consumer });
                 expect((await readFile(join(consumer, `out-${mode}/types-only.js`), 'utf8')).trim()).toBe('export {};');

@@ -127,6 +127,9 @@ export const transferOwn: ResourceModule['transferOwn'] = (context, handle, from
     return tableCreateOwn(context.indexSpaces, getOrCreateTable(context.tables, toTid), rep);
 };
 export const callDestructor: ResourceModule['callDestructor'] = (context, { componentIdx, dtor, rep }) => {
+    if (context.storeTrap.stopped) {
+        return;
+    }
     if (!context.createTask || !context.registers) {
         throw new TypeError('resource destructors require createTask and registers');
     }

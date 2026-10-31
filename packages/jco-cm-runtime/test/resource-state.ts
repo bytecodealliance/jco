@@ -74,7 +74,10 @@ function createResource(
         transferOwn: (handle: number, from: number, to: number) =>
             operations.transferOwn({ ...remove, tables }, handle, from, to),
         callDestructor: <T>(args: Parameters<ResourceModule['callDestructor']>[1] & { dtor: (rep: number) => T }) =>
-            operations.callDestructor({ ...tasks, registers } as ResourceDestructorContext, args),
+            operations.callDestructor(
+                { storeTrap: { stopped: false }, ...tasks, registers } as ResourceDestructorContext,
+                args,
+            ),
     };
 }
 
@@ -383,6 +386,19 @@ test.concurrent('destructors report a missing task bridge before invoking the gu
         }),
     ).toThrow('resource destructors require createTask and registers');
     expect(called).toBe(false);
+});
+
+test.concurrent('stopped stores skip guest destructors and task creation', () => {
+    const resource = createResource({ storeTrap: { stopped: true } });
+    expect(
+        resource.callDestructor({
+            componentIdx: 0,
+            rep: 1,
+            dtor: () => {
+                throw new Error('must not enter stopped guest');
+            },
+        }),
+    ).toBeUndefined();
 });
 
 test.concurrent.each([0, 0x40000000, 0x7ffffff0, 0x80000010, 0xc0000010, 0xffffffff, -1])(
