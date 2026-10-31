@@ -10,6 +10,13 @@ import { expectedResult, importsFor, workload } from './workloads.mjs';
 const median = (values) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
 
 export async function main(config) {
+    const environment = {
+        node: process.version,
+        flags: process.execArgv,
+        debug: process.env.JCO_DEBUG ?? null,
+        jspi: 'Suspending' in WebAssembly,
+    };
+
     // Prepare both runtime modes before collecting observations.
     const order = config.memoryMode
         ? [config.memoryMode]
@@ -51,7 +58,7 @@ export async function main(config) {
     // Correctness-only runs return before calibration or timing.
     const verified = [...config.inline.parts];
     if (config.verifyOnly) {
-        await writeFile(config.output, JSON.stringify({ verified }));
+        await writeFile(config.output, JSON.stringify({ verified, environment }));
         return;
     }
 
@@ -81,7 +88,13 @@ export async function main(config) {
         );
         await writeFile(
             config.output,
-            JSON.stringify({ mode, stores: 64, deltas, valid: Object.values(deltas).every((n) => n >= 0) }),
+            JSON.stringify({
+                mode,
+                stores: 64,
+                deltas,
+                valid: Object.values(deltas).every((n) => n >= 0),
+                environment,
+            }),
         );
         return;
     }
@@ -173,6 +186,7 @@ export async function main(config) {
         config.output,
         JSON.stringify({
             processIndex: config.processIndex,
+            environment,
             sampleCount: config.sampleCount,
             order,
             verified,

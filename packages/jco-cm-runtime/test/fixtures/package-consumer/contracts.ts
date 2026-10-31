@@ -32,3 +32,24 @@ export const wrongHandle: ResourceModule = {
 };
 // @ts-expect-error incompatible result
 export const wrongResult: ResourceModule = { tableGet: () => ({ rep: '1', scope: 0, own: true }) };
+
+import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
+import type {
+    ConversionModule,
+    StrictNumericContext,
+    Bitcast32Context,
+} from '@bytecodealliance/jco-cm-runtime/runtime';
+const conversionModule: ConversionModule = conversion;
+conversionModule.toUint32({ strict: false }, '42');
+conversionModule.toString(42);
+// @ts-expect-error numeric conversions require their explicit policy context
+conversionModule.toUint32(42);
+// @ts-expect-error bitcasts need selected storage, not a numeric policy
+conversionModule.i32ToF32({ strict: false }, 42);
+// @ts-expect-error no universal runtime option bag
+const broadNumericContext: StrictNumericContext = { strict: false, nodejsCompat: true };
+const bitcastContext: Bitcast32Context = conversionModule.initializeBitcast32();
+bitcastContext.i32[0] = 0x3f800000;
+// @ts-expect-error storage identities remain stable for an instantiation
+bitcastContext.i32 = [0];
+void broadNumericContext;

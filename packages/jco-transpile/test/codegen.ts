@@ -494,7 +494,7 @@ suite('--strict', () => {
 
     test.concurrent('adds checks when enabled', async () => {
         const bytes = await readFile(join(COMPONENT_FIXTURES_DIR, 'adder.component.wasm'));
-        const { files } = await transpileBytes(bytes, { name: 'adder', strict: true });
+        const { files } = await transpileBytes(bytes, { name: 'adder', strict: true, cmRuntimeEsModule: undefined });
         const bindingsSource = new TextDecoder().decode(files['adder.js']);
         // Somewhat brittle, but we're looking for a *specific* call in the body of `toUint32(val)` below:
         assert.isOk(
