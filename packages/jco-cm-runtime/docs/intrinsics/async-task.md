@@ -47,9 +47,8 @@ operation-specific views. Lift/lower callbacks and canonical metadata remain
 per-call operands. Existing partial callbacks preserve their null receiver and
 operand order. Direct symmetric-call callbacks bind context with `void 0` in
 named mode; the suspending wrapper's slow callback preserves its null receiver.
-Inline callbacks retain their original function identity. A narrow lazy
-future-value predicate remains until the future family migrates; selecting a
-class or owner does not invoke it. Waitables use their own static event writer
+Inline callbacks retain their original function identity. Task classes receive
+the selected per-store `FutureValue` constructor for identity checks. Waitables use their own static event writer
 without a generated callback.
 
 Custom providers must publish this subpath and replace the old resource, core

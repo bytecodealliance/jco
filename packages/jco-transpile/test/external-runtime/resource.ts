@@ -65,7 +65,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     join(dir, 'provider/intrinsics/core.js'),
                     'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
                 );
-                for (const suffix of ['conversion', 'js-helper', 'string', 'webidl', 'lift', 'lower']) {
+                for (const suffix of ['conversion', 'js-helper', 'string', 'webidl', 'lift', 'lower', 'future']) {
                     await writeFile(
                         join(dir, 'provider/intrinsics/' + suffix + '.js'),
                         'export * from ' +

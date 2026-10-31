@@ -1,13 +1,12 @@
 //! Lift helpers share selected codec/scratch owners and lazy pending-family capabilities.
 use super::{
-    ComponentContext, CoreContext, ErrCtxContext, RuntimeContext, RuntimeImport, RuntimeImportKind,
-    RuntimeInitializer,
+    ComponentContext, CoreContext, ErrCtxContext, FutureContext, RuntimeContext, RuntimeImport,
+    RuntimeImportKind, RuntimeInitializer,
 };
 use crate::{
     intrinsics::{
-        Intrinsic, RenderIntrinsicsArgs,
-        lift::LiftIntrinsic,
-        p3::{async_future::AsyncFutureIntrinsic, async_stream::AsyncStreamIntrinsic},
+        Intrinsic, RenderIntrinsicsArgs, lift::LiftIntrinsic,
+        p3::async_stream::AsyncStreamIntrinsic,
     },
     source::Source,
     uwriteln,
@@ -60,7 +59,8 @@ impl LiftContext {
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
         match self {
             Self::Strings => &[RuntimeContext::Utf8Decoder, RuntimeContext::Utf16Decoder],
-            Self::Future | Self::Stream => &[
+            Self::Future => &[RuntimeContext::Future(FutureContext::Lookup)],
+            Self::Stream => &[
                 RuntimeContext::Component(ComponentContext::StateLookup),
                 RuntimeContext::Core(CoreContext::WebAssemblyRuntimeError),
             ],
@@ -80,10 +80,7 @@ impl LiftContext {
                 uwriteln!(output, "const {local} = {{ asBigInt: {as_bigint} }};");
             }
             // Until N17/N18, look up the actual inline tables/classes at call time.
-            Self::Future => uwriteln!(
-                output,
-                "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, getTables: () => FUTURE_TABLES, getEnd: (options) => getFutureEnd(options) }};"
-            ),
+            Self::Future => uwriteln!(output, "const {local} = _jcoFutureEndLookupContext;"),
             Self::Stream => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, getTables: () => STREAM_TABLES, getEnd: (options) => getStreamEnd(options), getExternalStream: () => Stream }};"
@@ -117,17 +114,10 @@ pub(crate) fn import(intrinsic: LiftIntrinsic) -> RuntimeImport {
 }
 
 pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
-    match intrinsic {
-        Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture) => {
-            args.require_intrinsic(AsyncFutureIntrinsic::GlobalFutureTableMap);
-            args.require_intrinsic(AsyncFutureIntrinsic::GetFutureEnd);
-        }
-        Intrinsic::Lift(LiftIntrinsic::LiftFlatStream) => {
-            args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
-            args.require_intrinsic(AsyncStreamIntrinsic::GetStreamEnd);
-            args.require_intrinsic(AsyncStreamIntrinsic::ExternalStreamClass);
-        }
-        _ => {}
+    if let Intrinsic::Lift(LiftIntrinsic::LiftFlatStream) = intrinsic {
+        args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
+        args.require_intrinsic(AsyncStreamIntrinsic::GetStreamEnd);
+        args.require_intrinsic(AsyncStreamIntrinsic::ExternalStreamClass);
     }
 }
 
@@ -212,15 +202,13 @@ mod tests {
         let (source, intrinsics) =
             generated(&[LiftIntrinsic::LiftFlatFuture, LiftIntrinsic::LiftFlatStream]);
         for retained in [
-            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
-            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GetFutureEnd),
             Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
             Intrinsic::AsyncStream(AsyncStreamIntrinsic::GetStreamEnd),
             Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
         ] {
             assert!(intrinsics.contains(&retained), "{retained:?}");
         }
-        assert!(source.contains("getTables: () => FUTURE_TABLES"));
+        assert!(source.contains("const _jcoLiftFutureContext = _jcoFutureEndLookupContext;"));
         assert!(source.contains("getTables: () => STREAM_TABLES"));
         assert!(source.contains("getExternalStream: () => Stream"));
         assert!(!source.contains("function _liftFlatFuture("));
