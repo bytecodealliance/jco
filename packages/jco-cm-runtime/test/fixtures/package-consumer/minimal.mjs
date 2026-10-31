@@ -24,6 +24,13 @@ const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodeallian
 const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
 const { clampGuest, typeCheckValidI32, initializeTaskRegisters } =
     await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
+const { initializeStoreTrap, checkMayLeave } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/component');
+if (
+    initializeStoreTrap().error !== null ||
+    checkMayLeave({ RuntimeError: Error, instanceFlags: { get: () => ({ value: 1 }) } }, 0) !== undefined
+) {
+    throw new Error('component capability leak');
+}
 if (clampGuest(42, 0, 100) !== 42 || !typeCheckValidI32(42) || Object.keys(initializeTaskRegisters()).length) {
     throw new Error('core capability leak');
 }

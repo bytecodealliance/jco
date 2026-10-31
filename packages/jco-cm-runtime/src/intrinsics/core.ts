@@ -9,6 +9,7 @@ import type {
     ConditionalSlowFn,
     ConditionalSuspendingPlatform,
 } from '../runtime.js';
+import { checkMayLeave, recordTrap, getOrCreateAsyncState } from './component.js';
 export { debugLog } from './core-debug.js';
 export { initializeRepTableClass } from './rep-table.js';
 export { initializeManagedBufferClass, initializeBufferManagerClass } from './buffers.js';
@@ -164,22 +165,7 @@ export const throwInvalidBool: CoreModule['throwInvalidBool'] = () => {
 export const throwUninitialized: CoreModule['throwUninitialized'] = () => {
     throw new TypeError('Wasm uninitialized use `await $init` first');
 };
-export function promiseWithResolvers<T>(): {
-    promise: Promise<T>;
-    resolve(value: T | PromiseLike<T>): void;
-    reject(reason?: unknown): void;
-} {
-    if (Promise.withResolvers) {
-        return Promise.withResolvers<T>();
-    }
-    let resolve!: (value: T | PromiseLike<T>) => void;
-    let reject!: (reason?: unknown) => void;
-    const promise = new Promise<T>((res, rej) => {
-        resolve = res;
-        reject = rej;
-    });
-    return { promise, resolve, reject };
-}
+export { promiseWithResolvers } from './core-promises.js';
 
 export const registerMemory: CoreModule['registerMemory'] = (map, args) => {
     const { componentIdx, memory, memoryIdx } = args ?? {};
@@ -226,7 +212,7 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
 ) => {
     const { registers: currentTaskMeta, RuntimeError } = context;
     return function (...args) {
-        context.checkMayLeave(componentIdx);
+        checkMayLeave(context.mayLeave, componentIdx);
         const saved = currentTaskMeta[componentIdx] ?? null;
         const savedThread = saved ? context.getCurrentThread(saved.componentIdx, saved.threadID, saved.taskID) : null;
         const mayBlock = savedThread ? (savedThread.task.mayBlock() ?? context.currentTaskMayBlock() !== 0) : false;
@@ -242,7 +228,7 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
                 if (!switchesTask) {
                     currentTaskMeta.current = saved;
                 }
-                throw context.recordTrap(componentIdx, error, convertsRangeErrors);
+                throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
             }
             currentTaskMeta[componentIdx] = saved;
             if (!switchesTask) {
@@ -262,10 +248,10 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
         return (async () => {
             try {
                 const result = await fn.apply(null, args);
-                context.throwIfInterrupted(componentIdx);
+                getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
                 return result;
             } catch (error) {
-                throw context.recordTrap(componentIdx, error, convertsRangeErrors);
+                throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
             } finally {
                 currentTaskMeta[componentIdx] = saved;
                 if (!switchesTask) {
