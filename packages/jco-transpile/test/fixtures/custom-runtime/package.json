@@ -11,6 +11,7 @@
         "./intrinsics/core": "./intrinsics/core.js",
         "./intrinsics/component": "./intrinsics/component.js",
         "./intrinsics/waitable": "./intrinsics/waitable.js",
-        "./intrinsics/error-context": "./intrinsics/error-context.js"
+        "./intrinsics/error-context": "./intrinsics/error-context.js",
+        "./intrinsics/async-task": "./intrinsics/async-task.js"
     }
 }

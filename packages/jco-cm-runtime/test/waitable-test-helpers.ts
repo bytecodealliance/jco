@@ -1,6 +1,12 @@
 // Test-only assembly of selected constructors and the actual operation contexts.
 import * as operations from '../src/intrinsics/waitable.js';
-import type { WaitableTaskLookup, WaitableSetWaitContext } from '../src/runtime.js';
+import type {
+    WaitableTaskLookup,
+    WaitableSetWaitContext,
+    AsyncTaskMeta,
+    WaitableTask,
+    TaskIdentity,
+} from '../src/runtime.js';
 import { create as createComponent } from './component-helpers.js';
 
 type WaitableTestOptions = NonNullable<Parameters<typeof createComponent>[0]> & {
@@ -16,11 +22,10 @@ export function create(options: WaitableTestOptions = {}) {
         lookup,
         Waitable,
         WaitableSet,
-        getCurrentTask:
-            options.waitableContext?.getCurrentTask ??
-            (() => {
-                throw new TypeError('missing waitableContext.getCurrentTask');
-            }),
+        taskLookup: options.waitableContext?.taskLookup ?? {
+            registers: core.currentTaskMeta,
+            tasks: new Map<number, AsyncTaskMeta<WaitableTask & TaskIdentity>[]>(),
+        },
         storeEventInComponentMemory:
             options.waitableContext?.storeEventInComponentMemory ??
             (() => {

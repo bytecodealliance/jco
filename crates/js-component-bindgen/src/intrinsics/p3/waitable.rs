@@ -485,8 +485,9 @@ impl WaitableIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let waitable_set_wait_fn = render_args.require_intrinsic(Self::WaitableSetWait);
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let store_event_in_component_memory_fn = render_args
                     .require_intrinsic(Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory));
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
@@ -504,7 +505,7 @@ impl WaitableIntrinsic {
                             getMemoryFn,
                         }} = ctx;
 
-                        const taskMeta = {current_task_get_fn}(componentIdx);
+                        const taskMeta = {current_task_get_fn}componentIdx);
                         if (!taskMeta) {{ throw Error('invalid/missing async task meta'); }}
 
                         const task = taskMeta.task;
@@ -546,8 +547,9 @@ impl WaitableIntrinsic {
             Self::WaitableSetPoll => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let waitable_set_poll_fn = render_args.require_intrinsic(Self::WaitableSetPoll);
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -568,7 +570,7 @@ impl WaitableIntrinsic {
                             resultPtr,
                         }});
 
-                        const taskMeta = {current_task_get_fn}(componentIdx);
+                        const taskMeta = {current_task_get_fn}componentIdx);
                         if (!taskMeta) {{ throw Error('invalid/missing current task meta'); }}
                         if (taskMeta.componentIdx !== componentIdx) {{
                             throw Error('task component idx [' + taskMeta.componentIdx + '] != component instance ID [' + componentIdx + ']');
@@ -620,8 +622,9 @@ impl WaitableIntrinsic {
             Self::WaitableSetDrop => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let waitable_set_drop_fn = render_args.require_intrinsic(Self::WaitableSetDrop);
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -629,7 +632,7 @@ impl WaitableIntrinsic {
                 output.push_str(&format!("
                     function {waitable_set_drop_fn}(componentIdx, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_set_drop_fn}()] args', {{ componentIdx, waitableSetRep }});
-                        const task = {current_task_get_fn}(componentIdx);
+                        const task = {current_task_get_fn}componentIdx);
 
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
                         if (task.componentIdx !== componentIdx) {{

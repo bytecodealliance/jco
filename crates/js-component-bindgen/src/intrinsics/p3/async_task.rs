@@ -3084,7 +3084,7 @@ impl AsyncTaskIntrinsic {
 
                             // TODO(fix): we should be able to easily have the caller's meomry
                             // to lower into here, but it's not present in PrepareCall
-                            const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}{{ componentIdx: this.#parentTask?.componentIdx() }})[0];
+                            const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}{{ componentIdx: this.#parentTask?.componentIdx() }})[0]?.memory;
                             // NOTE: cancelled resolutions carry no value, so nothing is lowered
                             const returned = this.#state === {subtask_class}.State.RETURNED;
                             if (returned && callMetadata && !callMetadata.returnFn && (this.isAsync || callMetadata.funcTypeIsAsync) && callMetadata.resultPtr && memory) {{
@@ -3142,9 +3142,9 @@ impl AsyncTaskIntrinsic {
 
                         addLender(handle) {{
                             {debug_log_fn}('[{subtask_class}#addLender()] args', {{ handle }});
-                            if (!Number.isNumber(handle)) {{ throw new Error('missing/invalid lender handle [' + handle + ']'); }}
+                            if (!handle || typeof handle.lends !== 'number') {{ throw new Error('missing/invalid lender handle [' + handle + ']'); }}
 
-                            if (this.#lenders.length === 0 || this.isResolved()) {{
+                            if (this.#lenders === null || this.isResolved()) {{
                                 throw new Error('subtask has no lendors or has already been resolved');
                             }}
 
@@ -3202,7 +3202,7 @@ impl AsyncTaskIntrinsic {
                         #getComponentState() {{
                             const state = {get_or_create_async_state_fn}this.#componentIdx);
                             if (!state) {{
-                                throw new Error('invalid/missing async state for component [' + componentIdx + ']');
+                                throw new Error('invalid/missing async state for component [' + this.#componentIdx + ']');
                             }}
                             return state;
                         }}
@@ -3957,7 +3957,10 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             const syncRes = subtask.getResult();
-                            if (createdTask) {{ createdTask.resolve([syncRes]); }}
+                            if (createdTask) {{
+                                createdTask.resolve([syncRes]);
+                                createdTask.exit();
+                            }}
 
                             return syncRes;
                         }}
