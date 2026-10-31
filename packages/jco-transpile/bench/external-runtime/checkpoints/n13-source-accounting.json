@@ -1,0 +1,21 @@
+{
+    ".github/workflows/main.yml": "Ported serial full-portfolio invocation and artifact upload; strict parity gate, never implicit recording.",
+    "packages/jco-transpile/.gitignore": "Already ported at N01; historical output preserved.",
+    "packages/jco-transpile/bench/external-runtime/README.md": "Adapted to named export API, full/smoke matrices, immutable checkpoints, uncertainty, memory scope and isolation correction.",
+    "packages/jco-transpile/bench/external-runtime/baseline.json": "Historical factory baseline preserved at original refs; named architecture uses immutable keyed schema-2 checkpoints. N13 full five-process checkpoint 44d1a7a1256979c356401554b290dd01824b83a6fa8ddcb3920ea9a03f77b100 recorded after complete collection. Expanded cohort remains separate.",
+    "packages/jco-transpile/bench/external-runtime/build.ts": "N01 machinery already supports actual file/package named exports and both bundlers; retained.",
+    "packages/jco-transpile/bench/external-runtime/cases.ts": "Restored all twelve historical components and eight-component portfolio; keeps new resource/empty/noise/sharing controls, 17 total scenarios.",
+    "packages/jco-transpile/bench/external-runtime/gates.test.ts": "Canaries consolidated in integrity.test.ts; missing/nonfinite data, equal absolute growth, wrong stubs, timed checksum corruption, relative timing, immutable/CI/filtered/parity recording, complete matrices.",
+    "packages/jco-transpile/bench/external-runtime/measure.ts": "Already stronger at N01: separate verify/timing/memory processes and retained raw paired samples; unchanged.",
+    "packages/jco-transpile/bench/external-runtime/performance.test.ts": "Replaced by existing foundation.test.ts serial prebuild/verify-all then full rotated repeated-process collection; independent correctness portfolio added.",
+    "packages/jco-transpile/bench/external-runtime/report.ts": "Existing strict regression/parity and cluster uncertainty retained without budget changes; restored relative timing canary.",
+    "packages/jco-transpile/bench/external-runtime/runner.mjs": "Retains stronger current varying checksums/calibration and separate diagnostics. Adds accurate memory counter-scope metadata only.",
+    "packages/jco-transpile/bench/external-runtime/size.test.ts": "Covered by serial foundation.test.ts complete 68-report size/timing matrix, module graphs, independent known answers and equal core Wasm.",
+    "packages/jco-transpile/bench/external-runtime/tsconfig.json": "Already present at N01; new full portfolio strict types verified.",
+    "packages/jco-transpile/bench/external-runtime/vitest.config.ts": "Already serial and independent from functional discovery at N01; new correctness-only config does not collect accepted timings.",
+    "packages/jco-transpile/bench/external-runtime/workloads.mjs": "Restores eight missing cases; preserves stronger current strings/numbers/variants/resource; strengthens variable list/record payloads and actual resource drop deltas. Stream remains lifecycle-only.",
+    "packages/jco-transpile/package.json": "Adds full portfolio correctness command; full/smoke/regression/parity commands already N01.",
+    "packages/jco-transpile/scripts/bench-external-runtime.mjs": "Explicit canonical full/smoke selection and completeness checks; immutable publisher; accurate diagnostic labels. No factory namespace restored.",
+    "packages/jco-transpile/test/README.md": "Adds separate benchmark correctness/measurement commands and discovery explanation.",
+    "pnpm-lock.yaml": "Old required bundler/minifier dependencies already ported at N01; no dependency or lock change necessary."
+}

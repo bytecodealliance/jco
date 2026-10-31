@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { assert, test } from 'vitest';
 import { buildPair, installRuntime, optimize } from './build.js';
-import { bundlers, resolutions, scenarios, importControls } from './cases.js';
+import { bundlers, resolutions, scenarios, importControls, portfolio } from './cases.js';
 import { measure, type Measurement } from './measure.js';
 import {
     median,
@@ -43,7 +43,7 @@ const matrixTimeoutMs = Math.max(
 
 // Serial by design: build every graph before starting ANY measured process.
 test(
-    'complete named-runtime smoke matrix',
+    `complete named-runtime ${portfolio} matrix`,
     async () => {
         const output = resolve(process.env.JCO_EXTERNAL_RUNTIME_BENCH_RUN!);
         const coverage = JSON.parse(await readFile(join(here, 'coverage.json'), 'utf8'));
@@ -104,25 +104,8 @@ test(
         ]) {
             runtimeArtifacts[name] = hash(await readFile(new URL(name, defaultRuntimeUrl)));
         }
-        const mappingSources = Object.fromEntries(
-            await Promise.all(
-                [
-                    'runtime.rs',
-                    'runtime/core.rs',
-                    'runtime/component.rs',
-                    'runtime/waitable.rs',
-                    'runtime/error_context.rs',
-                    'runtime/async_task.rs',
-                    'runtime/host.rs',
-                ].map(async (name) => [
-                    name,
-                    hash(
-                        await readFile(
-                            new URL('../../../../crates/js-component-bindgen/src/intrinsics/' + name, import.meta.url),
-                        ),
-                    ),
-                ]),
-            ),
+        const mappingSources = await sourceHashes(
+            new URL('../../../../crates/js-component-bindgen/src/intrinsics/', import.meta.url),
         );
         const environment = {
             compilerArtifacts,
@@ -143,6 +126,7 @@ test(
             ),
         };
         const settings = {
+            portfolio,
             processCount,
             sampleCount,
             matrixTimeoutMs,

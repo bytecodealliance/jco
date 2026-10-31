@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 import { SourceTextModule } from 'node:vm';
 import assert from 'node:assert/strict';
 import { expectedResult, importsFor, workload } from './workloads.mjs';
+import { memoryAccounting } from './memory-accounting.mjs';
 
 const median = (values) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
 const config = JSON.parse(await readFile(process.argv[2], 'utf8'));
@@ -14,6 +15,7 @@ const environment = {
     flags: process.execArgv,
     debug: process.env.JCO_DEBUG ?? null,
     jspi: 'Suspending' in WebAssembly,
+    memoryAccounting,
 };
 const order = config.memoryMode
     ? [config.memoryMode]

@@ -7,7 +7,59 @@ import { promisify } from 'node:util';
 import { assert, expect, test } from 'vitest';
 import { measure } from './measure.js';
 import { parityLosses, processInterval, regressionLosses } from './report.js';
+import { expectedReportIds, portfolioFromArgs, scenarioIdsForPortfolio } from './matrix.mjs';
+import { publishBaseline } from './recording.mjs';
+import { workload } from './workloads.mjs';
 const exec = promisify(execFile);
+
+test.concurrent('full and smoke portfolios require their complete distinct matrices', () => {
+    assert.equal(portfolioFromArgs([]), 'full');
+    assert.equal(portfolioFromArgs(['--smoke', '--record']), 'smoke');
+    assert.equal(expectedReportIds('full').length, 68);
+    assert.equal(expectedReportIds('smoke').length, 32);
+    assert.equal(new Set(expectedReportIds('full')).size, 68);
+    assert.includeMembers(
+        [...scenarioIdsForPortfolio('full')],
+        ['lists', 'records', 'flavorful', 'resources', 'events', 'async', 'streams', 'futures', 'portfolio'],
+    );
+    assert.throws(() => portfolioFromArgs(['adder']), /without filters/);
+    assert.throws(() => expectedReportIds('partial'), /Unknown/);
+});
+
+test.concurrent('checkpoint recording cannot overwrite an existing baseline', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-immutable-baseline-'));
+    try {
+        const file = join(dir, 'baseline.json');
+        const original = { schema: 2, checkpointKey: 'original', reports: { raw: 42 } };
+        await publishBaseline(file, original);
+        const bytes = await readFile(file, 'utf8');
+        await expect(publishBaseline(file, { ...original, reports: { raw: 1 } })).rejects.toMatchObject({
+            code: 'EEXIST',
+        });
+        assert.equal(await readFile(file, 'utf8'), bytes);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test.concurrent.each(['lists', 'records', 'flavorful', 'resources', 'events', 'async', 'streams', 'futures'])(
+    'full workload rejects corrupt or missing exports: %s',
+    async (id) => {
+        const noOp = () => 0;
+        await expect(
+            workload(id, {
+                test: new Proxy({}, { get: () => noOp }),
+                api: { make: () => ({ [Symbol.dispose]() {} }) },
+                'jco:test-components/future-lower-sync': { futurePassthrough: async () => 0 },
+                allocatedBytes: noOp,
+                run: noOp,
+                drops: noOp,
+                pollEmptySet: async () => 1,
+                zeroLengthWrite: async () => 0,
+            }),
+        ).rejects.toThrow();
+    },
+);
 
 test.concurrent('ten-process bootstrap does not force balanced index parity', () => {
     // Independent resampling of five ones and five twos must allow either
@@ -82,6 +134,25 @@ test.concurrent('rejects string corruption confined to timed payloads in both mo
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test.concurrent.each(['lists', 'records'] as const)(
+    'rejects %s corruption confined to timed payloads in both modes',
+    async (id) => {
+        const dir = await mkdtemp(join(tmpdir(), 'jco-full-payload-canary-'));
+        try {
+            const bundle = join(dir, 'stub.mjs');
+            const body =
+                id === 'lists'
+                    ? 'allocatedBytes() { return 0; }, test: { listRoundtrip(value) { return value[255] <= 10 || value[255] === 17 ? value : new Uint8Array(256); } }'
+                    : 'test: { roundtripRecord1(value) { return value.a === 42 ? value : { ...value, a: 0 }; }, tuple1(value) { return value; }, roundtripFlags2() { return { c: true, d: false, e: false }; } }';
+            await writeFile(bundle, `export function create0() { return { ${body} }; }`);
+            const artifact = { dir, bundle, parts: [id], wasm: { bytes: 0, files: {} } };
+            await expect(measure({ inline: artifact, external: artifact })).rejects.toThrow(/checksum|expected/);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    },
+);
 test.concurrent('rejects missing/nonfinite metrics and reports parity independently', () => {
     assert.throws(() => parityLosses({ inline: {}, external: {} }));
     assert.throws(() => parityLosses({ inline: { parse: 1 }, external: {} }));
@@ -105,12 +176,26 @@ test.concurrent('rejects missing/nonfinite metrics and reports parity independen
     assert.throws(() => processInterval([1, 1, 1, NaN, 1]));
     assert.deepEqual(processInterval([1, 1, 1, 1, 1]).ci95, [1, 1]);
 });
-test.concurrent.each(['ci', 'filter'] as const)('refuses protected baseline recording (%s)', async (mode) => {
+
+test.concurrent('relative timing gates detect external slowdowns independently of native-call speed', () => {
+    const baseline = { inline: { call: 1000 }, external: { call: 1100 } };
+    assert.deepEqual(
+        regressionLosses({ inline: { call: 2000 }, external: { call: 2200 } }, baseline, 'performance'),
+        [],
+    );
+    assert.isNotEmpty(regressionLosses({ inline: { call: 1000 }, external: { call: 3000 } }, baseline, 'performance'));
+});
+
+test.concurrent.each(['ci', 'filter', 'parity'] as const)('refuses protected baseline recording (%s)', async (mode) => {
     const script = fileURLToPath(new URL('../../scripts/bench-external-runtime.mjs', import.meta.url));
     await expect(
-        exec(process.execPath, [script, '--record', ...(mode === 'filter' ? ['adder'] : [])], {
-            env: { ...process.env, ...(mode === 'ci' ? { CI: '1' } : {}) },
-        }),
+        exec(
+            process.execPath,
+            [script, '--record', ...(mode === 'filter' ? ['adder'] : mode === 'parity' ? ['--parity'] : [])],
+            {
+                env: { ...process.env, ...(mode === 'ci' ? { CI: '1' } : {}) },
+            },
+        ),
     ).rejects.toThrow(/Recording is disabled|without filters/);
 });
 

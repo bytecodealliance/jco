@@ -34,3 +34,11 @@ Node tests use an absolute file URL so generated modules in temporary
 directories can resolve the provider. Browser tests serve a copy of the runtime
 beside their generated components. Runtime fixture output directories are
 separate for the two modes.
+
+Bundled runtime correctness and performance checks live separately under
+`bench/external-runtime`; normal, LTS and extended test discovery does not include
+them. After building the transpiler, runtime and generated fixtures, run
+`pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime:verify`
+for the complete portfolio's bundled known answers and integrity canaries.
+See [the benchmark instructions](../bench/external-runtime/README.md) for serial
+full/smoke measurements, immutable checkpoint recording and strict parity gates.

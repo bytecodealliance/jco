@@ -1,0 +1,39 @@
+{
+    "node": "v24.21.0",
+    "pages": 256,
+    "linearBytes": 16777216,
+    "before": {
+        "rss": 48644096,
+        "heapTotal": 6856704,
+        "heapUsed": 3892064,
+        "external": 1599231,
+        "arrayBuffers": 137467
+    },
+    "afterCreate": {
+        "rss": 48775168,
+        "heapTotal": 6594560,
+        "heapUsed": 3890408,
+        "external": 18376451,
+        "arrayBuffers": 137467
+    },
+    "afterBuffer": {
+        "rss": 48775168,
+        "heapTotal": 6594560,
+        "heapUsed": 3890592,
+        "external": 18376451,
+        "arrayBuffers": 137467
+    },
+    "createDeltas": {
+        "heapUsed": -1656,
+        "external": 16777220,
+        "arrayBuffers": 0,
+        "rss": 131072
+    },
+    "bufferDeltas": {
+        "heapUsed": -1472,
+        "external": 16777220,
+        "arrayBuffers": 0,
+        "rss": 131072
+    },
+    "held": true
+}

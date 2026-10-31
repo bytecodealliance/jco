@@ -1,4 +1,5 @@
 import { fileURLToPath } from 'node:url';
+import { scenarioIdsForPortfolio } from './matrix.mjs';
 
 export const components = [
     { id: 'empty', path: 'empty.wat' },
@@ -8,12 +9,33 @@ export const components = [
     { id: 'strings', path: '../../test/fixtures/components/runtime/strings.component.wasm' },
     { id: 'adder', path: '../../test/fixtures/components/adder.component.wasm' },
     { id: 'resource', path: '../../test/fixtures/components/runtime/external-runtime-resource.component.wat' },
+    { id: 'lists', path: '../../test/fixtures/components/runtime/lists.component.wasm' },
+    { id: 'records', path: '../../test/fixtures/components/runtime/records.component.wasm' },
+    { id: 'flavorful', path: '../../test/fixtures/components/runtime/flavorful.component.wasm' },
+    { id: 'resources', path: '../../test/fixtures/components/p3/context-resource-drop.wat' },
+    { id: 'events', path: '../../test/fixtures/components/p3/waitable-set-poll-non-set.wat' },
+    { id: 'async', path: '../../test/fixtures/components/p3/sync-lowered-async-callee.wat' },
+    { id: 'streams', path: '../../test/fixtures/components/p3/zero-length-same-component-stream.wat' },
+    { id: 'futures', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
 ] as const;
 export type ComponentId = (typeof components)[number]['id'];
-export const scenarios: { id: string; components: readonly ComponentId[] }[] = [
+export const fullScenarios: { id: string; components: readonly ComponentId[] }[] = [
     ...components.map(({ id }) => ({ id, components: [id] })),
     { id: 'sharing', components: ['resource', 'resource'] },
+    {
+        id: 'portfolio',
+        components: ['adder', 'numbers', 'strings', 'lists', 'records', 'variants', 'flavorful', 'resources'],
+    },
 ];
+export const smokeScenarios = fullScenarios.filter((scenario) =>
+    scenarioIdsForPortfolio('smoke').includes(scenario.id),
+);
+export const portfolio = process.env.JCO_EXTERNAL_RUNTIME_BENCH_PORTFOLIO ?? 'full';
+const declared = scenarioIdsForPortfolio(portfolio);
+if (fullScenarios.map((scenario) => scenario.id).join() !== scenarioIdsForPortfolio('full').join()) {
+    throw new Error('Full benchmark scenario catalog does not match its declared matrix');
+}
+export const scenarios = fullScenarios.filter((scenario) => declared.includes(scenario.id));
 export const bundlers = ['rolldown', 'rollup'] as const;
 export type Bundler = (typeof bundlers)[number];
 export const resolutions = ['file', 'package'] as const;
