@@ -172,8 +172,12 @@ async function buildArtifact(
                 sourceBytes += bytes.byteLength;
                 const source = new TextDecoder().decode(bytes);
                 graph.imports.push(...(source.match(/import \{[^}]+\} from [^;]+;/g) ?? []));
-                graph.contexts.push(...(source.match(/const _jco\w*Context\s*=.*;/g) ?? []));
+                const selectedInitializations = source.match(/const \w+\s*=\s*_jcoInitialize\w*\([^;]*\);/g) ?? [];
+                graph.contexts.push(
+                    ...new Set([...(source.match(/const _jco\w*Context\s*=.*;/g) ?? []), ...selectedInitializations]),
+                );
                 graph.initializers.push(
+                    ...selectedInitializations,
                     ...(source.match(/(?:const|let) \w+ = (?:new \w+|create\w+|initialize\w+)\([^;]*;/g) ?? []),
                 );
             }

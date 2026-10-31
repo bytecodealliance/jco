@@ -8,7 +8,7 @@ bindings create this cache only when a memory load or store selects `dataView`,
 once per instantiation. Memory growth and switches between memories refresh the
 same live cache owner; independent instantiations have independent caches.
 
-Importing either function allocates no cache. Providers implementing earlier v2
+Importing either function allocates no cache. Providers implementing earlier v1
 output must add this named subpath when adopting this compiler. A provider may
 wrap `dataView` while re-exporting the other defaults; each default uses its own
 static implementation dependencies.

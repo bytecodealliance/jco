@@ -149,7 +149,7 @@ mod tests {
     const TABLE_GET: Intrinsic = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
     const SAMPLES: [Intrinsic; 5] = [
         Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateBorrow),
-        Intrinsic::String(StringIntrinsic::Utf8Encode),
+        Intrinsic::DebugLog,
         Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn),
         Intrinsic::Base64Compile,
         Intrinsic::HandleTables,

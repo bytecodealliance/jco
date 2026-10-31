@@ -27,6 +27,7 @@ use std::fmt::Write;
 
 pub(crate) mod conversion;
 pub(crate) mod js_helper;
+pub(crate) mod string;
 
 pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
@@ -39,6 +40,10 @@ pub(crate) enum RuntimeContext {
     Bitcast32,
     Bitcast64,
     DataViewCache,
+    Utf8Decoder,
+    Utf16Decoder,
+    Utf8Encoder,
+    Utf16Encoding,
 }
 
 impl RuntimeContext {
@@ -52,6 +57,11 @@ impl RuntimeContext {
             "_jcoInitializeBitcast64",
             "_jcoDataViewCacheContext",
             "_jcoInitializeDataViewCache",
+            "_jcoInitializeUtf8Decoder",
+            "_jcoInitializeUtf16Decoder",
+            "_jcoInitializeUtf8Encoder",
+            "_jcoInitializeUtf16Encoding",
+            "_jcoUtf16EncodingContext",
         ]
     }
 
@@ -62,6 +72,10 @@ impl RuntimeContext {
             Self::Bitcast32 => "_jcoBitcast32Context",
             Self::Bitcast64 => "_jcoBitcast64Context",
             Self::DataViewCache => "_jcoDataViewCacheContext",
+            Self::Utf8Decoder => "TEXT_DECODER_UTF8",
+            Self::Utf16Decoder => "utf16Decoder",
+            Self::Utf8Encoder => "TEXT_ENCODER_UTF8",
+            Self::Utf16Encoding => "_jcoUtf16EncodingContext",
         }
     }
 
@@ -83,6 +97,26 @@ impl RuntimeContext {
                 "initializeDataViewCache",
                 "_jcoInitializeDataViewCache",
             ),
+            Self::Utf8Decoder => (
+                "intrinsics/string",
+                "initializeUtf8Decoder",
+                "_jcoInitializeUtf8Decoder",
+            ),
+            Self::Utf16Decoder => (
+                "intrinsics/string",
+                "initializeUtf16Decoder",
+                "_jcoInitializeUtf16Decoder",
+            ),
+            Self::Utf8Encoder => (
+                "intrinsics/string",
+                "initializeUtf8Encoder",
+                "_jcoInitializeUtf8Encoder",
+            ),
+            Self::Utf16Encoding => (
+                "intrinsics/string",
+                "initializeUtf16Encoding",
+                "_jcoInitializeUtf16Encoding",
+            ),
             _ => return None,
         };
         Some(RuntimeInitializer {
@@ -102,7 +136,13 @@ impl RuntimeContext {
             Self::StrictNumeric => {
                 uwriteln!(output, "const {local} = {{ strict: {strict} }};")
             }
-            Self::Bitcast32 | Self::Bitcast64 | Self::DataViewCache => {
+            Self::Bitcast32
+            | Self::Bitcast64
+            | Self::DataViewCache
+            | Self::Utf8Decoder
+            | Self::Utf16Decoder
+            | Self::Utf8Encoder
+            | Self::Utf16Encoding => {
                 let initialize = self.initializer().unwrap().local_name;
                 uwriteln!(output, "const {local} = {initialize}();")
             }
@@ -117,13 +157,20 @@ pub(crate) struct RuntimeInitializer {
     pub(crate) local_name: &'static str,
 }
 
-/// A named call export. Context requirements are separate from the public name.
-/// Add value/constructor/state descriptors when such exports are implemented.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum RuntimeImportKind {
+    Call,
+    /// The binding refers to the selected context initializer's returned value.
+    InitializedValue,
+}
+
+/// A named operation or initialized value, with separately selected capabilities.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) struct RuntimeImport {
     pub(crate) suffix: &'static str,
     pub(crate) export: &'static str,
     pub(crate) context: Option<RuntimeContext>,
+    pub(crate) kind: RuntimeImportKind,
 }
 
 /// Imports what the external runtime implements and delegates the rest to
@@ -139,6 +186,7 @@ impl ExternalRuntime {
         match intrinsic {
             ResourceIntrinsic::ResourceTableGet => Some(RuntimeImport {
                 suffix: "intrinsics/resource",
+                kind: RuntimeImportKind::Call,
                 export: "tableGet",
                 context: Some(RuntimeContext::ResourceTableGet),
             }),
@@ -151,6 +199,7 @@ impl ExternalRuntime {
             Intrinsic::Resource(i) => Self::resource_import(i),
             Intrinsic::Conversion(i) => Some(conversion::import(i)),
             Intrinsic::JsHelper(i) => js_helper::import(i),
+            Intrinsic::String(i) => Some(string::import(i)),
             _ => None,
         }
     }
@@ -172,10 +221,12 @@ impl ExternalRuntime {
     ) {
         let mut modules = BTreeMap::<&str, BTreeSet<(&str, &str)>>::new();
         for (intrinsic, import) in Self::imports(intrinsics) {
-            modules
-                .entry(import.suffix)
-                .or_default()
-                .insert((import.export, intrinsic.name()));
+            if import.kind == RuntimeImportKind::Call {
+                modules
+                    .entry(import.suffix)
+                    .or_default()
+                    .insert((import.export, intrinsic.name()));
+            }
             if let Some(initializer) = import.context.and_then(RuntimeContext::initializer) {
                 modules
                     .entry(initializer.suffix)
@@ -270,6 +321,22 @@ impl Provides<JsHelperIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<StringIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: StringIntrinsic) -> IntrinsicBinding {
+        let _ = string::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        _intrinsic: StringIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -295,7 +362,6 @@ macro_rules! delegate_to_inline {
 delegate_to_inline! {
     BaseIntrinsic,
     WebIdlIntrinsic,
-    StringIntrinsic,
     ErrCtxIntrinsic,
     AsyncTaskIntrinsic,
     WaitableIntrinsic,
@@ -335,7 +401,18 @@ impl IntrinsicRuntime for ExternalRuntime {
     /// Insert only the context required by this operation.
     fn call(&self, intrinsic: Intrinsic, operands: &str) -> String {
         let name = runtime::binding(self, intrinsic).local_name();
-        match Self::import(intrinsic).and_then(|import| import.context) {
+        let import = Self::import(intrinsic);
+        assert!(
+            !matches!(
+                import,
+                Some(RuntimeImport {
+                    kind: RuntimeImportKind::InitializedValue,
+                    ..
+                })
+            ),
+            "initialized runtime values must be used as values"
+        );
+        match import.and_then(|import| import.context) {
             Some(context) => {
                 let context = context.local_name();
                 let separator = if operands.is_empty() { "" } else { ", " };

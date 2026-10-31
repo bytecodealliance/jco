@@ -39,6 +39,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/resource': ResourceModule;
     readonly 'intrinsics/conversion': ConversionModule;
     readonly 'intrinsics/js-helper': JsHelperModule;
+    readonly 'intrinsics/string': StringModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -90,4 +91,80 @@ export interface JsHelperModule {
     readonly emptyFunc: (...args: unknown[]) => void;
     readonly initializeDataViewCache: () => DataViewCacheContext;
     readonly dataView: (context: DataViewCacheContext, memory: { readonly buffer: ArrayBufferLike }) => DataView;
+}
+
+export type StringRealloc = (oldPtr: number, oldSize: number, alignment: number, newSize: number) => number;
+export type AsyncStringRealloc = (
+    oldPtr: number,
+    oldSize: number,
+    alignment: number,
+    newSize: number,
+) => number | PromiseLike<number>;
+export interface StringMemory {
+    readonly buffer: ArrayBufferLike;
+}
+export interface StringAllocation {
+    ptr: number;
+    len: number;
+    /** Omitted for the empty UTF-8 sentinel. */
+    codepoints?: number;
+}
+export interface StringDecoder {
+    readonly decode: (input: ArrayBufferLike | ArrayBufferView) => string;
+}
+export interface StringEncodeInto {
+    readonly encodeInto: (input: string, destination: Uint8Array) => { read: number; written: number };
+}
+export interface StringEncoder extends StringEncodeInto {
+    readonly encode: (input: string) => Uint8Array;
+}
+export interface Utf16EncodingContext {
+    readonly littleEndian: boolean;
+}
+
+/** Independently selected codecs and operations at intrinsics/string. */
+export interface StringModule {
+    readonly compactUtf16Decode: (
+        decoder: StringDecoder,
+        memory: StringMemory,
+        ptr: number,
+        taggedLength: number,
+    ) => string;
+    readonly compactUtf16Encode: (
+        context: Utf16EncodingContext,
+        value: unknown,
+        realloc: StringRealloc,
+        memory: StringMemory,
+    ) => StringAllocation;
+    readonly initializeUtf8Decoder: () => StringDecoder;
+    readonly initializeUtf16Decoder: () => StringDecoder;
+    readonly initializeUtf8Encoder: () => StringEncoder;
+    readonly initializeUtf16Encoding: () => Utf16EncodingContext;
+    readonly utf16Encode: (
+        context: Utf16EncodingContext,
+        value: unknown,
+        realloc: StringRealloc,
+        memory: StringMemory,
+    ) => StringAllocation;
+    readonly utf16EncodeAsync: (
+        context: Utf16EncodingContext,
+        value: unknown,
+        realloc: AsyncStringRealloc,
+        memory: StringMemory,
+    ) => Promise<StringAllocation>;
+    readonly utf16ValidatingCopy: (from: Uint16Array, to: Uint16Array) => boolean;
+    readonly utf8Encode: (
+        encoder: StringEncodeInto,
+        value: unknown,
+        realloc: StringRealloc,
+        memory: StringMemory,
+    ) => StringAllocation;
+    readonly utf8EncodeAsync: (
+        encoder: StringEncodeInto,
+        value: unknown,
+        realloc: AsyncStringRealloc,
+        memory: StringMemory,
+    ) => Promise<StringAllocation>;
+    readonly validateGuestChar: (value: number) => string;
+    readonly validateHostChar: (value: unknown) => number | undefined;
 }
