@@ -86,9 +86,18 @@ pub(crate) trait IntrinsicRuntime:
         binding(self, intrinsic).local_name()
     }
 
+    /// Begin an intrinsic call, including implicit operands when required.
+    fn call_prefix(&self, intrinsic: Intrinsic, _has_operands: bool) -> String {
+        format!("{}(", binding(self, intrinsic).local_name())
+    }
+
     /// Render a call to `intrinsic`. Runtimes may add implicit leading operands.
     fn call(&self, intrinsic: Intrinsic, operands: &str) -> String {
-        format!("{}({operands})", binding(self, intrinsic).local_name())
+        format!(
+            "{}{})",
+            self.call_prefix(intrinsic, !operands.is_empty()),
+            operands
+        )
     }
 }
 
@@ -152,12 +161,10 @@ mod tests {
     use std::collections::BTreeSet;
 
     const TABLE_GET: Intrinsic = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
-    const SAMPLES: [Intrinsic; 5] = [
-        Intrinsic::WebAssemblyRuntimeError,
-        Intrinsic::DebugLog,
+    const SAMPLES: [Intrinsic; 3] = [
         Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn),
-        Intrinsic::Base64Compile,
-        Intrinsic::SymbolDispose,
+        Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
+        Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
     ];
 
     fn render_with(runtime: &dyn IntrinsicRuntime, intrinsic: Intrinsic) -> String {

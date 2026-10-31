@@ -84,7 +84,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Threads (WASI P3)', 
         assert.include(source, 'const { task, threadID } = createNewCurrentImplicitThread({');
         assert.match(
             source,
-            /_withGlobalCurrentThreadMeta\(\{\s*taskID: task\.id\(\),\s*threadID,\s*componentIdx: task\.componentIdx\(\),\s*fn: \(\) => /,
+            /_withGlobalCurrentThreadMeta\((?:CURRENT_TASK_META, )?\{\s*taskID: task\.id\(\),\s*threadID,\s*componentIdx: task\.componentIdx\(\),\s*fn: \(\) => /,
         );
     });
 

@@ -419,7 +419,7 @@ impl AsyncTaskIntrinsic {
                 let current_thread_get_fn = render_args.require_intrinsic(Self::GetCurrentThread);
                 let type_check_i32 = render_args.require_intrinsic(Intrinsic::TypeCheckValidI32);
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 uwriteln!(
                     output,
@@ -433,7 +433,7 @@ impl AsyncTaskIntrinsic {
                           // adapters have no component index; post-return also runs
                           // after the callee register is cleared. Both use the executing
                           // task, whose context FACT temporarily saves and restores.
-                          let currentThreadMeta = {get_global_current_thread_meta_fn}(ctx.componentIdx);
+                          let currentThreadMeta = {get_global_current_thread_meta_fn}ctx.componentIdx);
                           let threadMeta = currentThreadMeta
                               ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                               : undefined;
@@ -442,7 +442,7 @@ impl AsyncTaskIntrinsic {
                           // per-component register can therefore name a task which is
                           // no longer live; fall back to FACT's executing task.
                           if (!threadMeta) {{
-                              currentThreadMeta = {get_global_current_thread_meta_fn}();
+                              currentThreadMeta = {get_global_current_thread_meta_fn});
                               threadMeta = currentThreadMeta
                                   ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                                   : undefined;
@@ -475,7 +475,7 @@ impl AsyncTaskIntrinsic {
                 let context_get_fn = render_args.require_intrinsic(Self::ContextGet);
                 let current_thread_get_fn = render_args.require_intrinsic(Self::GetCurrentThread);
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 uwriteln!(
                     output,
@@ -488,7 +488,7 @@ impl AsyncTaskIntrinsic {
                           // adapters have no component index; post-return also runs
                           // after the callee register is cleared. Both use the executing
                           // task, whose context FACT temporarily saves and restores.
-                          let currentThreadMeta = {get_global_current_thread_meta_fn}(ctx.componentIdx);
+                          let currentThreadMeta = {get_global_current_thread_meta_fn}ctx.componentIdx);
                           let threadMeta = currentThreadMeta
                               ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                               : undefined;
@@ -497,7 +497,7 @@ impl AsyncTaskIntrinsic {
                           // per-component register can therefore name a task which is
                           // no longer live; fall back to FACT's executing task.
                           if (!threadMeta) {{
-                              currentThreadMeta = {get_global_current_thread_meta_fn}();
+                              currentThreadMeta = {get_global_current_thread_meta_fn});
                               threadMeta = currentThreadMeta
                                   ? {current_thread_get_fn}(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
                                   : undefined;
@@ -532,10 +532,10 @@ impl AsyncTaskIntrinsic {
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
                 let with_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
@@ -552,7 +552,7 @@ impl AsyncTaskIntrinsic {
                         const memory = getMemoryFn();
                         let useDirectParams = ctx.useDirectParams;
 
-                        const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                        const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
 
                         const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                         if (!taskMeta) {{ throw new Error('failed to retrieve current task metadata'); }}
@@ -596,7 +596,7 @@ impl AsyncTaskIntrinsic {
                                 returnFnParams: [...params, subtaskCallMetadata.resultPtr],
                             }});
                             const callerTask = task.getParentSubtask().getParentTask();
-                            const res = {with_global_current_thread_meta_fn}({{
+                            const res = {with_global_current_thread_meta_fn}{{
                                 taskID: callerTask.id(),
                                 threadID: subtaskCallMetadata.callerThreadID,
                                 componentIdx: callerTask.componentIdx(),
@@ -724,11 +724,11 @@ impl AsyncTaskIntrinsic {
             Self::ThreadIndex => {
                 let thread_index_fn = self.name();
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 output.push_str(&format!(
                     "
                     function {thread_index_fn}(componentIdx) {{
-                        const meta = {get_global_current_thread_meta_fn}(componentIdx);
+                        const meta = {get_global_current_thread_meta_fn}componentIdx);
                         if (!meta) {{ throw new Error('missing/incomplete global current thread meta for component idx [' + componentIdx + ']'); }}
                         return meta.threadID;
                     }}
@@ -1006,7 +1006,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 // Implements `canon subtask.cancel` -- the *supertask*-side request to
                 // cancel a pending subtask (in contrast to `canon task.cancel`, which is
@@ -1053,7 +1053,7 @@ impl AsyncTaskIntrinsic {
                                 return progress.then(() => {{
                                     if (subtask.isResolved()) {{ return finishCancel(); }}
                                     if (isAsync) {{ return 0xFFFFFFFF; }}
-                                    const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                                    const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
                                     const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                                     if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
                                     return taskMeta.task.waitUntil({{
@@ -1063,7 +1063,7 @@ impl AsyncTaskIntrinsic {
                                 }});
                             }}
 
-                            const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                            const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
                             const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                             if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
                             return taskMeta.task.waitUntil({{
@@ -1115,7 +1115,7 @@ impl AsyncTaskIntrinsic {
                                 // suspending half must finish the synchronous cancel.
                                 if (!slowOnly) {{ return 0xFFFFFFFE; }}
 
-                                const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                                const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
                                 const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                                 if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
                                 return taskMeta.task.waitUntil({{
@@ -1138,7 +1138,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 output.push_str(&format!("
                     function {task_cancel_fn}(componentIdx) {{
@@ -1147,7 +1147,7 @@ impl AsyncTaskIntrinsic {
                         const state = {get_or_create_async_state_fn}(componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
-                        const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                        const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
 
                         const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                         if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
@@ -1332,11 +1332,11 @@ impl AsyncTaskIntrinsic {
                 let fn_name = self.name();
                 let get_current_thread_fn = render_args.require_intrinsic(Self::GetCurrentThread);
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 output.push_str(&format!(
                     r#"
                     function {fn_name}(componentIdx) {{
-                        const meta = {get_global_current_thread_meta_fn}(componentIdx);
+                        const meta = {get_global_current_thread_meta_fn}componentIdx);
                         if (!meta) {{
                             throw new Error(`missing/incomplete global current thread meta for component idx [${{componentIdx}}]`);
                         }}
@@ -1413,10 +1413,10 @@ impl AsyncTaskIntrinsic {
                 let clear_current_task_fn = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::ClearCurrentThread,
                 ));
-                let with_global_current_thread_meta_async_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
+                let with_global_current_thread_meta_async_fn = render_args
+                    .intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
                 let with_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let post_return_trap_fn = render_args
@@ -1435,7 +1435,7 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 output.push_str(&format!(r#"
                     class {task_class} {{
@@ -1797,14 +1797,14 @@ impl AsyncTaskIntrinsic {
                         runCallbackFn(...args) {{
                             if (!this.#callbackFn) {{ throw new Error('no callback function has been set for task'); }}
                             if (this.#callbackFn._jcoMaySuspend === false) {{
-                                return {with_global_current_thread_meta_fn}({{
+                                return {with_global_current_thread_meta_fn}{{
                                     taskID: this.#id,
                                     threadID: this.defaultThread().id(),
                                     componentIdx: this.#componentIdx,
                                     fn: () => this.#callbackFn.apply(null, args),
                                 }});
                             }}
-                            return {with_global_current_thread_meta_async_fn}({{
+                            return {with_global_current_thread_meta_async_fn}{{
                                 taskID: this.#id,
                                 threadID: this.defaultThread().id(),
                                 componentIdx: this.#componentIdx,
@@ -2197,7 +2197,7 @@ impl AsyncTaskIntrinsic {
                             // Entry can wait on backpressure before a guest register window exists.
                             const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
                             const thread = this.#entered
-                                ? cstate.threads.get({get_global_current_thread_meta_fn}(this.#componentIdx).threadID)
+                                ? cstate.threads.get({get_global_current_thread_meta_fn}this.#componentIdx).threadID)
                                 : this.defaultThread();
                             if (!thread || thread.task() !== this) {{ throw new Error('invalid current thread for wait'); }}
                             // Suspending a core Wasm stack retains the task's exclusive
@@ -2326,7 +2326,7 @@ impl AsyncTaskIntrinsic {
                                         subtaskID: this.#parentSubtask.id(),
                                     }});
                                     const callerTask = this.#parentSubtask.getParentTask();
-                                    {with_global_current_thread_meta_fn}({{
+                                    {with_global_current_thread_meta_fn}{{
                                         taskID: callerTask.id(),
                                         threadID: meta.callerThreadID,
                                         componentIdx: callerTask.componentIdx(),
@@ -2342,7 +2342,7 @@ impl AsyncTaskIntrinsic {
                                     taskID: this.#id,
                                 }});
                                 try {{
-                                    {with_global_current_thread_meta_fn}({{
+                                    {with_global_current_thread_meta_fn}{{
                                         taskID: this.#id,
                                         threadID: this.defaultThread().id(),
                                         componentIdx: this.#componentIdx,
@@ -2580,8 +2580,8 @@ impl AsyncTaskIntrinsic {
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-                let with_global_current_thread_meta_async_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
+                let with_global_current_thread_meta_async_fn = render_args
+                    .intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
 
                 let record_trap_fn = render_args
                     .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::RecordTrap));
@@ -2690,7 +2690,7 @@ impl AsyncTaskIntrinsic {
                             const startFn = this.#startFn;
                             this.#startFn = null;
 
-                            {with_global_current_thread_meta_async_fn}({{
+                            {with_global_current_thread_meta_async_fn}{{
                                 threadID: this.#id,
                                 taskID: this.#task.id(),
                                 componentIdx: this.#componentIdx,
@@ -2728,8 +2728,9 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let lookup_memories_for_component =
-                    render_args.require_intrinsic(Intrinsic::LookupMemoriesForComponent);
-                let dispose_host_value = render_args.require_intrinsic(Intrinsic::DisposeHostValue);
+                    render_args.intrinsic_call_prefix(Intrinsic::LookupMemoriesForComponent);
+                let dispose_host_value =
+                    render_args.intrinsic_call_prefix(Intrinsic::DisposeHostValue);
 
                 output.push_str(&format!(r#"
                     class {subtask_class} {{
@@ -2945,7 +2946,7 @@ impl AsyncTaskIntrinsic {
                             const pending = this.#hostPendingResult;
                             if (!pending) {{ return; }}
                             this.#hostPendingResult = null;
-                            {dispose_host_value}(pending);
+                            {dispose_host_value}pending);
                         }}
 
                         registerOnStartHandler(f) {{
@@ -3062,7 +3063,7 @@ impl AsyncTaskIntrinsic {
 
                             // TODO(fix): we should be able to easily have the caller's meomry
                             // to lower into here, but it's not present in PrepareCall
-                            const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}({{ componentIdx: this.#parentTask?.componentIdx() }})[0];
+                            const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}{{ componentIdx: this.#parentTask?.componentIdx() }})[0];
                             // NOTE: cancelled resolutions carry no value, so nothing is lowered
                             const returned = this.#state === {subtask_class}.State.RETURNED;
                             if (returned && callMetadata && !callMetadata.returnFn && (this.isAsync || callMetadata.funcTypeIsAsync) && callMetadata.resultPtr && memory) {{
@@ -3495,11 +3496,11 @@ impl AsyncTaskIntrinsic {
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
-                let with_global_current_thread_meta_async_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                let with_global_current_thread_meta_async_fn = render_args
+                    .intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
                 let with_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let check_may_leave_fn = render_args
@@ -3529,7 +3530,7 @@ impl AsyncTaskIntrinsic {
 
                         {check_may_leave_fn}(componentIdx);
 
-                        const {{ taskID, threadID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                        const {{ taskID, threadID }} = {get_global_current_thread_meta_fn}componentIdx);
 
                         const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                         if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
@@ -3595,7 +3596,7 @@ impl AsyncTaskIntrinsic {
                             const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}();
                             queueMicrotask(async () => {{
                                 try {{
-                                    await {with_global_current_thread_meta_async_fn}({{
+                                    await {with_global_current_thread_meta_async_fn}{{
                                         taskID: task.id(),
                                         threadID,
                                         componentIdx: task.componentIdx(),
@@ -3702,7 +3703,7 @@ impl AsyncTaskIntrinsic {
                         if (isAsync) {{
                             try {{
                                 if (!subtask.cancellationRequested() && task.taskState() !== {task_class}.State.CANCEL_PENDING) {{
-                                    const pending = {with_global_current_thread_meta_fn}({{
+                                    const pending = {with_global_current_thread_meta_fn}{{
                                         taskID: task.id(),
                                         threadID,
                                         componentIdx: task.componentIdx(),
@@ -3733,7 +3734,7 @@ impl AsyncTaskIntrinsic {
                                 // must still run so the guest can finish its cleanup.
                                 if (subtask.cancellationRequested() || task.taskState() === {task_class}.State.CANCEL_PENDING) {{ return; }}
                                 {debug_log_fn}('[{lower_import_fn}()] calling lowered import', {{ importFn, params }});
-                                await {with_global_current_thread_meta_async_fn}({{
+                                await {with_global_current_thread_meta_async_fn}{{
                                     taskID: task.id(),
                                     threadID,
                                     componentIdx: task.componentIdx(),
@@ -3796,11 +3797,11 @@ impl AsyncTaskIntrinsic {
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 let set_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::SetGlobalCurrentThreadMetaFn);
                 let clear_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::ClearGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::ClearGlobalCurrentThreadMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let check_may_leave_fn = render_args
@@ -3830,7 +3831,7 @@ impl AsyncTaskIntrinsic {
 
                         {check_may_leave_fn}(componentIdx);
 
-                        const meta = {get_global_current_thread_meta_fn}(componentIdx);
+                        const meta = {get_global_current_thread_meta_fn}componentIdx);
                         let taskMeta = meta && {current_task_get_fn}(componentIdx, meta.taskID);
                         let createdTask;
 
@@ -3859,14 +3860,14 @@ impl AsyncTaskIntrinsic {
 
                             // Since we're managing the task creation ourselves we must clear ourselves
                             createdTask.registerOnResolveHandler(() => {{
-                                {clear_global_current_thread_meta_fn}({{
+                                {clear_global_current_thread_meta_fn}{{
                                     taskID: task.id(),
                                     threadID: newThreadID,
                                     componentIdx: task.componentIdx(),
                                 }});
                             }});
 
-                            {set_global_current_thread_meta_fn}({{
+                            {set_global_current_thread_meta_fn}{{
                                 componentIdx,
                                 taskID: newTaskID,
                                 threadID: newThreadID,
@@ -4069,7 +4070,7 @@ impl AsyncTaskIntrinsic {
                 let get_current_task_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let get_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 let create_new_current_thread_fn = render_args.require_intrinsic(
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentImplicitThread),
                 );
@@ -4077,7 +4078,7 @@ impl AsyncTaskIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let set_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::SetGlobalCurrentThreadMetaFn);
                 let symmetric_sync_guest_call_stack =
                     render_args.require_intrinsic(Self::SymmetricSyncGuestCallStack);
                 let current_task_may_block =
@@ -4105,7 +4106,7 @@ impl AsyncTaskIntrinsic {
                             return 0;
                         }}
 
-                        const callerThreadMeta = {get_global_current_thread_meta_fn}(callerComponentIdx);
+                        const callerThreadMeta = {get_global_current_thread_meta_fn}callerComponentIdx);
                         if (!callerThreadMeta) {{ throw new Error('missing current caller thread metadata'); }}
                         const callerTaskMeta = {get_current_task_fn}(callerComponentIdx, callerThreadMeta.taskID);
                         if (!callerTaskMeta) {{ throw new Error('missing current caller task metadata'); }}
@@ -4156,7 +4157,7 @@ impl AsyncTaskIntrinsic {
                         subtask.onStart();
 
                         const finishEnter = () => {{
-                            {set_global_current_thread_meta_fn}({{
+                            {set_global_current_thread_meta_fn}{{
                                 threadID: newThreadID,
                                 taskID: newTask.id(),
                                 componentIdx: newTask.componentIdx(),
@@ -4211,7 +4212,7 @@ impl AsyncTaskIntrinsic {
                 let get_current_task_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let set_global_current_thread_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentThreadMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::SetGlobalCurrentThreadMetaFn);
                 let symmetric_sync_guest_call_stack =
                     render_args.require_intrinsic(Self::SymmetricSyncGuestCallStack);
                 let current_task_may_block =
@@ -4250,7 +4251,7 @@ impl AsyncTaskIntrinsic {
                         // calls into the same component: an enclosing synchronous
                         // metadata wrapper may already have restored its task before
                         // this exit trampoline runs.
-                        {set_global_current_thread_meta_fn}({{
+                        {set_global_current_thread_meta_fn}{{
                             taskID: callerTask.id(),
                             threadID: callerThreadID,
                             componentIdx: callerTask.componentIdx(),

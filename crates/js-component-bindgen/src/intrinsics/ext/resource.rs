@@ -99,12 +99,10 @@ pub(crate) fn discover_inline_dependencies(
     };
     match intrinsic {
         Intrinsic::Resource(R::ResourceTransferBorrow | R::ResourceTransferBorrowValidLifting) => {
-            args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
             args.require_intrinsic(Intrinsic::AsyncTask(T::GetCurrentTask));
         }
         Intrinsic::Resource(R::ResourceDestructorCall) => {
             args.require_intrinsic(Intrinsic::AsyncTask(T::CreateNewCurrentImplicitThread));
-            args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
         }
         _ => {}
     }
