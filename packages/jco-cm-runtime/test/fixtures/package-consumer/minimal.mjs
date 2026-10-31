@@ -3,6 +3,8 @@ for (const key of [
     'TextEncoder',
     'TextDecoder',
     'DataView',
+    'Proxy',
+    'Symbol',
     'Int32Array',
     'Float32Array',
     'BigInt64Array',
@@ -19,6 +21,10 @@ const { tableGet } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/r
 const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
 const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
 const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
+const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
+if (initializeWebIdlProxyCache().proxy !== undefined) {
+    throw new Error('eager WebIDL proxy');
+}
 if (validateGuestChar(0x1f680) !== '🚀' || !utf16ValidatingCopy(new Uint16Array([97]), new Uint16Array(1))) {
     throw new Error('string capability leak');
 }

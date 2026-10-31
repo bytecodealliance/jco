@@ -4,6 +4,7 @@ import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource'
 import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
+import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
 import * as custom from './provider.js';
 import type {
     ResourceModule,
@@ -13,6 +14,12 @@ import type {
 const defaultModule: ResourceModule = resource;
 const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
 const helpers: RuntimeModuleContracts['intrinsics/js-helper'] = jsHelper;
+const webIdlModule: RuntimeModuleContracts['intrinsics/webidl'] = webidl;
+const webIdlCache = custom.initializeWebIdlProxyCache();
+const globalProxy = webIdlModule.globalThisIdlProxy(webIdlCache);
+if (globalProxy !== webIdlModule.globalThisIdlProxy(webIdlCache) || Reflect.get(globalProxy, 'URL') !== URL) {
+    throw new Error('WebIDL consumer failed');
+}
 const strings: RuntimeModuleContracts['intrinsics/string'] = string;
 const encoder = strings.initializeUtf8Encoder();
 const stringMemory = { buffer: new ArrayBuffer(8) };

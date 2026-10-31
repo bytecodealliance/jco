@@ -9,8 +9,12 @@ export async function main(moduleUrl, outputPath) {
 
     // Install instrumentation only while this probe runs.
     try {
+        // Instrumentation wrappers themselves must not increment the Proxy counter.
+        const InstrumentationProxy = globalThis.Proxy;
         for (const key of [
             'Map',
+            'Proxy',
+            'Symbol',
             'DataView',
             'ArrayBuffer',
             'Uint8Array',
@@ -25,7 +29,11 @@ export async function main(moduleUrl, outputPath) {
             const original = globalThis[key];
             originals[key] = original;
             counts[key] = 0;
-            globalThis[key] = new Proxy(original, {
+            globalThis[key] = new InstrumentationProxy(original, {
+                apply(target, receiver, args) {
+                    counts[key]++;
+                    return Reflect.apply(target, receiver, args);
+                },
                 construct(target, args, receiver) {
                     counts[key]++;
                     return Reflect.construct(target, args, receiver);

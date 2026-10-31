@@ -1,3 +1,4 @@
+import { testWebidlIntrinsics } from './webidl.mjs';
 import { testStringIntrinsics } from './string.mjs';
 import { testJsHelperIntrinsics } from './js-helper.mjs';
 import { testConversionIntrinsics } from './conversion.mjs';
@@ -11,6 +12,7 @@ export const DEFAULT_RUNTIME_BASE = '@bytecodealliance/jco-cm-runtime';
 const TEST_GROUPS = new Map([
     ['runtime', testRuntimeExports],
     ['resource', testResourceIntrinsics],
+    ['webidl', testWebidlIntrinsics],
     ['string', testStringIntrinsics],
     ['js-helper', testJsHelperIntrinsics],
     ['conversion', testConversionIntrinsics],
