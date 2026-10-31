@@ -57,7 +57,7 @@ export function create(options: ComponentTestOptions = {}) {
         backpressureDec: (idx: number) => operations.backpressureDec(lookup, idx),
         setAllError: () => operations.setAllError(asyncState),
     };
-    return { core, resource, component, lookup };
+    return { core, resource, component, lookup, traps: record };
 }
 type ComponentIntrinsics = ReturnType<typeof create>['component'];
 export function clearDeadlockCheck(component: ComponentIntrinsics) {

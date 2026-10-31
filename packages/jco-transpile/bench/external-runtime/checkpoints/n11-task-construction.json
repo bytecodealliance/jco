@@ -1,0 +1,969 @@
+{
+    "schema": 1,
+    "kind": "independent task construction diagnostics; separate from final smoke timing",
+    "protocol": {
+        "pairs": 5,
+        "processOrder": "alternating per pair",
+        "components": ["adder.component.wasm", "async-flat-param-adder.wasm"],
+        "options": "existing test/perf.ts options: strict/minify/validLiftingOptimization,async instantiation",
+        "samples": {
+            "sync": 5,
+            "nativeCallsPerSample": 1000000,
+            "syncCallsPerSample": 100000,
+            "asyncCallsPerSample": 1000
+        },
+        "warmup": {
+            "native": 10000,
+            "module": 10000,
+            "sync": 10000,
+            "async": 100
+        },
+        "flags": ["--expose-gc", "--experimental-wasm-jspi"]
+    },
+    "originalNamedVsInline": {
+        "raw": [
+            {
+                "mode": "inline",
+                "processIndex": 0,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.998743,
+                    "samples": [9.998743, 9.796383, 10.076528, 9.925067, 10.264278]
+                },
+                "module": {
+                    "median": 13.957556,
+                    "samples": [15.309286, 14.103229, 13.478711, 13.957556, 13.140653]
+                },
+                "syncComponent": {
+                    "median": 5523.84338,
+                    "samples": [6238.66318, 5904.65996, 5523.84338, 5490.5141, 5312.58612]
+                },
+                "asyncComponent": {
+                    "median": 37767.08,
+                    "samples": [41355.058, 37767.08, 37505.788, 35478.044, 40714.133]
+                },
+                "ratios": {
+                    "module": 1.395931068535315,
+                    "sync": 552.4537814403271,
+                    "async": 3777.1827918769395
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 0,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.854759,
+                    "samples": [9.539087, 9.854759, 10.458923, 10.172102, 9.540005]
+                },
+                "module": {
+                    "median": 12.662504,
+                    "samples": [13.763163, 12.247512, 12.662504, 12.439513, 12.672063]
+                },
+                "syncComponent": {
+                    "median": 9002.07686,
+                    "samples": [9078.54489, 8282.32141, 9002.07686, 9270.89282, 8615.40232]
+                },
+                "asyncComponent": {
+                    "median": 35818.789,
+                    "samples": [46864.227, 35818.789, 35959.073, 34604.725, 35393.105]
+                },
+                "ratios": {
+                    "module": 1.2849125990803023,
+                    "sync": 913.4750895481056,
+                    "async": 3634.6691989119163
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 1,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.330933,
+                    "samples": [9.595368, 8.984879, 9.330933, 9.034062, 10.063876]
+                },
+                "module": {
+                    "median": 14.059704,
+                    "samples": [15.774291, 14.059704, 14.342896, 14.03254, 13.409038]
+                },
+                "syncComponent": {
+                    "median": 8905.82741,
+                    "samples": [10226.80133, 9364.7979, 8883.24086, 8905.82741, 8741.82537]
+                },
+                "asyncComponent": {
+                    "median": 40747.683,
+                    "samples": [44447.337, 40812.527, 34843.042, 40747.683, 35407.341]
+                },
+                "ratios": {
+                    "module": 1.5067843697945318,
+                    "sync": 954.4412557672422,
+                    "async": 4366.946263573
+                }
+            },
+            {
+                "mode": "inline",
+                "processIndex": 1,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.744747,
+                    "samples": [8.507782, 8.628792, 8.744747, 8.92471, 10.462794]
+                },
+                "module": {
+                    "median": 12.39225,
+                    "samples": [13.650398, 12.377055, 12.695896, 12.39225, 12.0149]
+                },
+                "syncComponent": {
+                    "median": 5583.50946,
+                    "samples": [5800.82449, 5583.50946, 5795.93704, 5517.08705, 5544.11359]
+                },
+                "asyncComponent": {
+                    "median": 37680.375,
+                    "samples": [48568.721, 38361.456, 37433.59, 35992.262, 37680.375]
+                },
+                "ratios": {
+                    "module": 1.4171078934587815,
+                    "sync": 638.4986849819669,
+                    "async": 4308.915398009799
+                }
+            },
+            {
+                "mode": "inline",
+                "processIndex": 2,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.586372,
+                    "samples": [8.425036, 8.567767, 8.712252, 8.616267, 8.586372]
+                },
+                "module": {
+                    "median": 12.09333,
+                    "samples": [13.079506, 12.112398, 12.09333, 11.941297, 11.551422]
+                },
+                "syncComponent": {
+                    "median": 5628.0072,
+                    "samples": [5628.0072, 6423.62058, 5953.89227, 5599.42131, 5529.30647]
+                },
+                "asyncComponent": {
+                    "median": 33793.749,
+                    "samples": [40780.73, 34622.308, 33793.749, 32966.098, 33380.538]
+                },
+                "ratios": {
+                    "module": 1.4084330378418264,
+                    "sync": 655.4581143234884,
+                    "async": 3935.742476566354
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 2,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.691298,
+                    "samples": [9.122491, 9.26296, 9.691298, 10.020012, 9.931344]
+                },
+                "module": {
+                    "median": 13.074321,
+                    "samples": [14.129107, 13.42364, 13.074321, 12.841647, 12.873377]
+                },
+                "syncComponent": {
+                    "median": 9290.76911,
+                    "samples": [10198.24398, 9535.22869, 9290.76911, 9058.00089, 9229.97551]
+                },
+                "asyncComponent": {
+                    "median": 40059.933,
+                    "samples": [49301.321, 40059.933, 38758.402, 39578.634, 40151.375]
+                },
+                "ratios": {
+                    "module": 1.3490784206615047,
+                    "sync": 958.6712853118333,
+                    "async": 4133.598306439447
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 3,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 7.79987,
+                    "samples": [7.756206, 7.783517, 7.79987, 8.122567, 8.206782]
+                },
+                "module": {
+                    "median": 11.067644,
+                    "samples": [11.952735, 10.794222, 10.848709, 11.067644, 12.325467]
+                },
+                "syncComponent": {
+                    "median": 8934.37206,
+                    "samples": [8934.37206, 10399.82792, 8779.92538, 8459.63728, 9436.55303]
+                },
+                "asyncComponent": {
+                    "median": 39347.392,
+                    "samples": [42316.527, 39055.866, 39347.392, 37924.164, 48599.178]
+                },
+                "ratios": {
+                    "module": 1.4189523671548372,
+                    "sync": 1145.451406241386,
+                    "async": 5044.621512922651
+                }
+            },
+            {
+                "mode": "inline",
+                "processIndex": 3,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.899328,
+                    "samples": [9.061582, 9.659336, 9.899328, 11.413825, 10.823662]
+                },
+                "module": {
+                    "median": 14.176293,
+                    "samples": [15.020175, 13.615535, 14.768472, 13.424146, 14.176293]
+                },
+                "syncComponent": {
+                    "median": 6302.51008,
+                    "samples": [6492.46747, 6302.51008, 6477.90894, 6238.99516, 6256.6281]
+                },
+                "asyncComponent": {
+                    "median": 38697.3,
+                    "samples": [47551.376, 38697.3, 42019.289, 38025.638, 36630.407]
+                },
+                "ratios": {
+                    "module": 1.432045993425008,
+                    "sync": 636.6603955339191,
+                    "async": 3909.0835256696214
+                }
+            },
+            {
+                "mode": "inline",
+                "processIndex": 4,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.301018,
+                    "samples": [8.718896, 8.773389, 9.301018, 9.459445, 9.368605]
+                },
+                "module": {
+                    "median": 14.735736,
+                    "samples": [16.08381, 15.211659, 14.735736, 14.302974, 14.054512]
+                },
+                "syncComponent": {
+                    "median": 6254.59573,
+                    "samples": [6385.89592, 6254.59573, 6334.45239, 5755.13513, 5916.61181]
+                },
+                "asyncComponent": {
+                    "median": 38505.933,
+                    "samples": [46654.109, 39262.013, 38009.919, 38100.613, 38505.933]
+                },
+                "ratios": {
+                    "module": 1.5843143191422704,
+                    "sync": 672.4635658161291,
+                    "async": 4139.9697323454275
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 4,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.555244,
+                    "samples": [9.049168, 8.439285, 8.136736, 8.689477, 8.555244]
+                },
+                "module": {
+                    "median": 11.822505,
+                    "samples": [12.490739, 11.822505, 11.618761, 11.714165, 12.154495]
+                },
+                "syncComponent": {
+                    "median": 8759.86757,
+                    "samples": [9116.12658, 8146.48887, 9541.02416, 8644.4558, 8759.86757]
+                },
+                "asyncComponent": {
+                    "median": 35613.714,
+                    "samples": [43185.096, 35613.714, 35903.627, 35272.727, 34466.007]
+                },
+                "ratios": {
+                    "module": 1.3819015565190191,
+                    "sync": 1023.9179116340808,
+                    "async": 4162.793486661514
+                }
+            }
+        ],
+        "analysis": {
+            "pairs": 5,
+            "ratios": {
+                "native": {
+                    "median": 0.9855997898935897,
+                    "range": [0.7879191395617965, 1.128683686194821],
+                    "ci95": [0.7879191395617965, 1.128683686194821]
+                },
+                "module": {
+                    "median": 0.9072149880681116,
+                    "range": [0.7807149584168442, 1.1345561943956908],
+                    "ci95": [0.7807149584168442, 1.1345561943956908]
+                },
+                "syncComponent": {
+                    "median": 1.5950232508426698,
+                    "range": [1.4005489640175353, 1.650809741323714],
+                    "ci95": [1.4005489640175353, 1.650809741323714]
+                },
+                "asyncComponent": {
+                    "median": 1.0167994149462622,
+                    "range": [0.9248890034686343, 1.1854243517048078],
+                    "ci95": [0.9248890034686343, 1.1854243517048078]
+                }
+            },
+            "absolute": {
+                "native": {
+                    "inline": 9.301018,
+                    "external": 9.330933
+                },
+                "module": {
+                    "inline": 13.957556,
+                    "external": 12.662504
+                },
+                "syncComponent": {
+                    "inline": 5628.0072,
+                    "external": 8934.37206
+                },
+                "asyncComponent": {
+                    "inline": 37767.08,
+                    "external": 39347.392
+                }
+            },
+            "nativeBudgetFailures": [
+                {
+                    "mode": "external",
+                    "index": 3,
+                    "ratio": 1145.451406241386
+                },
+                {
+                    "mode": "external",
+                    "index": 4,
+                    "ratio": 1023.9179116340808
+                }
+            ]
+        }
+    },
+    "sameNamedSingleVsSecondStore": {
+        "raw": [
+            {
+                "mode": "external",
+                "processIndex": 0,
+                "warmSecond": false,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.447814,
+                    "samples": [9.363392, 16.268345, 9.333207, 9.447814, 10.97503]
+                },
+                "module": {
+                    "median": 12.404497,
+                    "samples": [12.325247, 11.676423, 20.685319, 12.838371, 12.404497]
+                },
+                "syncComponent": {
+                    "median": 5470.83109,
+                    "samples": [5549.86952, 5470.83109, 5298.5898, 5572.79207, 5326.25989]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.312948900137111,
+                    "sync": 579.0578741283433,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 0,
+                "warmSecond": true,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 7.970185,
+                    "samples": [7.792752, 7.81257, 7.970185, 8.103056, 8.179164]
+                },
+                "module": {
+                    "median": 11.241843,
+                    "samples": [11.844983, 11.241843, 11.913608, 11.198207, 11.205478]
+                },
+                "syncComponent": {
+                    "median": 8161.08128,
+                    "samples": [8887.31784, 8238.42379, 8161.08128, 7860.17356, 7856.47483]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.410487084051374,
+                    "sync": 1023.9512984955808,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 1,
+                "warmSecond": true,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.941825,
+                    "samples": [9.480768, 9.473746, 9.941825, 10.613909, 10.569734]
+                },
+                "module": {
+                    "median": 13.814682,
+                    "samples": [13.814682, 13.550451, 14.176379, 14.162016, 13.107845]
+                },
+                "syncComponent": {
+                    "median": 8531.64579,
+                    "samples": [9472.39048, 8432.46472, 8749.52155, 8531.64579, 8425.49513]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.3895519182846208,
+                    "sync": 858.1569068053401,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 1,
+                "warmSecond": false,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.94717,
+                    "samples": [9.795477, 10.417726, 8.94717, 8.487046, 8.48998]
+                },
+                "module": {
+                    "median": 12.806173,
+                    "samples": [12.806173, 12.570114, 18.54223, 19.365793, 12.76251]
+                },
+                "syncComponent": {
+                    "median": 5535.31952,
+                    "samples": [5625.08781, 5439.95875, 5535.31952, 5561.46675, 5441.592]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.4313099002254344,
+                    "sync": 618.6670779699056,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 2,
+                "warmSecond": false,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.899838,
+                    "samples": [9.812211, 9.938518, 9.897459, 9.899838, 10.931768]
+                },
+                "module": {
+                    "median": 13.322636,
+                    "samples": [13.312292, 13.083303, 13.322636, 13.450171, 13.424478]
+                },
+                "syncComponent": {
+                    "median": 5372.83015,
+                    "samples": [5562.42967, 5338.4542, 5415.43059, 5304.41046, 5372.83015]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.3457428293271059,
+                    "sync": 542.718997017931,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 2,
+                "warmSecond": true,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.558813,
+                    "samples": [8.558813, 8.171163, 8.243042, 8.582318, 8.575736]
+                },
+                "module": {
+                    "median": 11.15141,
+                    "samples": [12.416557, 11.058781, 11.24013, 11.093101, 11.15141]
+                },
+                "syncComponent": {
+                    "median": 9242.36867,
+                    "samples": [9242.36867, 9387.93726, 9753.01099, 8978.20712, 9111.00283]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.302915486060976,
+                    "sync": 1079.8657091818689,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 3,
+                "warmSecond": true,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 10.802504,
+                    "samples": [10.05451, 10.59982, 11.248496, 11.171951, 10.802504]
+                },
+                "module": {
+                    "median": 14.053598,
+                    "samples": [14.277214, 13.804929, 14.053598, 14.072111, 13.781234]
+                },
+                "syncComponent": {
+                    "median": 9110.57913,
+                    "samples": [9954.58726, 9222.67431, 9110.57913, 8849.19892, 8881.93992]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.300957444681344,
+                    "sync": 843.376603239397,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 3,
+                "warmSecond": false,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 10.22186,
+                    "samples": [10.313076, 10.22186, 10.281951, 10.15402, 10.163597]
+                },
+                "module": {
+                    "median": 13.119188,
+                    "samples": [13.119188, 13.187082, 13.148584, 12.967734, 12.550834]
+                },
+                "syncComponent": {
+                    "median": 6023.74611,
+                    "samples": [5765.59102, 6010.7487, 6195.78625, 6163.85494, 6023.74611]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.2834443046568824,
+                    "sync": 589.3003924921687,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 4,
+                "warmSecond": false,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.018634,
+                    "samples": [8.928394, 9.108438, 9.018634, 9.000877, 9.106398]
+                },
+                "module": {
+                    "median": 12.228516,
+                    "samples": [13.016875, 12.09645, 11.781604, 12.228516, 12.245668]
+                },
+                "syncComponent": {
+                    "median": 5489.73784,
+                    "samples": [5512.1725, 5583.2148, 5485.66586, 5434.18317, 5489.73784]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.3559166499050743,
+                    "sync": 608.7105696938139,
+                    "async": null
+                }
+            },
+            {
+                "mode": "external",
+                "processIndex": 4,
+                "warmSecond": true,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 10.122654,
+                    "samples": [9.504021, 10.108638, 10.122654, 10.203702, 10.292075]
+                },
+                "module": {
+                    "median": 12.916073,
+                    "samples": [13.162769, 12.84519, 12.916073, 13.536746, 12.497748]
+                },
+                "syncComponent": {
+                    "median": 8933.55679,
+                    "samples": [9358.09375, 8933.55679, 9090.35932, 8833.44623, 8750.84935]
+                },
+                "asyncComponent": null,
+                "ratios": {
+                    "module": 1.2759571748673817,
+                    "sync": 882.5310822636039,
+                    "async": null
+                }
+            }
+        ],
+        "analysis": {
+            "sameFrozenNamedInputs": true,
+            "onlyChange": "instantiate and warm second async component before sync call measurements",
+            "singleNs": 5489.73784,
+            "secondNs": 8933.55679,
+            "ratio": {
+                "median": 1.5413104445323873,
+                "range": [1.491744333857692, 1.7202048849431804],
+                "ci95": [1.491744333857692, 1.7202048849431804]
+            }
+        }
+    },
+    "privateRecordBeforeAfter": {
+        "raw": [
+            {
+                "mode": "before",
+                "processIndex": 0,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 10.018254,
+                    "samples": [10.542624, 9.500585, 10.954682, 10.018254, 9.87757]
+                },
+                "module": {
+                    "median": 15.497314,
+                    "samples": [18.602838, 16.847951, 15.497314, 13.545696, 14.127336]
+                },
+                "syncComponent": {
+                    "median": 9910.98028,
+                    "samples": [10018.83392, 8864.30224, 8874.01511, 10681.2105, 9910.98028]
+                },
+                "asyncComponent": {
+                    "median": 40954.83,
+                    "samples": [48465.349, 45084.715, 40954.83, 40255.933, 40660.088]
+                },
+                "ratios": {
+                    "module": 1.5469076747305468,
+                    "sync": 989.2921740654608,
+                    "async": 4088.020726964998
+                }
+            },
+            {
+                "mode": "after",
+                "processIndex": 0,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 11.866595,
+                    "samples": [10.432893, 11.255485, 11.967038, 12.122797, 11.866595]
+                },
+                "module": {
+                    "median": 14.615292,
+                    "samples": [15.366189, 14.437974, 14.770258, 14.580157, 14.615292]
+                },
+                "syncComponent": {
+                    "median": 7508.40288,
+                    "samples": [7852.25596, 7615.45279, 7506.70459, 7358.92526, 7508.40288]
+                },
+                "asyncComponent": {
+                    "median": 33563.699,
+                    "samples": [38973.403, 33660.955, 33563.699, 32494.727, 31846.149]
+                },
+                "ratios": {
+                    "module": 1.2316331685711024,
+                    "sync": 632.7344010645007,
+                    "async": 2828.4186828656407
+                }
+            },
+            {
+                "mode": "after",
+                "processIndex": 1,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.171357,
+                    "samples": [8.301932, 8.960148, 9.177989, 9.188131, 9.171357]
+                },
+                "module": {
+                    "median": 12.987182,
+                    "samples": [13.183209, 12.412207, 12.987182, 13.126717, 12.963031]
+                },
+                "syncComponent": {
+                    "median": 6731.21899,
+                    "samples": [7259.83215, 6939.77952, 6648.29354, 6731.21899, 6599.78168]
+                },
+                "asyncComponent": {
+                    "median": 29661.067,
+                    "samples": [33096.406, 28707.213, 29892.717, 29472.022, 29661.067]
+                },
+                "ratios": {
+                    "module": 1.4160589321732868,
+                    "sync": 733.9392622051458,
+                    "async": 3234.097963910902
+                }
+            },
+            {
+                "mode": "before",
+                "processIndex": 1,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.873651,
+                    "samples": [8.669329, 8.733149, 8.873651, 9.063858, 8.937743]
+                },
+                "module": {
+                    "median": 14.634524,
+                    "samples": [15.343815, 14.747647, 14.634524, 14.571331, 14.457726]
+                },
+                "syncComponent": {
+                    "median": 9163.19665,
+                    "samples": [9810.93599, 9288.02258, 9163.19665, 9048.80076, 9020.10388]
+                },
+                "asyncComponent": {
+                    "median": 36390.225,
+                    "samples": [42649.438, 36019.756, 36390.225, 36586.53, 35572.273]
+                },
+                "ratios": {
+                    "module": 1.6492111307961064,
+                    "sync": 1032.62982170473,
+                    "async": 4100.930383671839
+                }
+            },
+            {
+                "mode": "before",
+                "processIndex": 2,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 11.695657,
+                    "samples": [11.203421, 11.086759, 11.695657, 11.987917, 11.888212]
+                },
+                "module": {
+                    "median": 14.159156,
+                    "samples": [14.84131, 14.489184, 14.03945, 14.159156, 13.824531]
+                },
+                "syncComponent": {
+                    "median": 10059.58936,
+                    "samples": [10649.42472, 9878.95036, 10059.58936, 9907.15804, 10452.67011]
+                },
+                "asyncComponent": {
+                    "median": 40864.165,
+                    "samples": [47967.918, 41820.537, 40864.165, 39831.802, 40171.598]
+                },
+                "ratios": {
+                    "module": 1.2106336565786768,
+                    "sync": 860.1132334848738,
+                    "async": 3493.960621451193
+                }
+            },
+            {
+                "mode": "after",
+                "processIndex": 2,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 10.764751,
+                    "samples": [9.084291, 10.741715, 11.608249, 10.764751, 11.188066]
+                },
+                "module": {
+                    "median": 13.539402,
+                    "samples": [15.628542, 13.150592, 15.657921, 13.539402, 13.526854]
+                },
+                "syncComponent": {
+                    "median": 6591.15443,
+                    "samples": [7351.80791, 6596.55453, 6559.51485, 6528.24534, 6591.15443]
+                },
+                "asyncComponent": {
+                    "median": 29232.967,
+                    "samples": [34586.857, 28673.782, 29232.967, 29413.475, 28774.419]
+                },
+                "ratios": {
+                    "module": 1.2577533841702424,
+                    "sync": 612.2904682142671,
+                    "async": 2715.619432349155
+                }
+            },
+            {
+                "mode": "after",
+                "processIndex": 3,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 7.789245,
+                    "samples": [7.254732, 7.394235, 7.789245, 7.966424, 8.312439]
+                },
+                "module": {
+                    "median": 11.711411,
+                    "samples": [11.606502, 11.711411, 12.011104, 11.688352, 11.794446]
+                },
+                "syncComponent": {
+                    "median": 7067.68188,
+                    "samples": [7608.57718, 6846.36188, 7067.68188, 7120.03363, 6881.37941]
+                },
+                "asyncComponent": {
+                    "median": 33598.089,
+                    "samples": [40165.007, 34040.762, 33598.089, 32998.266, 33472.546]
+                },
+                "ratios": {
+                    "module": 1.5035360936778852,
+                    "sync": 907.3641771442547,
+                    "async": 4313.39481554374
+                }
+            },
+            {
+                "mode": "before",
+                "processIndex": 3,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.375598,
+                    "samples": [8.171655, 8.331021, 8.375598, 8.689412, 8.744125]
+                },
+                "module": {
+                    "median": 11.963666,
+                    "samples": [13.00322, 12.222376, 11.963666, 11.741354, 11.716126]
+                },
+                "syncComponent": {
+                    "median": 10311.06634,
+                    "samples": [10324.66493, 9764.8576, 10934.0714, 10311.06634, 10092.39888]
+                },
+                "asyncComponent": {
+                    "median": 40494.931,
+                    "samples": [51902.794, 40494.931, 37649.411, 38647.84, 43903.846]
+                },
+                "ratios": {
+                    "module": 1.4283954411374566,
+                    "sync": 1231.0841972119483,
+                    "async": 4834.870417610778
+                }
+            },
+            {
+                "mode": "before",
+                "processIndex": 4,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 9.792598,
+                    "samples": [9.122844, 9.792598, 9.711566, 9.794114, 9.805685]
+                },
+                "module": {
+                    "median": 12.255107,
+                    "samples": [12.860744, 12.16137, 12.397946, 12.201974, 12.255107]
+                },
+                "syncComponent": {
+                    "median": 8533.78341,
+                    "samples": [9165.49415, 8533.78341, 8574.27521, 8437.52767, 8273.32096]
+                },
+                "asyncComponent": {
+                    "median": 38090.774,
+                    "samples": [41814.116, 40113.361, 35524.771, 34880.31, 38090.774]
+                },
+                "ratios": {
+                    "module": 1.2514663626547318,
+                    "sync": 871.4524388727077,
+                    "async": 3889.7516266878306
+                }
+            },
+            {
+                "mode": "after",
+                "processIndex": 4,
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-wasm-jspi"],
+                "native": {
+                    "median": 8.90671,
+                    "samples": [8.218701, 8.629344, 8.954659, 8.90671, 9.082531]
+                },
+                "module": {
+                    "median": 12.463043,
+                    "samples": [13.814219, 12.393473, 12.463043, 13.058809, 11.975173]
+                },
+                "syncComponent": {
+                    "median": 6584.68255,
+                    "samples": [6743.87397, 6515.60209, 6493.17838, 6584.68255, 6967.00455]
+                },
+                "asyncComponent": {
+                    "median": 28547.802,
+                    "samples": [33158.779, 28547.802, 28655.402, 27161.445, 26802.539]
+                },
+                "ratios": {
+                    "module": 1.3992869420919734,
+                    "sync": 739.2945936266029,
+                    "async": 3205.201696249232
+                }
+            }
+        ],
+        "analysis": {
+            "pairs": 5,
+            "axes": {
+                "native": {
+                    "before": 9.792598,
+                    "after": 9.171357,
+                    "ratio": {
+                        "median": 0.9299927002227184,
+                        "range": [0.9095349364897855, 1.1844973185946372],
+                        "ci95": [0.9095349364897855, 1.1844973185946372]
+                    }
+                },
+                "module": {
+                    "before": 14.159156,
+                    "after": 12.987182,
+                    "ratio": {
+                        "median": 0.956229453224472,
+                        "range": [0.887434534939435, 1.0169672937168153],
+                        "ci95": [0.887434534939435, 1.0169672937168153]
+                    }
+                },
+                "syncComponent": {
+                    "before": 9910.98028,
+                    "after": 6731.21899,
+                    "ratio": {
+                        "median": 0.734592877039259,
+                        "range": [0.6552110820953033, 0.7716017894576493],
+                        "ci95": [0.6552110820953033, 0.7716017894576493]
+                    }
+                },
+                "asyncComponent": {
+                    "before": 40494.931,
+                    "after": 29661.067,
+                    "ratio": {
+                        "median": 0.8150833637329805,
+                        "range": [0.7153692483377551, 0.829686288390021],
+                        "ci95": [0.7153692483377551, 0.829686288390021]
+                    }
+                }
+            },
+            "nativeBudgetFailures": [
+                {
+                    "mode": "before",
+                    "index": 1,
+                    "ratio": 1032.62982170473
+                },
+                {
+                    "mode": "before",
+                    "index": 3,
+                    "ratio": 1231.0841972119483
+                }
+            ]
+        }
+    },
+    "semanticAudit": {
+        "fields": 42,
+        "accesses": 248,
+        "initialValuesAndOrderPreserved": true,
+        "originalClassTokensRecovered": true,
+        "normalization": "Whitespace/comments and trailing object commas only; array commas and all other tokens retained",
+        "exclusions": "Physical private slot layout differs; private brand/prototype/constructor identities have independent runtime regression coverage. This does not assert equivalent allocation size.",
+        "beforeSourceSha256": "163ee2611b1bfa4d37b6530c60e39ee770c8e9bb4737049970ffc8fed1646160",
+        "afterSourceSha256": "e9e4bfff8568a6491e4e99c8ff23b8993563872b28754f0c29ff123d0b97b08e",
+        "auditSourceSha256": "44985273dc70736774eecfd14adcd54667c83d4a00b69b5f02240ec5bc1b9764"
+    },
+    "emitterAudit": {
+        "ts6BeforeEmitterMatchesFrozenTS7RuntimeTokens": true,
+        "ts6ExperimentMatchesActualTS7RuntimeTokens": true,
+        "beforeTokens": 13103,
+        "afterTokens": 13629,
+        "normalization": "Parsed syntax tokens, excluding whitespace/comments and trailing object commas only",
+        "meaning": "The isolated layout experiment does not conflate a runtime compiler-emission change with the slot-layout change."
+    },
+    "limitations": [
+        "Not a comparison of N10 against N11; originalNamedVsInline is a current-revision two-mode diagnostic.",
+        "The private record adds one ordinary object per task; constructor traces exclude ordinary object allocations. No memory-saving claim.",
+        "CPU profiles locate candidate work but are not timing evidence.",
+        "Private brands, own prototype methods, constructor/statics and state-owner identity have independent runtime regression coverage."
+    ]
+}

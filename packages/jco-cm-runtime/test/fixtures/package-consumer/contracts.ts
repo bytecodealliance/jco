@@ -99,16 +99,17 @@ const scopeTasks = resource.initializeResourceScopeTasks();
 const scope = resource.initializeScopeId();
 const callBorrows = resource.initializeCallBorrows();
 const registers = {};
+const taskLookup = { registers, tasks: asyncTask.initializeTasksByComponent() };
 const removal = { RuntimeError: WebAssembly.RuntimeError, indexSpaces, scopeTasks };
 const table = Object.assign([resource.tableFlag, 0], { _createdReps: new Set<number>() });
 resource.tableRemove(removal, table, resource.tableCreateOwn(indexSpaces, table, 42));
-resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, registers, callBorrows }, 1, 0, 1);
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, taskLookup, callBorrows }, 1, 0, 1);
 // @ts-expect-error removal needs the shared allocator and scope-task lookup
 resource.tableRemove({ RuntimeError: Error }, table, 1);
 // @ts-expect-error transfer requires the live scope cell, not its numeric snapshot
-resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope: 0, registers, callBorrows }, 1, 0, 1);
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope: 0, taskLookup, callBorrows }, 1, 0, 1);
 // @ts-expect-error borrow-list replacement must go through its actual mutable owner
-resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, registers, callBorrows: [] }, 1, 0, 1);
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, taskLookup, callBorrows: [] }, 1, 0, 1);
 // @ts-expect-error task construction is a required explicit capability
 resource.callDestructor({ registers: {} }, { componentIdx: 0, rep: 42, dtor: () => {} });
 
@@ -192,3 +193,47 @@ export const privateErrorContext: ErrorContextModule['errCtxNew'] = (
 errorContext.errCtxNew({ componentIdx: 0, localTableIdx: 0, readStrFn: () => '' }, 0, 0);
 // @ts-expect-error public function properties are readonly
 defaultErrorContext.errCtxTransfer = () => 0;
+
+import * as asyncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/async-task';
+import type {
+    AsyncTaskModule,
+    TaskLookupContext,
+    AsyncTaskClassContext,
+    TaskGlobalPlatform,
+} from '@bytecodealliance/jco-cm-runtime/runtime';
+export const defaultAsyncTask: AsyncTaskModule = asyncTask;
+export const asyncTaskMapEntry: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
+// A selected i32 Global needs only construction and a mutable value slot.
+// A provider need not implement unused native prototype methods or overloads.
+export const minimalTaskGlobalPlatform: TaskGlobalPlatform = {
+    Global: class Global {
+        value: number;
+        constructor(_descriptor: { value: 'i32'; mutable: true }, value: number) {
+            this.value = value;
+        }
+    },
+};
+asyncTask.initializeCurrentTaskMayBlock(minimalTaskGlobalPlatform);
+asyncTask.initializeAsyncBlockingCallDepth(minimalTaskGlobalPlatform);
+// @ts-expect-error providers supply all named task operations and selected initializers
+export const missingAsyncTask: AsyncTaskModule = {};
+// @ts-expect-error task maps are context-free and accept no operation catalog
+asyncTask.initializeTasksByComponent({});
+// @ts-expect-error lookup needs its actual task map and executing register owners
+asyncTask.getCurrentTask(0);
+// @ts-expect-error raw registers need a selected Global capability or the absent-platform sentinel
+asyncTask.initializeCurrentTaskMayBlock({ RuntimeError: Error });
+// @ts-expect-error selected class initialization cannot require private provider state
+export const privateTaskClass: AsyncTaskModule['initializeAsyncTaskClass'] = (
+    _context: AsyncTaskClassContext & { privateState: number },
+) => asyncTask.initializeAsyncTaskClass(_context);
+// @ts-expect-error lookup providers cannot require an unrelated class catalog
+export const privateTaskLookup: AsyncTaskModule['getCurrentTask'] = (
+    _context: TaskLookupContext & { classes: object },
+) => undefined;
+// @ts-expect-error state is a real mutable owner, not a callback lookup bridge
+asyncTask.getCurrentTask({ registers: {}, getCurrentTask: () => undefined }, 0);
+// @ts-expect-error exported operation properties are readonly
+defaultAsyncTask.createNewCurrentTask = () => {
+    throw new Error('override');
+};

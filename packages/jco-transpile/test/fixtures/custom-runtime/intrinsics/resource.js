@@ -33,14 +33,18 @@ export function tableGet(context, table, handle) {
     return { rep, scope, own };
 }
 
-// Independent API-v2 resource implementation; internal calls have no namespace receiver.
 import { getCurrentTaskMeta, withCurrentTaskMeta } from './task-context.js';
+import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
+
+// Bit 30 of a scope marks a freed entry. An owned entry stores its u32 rep plus 2 ** 32.
 const RESOURCE_TABLE_FLAG = 1 << 30;
+const RESOURCE_TABLE_OWN = 2 ** 32;
+
 const readTable = (context, table, handle) => {
     const scope = table[handle << 1];
     const value = table[(handle << 1) + 1];
-    const own = value >= 2 ** 32;
-    const rep = own ? value - 2 ** 32 : value;
+    const own = value >= RESOURCE_TABLE_OWN;
+    const rep = own ? value - RESOURCE_TABLE_OWN : value;
     // A freed or never allocated index has no entry in this table: its index may
     // belong to another handle kind of the instance, and `value` is undefined
     // past the end of the table.
@@ -49,8 +53,9 @@ const readTable = (context, table, handle) => {
     }
     return { rep, scope, own };
 };
+
 export const tableFlag = RESOURCE_TABLE_FLAG;
-export const tableOwn = 2 ** 32;
+export const tableOwn = RESOURCE_TABLE_OWN;
 export const initializeHandleIndexSpaces = () => new Map();
 export const initializeHandleTables = () => [];
 export const initializeCallBorrows = () => ({ borrows: [] });
@@ -58,6 +63,7 @@ export const initializeCurrentBorrows = () => ({ borrows: [] });
 export const initializeResourceScopeCounter = () => ({ value: 0 });
 export const initializeResourceScopeTasks = () => new Map();
 export const initializeScopeId = () => ({ value: 0 });
+
 export const getHandleIndexSpace = (spaces, key) => {
     let space = spaces.get(key);
     if (space === undefined) {
@@ -89,7 +95,7 @@ export const tableCreateOwn = (spaces, table, rep) => {
     table._createdReps.add(rep);
     const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
     table[handle << 1] = 0;
-    table[(handle << 1) + 1] = rep + 2 ** 32;
+    table[(handle << 1) + 1] = rep + RESOURCE_TABLE_OWN;
     return handle;
 };
 export const tableEnsureBorrowDrop = (table, handle, scope) => {
@@ -100,8 +106,8 @@ export const tableEnsureBorrowDrop = (table, handle, scope) => {
 export const tableRemove = (context, table, handle) => {
     const scope = table[handle << 1];
     const value = table[(handle << 1) + 1];
-    const own = value >= 2 ** 32;
-    const rep = own ? value - 2 ** 32 : value;
+    const own = value >= RESOURCE_TABLE_OWN;
+    const rep = own ? value - RESOURCE_TABLE_OWN : value;
     if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
         throw new context.RuntimeError('unknown handle index ' + handle);
     }
@@ -128,8 +134,9 @@ export const transferBorrow = (context, handle, fromTid, toTid) => {
     const { rep, own } = readTable(context, fromTable, handle);
     const toTable = getOrCreateTable(context.tables, toTid);
     const componentIdx = toTable._componentIdx;
-    const meta = componentIdx === undefined ? undefined : getCurrentTaskMeta(context.registers, componentIdx);
-    const borrowTask = meta ? context.getTask?.(meta.componentIdx, meta.taskID) : undefined;
+    const meta =
+        componentIdx === undefined ? undefined : getCurrentTaskMeta(context.taskLookup.registers, componentIdx);
+    const borrowTask = meta ? getCurrentTask(context.taskLookup, meta.componentIdx, meta.taskID)?.task : undefined;
     if (borrowTask && own) {
         fromTable[handle << 1]++;
         borrowTask.addResourceLender(fromTable, handle);
@@ -156,10 +163,10 @@ export const transferOwn = (context, handle, fromTid, toTid) => {
     return tableCreateOwn(context.indexSpaces, getOrCreateTable(context.tables, toTid), rep);
 };
 export const callDestructor = (context, { componentIdx, dtor, rep }) => {
-    if (!context.createTask || !context.registers) {
-        throw new TypeError('resource destructors require createTask and registers');
+    if (!context.creation || !context.registers) {
+        throw new TypeError('resource destructors require task creation state and registers');
     }
-    const { task, threadID } = context.createTask({
+    const { task, threadID } = createNewCurrentImplicitThread(context.creation, {
         componentIdx,
         isAsync: false,
         callingWasmExport: true,

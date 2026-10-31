@@ -22,8 +22,136 @@ export function componentPath(id: ComponentId) {
     return fileURLToPath(new URL(components.find((component) => component.id === id)!.path, import.meta.url));
 }
 
-/** Keep selected scratch families separate from scalar-only runtime imports. */
+const taskClassImports = [
+    {
+        suffix: 'intrinsics/core',
+        names: [
+            'initializeRepTableClass',
+            'initializeComponentMemoryMap',
+            'initializeSymbolDispose',
+            'initializeAsyncEventCodes',
+        ],
+    },
+    {
+        suffix: 'intrinsics/resource',
+        names: ['initializeHandleIndexSpaces', 'initializeResourceScopeCounter', 'initializeResourceScopeTasks'],
+    },
+    {
+        suffix: 'intrinsics/component',
+        names: [
+            'initializeInstanceFlags',
+            'initializeStoreTrap',
+            'initializeStoreAsyncState',
+            'initializeComponentAsyncStates',
+            'initializeComponentAsyncStateClass',
+        ],
+    },
+    { suffix: 'intrinsics/waitable', names: ['initializeWaitableClass'] },
+];
+const taskClassBase = `
+ const RuntimeError = Error, RepTable = initializeRepTableClass({ RuntimeError });
+ const indexSpaces = initializeHandleIndexSpaces(), instanceFlags = initializeInstanceFlags();
+ const storeTrap = initializeStoreTrap(), storeAsyncState = initializeStoreAsyncState(), asyncState = initializeComponentAsyncStates();
+ const Waitable = initializeWaitableClass(), normalization = { RuntimeError, messages: new Map() };
+ const deadlock = { RuntimeError, storeTrap, storeAsyncState, asyncState };
+ const ComponentAsyncState = initializeComponentAsyncStateClass({ RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, cannotEnter: 'cannot enter', deadlock, Waitable });
+ const lookup = { asyncState, ComponentAsyncState }, memories = initializeComponentMemoryMap(), disposeSymbol = initializeSymbolDispose();
+ const subtaskContext = { RuntimeError, lookup, memories, disposeSymbol };
+ const AsyncSubtask = initializeAsyncSubtaskClass(subtaskContext);
+`;
+
+/** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
+    {
+        suffix: 'intrinsics/async-task',
+        id: 'task-blocked-value',
+        names: ['asyncBlockedCode'],
+        setup: '',
+        answer: 'asyncBlockedCode === 0xffffffff ? 42 : 0',
+        allocations: {},
+    },
+    {
+        suffix: 'intrinsics/async-task',
+        id: 'task-state-owners',
+        names: [
+            'initializeTasksByComponent',
+            'initializeCurrentTaskIds',
+            'initializeCurrentComponentIdxs',
+            'initializeSymmetricSyncGuestCallStack',
+        ],
+        setup: 'const tasks = initializeTasksByComponent(), ids = initializeCurrentTaskIds(), components = initializeCurrentComponentIdxs(), stack = initializeSymmetricSyncGuestCallStack();',
+        answer: 'tasks.size + ids.length + components.length + stack.length === 0 ? 42 : 0',
+        allocations: { Map: 1 },
+    },
+    {
+        suffix: 'intrinsics/async-task',
+        id: 'task-pure-lookup',
+        names: ['initializeTasksByComponent', 'getCurrentTask'],
+        setup: 'const context = { tasks: initializeTasksByComponent(), registers: {} };',
+        answer: 'getCurrentTask(context, 0) === undefined ? 42 : 0',
+        allocations: { Map: 1 },
+    },
+    {
+        suffix: 'intrinsics/async-task',
+        id: 'task-selected-raw-registers',
+        names: ['initializeCurrentTaskMayBlock', 'initializeAsyncBlockingCallDepth'],
+        setup: 'let calls = 0; class Global { constructor(_descriptor, value = 0) { calls++; this.value = value; } } const a = initializeCurrentTaskMayBlock({ Global }), b = initializeAsyncBlockingCallDepth({ Global }); b.value = 1;',
+        answer: 'a instanceof Global && b instanceof Global && a !== b && a.value === 0 && b.value === 1 && calls === 2 && initializeCurrentTaskMayBlock(false) === false && initializeAsyncBlockingCallDepth(false).value === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
+        suffix: 'intrinsics/async-task',
+        id: 'task-create-lookup-clear',
+        names: [
+            'initializeTasksByComponent',
+            'initializeCurrentTaskIds',
+            'initializeCurrentComponentIdxs',
+            'createNewCurrentTask',
+            'getCurrentTask',
+            'clearCurrentTask',
+        ],
+        setup: 'let id = 0n; class Task { constructor() { this.value = ++id; } id() { return this.value; } addThread(thread) { return thread; } } class Thread { constructor({ task }) { this.task = task; } id() { return Number(this.task.id()); } } const creation = { AsyncTask: Task, AsyncThread: Thread, tasks: initializeTasksByComponent(), taskIds: initializeCurrentTaskIds(), componentIdxs: initializeCurrentComponentIdxs() }; const [a] = createNewCurrentTask(creation, { componentIdx: 0 }), [b] = createNewCurrentTask(creation, { componentIdx: 0 }); const lookup = { tasks: creation.tasks, registers: { 0: { componentIdx: 0, taskID: a.id() } } }; const selected = getCurrentTask(lookup, 0).task; const removedA = clearCurrentTask(creation, 0, a.id()), removedB = clearCurrentTask(creation, 0, b.id());',
+        answer: 'selected === a && removedA === a && removedB === b && creation.tasks.get(0).length === 0 && creation.taskIds.length === 0 && creation.componentIdxs.length === 0 ? 42 : 0',
+        allocations: { Map: 1 },
+    },
+    {
+        suffix: 'intrinsics/async-task',
+        id: 'task-selected-subtask-class',
+        names: ['initializeAsyncSubtaskClass'],
+        imports: taskClassImports,
+        setup: taskClassBase + 'const other = initializeAsyncSubtaskClass(subtaskContext);',
+        answer: 'AsyncSubtask !== other && AsyncSubtask._ID === 0n && other._ID === 0n && AsyncSubtask.State.STARTING === 0 ? 42 : 0',
+        allocations: { Map: 5, Symbol: 1 },
+    },
+    {
+        suffix: 'intrinsics/async-task',
+        id: 'task-selected-task-class',
+        names: [
+            'initializeAsyncSubtaskClass',
+            'initializeAsyncTaskClass',
+            'initializeAsyncThreadClass',
+            'initializeTasksByComponent',
+            'initializeCurrentTaskIds',
+            'initializeCurrentComponentIdxs',
+            'createNewCurrentTask',
+            'clearCurrentTask',
+        ],
+        imports: taskClassImports,
+        setup:
+            taskClassBase +
+            `
+         const scopeCounter = initializeResourceScopeCounter(), scopeTasks = initializeResourceScopeTasks();
+         const clearing = { tasks: initializeTasksByComponent(), taskIds: initializeCurrentTaskIds(), componentIdxs: initializeCurrentComponentIdxs() };
+         const registers = {}, traps = { RuntimeError, registers, lookup };
+         const AsyncThread = initializeAsyncThreadClass({ registers, lookup, traps });
+         const Task = initializeAsyncTaskClass({ RuntimeError, traps, postReturn: { RuntimeError, lookup, stackOverflow: "stack", uncaughtException: "uncaught" }, AsyncSubtask, Waitable, lookup, events: initializeAsyncEventCodes(), determinism: 'deterministic', scopeCounter, scopeTasks, clearing, registers, isFutureValue: () => { throw new Error('eager future predicate'); } });
+         const creation = { ...clearing, AsyncTask: Task, AsyncThread }, [a] = createNewCurrentTask(creation, { componentIdx: 0 }), [b] = createNewCurrentTask(creation, { componentIdx: 0 });
+         const shared = scopeTasks.get(a.resourceScopeId()) === a && scopeTasks.get(b.resourceScopeId()) === b;
+         a.validateResourceBorrowScope(); b.validateResourceBorrowScope(); clearCurrentTask(clearing, 0, a.id()); clearCurrentTask(clearing, 0, b.id());
+        `,
+        answer: 'a instanceof Task && b instanceof Task && a.id() === 1n && b.id() === 2n && shared && scopeCounter.value === 2 && Array.from(scopeTasks.keys()).length === 0 && clearing.tasks.get(0).length === 0 && clearing.taskIds.length === 0 ? 42 : 0',
+        allocations: { Map: 9, Symbol: 1 },
+    },
     {
         suffix: 'intrinsics/error-context',
         id: 'error-context-owners',

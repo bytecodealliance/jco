@@ -30,9 +30,9 @@ The explicit host `instantiateCore` callback retains its existing two-argument
 signature and takes precedence over the default named core operation.
 
 Custom providers adopting this compiler must publish the core subpath and update
-resource borrow/destructor contexts to receive `registers`; the earlier v1
-`getCurrentTask`/`withTask` bridge shapes are replaced by shared state and the
-remaining narrowly named task capability.
+resource borrow/destructor contexts to receive actual `taskLookup`/`creation`
+owners. Core suspending imports receive `threadLookup` and the raw `mayBlock`
+register; earlier task callback bridges are removed.
 
 [All intrinsic contracts](README.md) · [Runtime API](../runtime.md)
 
