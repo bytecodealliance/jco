@@ -594,26 +594,26 @@ impl FunctionBindgen<'_> {
         operands: &[String],
         results: &mut Vec<String>,
     ) {
-        let view = self.intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::DataView));
-        let Some(memory) = self.memory.as_ref() else {
+        let Some(memory) = self.memory else {
             panic!(
                 "unexpectedly missing memory during bindgen for interface [{:?}] (callee {})",
                 self.iface_name, self.callee,
             );
         };
+        let view = self.intrinsic_call(Intrinsic::JsHelper(JsHelperIntrinsic::DataView), memory);
         results.push(format!(
-            "{view}({memory}).{method}(({}) + {offset}, true)",
+            "{view}.{method}(({}) + {offset}, true)",
             operands[0],
             offset = offset.size_wasm32()
         ));
     }
 
     fn store(&mut self, method: &str, offset: ArchitectureSize, operands: &[String]) {
-        let view = self.intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::DataView));
-        let memory = self.memory.as_ref().unwrap();
+        let memory = self.memory.unwrap();
+        let view = self.intrinsic_call(Intrinsic::JsHelper(JsHelperIntrinsic::DataView), memory);
         uwriteln!(
             self.src,
-            "{view}({memory}).{method}(({}) + {offset}, {}, true);",
+            "{view}.{method}(({}) + {offset}, {}, true);",
             operands[1],
             operands[0],
             offset = offset.size_wasm32()

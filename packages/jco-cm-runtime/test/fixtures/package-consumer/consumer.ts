@@ -2,6 +2,7 @@ import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-
 import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
 import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
 import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
+import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as custom from './provider.js';
 import type {
     ResourceModule,
@@ -10,6 +11,13 @@ import type {
 } from '@bytecodealliance/jco-cm-runtime/runtime';
 const defaultModule: ResourceModule = resource;
 const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
+const helpers: RuntimeModuleContracts['intrinsics/js-helper'] = jsHelper;
+const cache = helpers.initializeDataViewCache();
+const memory = { buffer: new ArrayBuffer(8) };
+const view = helpers.dataView(cache, memory);
+view.setUint32(0, 42, true);
+if (helpers.dataView(cache, memory) !== view || view.getUint32(0, true) !== 42 || helpers.emptyFunc(1) !== undefined)
+    throw new Error('cache consumer failed');
 const customUint32: ConversionModule['toUint32'] = custom.toUint32;
 if (customUint32({ strict: false }, -1) !== 0xffffffff || defaultConversions.toUint32({ strict: true }, 42) !== 42)
     throw new Error('numeric consumer failed');
