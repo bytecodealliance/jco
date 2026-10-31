@@ -1,6 +1,8 @@
 # Intrinsic contracts
 
-Each page describes a public intrinsic module and the capabilities and state its operations use.
+The [runtime type declarations](../../src/runtime.ts) describe the public intrinsic modules
+and the capabilities and state their operations use.
 See the [runtime API](../runtime.md) for module resolution, versioning and provider conformance.
 
 - [`intrinsics/resource`](resource.md): resource table.
+- `intrinsics/conversion`: conversion.

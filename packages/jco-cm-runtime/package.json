@@ -34,6 +34,10 @@
         "./intrinsics/resource": {
             "types": "./dist/intrinsics/resource.d.ts",
             "default": "./dist/intrinsics/resource.js"
+        },
+        "./intrinsics/conversion": {
+            "types": "./dist/intrinsics/conversion.d.ts",
+            "default": "./dist/intrinsics/conversion.js"
         }
     },
     "scripts": {

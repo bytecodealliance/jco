@@ -1,5 +1,26 @@
 {
     "schema": 2,
     "apiVersion": 1,
-    "mapped": ["Resource(ResourceTableGet)"]
+    "mapped": [
+        "Resource(ResourceTableGet)",
+        "Conversion(I32ToF32)",
+        "Conversion(I64ToF64)",
+        "Conversion(F32ToI32)",
+        "Conversion(F64ToI64)",
+        "Conversion(I32ToChar)",
+        "Conversion(ToBigInt64)",
+        "Conversion(ToBigUint64)",
+        "Conversion(ToInt16)",
+        "Conversion(ToInt32)",
+        "Conversion(ToInt8)",
+        "Conversion(ToString)",
+        "Conversion(ToUint16)",
+        "Conversion(ToUint32)",
+        "Conversion(ToUint8)",
+        "Conversion(ToResultString)",
+        "Conversion(RequireValidNumericPrimitive)",
+        "Conversion(IsValidNumericPrimitive)",
+        "Conversion(MergeBigInt64)",
+        "Conversion(SplitBigInt64)"
+    ]
 }

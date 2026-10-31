@@ -3,13 +3,11 @@ import { createServer } from 'node:http';
 import { resolve, relative, dirname } from 'node:path';
 import { URL, fileURLToPath } from 'node:url';
 
-import { componentize } from '@bytecodealliance/componentize-js';
-
 import { suite, test } from 'vitest';
 
 import { transpile, writeFiles } from '../transpilation.js';
 
-import { getTmpDir, runTSCodegen, getRandomPort, nodeExec } from '../helpers.js';
+import { componentize, getTmpDir, runTSCodegen, getRandomPort, nodeExec } from '../helpers.js';
 
 suite(`p2 http`, async () => {
     test('wasi-http-proxy-p2', async () => {

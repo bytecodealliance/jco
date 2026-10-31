@@ -4,8 +4,6 @@
 //! [`IntrinsicRuntime`] lists every intrinsic family as a [`Provides`] supertrait, so
 //! a runtime that does not account for a family fails to compile.
 
-use std::collections::BTreeSet;
-
 use super::component::ComponentIntrinsic;
 use super::conversion::ConversionIntrinsic;
 use super::ext::ExternalRuntime;
@@ -81,7 +79,7 @@ pub(crate) trait IntrinsicRuntime:
     + Provides<HostIntrinsic>
 {
     /// Code emitted once before any intrinsic, given the full set of intrinsics.
-    fn render_prelude(&self, _intrinsics: &BTreeSet<Intrinsic>, _output: &mut Source) {}
+    fn render_prelude(&self, _args: &RenderIntrinsicsArgs<'_>, _output: &mut Source) {}
 
     /// Render a call to `intrinsic`. Runtimes may add implicit leading operands.
     fn call(&self, intrinsic: Intrinsic, operands: &str) -> String {
@@ -146,13 +144,14 @@ pub(crate) fn select(external: bool) -> &'static dyn IntrinsicRuntime {
 mod tests {
     use super::*;
     use crate::TranspileOpts;
+    use std::collections::BTreeSet;
 
     const TABLE_GET: Intrinsic = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
     const SAMPLES: [Intrinsic; 5] = [
         Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateBorrow),
         Intrinsic::String(StringIntrinsic::Utf8Encode),
         Intrinsic::JsHelper(JsHelperIntrinsic::DataView),
-        Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
+        Intrinsic::Base64Compile,
         Intrinsic::HandleTables,
     ];
 
@@ -225,13 +224,19 @@ mod tests {
 
     #[test]
     fn prelude_is_emitted_only_when_something_is_imported() {
-        let mut output = Source::default();
-        InlineRuntime.render_prelude(&BTreeSet::from([TABLE_GET]), &mut output);
-        ExternalRuntime.render_prelude(&BTreeSet::from(SAMPLES), &mut output);
-        assert!(output.is_empty());
-
-        ExternalRuntime.render_prelude(&BTreeSet::from([TABLE_GET, SAMPLES[0]]), &mut output);
-        let prelude: String = output.into();
+        let prelude = |runtime: &dyn IntrinsicRuntime, mut intrinsics: BTreeSet<Intrinsic>| {
+            let opts = TranspileOpts::builder().name("prelude".into()).build();
+            let args = RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build();
+            let mut output = Source::default();
+            runtime.render_prelude(&args, &mut output);
+            String::from(output)
+        };
+        assert!(prelude(&InlineRuntime, BTreeSet::from([TABLE_GET])).is_empty());
+        assert!(prelude(&ExternalRuntime, BTreeSet::from(SAMPLES)).is_empty());
+        let prelude = prelude(&ExternalRuntime, BTreeSet::from([TABLE_GET, SAMPLES[0]]));
         assert_eq!(prelude.matches("_jcoRuntimeApiVersion !== 1").count(), 1);
         assert_eq!(
             prelude.matches("const _jcoResourceTableGetContext").count(),
