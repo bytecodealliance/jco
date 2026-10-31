@@ -187,9 +187,8 @@ mod tests {
     use std::collections::BTreeSet;
 
     const TABLE_GET: Intrinsic = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
-    const SAMPLES: [Intrinsic; 3] = [
+    const SAMPLES: [Intrinsic; 2] = [
         Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn),
-        Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
         Intrinsic::Lower(LowerIntrinsic::LowerFlatBool),
     ];
 

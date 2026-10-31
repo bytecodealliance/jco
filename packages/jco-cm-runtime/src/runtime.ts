@@ -172,6 +172,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/error-context': ErrorContextModule;
     readonly 'intrinsics/async-task': AsyncTaskModule;
     readonly 'intrinsics/host': HostModule;
+    readonly 'intrinsics/lift': LiftModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -1104,6 +1105,8 @@ export interface TaskLiftContext {
     stringEncoding?: string | null;
     storagePtr?: number;
     storageLen?: number;
+    isBorrowed?: boolean;
+    liftResource?: (handle: number, tableIdx: number) => unknown;
     [key: string]: unknown;
 }
 
@@ -1733,4 +1736,162 @@ export interface HostModule {
         paramCount: number,
     ) => Promise<unknown>;
     readonly storeEventInComponentMemory: (args: StoreEventOptions) => number;
+}
+
+/** Metadata-driven lifting consumes the caller's live parameter/storage cursor. */
+export interface LiftRecordMeta {
+    readonly fieldMetas: readonly (readonly [string, TaskLiftFn, number, number])[];
+    readonly size32: number;
+    readonly align32: number;
+}
+export interface LiftVariantMeta {
+    readonly caseMetas: readonly (readonly [
+        string,
+        TaskLiftFn | null,
+        number,
+        number,
+        number | null,
+        (readonly string[])?,
+    ])[];
+    readonly variantSize32: number;
+    readonly variantAlign32: number;
+    readonly variantPayloadOffset32: number;
+    readonly variantFlatCount: number | null;
+    readonly variantPayloadFlatTypes?: readonly string[] | null;
+    isEnum?: boolean;
+    readonly payloadMaybeNull?: boolean;
+}
+export interface LiftVariantContext {
+    readonly scratch: DataView;
+}
+export interface LiftStringContext {
+    readonly utf8: StringDecoder;
+    readonly utf16: StringDecoder;
+}
+export interface LiftListMeta {
+    readonly elemLiftFn: TaskLiftFn;
+    readonly elemSize32: number;
+    readonly elemAlign32: number;
+    readonly knownLen?: number;
+    readonly typedArray?: (new (values: number[]) => unknown) | (new (values: bigint[]) => unknown);
+}
+export interface LiftMapMeta {
+    readonly keyLiftFn: TaskLiftFn;
+    readonly valueLiftFn: TaskLiftFn;
+    readonly entrySize32: number;
+    readonly valueOffset32: number;
+}
+export interface LiftTupleMeta {
+    readonly elemLiftFns: readonly (readonly [TaskLiftFn, number, number])[];
+    readonly size32: number;
+    readonly align32: number;
+}
+export interface LiftFlagsMeta {
+    readonly names: readonly string[];
+    readonly size32: number;
+    readonly align32: number;
+    readonly intSizeBytes: number;
+}
+export interface LiftFlagsContext {
+    readonly asBigInt: boolean;
+}
+export interface LiftOwnMeta {
+    readonly classNameFn: () => unknown;
+    readonly createResourceFn: (handle: number) => unknown;
+    readonly componentIdx: number;
+    readonly tableIdx: number;
+}
+export interface LiftFutureMeta {
+    readonly componentIdx: number;
+    readonly futureTableIdx: number;
+}
+export interface LiftStreamMeta {
+    readonly componentIdx: number;
+    readonly streamTableIdx: number;
+}
+export interface LiftEndpoint {
+    readonly isWritable: () => boolean;
+    readonly isDoneState: () => boolean;
+    readonly isIdleState: () => boolean;
+    readonly isInSet: () => boolean;
+}
+export interface LiftFutureEndpoint extends LiftEndpoint {
+    readonly promise: () => Promise<unknown>;
+}
+export interface LiftStreamEndpoint extends LiftEndpoint {
+    readonly isReadable: () => boolean;
+    readonly globalStreamMapRep: () => number;
+    readonly write: (value: unknown) => unknown;
+    readonly read: (options: unknown) => unknown;
+    readonly drop: (options: { allowPendingEvent: true }) => unknown;
+}
+export interface LiftEndpointTable {
+    readonly componentIdx: number;
+    readonly table: unknown;
+}
+/** Temporary lazy inline capabilities, removed by the future/stream conversions. */
+export interface LiftFutureContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly getTables: () => Readonly<Record<number, LiftEndpointTable>>;
+    readonly getEnd: (options: { tableIdx: number; futureEndWaitableIdx: number }) => LiftFutureEndpoint | undefined;
+}
+export interface LiftExternalStreamOptions {
+    readonly globalRep: number;
+    readonly isReadable: boolean;
+    readonly isWritable: boolean;
+    readonly writeFn: (value: unknown) => unknown;
+    readonly readFn: (options: unknown) => unknown;
+    readonly dropFn: () => unknown;
+}
+export interface LiftStreamContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly getTables: () => Readonly<Record<number, LiftEndpointTable>>;
+    readonly getEnd: (options: { tableIdx: number; streamEndWaitableIdx: number }) => LiftStreamEndpoint | undefined;
+    readonly getExternalStream: () => new (options: LiftExternalStreamOptions) => unknown;
+}
+export interface LiftErrorContext extends ErrorContextHandleContext {
+    readonly local: ErrorContextLocalTableContext;
+}
+export interface LiftModule {
+    readonly initializeLiftVariant: () => LiftVariantContext;
+    readonly liftFlatBool: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatS8: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatU8: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatS16: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatU16: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatS32: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatU32: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatS64: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatU64: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatFloat32: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatFloat64: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatChar: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatStringAny: (context: LiftStringContext, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatStringUTF8: (context: StringDecoder, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatStringUTF16: (context: StringDecoder, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatRecord: (meta: LiftRecordMeta) => TaskLiftFn;
+    readonly liftFlatVariant: (context: LiftVariantContext, meta: LiftVariantMeta) => TaskLiftFn;
+    readonly liftFlatList: (context: TrapContext, meta: LiftListMeta) => TaskLiftFn;
+    readonly liftFlatMap: (meta: LiftMapMeta) => TaskLiftFn;
+    readonly liftFlatTuple: (meta: LiftTupleMeta) => TaskLiftFn;
+    readonly liftFlatEnum: (context: LiftVariantContext, meta: LiftVariantMeta) => TaskLiftFn;
+    readonly liftFlatOption: (context: LiftVariantContext, meta: LiftVariantMeta) => TaskLiftFn;
+    readonly liftFlatResult: (context: LiftVariantContext, meta: LiftVariantMeta) => TaskLiftFn;
+    readonly liftFlatFlags: (context: LiftFlagsContext, meta: LiftFlagsMeta) => TaskLiftFn;
+    readonly liftFlatOwn: (meta: LiftOwnMeta) => TaskLiftFn;
+    readonly liftFlatBorrow: (
+        componentTableIdx: number,
+        size: number,
+        memory: unknown,
+        vals: unknown[],
+        storagePtr: number,
+        storageLen: number,
+    ) => never;
+    readonly liftFlatFuture: (context: LiftFutureContext, meta: LiftFutureMeta) => TaskLiftFn;
+    readonly liftFlatStream: (context: LiftStreamContext, meta: LiftStreamMeta) => TaskLiftFn;
+    readonly liftFlatErrorContext: (
+        context: LiftErrorContext,
+        errCtxTableIdx: number,
+        ctx: TaskLiftContext,
+    ) => [unknown, TaskLiftContext];
 }
