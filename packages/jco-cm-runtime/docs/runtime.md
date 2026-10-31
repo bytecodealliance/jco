@@ -11,7 +11,8 @@ from `intrinsics/webidl`, with core operations, constructors and state owners
 from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
 and waitable constructors/operations from `intrinsics/waitable`.
 Error-context storage and operations use `intrinsics/error-context`;
-tasks, subtasks and their state use `intrinsics/async-task`.
+tasks, subtasks and their state use `intrinsics/async-task`;
+guest-to-guest host calls and event writing use `intrinsics/host`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -52,7 +53,8 @@ const conformance: ResourceModule = resource;
 Export `CM_RUNTIME_API_VERSION = 1` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
 `./intrinsics/js-helper`, `./intrinsics/string`, `./intrinsics/webidl` and
-`./intrinsics/core` and `./intrinsics/component` subpaths
+`./intrinsics/core`, `./intrinsics/component`, `./intrinsics/waitable`,
+`./intrinsics/error-context`, `./intrinsics/async-task` and `./intrinsics/host` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.

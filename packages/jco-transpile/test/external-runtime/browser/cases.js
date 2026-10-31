@@ -62,6 +62,31 @@ export async function runComponent({ componentPath, corePaths, instantiation, pr
     return exerciseInstances(first, second, provider);
 }
 
+/** Exercise real host scheduling through independently instantiated browser stores. */
+export async function runHost({ componentPath, corePaths, deferred }) {
+    const moduleUrl = new URL(componentPath, location.href);
+    const bindings = await import(moduleUrl.href);
+    const modules = new Map(
+        await Promise.all(
+            corePaths.map(async (name) => [name, new WebAssembly.Module(await fetchBytes(new URL(name, moduleUrl)))]),
+        ),
+    );
+    const values = [],
+        completed = [];
+    for (let store = 0; store < 2; store++) {
+        const instance = bindings.instantiate((name) => modules.get(name), {});
+        const value = await instance.run();
+        values.push(deferred ? [(value >>> 8) & 15, value & 15] : value);
+        if (deferred) {
+            for (let i = 0; i < 50 && instance.completed() !== 2; i++) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
+            completed.push(instance.completed());
+        }
+    }
+    return { values, completed };
+}
+
 /** Exercise the option through the bindgen component running in the browser as well. */
 export async function transpileInBrowser({ componentPath, cmRuntimeEsModule, providerPath }) {
     const provider = await loadProvider(providerPath);

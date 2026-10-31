@@ -84,6 +84,7 @@ suite('runtime package', () => {
                     'WaitableModule',
                     'ErrorContextModule',
                     'AsyncTaskModule',
+                    'HostModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -100,6 +101,7 @@ suite('runtime package', () => {
                 './intrinsics/conversion',
                 './intrinsics/core',
                 './intrinsics/error-context',
+                './intrinsics/host',
                 './intrinsics/js-helper',
                 './intrinsics/resource',
                 './intrinsics/string',
