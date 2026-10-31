@@ -6,6 +6,7 @@
         "./intrinsics/resource": "./intrinsics/resource.js",
         "./intrinsics/conversion": "./intrinsics/conversion.js",
         "./intrinsics/js-helper": "./intrinsics/js-helper.js",
-        "./intrinsics/string": "./intrinsics/string.js"
+        "./intrinsics/string": "./intrinsics/string.js",
+        "./intrinsics/webidl": "./intrinsics/webidl.js"
     }
 }

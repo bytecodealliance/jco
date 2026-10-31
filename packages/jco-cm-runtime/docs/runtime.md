@@ -6,7 +6,8 @@
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
 `tableGet` from `intrinsics/resource` and selected conversions from
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
-string operations/codecs from `intrinsics/string`.
+string operations/codecs from `intrinsics/string` and the global WebIDL adapter
+from `intrinsics/webidl`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -30,7 +31,8 @@ runtime directory tree with JavaScript MIME types.
 
 Bindings check version 1 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
-operations, both JavaScript helpers and all ten string variants (32/274 logical intrinsic variants);
+operations, both JavaScript helpers, all ten string variants and the WebIDL proxy
+(33/274 logical intrinsic variants);
 other families remain inline during migration.
 
 ## Implementing an alternative runtime
@@ -48,7 +50,7 @@ const conformance: ResourceModule = resource;
 
 Export `CM_RUNTIME_API_VERSION = 1` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
-`./intrinsics/js-helper` and `./intrinsics/string` subpaths
+`./intrinsics/js-helper`, `./intrinsics/string` and `./intrinsics/webidl` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.

@@ -35,6 +35,7 @@
         "String(ValidateGuestChar)",
         "String(ValidateHostChar)",
         "String(CompactUtf16Decode)",
-        "String(CompactUtf16Encode)"
+        "String(CompactUtf16Encode)",
+        "WebIdl(GlobalThisIdlProxy)"
     ]
 }
