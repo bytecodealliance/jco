@@ -1,4 +1,4 @@
-import { cp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
@@ -6,12 +6,12 @@ import { assert, expect, suite, test } from 'vitest';
 
 import { transpile, writeFiles } from '../transpilation.js';
 import { getTmpDir, nodeExec } from '../helpers.js';
+import { writeCustomRuntime } from './helpers.js';
 
 const resourceFixture = fileURLToPath(
     new URL('../fixtures/components/runtime/external-runtime-resource.component.wat', import.meta.url),
 );
 const defaultBase = new URL('../../../jco-cm-runtime/dist/', import.meta.url).href;
-const customBase = new URL('../fixtures/custom-runtime/', import.meta.url);
 
 suite('external runtime codegen', () => {
     for (const instantiation of ['sync', 'async'] as const) {
@@ -45,7 +45,7 @@ suite('external runtime codegen', () => {
             async (minify) => {
                 const outDir = await getTmpDir();
                 try {
-                    await cp(customBase, join(outDir, 'runtime'), { recursive: true });
+                    await writeCustomRuntime(join(outDir, 'runtime'));
                     await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
                     const { files } = await transpile(resourceFixture, {
                         name: 'component',
@@ -89,13 +89,13 @@ suite('external runtime codegen', () => {
         );
     }
 
-    test.concurrent.each(['independent', 'reexport'] as const)(
+    test.concurrent.each(['instrumented', 'reexport'] as const)(
         'loads a %s package installed only beside generated bindings',
         async (implementation) => {
             const outDir = await getTmpDir();
             const packageDir = join(outDir, 'node_modules/test-runtime-provider');
             try {
-                await cp(customBase, packageDir, { recursive: true });
+                await writeCustomRuntime(packageDir);
                 if (implementation === 'reexport') {
                     await writeFile(
                         join(packageDir, 'intrinsics/resource.js'),
@@ -124,7 +124,7 @@ suite('external runtime codegen', () => {
         async (instantiation) => {
             const outDir = await getTmpDir();
             try {
-                await cp(customBase, join(outDir, 'runtime'), { recursive: true });
+                await writeCustomRuntime(join(outDir, 'runtime'));
                 await writeFile(join(outDir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 2;');
                 await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
                 const { files } = await transpile(resourceFixture, {
@@ -151,7 +151,7 @@ suite('external runtime codegen', () => {
         const outDir = await getTmpDir();
         const packageDir = join(outDir, 'node_modules/test-runtime-provider');
         try {
-            await cp(customBase, packageDir, { recursive: true });
+            await writeCustomRuntime(packageDir);
             if (missing === 'export') {
                 await writeFile(join(packageDir, 'intrinsics/resource.js'), 'export {};');
             } else {
@@ -230,7 +230,7 @@ suite('external runtime codegen', () => {
             const outDir = await getTmpDir();
             const directory = "runtime with 'quotes'";
             try {
-                await cp(customBase, join(outDir, directory), { recursive: true });
+                await writeCustomRuntime(join(outDir, directory));
                 const cmRuntimeEsModule =
                     kind === 'relative' ? `./${directory}/` : pathToFileURL(join(outDir, directory)).href;
                 const { files } = await transpile(resourceFixture, {
