@@ -8,6 +8,7 @@ import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/componen
 import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
 import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
 import * as asyncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/async-task';
+import * as host from '@bytecodealliance/jco-cm-runtime/intrinsics/host';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -28,6 +29,7 @@ const publicModules: Record<string, Record<string, unknown>> = {
     WaitableModule: waitable,
     ErrorContextModule: errorContext,
     AsyncTaskModule: asyncTask,
+    HostModule: host,
 };
 
 const constants = new Set([
@@ -51,6 +53,17 @@ for (const [name, exports] of Object.entries(expectedExports)) {
 const defaultModule: ResourceModule = resource;
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
 const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
+const defaultHost: RuntimeModuleContracts['intrinsics/host'] = host;
+const eventMemory = { buffer: new ArrayBuffer(8) };
+if (
+    defaultHost.storeEventInComponentMemory({
+        memory: eventMemory,
+        ptr: 0,
+        event: { code: 1, payload0: 17, payload1: 23 },
+    }) !== 1 ||
+    new DataView(eventMemory.buffer).getUint32(4, true) !== 23
+)
+    {throw new Error('host event writer consumer failed');}
 if (custom.getCurrentTask({ tasks: custom.initializeTasksByComponent(), registers: {} }, 0) !== undefined) {
     throw new Error('copied task contract consumer failed');
 }

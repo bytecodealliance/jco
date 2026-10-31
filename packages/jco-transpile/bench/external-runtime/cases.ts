@@ -63,6 +63,30 @@ const taskClassBase = `
 /** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        suffix: 'intrinsics/host',
+        id: 'host-event-memory',
+        names: ['storeEventInComponentMemory'],
+        setup: 'const memory = { buffer: new ArrayBuffer(8) }, event = { code: 1, payload0: 17, payload1: 23 }; const code = storeEventInComponentMemory({ memory, ptr: 0, event }); const view = new DataView(memory.buffer);',
+        answer: 'code === 1 && view.getUint32(0, true) === 17 && view.getUint32(4, true) === 23 ? 42 : 0',
+        allocations: { ArrayBuffer: 1, DataView: 2 },
+    },
+    {
+        suffix: 'intrinsics/host',
+        id: 'host-prepare-selected-trap',
+        names: ['prepareCall'],
+        setup: `class Trap extends Error {} const context = { tasks: { get() {} }, registers: {}, mayBlock: { value: 0 }, RuntimeError: Trap, get creation() { throw new Error('unexpected task creation'); } }; let trapped = false; try { prepareCall(context, null, () => null, () => [], () => {}, 0, 1, 0, 0, 0, 0); } catch (error) { trapped = error instanceof Trap && error.message === 'cannot block a synchronous task before returning'; }`,
+        answer: 'trapped ? 42 : 0',
+        allocations: {},
+    },
+    {
+        suffix: 'intrinsics/host',
+        id: 'host-start-lazy-capabilities',
+        names: ['asyncStartCall'],
+        setup: `const context = { componentIdxs: [1], registers: {}, get platform() { throw new Error('unexpected JSPI selection'); }, get driver() { throw new Error('unexpected driver selection'); } }; let rejected = false; try { asyncStartCall(context, {}, () => 0, 0, 0, 0); } catch (error) { rejected = error.message === 'missing global current task globalTaskMeta'; }`,
+        answer: 'rejected ? 42 : 0',
+        allocations: {},
+    },
+    {
         suffix: 'intrinsics/async-task',
         id: 'task-blocked-value',
         names: ['asyncBlockedCode'],

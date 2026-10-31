@@ -2927,9 +2927,6 @@ impl<'a> Instantiator<'a, '_> {
 
             // This sets up a subtask (sets parent, etc) for guest -> guest calls
             Trampoline::PrepareCall { memory } => {
-                let prepare_call_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Host(HostIntrinsic::PrepareCall));
                 let (memory_idx_js, memory_fn_js) = memory
                     .map(|v| {
                         (
@@ -2938,32 +2935,30 @@ impl<'a> Instantiator<'a, '_> {
                         )
                     })
                     .unwrap_or_else(|| ("null".into(), "() => null".into()));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {prepare_call_fn}.bind(null, {memory_idx_js}, {memory_fn_js});",
-                )
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Host(HostIntrinsic::PrepareCall),
+                    &format!("{memory_idx_js}, {memory_fn_js}"),
+                );
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};",)
             }
 
             Trampoline::SyncStartCall { callback } => {
-                let sync_start_call_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Host(HostIntrinsic::SyncStartCall));
                 let (callback_idx, callback_fn) = callback
                     .map(|v| (v.as_u32().to_string(), format!("callback_{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Host(HostIntrinsic::SyncStartCall),
+                    &format!(
+                        "{{ callbackIdx: {callback_idx}, getCallbackFn: () => {callback_fn} }}"
+                    ),
+                );
 
                 // NOTE: the intrinsic blocks the (sync-lowered) caller until the
                 // async-lifted callee resolves via task.return, so it must be
                 // JSPI-wrapped.
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = new WebAssembly.Suspending({sync_start_call_fn}.bind(
-                         null,
-                         {{
-                             callbackIdx: {callback_idx},
-                             getCallbackFn: () => {callback_fn},
-                         }},
-                     ));",
+                    "const trampoline{i} = new WebAssembly.Suspending({callback});",
                 );
             }
 
@@ -2973,28 +2968,19 @@ impl<'a> Instantiator<'a, '_> {
                 callback,
                 post_return,
             } => {
-                let async_start_call_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
                 let (callback_idx, callback_fn) = callback
                     .map(|v| (v.as_u32().to_string(), format!("callback_{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
                 let (post_return_idx, post_return_fn) = post_return
                     .map(|v| (v.as_u32().to_string(), format!("postReturn{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
-
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {async_start_call_fn}.bind(
-                         null,
-                         {{
-                             postReturnIdx: {post_return_idx},
-                             getPostReturnFn: () => {post_return_fn},
-                             callbackIdx: {callback_idx},
-                             getCallbackFn: () => {callback_fn},
-                         }},
-                     );",
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Host(HostIntrinsic::AsyncStartCall),
+                    &format!(
+                        "{{ postReturnIdx: {post_return_idx}, getPostReturnFn: () => {post_return_fn}, callbackIdx: {callback_idx}, getCallbackFn: () => {callback_fn} }}"
+                    ),
                 );
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};",);
             }
 
             Trampoline::LowerImport {

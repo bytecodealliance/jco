@@ -70,6 +70,10 @@
         "./intrinsics/async-task": {
             "types": "./dist/intrinsics/async-task.d.ts",
             "default": "./dist/intrinsics/async-task.js"
+        },
+        "./intrinsics/host": {
+            "types": "./dist/intrinsics/host.d.ts",
+            "default": "./dist/intrinsics/host.js"
         }
     },
     "scripts": {

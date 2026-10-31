@@ -49,7 +49,8 @@ operand order. Direct symmetric-call callbacks bind context with `void 0` in
 named mode; the suspending wrapper's slow callback preserves its null receiver.
 Inline callbacks retain their original function identity. A narrow lazy
 future-value predicate remains until the future family migrates; selecting a
-class or owner does not invoke it. The host event writer remains until N12.
+class or owner does not invoke it. Waitables use their own static event writer
+without a generated callback.
 
 Custom providers must publish this subpath and replace the old resource, core
 and waitable task callbacks with lookup/creation/register owners. The standalone
