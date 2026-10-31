@@ -1,0 +1,43 @@
+;; Buffer validation must happen before parking an operation or reporting a
+;; dropped peer, even when the operation requests zero elements.
+(component
+  (core module $memory (memory (export "mem") 1))
+  (core instance $memory (instantiate $memory))
+  (type $stream (stream u32))
+  (core func $new (canon stream.new $stream))
+  (core func $read (canon stream.read $stream async (memory (core memory $memory "mem"))))
+  (core func $write (canon stream.write $stream async (memory (core memory $memory "mem"))))
+  (core func $drop-read (canon stream.drop-readable $stream))
+  (core func $drop-write (canon stream.drop-writable $stream))
+  (core module $m
+    (import "" "new" (func $new (result i64)))
+    (import "" "read" (func $read (param i32 i32 i32) (result i32)))
+    (import "" "write" (func $write (param i32 i32 i32) (result i32)))
+    (import "" "drop-read" (func $drop-read (param i32)))
+    (import "" "drop-write" (func $drop-write (param i32)))
+    (func (export "run") (param $write-first i32) (param $drop-peer i32)
+        (param $ptr i32) (param $count i32) (result i32)
+      (local $ends i64) (local $rx i32) (local $tx i32)
+      (local.set $ends (call $new))
+      (local.set $rx (i32.wrap_i64 (local.get $ends)))
+      (local.set $tx (i32.wrap_i64 (i64.shr_u (local.get $ends) (i64.const 32))))
+      (if (result i32) (local.get $write-first)
+        (then
+          (if (local.get $drop-peer) (then (call $drop-read (local.get $rx))))
+          (call $write (local.get $tx) (local.get $ptr) (local.get $count)))
+        (else
+          (if (local.get $drop-peer) (then (call $drop-write (local.get $tx))))
+          (call $read (local.get $rx) (local.get $ptr) (local.get $count))))
+    )
+  )
+  (core instance $m (instantiate $m (with "" (instance
+    (export "new" (func $new))
+    (export "read" (func $read))
+    (export "write" (func $write))
+    (export "drop-read" (func $drop-read))
+    (export "drop-write" (func $drop-write))
+  ))))
+  (func (export "run") (param "write-first" bool) (param "drop-peer" bool)
+    (param "ptr" u32) (param "count" u32) (result u32)
+    (canon lift (core func $m "run")))
+)
