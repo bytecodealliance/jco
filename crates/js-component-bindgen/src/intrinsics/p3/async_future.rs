@@ -1955,7 +1955,7 @@ impl AsyncFutureIntrinsic {
                 output.push_str(&format!(
                     r#"
                       function {is_future_lowerable_object}(obj) {{
-                          if (typeof obj !== 'object') {{ return false; }}
+                          if (obj === null || typeof obj !== 'object') {{ return false; }}
                           return obj instanceof Promise
                                || 'then' in obj && typeof obj.then === 'function';
                       }}

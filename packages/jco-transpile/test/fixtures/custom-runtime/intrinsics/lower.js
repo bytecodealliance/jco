@@ -1,3 +1,5 @@
+import { createFuture } from './future-state.js';
+import { isFutureLowerableObject, genFutureHostInjectFn } from './future-operations.js';
 import { debugLog } from './core-debug.js';
 import { requireValidNumericPrimitive } from './conversion.js';
 import { utf8Encode, utf16Encode, compactUtf16Encode } from './string.js';
@@ -717,7 +719,7 @@ export function lowerFlatFuture(_context, meta) {
             throw new Error('missing external future value');
         }
 
-        if (!_context.isLowerable(future)) {
+        if (!isFutureLowerableObject(future)) {
             // A native async host function cannot return a thenable
             // without assimilating it. Preserve compatibility for a
             // single lowered layer by treating that result as already
@@ -728,7 +730,7 @@ export function lowerFlatFuture(_context, meta) {
         let globalRep = future[_context.resourceRep];
         let waitableIdx;
         if (globalRep) {
-            const hostFuture = _context.getGlobal().get(globalRep);
+            const hostFuture = _context.futures.get(globalRep);
             if (!hostFuture) {
                 throw new Error(`missing host future with global rep [${globalRep}]`);
             }
@@ -746,12 +748,16 @@ export function lowerFlatFuture(_context, meta) {
             // recursively by elemMeta.lowerFn when this layer settles.
             let nestingLevel = 0;
             while (nestingLevel >= 0) {
-                const { writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx } = _context.create(cstate, {
-                    tableIdx: futureTableIdx,
-                    elemMeta,
-                });
+                const { writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx } = createFuture(
+                    _context.creation,
+                    cstate,
+                    {
+                        tableIdx: futureTableIdx,
+                        elemMeta,
+                    },
+                );
 
-                const hostInjectFn = _context.genHostInject({
+                const hostInjectFn = genFutureHostInjectFn(_context.injection, {
                     promise: future,
                     stringEncoding: elemMeta.stringEncoding,
                     hostWriteEnd: writeEnd,
@@ -760,7 +766,7 @@ export function lowerFlatFuture(_context, meta) {
 
                 outermostReadEnd = readEnd;
                 future = {
-                    [_context.getNestedSymbol()]: true,
+                    [_context.nestedSymbol]: true,
                     readEndWaitableIdx,
                     writeEndWaitableIdx,
                     futureTableIdx,

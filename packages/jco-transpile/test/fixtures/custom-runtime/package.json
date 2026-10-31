@@ -15,6 +15,7 @@
         "./intrinsics/async-task": "./intrinsics/async-task.js",
         "./intrinsics/host": "./intrinsics/host.js",
         "./intrinsics/lift": "./intrinsics/lift.js",
-        "./intrinsics/lower": "./intrinsics/lower.js"
+        "./intrinsics/lower": "./intrinsics/lower.js",
+        "./intrinsics/future": "./intrinsics/future.js"
     }
 }

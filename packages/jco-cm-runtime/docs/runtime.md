@@ -13,7 +13,8 @@ and waitable constructors/operations from `intrinsics/waitable`.
 Error-context storage and operations use `intrinsics/error-context`;
 tasks, subtasks and their state use `intrinsics/async-task`;
 guest-to-guest host calls and event writing use `intrinsics/host`;
-flat lifting helpers use `intrinsics/lift` and lowering helpers use `intrinsics/lower`.
+flat lifting helpers use `intrinsics/lift`, lowering helpers use `intrinsics/lower`,
+and future classes, tables and operations use `intrinsics/future`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 

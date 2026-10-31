@@ -20,6 +20,7 @@ import type {
     StringDecoder,
     LiftFlagsContext,
 } from '../runtime.js';
+import { getFutureEnd } from './future-state.js';
 import { debugLog } from './core-debug.js';
 import { compactUtf16Decode } from './string.js';
 import { i32ToChar } from './conversion.js';
@@ -1015,7 +1016,7 @@ export function liftFlatFuture(
     return function liftFlatFutureInner(ctx) {
         debugLog('[liftFlatFuture()] args', { ctx });
 
-        const futureMeta = _context.getTables()[futureTableIdx];
+        const futureMeta = _context.tables[futureTableIdx];
         if (futureMeta.componentIdx !== componentIdx) {
             throw new Error('unexpectedly mismatched component idx');
         }
@@ -1043,7 +1044,7 @@ export function liftFlatFuture(
             throw new Error(`missing async state for component [${componentIdx}]`);
         }
 
-        const futureEnd = _context.getEnd({
+        const futureEnd = getFutureEnd(_context, {
             tableIdx: futureTableIdx,
             futureEndWaitableIdx: futureEndWaitableIdx as number,
         });

@@ -90,6 +90,14 @@ const taskClassBase = `
 /** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        id: 'future-value',
+        suffix: 'intrinsics/future',
+        names: ['initializeFutureValueClass'],
+        setup: 'const FutureValue = initializeFutureValueClass();',
+        answer: 'typeof FutureValue === "function" ? 42 : 0',
+        allocations: {},
+    },
+    {
         id: 'lower-u32',
         suffix: 'intrinsics/lower',
         names: ['lowerFlatU32'],
@@ -211,7 +219,7 @@ export const importControls = [
             'createNewCurrentTask',
             'clearCurrentTask',
         ],
-        imports: taskClassImports,
+        imports: [...taskClassImports, { suffix: 'intrinsics/future', names: ['initializeFutureValueClass'] }],
         setup:
             taskClassBase +
             `
@@ -219,7 +227,7 @@ export const importControls = [
          const clearing = { tasks: initializeTasksByComponent(), taskIds: initializeCurrentTaskIds(), componentIdxs: initializeCurrentComponentIdxs() };
          const registers = {}, traps = { RuntimeError, registers, lookup };
          const AsyncThread = initializeAsyncThreadClass({ registers, lookup, traps });
-         const Task = initializeAsyncTaskClass({ RuntimeError, traps, postReturn: { RuntimeError, lookup, stackOverflow: "stack", uncaughtException: "uncaught" }, AsyncSubtask, Waitable, lookup, events: initializeAsyncEventCodes(), determinism: 'deterministic', scopeCounter, scopeTasks, clearing, registers, isFutureValue: () => { throw new Error('eager future predicate'); } });
+         const Task = initializeAsyncTaskClass({ RuntimeError, traps, postReturn: { RuntimeError, lookup, stackOverflow: "stack", uncaughtException: "uncaught" }, AsyncSubtask, Waitable, lookup, events: initializeAsyncEventCodes(), determinism: 'deterministic', scopeCounter, scopeTasks, clearing, registers, FutureValue: initializeFutureValueClass() });
          const creation = { ...clearing, AsyncTask: Task, AsyncThread }, [a] = createNewCurrentTask(creation, { componentIdx: 0 }), [b] = createNewCurrentTask(creation, { componentIdx: 0 });
          const shared = scopeTasks.get(a.resourceScopeId()) === a && scopeTasks.get(b.resourceScopeId()) === b;
          a.validateResourceBorrowScope(); b.validateResourceBorrowScope(); clearCurrentTask(clearing, 0, a.id()); clearCurrentTask(clearing, 0, b.id());

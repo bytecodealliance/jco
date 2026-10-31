@@ -1,12 +1,13 @@
 // Test-only composition of actual selected owners and operation-specific views.
 import * as operations from '../src/intrinsics/async-task.js';
+import { initializeFutureValueClass } from '../src/intrinsics/future-value.js';
 import { initializeResourceScopeCounter, callDestructor } from '../src/intrinsics/resource.js';
-import type { TaskFutureValue, TaskMutableRegister, ResourceDestructorArgs } from '../src/runtime.js';
+import type { AsyncTaskClassContext, TaskMutableRegister, ResourceDestructorArgs } from '../src/runtime.js';
 import { create as createWaitable } from './waitable-test-helpers.js';
 import { initializeTaskRegisters } from '../src/intrinsics/task-context.js';
 
 type Options = Omit<NonNullable<Parameters<typeof createWaitable>[0]>, 'waitableContext'> & {
-    isFutureValue?: (value: unknown) => value is TaskFutureValue;
+    FutureValue?: AsyncTaskClassContext['FutureValue'];
 };
 type Tail<A extends unknown[]> = A extends [unknown, ...infer Rest] ? Rest : never;
 
@@ -50,7 +51,7 @@ export function create(options: Options = {}) {
         scopeTasks,
         clearing,
         registers,
-        isFutureValue: options.isFutureValue ?? ((_value): _value is TaskFutureValue => false),
+        FutureValue: options.FutureValue ?? initializeFutureValueClass(),
     });
     const creation = { ...clearing, AsyncTask, AsyncThread };
     const cancellation = { ...taskLookup, lookup };
