@@ -939,6 +939,16 @@ impl JsBindgen<'_> {
         self.runtime().callback_reference(intrinsic)
     }
 
+    fn intrinsic_callback_reference_with_receiver(
+        &mut self,
+        intrinsic: Intrinsic,
+        receiver: &str,
+    ) -> String {
+        self.all_intrinsics.insert(intrinsic);
+        self.runtime()
+            .callback_reference_with_receiver(intrinsic, receiver)
+    }
+
     /// Write out utility helpers/objects (available via esModule._util)
     fn write_util_export(&mut self, output: &mut source::Source) {
         // Future` class that can be used by external consumers (e.g. host code) to build nested future values
@@ -1476,7 +1486,7 @@ impl<'a> Instantiator<'a, '_> {
             return;
         }
 
-        let create_implicit_thread = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+        let create_implicit_thread = self.bindgen.intrinsic_call_prefix(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
         ));
         let set_thread_meta = self
@@ -1499,7 +1509,7 @@ impl<'a> Instantiator<'a, '_> {
                 setup,
                 r#"
                 {{
-                  const {{ task, taskID, threadID }} = {create_implicit_thread}({{
+                  const {{ task, taskID, threadID }} = {create_implicit_thread}{{
                       componentIdx: {component_idx},
                       isAsync: false,
                       callingWasmExport: true,
@@ -2064,17 +2074,17 @@ impl<'a> Instantiator<'a, '_> {
         cancellable: bool,
         instance: u32,
     ) {
-        let concede_fn = self.bindgen.intrinsic(Intrinsic::AsyncTask(intrinsic));
+        let concede_fn = self.bindgen.intrinsic_bind_callback(
+            Intrinsic::AsyncTask(intrinsic),
+            &format!("{{ isCancellable: {cancellable}, componentIdx: {instance} }}"),
+        );
         let suspending_wrap_fn = self
             .bindgen
             .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
         uwriteln!(
             self.src.js,
             r#"
-              const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{instance}, {concede_fn}.bind(null, {{
-                  isCancellable: {cancellable},
-                  componentIdx: {instance},
-              }})));
+              const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{instance}, {concede_fn}));
             "#
         );
     }
@@ -2083,20 +2093,21 @@ impl<'a> Instantiator<'a, '_> {
         let i = i.as_u32();
         match trampoline {
             Trampoline::TaskCancel { instance } => {
-                let task_cancel_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskCancel));
+                let task_cancel_callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskCancel),
+                    &instance.as_u32().to_string(),
+                );
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {task_cancel_fn}.bind(null, {instance_idx});\n",
-                    instance_idx = instance.as_u32(),
+                    "const trampoline{i} = {task_cancel_callback};\n",
                 );
             }
 
             Trampoline::SubtaskCancel { instance, async_ } => {
-                let subtask_cancel_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
+                let subtask_cancel_callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel),
+                    &format!("{}, {}", instance.as_u32(), async_),
+                );
                 let suspending_wrap_fn = self
                     .bindgen
                     .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
@@ -2110,44 +2121,28 @@ impl<'a> Instantiator<'a, '_> {
                 // Async-lowered cancellation reports BLOCKED directly unless a
                 // cancellable child is already resuming toward eager completion.
                 // Only that eager path and sync-lowered cancellation may suspend.
-                if *async_ {
-                    uwriteln!(
-                        self.src.js,
-                        r#"
-                        const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, true);
-                        const trampoline{i} = {conditional_suspending_fn}
-                            {guard_trap_fn}{instance_idx}, trampoline{i}Cancel, true),
-                            {suspending_wrap_fn}{instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
-                        );
-                        "#,
-                        instance_idx = instance.as_u32(),
+                uwriteln!(
+                    self.src.js,
+                    r#"
+                    const trampoline{i}Cancel = {subtask_cancel_callback};
+                    const trampoline{i} = {conditional_suspending_fn}
+                        {guard_trap_fn}{instance_idx}, trampoline{i}Cancel, true),
+                        {suspending_wrap_fn}{instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
                     );
-                } else {
-                    uwriteln!(
-                        self.src.js,
-                        r#"
-                        const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, false);
-                        const trampoline{i} = {conditional_suspending_fn}
-                            {guard_trap_fn}{instance_idx}, trampoline{i}Cancel, true),
-                            {suspending_wrap_fn}{instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
-                        );
-                        "#,
-                        instance_idx = instance.as_u32(),
-                    );
-                }
+                    "#,
+                    instance_idx = instance.as_u32(),
+                );
             }
 
             Trampoline::SubtaskDrop { instance } => {
                 let component_idx = instance.as_u32();
-                let subtask_drop_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskDrop));
+                let subtask_drop_callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskDrop),
+                    &component_idx.to_string(),
+                );
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {subtask_drop_fn}.bind(
-                         null,
-                         {component_idx},
-                     );"
+                    "const trampoline{i} = {subtask_drop_callback};"
                 );
             }
 
@@ -3082,10 +3077,8 @@ impl<'a> Instantiator<'a, '_> {
                 let has_result_pointer = result_flat_count
                     .map(|count| count > max_direct_results)
                     .unwrap_or(true);
-                let call = format!(
-                    r#"{lower_import_intrinsic}.bind(
-                        null,
-                        {{
+                let metadata = format!(
+                    r#"{{
                             trampolineIdx: {i},
                             componentIdx: {component_idx},
                             isAsync: {is_async},
@@ -3102,17 +3095,16 @@ impl<'a> Instantiator<'a, '_> {
                             getMemoryFn: {memory_expr_js},
                             getReallocFn: {realloc_expr_js},
                             importFn: _trampoline{i},
-                        }},
-                    )"#,
-                    lower_import_intrinsic = if is_async || func_ty_async {
-                        self.bindgen
-                            .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImport))
-                    } else {
-                        self.bindgen.intrinsic(Intrinsic::AsyncTask(
-                            AsyncTaskIntrinsic::LowerImportBackwardsCompat,
-                        ))
-                    }
+                        }}"#
                 );
+                let lower = if is_async || func_ty_async {
+                    AsyncTaskIntrinsic::LowerImport
+                } else {
+                    AsyncTaskIntrinsic::LowerImportBackwardsCompat
+                };
+                let call = self
+                    .bindgen
+                    .intrinsic_bind_callback(Intrinsic::AsyncTask(lower), &metadata);
 
                 // NOTE: For Trampoline::LowerImport, the trampoline index is actually already defined,
                 // but we *redefine* it to call the lower import function first.
@@ -3702,20 +3694,16 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|idx| idx.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
                 let component_idx = instance.as_u32();
-                let task_return_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
                 let callback_fn_idx = callback
                     .map(|v| v.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
                 let string_encoding_js = string_encoding_js_literal(string_encoding);
 
                 let result_type_idx = results.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {task_return_fn}.bind(
-                         null,
-                         {{
+                let task_return_callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn),
+                    &format!(
+                        r#"{{
                              componentIdx: {component_idx},
                              useDirectParams: {use_direct_params},
                              getMemoryFn: {get_memory_fn_js},
@@ -3725,9 +3713,10 @@ impl<'a> Instantiator<'a, '_> {
                              lowerFns: {lower_fns_js},
                              stringEncoding: {string_encoding_js},
                              resultTypeIdx: {result_type_idx},
-                         }},
-                     );",
+                         }}"#
+                    ),
                 );
+                uwriteln!(self.src.js, "const trampoline{i} = {task_return_callback};");
             }
 
             Trampoline::BackpressureInc { instance } => {
@@ -3765,37 +3754,26 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::ThreadIndex { instance } => {
-                let thread_index_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadIndex));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {thread_index_fn}.bind(null, {instance});\n",
-                    instance = instance.as_u32(),
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadIndex),
+                    &instance.as_u32().to_string(),
                 );
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};");
             }
-
             Trampoline::ThreadNewIndirect {
                 instance,
                 start_func_table_idx,
                 ..
             } => {
-                let thread_new_indirect_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadNewIndirect));
-                let guard_trap_fn = self
+                let component_idx = instance.as_u32();
+                let table = start_func_table_idx.as_u32();
+                let callback = self.bindgen.intrinsic_bind_callback(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadNewIndirect), &format!("{{ componentIdx: {component_idx}, getStartFuncTableFn: () => table{table} }}"));
+                let guard = self
                     .bindgen
                     .intrinsic_call_prefix(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
-                let component_instance_idx = instance.as_u32();
-                // Like the other non-suspending built-ins, a trap (out-of-range or
-                // uninitialized table index) must be recorded against the instance.
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {guard_trap_fn}{component_instance_idx}, {thread_new_indirect_fn}.bind(null, {{
-                        componentIdx: {component_instance_idx},
-                        getStartFuncTableFn: () => table{start_func_table},
-                    }}));\n",
-                    start_func_table = start_func_table_idx.as_u32(),
+                    "const trampoline{i} = {guard}{component_idx}, {callback});"
                 );
             }
 
@@ -3855,22 +3833,17 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
             Trampoline::ThreadResumeLater { instance } => {
-                let resume_later_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadResumeLater));
-                let guard_trap_fn = self
+                let component_idx = instance.as_u32();
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadResumeLater),
+                    &format!("{{ componentIdx: {component_idx} }}"),
+                );
+                let guard = self
                     .bindgen
                     .intrinsic_call_prefix(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
-                let component_instance_idx = instance.as_u32();
-                // Like the other non-suspending built-ins, a trap (unknown or
-                // non-suspended thread) must be recorded against the instance.
                 uwriteln!(
                     self.src.js,
-                    r#"
-                      const trampoline{i} = {guard_trap_fn}{component_instance_idx}, {resume_later_fn}.bind(null, {{
-                          componentIdx: {component_instance_idx},
-                      }}));
-                    "#
+                    "const trampoline{i} = {guard}{component_idx}, {callback});"
                 );
             }
 
@@ -3888,9 +3861,14 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::EnterSyncCall => {
-                let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
+                let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic_call_prefix(
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
                 );
+                let enter_symmetric_sync_guest_call_callback = self
+                    .bindgen
+                    .intrinsic_callback_reference(Intrinsic::AsyncTask(
+                        AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
+                    ));
                 let suspending_wrap_fn = self
                     .bindgen
                     .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
@@ -3913,12 +3891,19 @@ impl<'a> Instantiator<'a, '_> {
                     Some(AsyncMode::JavaScriptPromiseIntegration { .. })
                 );
                 if uses_jspi {
+                    // The suspending wrapper invokes callbacks with
+                    // fn.apply(null, args), including before context binding.
+                    let enter_symmetric_sync_guest_call_slow_callback =
+                        self.bindgen.intrinsic_callback_reference_with_receiver(
+                            Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
+                            "null",
+                        );
                     uwriteln!(
                         self.src.js,
                         r#"
                           const trampoline{i} = {conditional_suspending_fn}
-                              {guard_trap_fn}null, (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx, true), true),
-                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}callerComponentIdx, {enter_symmetric_sync_guest_call_fn}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
+                              {guard_trap_fn}null, (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}callerComponentIdx, calleeIsAsync, calleeComponentIdx, true), true),
+                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}callerComponentIdx, {enter_symmetric_sync_guest_call_slow_callback}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
                           );
                         "#,
                     );
@@ -3926,16 +3911,18 @@ impl<'a> Instantiator<'a, '_> {
                     uwriteln!(
                         self.src.js,
                         r#"
-                          const trampoline{i} = {enter_symmetric_sync_guest_call_fn};
+                          const trampoline{i} = {enter_symmetric_sync_guest_call_callback};
                         "#,
                     );
                 }
             }
 
             Trampoline::ExitSyncCall => {
-                let exit_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall),
-                );
+                let exit_symmetric_sync_guest_call_fn =
+                    self.bindgen
+                        .intrinsic_callback_reference(Intrinsic::AsyncTask(
+                            AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall,
+                        ));
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {exit_symmetric_sync_guest_call_fn};\n",
@@ -4114,8 +4101,10 @@ impl<'a> Instantiator<'a, '_> {
 
             self.add_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
             self.add_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
-            let current_task_get_fn =
-                Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+            let current_task_get_fn = self.bindgen.runtime().call_prefix(
+                Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
+                true,
+            );
             let get_global_current_thread_meta_fn = self
                 .bindgen
                 .runtime()
@@ -4128,7 +4117,7 @@ impl<'a> Instantiator<'a, '_> {
                     "(x) => {{
                 const {{ taskID }} = {get_global_current_thread_meta_fn}{component_instance_idx});
 
-                const taskMeta = {current_task_get_fn}({component_instance_idx}, taskID);
+                const taskMeta = {current_task_get_fn}{component_instance_idx}, taskID);
                 if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
 
                 const task = taskMeta.task;
@@ -5476,14 +5465,14 @@ impl<'a> Instantiator<'a, '_> {
                 .intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
             let get_current_thread = self
                 .bindgen
-                .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread));
+                .intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread));
             let component_idx = opts.instance.as_u32();
             realloc = Some(format!(
                 r#"((...args) => {{
                     const state = {get_component_state}{component_idx});
                     const previousMayLeave = state.mayLeave;
                     const meta = {get_current_thread_meta}{component_idx});
-                    const thread = meta && {get_current_thread}(meta.componentIdx, meta.threadID, meta.taskID)?.thread;
+                    const thread = meta && {get_current_thread}meta.componentIdx, meta.threadID, meta.taskID)?.thread;
                     const previousStorage = thread?.storage;
                     if (thread) {{ thread.storage = [0, 0]; }}
                     state.mayLeave = false;
@@ -5900,7 +5889,6 @@ impl<'a> Instantiator<'a, '_> {
                     UnsafeIntrinsic::ContextSetI32_1 => (AsyncTaskIntrinsic::ContextSet, 1),
                     ui => return format!("unsafeIntrinsic{}", ui.index()),
                 };
-                let context_fn = self.bindgen.intrinsic(intrinsic.into());
                 // FACT adapters have no owning component: their context operations
                 // follow the executing task as enter/exit-sync-call switches it.
                 let component = if let Some(component_idx) = self.init_current_module {
@@ -5909,7 +5897,10 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     String::new()
                 };
-                format!("{context_fn}.bind(null, {{ {component}slot: {slot} }})")
+                self.bindgen.intrinsic_bind_callback(
+                    intrinsic.into(),
+                    &format!("{{ {component}slot: {slot} }}"),
+                )
             }
         }
     }

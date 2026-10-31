@@ -25,6 +25,8 @@ use crate::{names::js_string_literal, source::Source, uwriteln};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+mod async_task;
+use async_task::TaskContext;
 mod component;
 pub(crate) mod conversion;
 mod core;
@@ -49,6 +51,7 @@ pub(crate) enum RuntimeContext {
     Component(ComponentContext),
     Waitable(WaitableContext),
     ErrCtx(ErrCtxContext),
+    Task(TaskContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -114,6 +117,7 @@ impl RuntimeContext {
         .chain(ComponentContext::get_global_names())
         .chain(WaitableContext::get_global_names())
         .chain(ErrCtxContext::get_global_names())
+        .chain(TaskContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -122,6 +126,7 @@ impl RuntimeContext {
             Self::Component(context) => context.local_name(),
             Self::Waitable(context) => context.local_name(),
             Self::ErrCtx(context) => context.local_name(),
+            Self::Task(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -153,6 +158,7 @@ impl RuntimeContext {
             Self::Component(context) => return context.initializer(),
             Self::Waitable(context) => return context.initializer(),
             Self::ErrCtx(context) => return context.initializer(),
+            Self::Task(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -243,6 +249,7 @@ impl RuntimeContext {
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
             Self::ErrCtx(context) => context.dependencies(),
+            Self::Task(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -254,9 +261,12 @@ impl RuntimeContext {
                 Self::HandleTables,
                 Self::ScopeId,
                 Self::CallBorrows,
-                Self::Core(CoreContext::GlobalCurrentTaskMeta),
+                Self::Task(TaskContext::Lookup),
             ],
-            Self::ResourceDestructor => &[Self::Core(CoreContext::GlobalCurrentTaskMeta)],
+            Self::ResourceDestructor => &[
+                Self::Core(CoreContext::GlobalCurrentTaskMeta),
+                Self::Task(TaskContext::Creation),
+            ],
             _ => &[],
         }
     }
@@ -279,6 +289,7 @@ impl RuntimeContext {
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),
             Self::ErrCtx(context) => context.render(output, args),
+            Self::Task(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -289,11 +300,11 @@ impl RuntimeContext {
             ),
             Self::ResourceTransferBorrow => uwriteln!(
                 output,
-                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, tables: HANDLE_TABLES, scope: _jcoScopeIdContext, callBorrows: _jcoCallBorrowContext, registers: CURRENT_TASK_META, getTask: (componentIdx, taskID) => getCurrentTask(componentIdx, taskID)?.task }};"
+                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, tables: HANDLE_TABLES, scope: _jcoScopeIdContext, callBorrows: _jcoCallBorrowContext, taskLookup: _jcoTaskLookupContext }};"
             ),
             Self::ResourceDestructor => uwriteln!(
                 output,
-                "const {local} = {{ registers: CURRENT_TASK_META, createTask: args => createNewCurrentImplicitThread(args) }};"
+                "const {local} = {{ registers: CURRENT_TASK_META, creation: _jcoTaskCreateContext }};"
             ),
             Self::ResourceTableGet => uwriteln!(
                 output,
@@ -367,6 +378,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::AsyncTask(i) => async_task::import(i),
             Intrinsic::ErrCtx(i) => Some(error_context::import(i)),
             Intrinsic::Waitable(i) => Some(waitable::import(i)),
             Intrinsic::Component(i) => Some(component::import(i)),
@@ -456,7 +468,7 @@ impl Provides<ResourceIntrinsic> for ExternalRuntime {
         _output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
-        resource::discover_inline_dependencies(Intrinsic::Resource(intrinsic), args);
+        async_task::discover(Intrinsic::Resource(intrinsic), args);
     }
 }
 
@@ -482,6 +494,7 @@ impl Provides<BaseIntrinsic> for ExternalRuntime {
             InlineRuntime.render(intrinsic, output, args);
         } else {
             core::discover(i, args);
+            async_task::discover(i, args);
             if i.conditional_suspending_wasm().is_some() {
                 output.push_str(&i.register_conditional_suspending_js(args));
             }
@@ -611,6 +624,30 @@ impl Provides<ErrCtxIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<AsyncTaskIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: AsyncTaskIntrinsic) -> IntrinsicBinding {
+        if async_task::import(intrinsic).is_some() {
+            IntrinsicBinding::Imported {
+                local_name: intrinsic.name(),
+            }
+        } else {
+            InlineRuntime.binding(intrinsic)
+        }
+    }
+    fn render(
+        &self,
+        intrinsic: AsyncTaskIntrinsic,
+        output: &mut Source,
+        args: &RenderIntrinsicsArgs<'_>,
+    ) {
+        if async_task::import(intrinsic).is_some() {
+            async_task::discover(intrinsic.into(), args);
+        } else {
+            InlineRuntime.render(intrinsic, output, args);
+        }
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -634,7 +671,6 @@ macro_rules! delegate_to_inline {
 }
 
 delegate_to_inline! {
-    AsyncTaskIntrinsic,
     LiftIntrinsic,
     LowerIntrinsic,
     AsyncStreamIntrinsic,
@@ -750,7 +786,7 @@ mod tests {
     use crate::intrinsics::{RenderIntrinsicsArgs, render_intrinsics, resource::ResourceIntrinsic};
 
     #[test]
-    fn transitive_named_calls_keep_inline_dependencies_and_deduplicate_imports() {
+    fn transitive_named_calls_share_task_owners_and_deduplicate_imports() {
         let mut intrinsics = BTreeSet::from([Intrinsic::Resource(
             ResourceIntrinsic::ResourceTransferBorrow,
         )]);
@@ -762,9 +798,17 @@ mod tests {
                 .external_runtime(true)
                 .build(),
         );
-        assert!(source.contains("getTask: (componentIdx, taskID) =>"));
+        assert!(source.contains("taskLookup: _jcoTaskLookupContext"));
         assert!(source.contains("const CURRENT_TASK_META = _jcoInitializeTaskRegisters();"));
-        assert!(source.contains("function getCurrentTask("));
+        assert!(!source.contains("function getCurrentTask("));
+        assert!(!source.contains("getTask: (componentIdx, taskID) =>"));
+        assert!(!source.contains("class FutureValue"));
+        assert_eq!(
+            source
+                .matches("const ASYNC_TASKS_BY_COMPONENT_IDX =")
+                .count(),
+            1
+        );
         assert!(!source.contains("function rscTableCreateBorrow("));
         assert!(source.contains("const HANDLE_TABLES"));
         assert!(!source.contains("function rscTableGet("));

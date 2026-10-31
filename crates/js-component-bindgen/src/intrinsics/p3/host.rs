@@ -122,11 +122,12 @@ impl HostIntrinsic {
             Self::PrepareCall => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let prepare_call_fn = render_args.require_intrinsic(Self::PrepareCall);
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let get_global_current_thread_meta_fn =
                     render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
-                let create_new_current_task_fn = render_args.require_intrinsic(
+                let create_new_current_task_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentImplicitThread),
                 );
                 let set_global_current_thread_meta_fn =
@@ -185,7 +186,7 @@ impl HostIntrinsic {
                         }}
 
                         const currentCallerThreadMeta = {get_global_current_thread_meta_fn}callerComponentIdx);
-                        const currentCallerTaskMeta = currentCallerThreadMeta && {current_task_get_fn}(callerComponentIdx, currentCallerThreadMeta.taskID);
+                        const currentCallerTaskMeta = currentCallerThreadMeta && {current_task_get_fn}callerComponentIdx, currentCallerThreadMeta.taskID);
                         if (!currentCallerTaskMeta) {{
                             // Core start functions run without an ambient component task.
                             // A fused synchronous lower would have to block that implicit
@@ -249,7 +250,7 @@ impl HostIntrinsic {
                            }}
                         }});
 
-                        const {{ task: newTask, thread: newThread }} = {create_new_current_task_fn}({{
+                        const {{ task: newTask, thread: newThread }} = {create_new_current_task_fn}{{
                             componentIdx: calleeComponentIdx,
                             isAsync,
                             getCalleeParamsFn,
@@ -306,15 +307,16 @@ impl HostIntrinsic {
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 let async_driver_loop_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+                    .intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
                 let lookup_memories_for_component_fn =
                     render_args.intrinsic_call_prefix(Intrinsic::LookupMemoriesForComponent);
                 let current_component_idx_globals = render_args
                     .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
                 let blocking_call_depth =
                     render_args.require_intrinsic(AsyncTaskIntrinsic::AsyncBlockingCallDepth);
-                let get_current_task_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_current_task_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let with_global_current_thread_meta_async_fn = render_args
                     .intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
                 let with_global_current_thread_meta_fn =
@@ -341,7 +343,7 @@ impl HostIntrinsic {
                         {debug_log_fn}('[{async_start_call_fn}()] args', {{ args, componentIdx }});
                         const {{ getCallbackFn, callbackIdx, getPostReturnFn, postReturnIdx }} = args;
 
-                        const preparedTaskMeta = {get_current_task_fn}(componentIdx, taskID);
+                        const preparedTaskMeta = {get_current_task_fn}componentIdx, taskID);
                         if (!preparedTaskMeta) {{ throw new Error('unexpectedly missing current task'); }}
 
                         const preparedTask = preparedTaskMeta.task;
@@ -584,7 +586,7 @@ impl HostIntrinsic {
                                 parentTaskID: subtask.parentTaskID(),
                             }});
 
-                            return {async_driver_loop_fn}({{
+                            return {async_driver_loop_fn}{{
                                 componentState: calleeComponentState,
                                 task: preparedTask,
                                 fnName,
@@ -793,11 +795,12 @@ impl HostIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let async_driver_loop_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+                    .intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
                 let current_component_idx_globals = render_args
                     .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
-                let get_current_task_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_current_task_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let with_global_current_thread_meta_async_fn = render_args
                     .intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
                 let with_global_current_thread_meta_fn =
@@ -842,7 +845,7 @@ impl HostIntrinsic {
                         {debug_log_fn}('[{sync_start_call_fn}()] args', {{ args, paramCount, componentIdx }});
                         const {{ getCallbackFn, callbackIdx }} = args;
 
-                        const preparedTaskMeta = {get_current_task_fn}(componentIdx, taskID);
+                        const preparedTaskMeta = {get_current_task_fn}componentIdx, taskID);
                         if (!preparedTaskMeta) {{ throw new Error('unexpectedly missing current (prepared) task'); }}
 
                         const preparedTask = preparedTaskMeta.task;
@@ -1004,7 +1007,7 @@ impl HostIntrinsic {
                                     componentIdx: preparedTask.componentIdx(),
                                     subtaskID: subtask.id(),
                                 }});
-                                await {async_driver_loop_fn}({{
+                                await {async_driver_loop_fn}{{
                                     componentState: calleeComponentState,
                                     task: preparedTask,
                                     fnName,

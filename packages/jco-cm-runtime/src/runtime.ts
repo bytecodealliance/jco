@@ -131,9 +131,7 @@ export interface ResourceTransferBorrowContext extends TrapContext {
     readonly tables: ResourceHandleTables;
     readonly scope: ResourceScopeCell;
     readonly callBorrows: ResourceCallBorrowList;
-    /** Lazy lookup while tasks remain inline; no operation namespace is supplied. */
-    readonly registers: TaskRegisters;
-    readonly getTask?: (componentIdx: number, taskID: bigint) => ResourceBorrowTask | undefined;
+    readonly taskLookup: TaskLookupContext<ResourceBorrowTask & TaskIdentity>;
 }
 export interface ResourceDestructorTask {
     readonly id: () => bigint;
@@ -157,8 +155,7 @@ export interface ResourceDestructorArgs<T> {
     readonly rep: ResourceRep;
 }
 export interface ResourceDestructorContext {
-    /** Lazy task capabilities, removed from generated inline bridges at N11. */
-    readonly createTask: (args: ResourceDestructorCreateArgs) => { task: ResourceDestructorTask; threadID: number };
+    readonly creation: TaskCreateContext;
     readonly registers: TaskRegisters;
 }
 
@@ -173,6 +170,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/component': ComponentModule;
     readonly 'intrinsics/waitable': WaitableModule;
     readonly 'intrinsics/error-context': ErrorContextModule;
+    readonly 'intrinsics/async-task': AsyncTaskModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -331,18 +329,14 @@ export interface MemoryMeta {
     memoryIdx?: number;
     memory?: RuntimeMemory;
 }
-/** Shared component contexts plus lazy access to task operations still inline. */
+/** Shared component and task owners used by the selected suspending wrapper. */
 export interface SuspendingImportContext extends TrapContext {
     readonly registers: TaskRegisters;
     readonly mayLeave: ComponentMayLeaveContext;
     readonly traps: ComponentRecordTrapContext;
     readonly states: ComponentStateLookupContext;
-    readonly getCurrentThread: (
-        componentIdx: number,
-        threadID: number,
-        taskID: bigint,
-    ) => { task: { mayBlock(): boolean | undefined } } | undefined;
-    readonly currentTaskMayBlock: () => number;
+    readonly threadLookup: ThreadLookupContext;
+    readonly mayBlock: TaskMayBlockGlobal;
 }
 export interface ComponentError extends Error {
     readonly payload: unknown;
@@ -703,7 +697,7 @@ export type ComponentTickResult = 'done' | 'resumed' | 'idle';
 export interface ComponentAsyncState {
     readonly handles: RepTable;
     readonly subtasks: RepTable;
-    readonly threads: RepTable;
+    readonly threads: RepTable<ComponentThread>;
     mayLeave: boolean;
     readonly componentIdx: () => number;
     readonly errored: () => boolean;
@@ -878,7 +872,7 @@ export interface WaitableSuspendOptions {
     readonly readyFn: () => boolean;
     readonly cancellable: boolean;
 }
-/** Task capabilities used by waitables while task implementation remains inline. */
+/** Task capabilities used by waitables. */
 export interface WaitableTask {
     readonly componentIdx: () => number;
     readonly deliverPendingCancel: (options: { cancellable: boolean }) => boolean;
@@ -934,8 +928,7 @@ export interface WaitableStoreEventOptions {
     readonly memoryIdx?: number;
 }
 export interface WaitableTaskLookup {
-    /** Lazy inline task lookup until N11; preserves current-task fallback semantics. */
-    readonly getCurrentTask: (componentIdx: number) => { componentIdx: number; task?: WaitableTask } | undefined;
+    readonly taskLookup: TaskLookupContext<WaitableTask & TaskIdentity>;
 }
 export interface WaitableSetNewContext {
     readonly lookup: ComponentStateLookupContext;
@@ -1089,4 +1082,578 @@ export interface ErrorContextModule {
         debugMessage: string,
         refCount: number,
     ) => { globalRep: number; errCtx: GlobalErrorContext };
+}
+
+export type TaskState = 'initial' | 'cancelled' | 'cancel-pending' | 'cancel-delivered' | 'resolved';
+
+export interface TaskSuspendOptions {
+    suspended?: boolean;
+    readonly readyFn: () => boolean;
+    cancellable?: boolean;
+}
+
+export type TaskCallback = ((...args: number[]) => number | Promise<number>) & {
+    _jcoMaySuspend?: boolean;
+};
+
+export type TaskPostReturn = (value: unknown) => unknown;
+
+export interface TaskLiftContext {
+    componentIdx: number;
+    params: unknown[];
+    memory?: RuntimeMemory | null;
+    useDirectParams?: boolean;
+    stringEncoding?: string | null;
+    storagePtr?: number;
+    storageLen?: number;
+    [key: string]: unknown;
+}
+
+export type TaskLiftFn = (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+
+export interface TaskLowerContext {
+    componentIdx: number;
+    vals: unknown[];
+    memory?: RuntimeMemory | null;
+    realloc?: StringRealloc | null;
+    storagePtr?: number;
+    stringEncoding?: string | null;
+    [key: string]: unknown;
+}
+
+export type TaskLowerFn = (ctx: TaskLowerContext) => unknown;
+
+export interface TaskCallMetadata {
+    callerThreadID?: number;
+    startFn?: (...args: unknown[]) => unknown;
+    returnFn?: (...args: unknown[]) => unknown;
+    returnFnCalled?: boolean;
+    returnFnResult?: unknown;
+    resultPtr?: number;
+    memoryIdx?: number | null;
+    memory?: RuntimeMemory | null;
+    realloc?: StringRealloc | null;
+    getReallocFn?: () => StringRealloc;
+    lowers?: TaskLowerFn[];
+    funcTypeIsAsync?: boolean;
+    stringEncoding?: string | null;
+}
+
+export interface AsyncTaskOptions {
+    componentIdx: number;
+    isAsync?: boolean;
+    isManualAsync?: boolean;
+    preserveFutureResult?: boolean;
+    entryFnName?: string;
+    callingWasmExport?: boolean;
+    callbackFn?: TaskCallback | null;
+    callbackFnName?: string | null;
+    getCalleeParamsFn?: () => unknown[];
+    stringEncoding?: string | null;
+    parentSubtask?: AsyncSubtask;
+    errHandling?: unknown;
+    resultPtr?: number;
+}
+
+export interface CreateTaskOptions extends AsyncTaskOptions {
+    parentSubtaskID?: bigint;
+    getCallbackFn?: () => TaskCallback;
+    getParamsFn?: () => unknown[];
+}
+
+export interface CreateSubtaskOptions {
+    componentIdx: number;
+    childTask?: AsyncTask | null;
+    parentTask?: AsyncTask;
+    callMetadata?: TaskCallMetadata;
+    fnName?: string;
+    isAsync?: boolean;
+    isManualAsync?: boolean;
+}
+
+export interface AsyncSubtaskOptions extends CreateSubtaskOptions {
+    parentTask: AsyncTask;
+    waitable: ComponentWaitable;
+    memoryIdx?: number;
+    target?: unknown;
+}
+
+export interface SubtaskLender {
+    lends: number;
+}
+
+export interface AsyncThreadOptions {
+    componentIdx: number;
+    task: AsyncTask;
+    startFn?: () => unknown;
+}
+export interface AsyncThread extends ComponentThread {
+    storage: number[];
+    readonly setId: (id: number) => void;
+    readonly task: () => AsyncTask;
+    readonly taskID: () => bigint;
+    readonly state: () => 'not-started' | 'running' | 'completed';
+    readonly isCancelled: () => boolean;
+    readonly isRejected: () => boolean;
+    readonly notifyProgress: () => void;
+    readonly entryFnName: () => string | undefined;
+    readonly getParentSubtask: () => AsyncSubtask | null;
+    readonly suspend: (options: TaskSuspendOptions & { releaseLock?: boolean }) => Promise<boolean>;
+    readonly start: () => void;
+}
+export interface AsyncThreadConstructor {
+    new (options: AsyncThreadOptions): AsyncThread;
+    readonly State: { NOT_STARTED: 'not-started'; RUNNING: 'running'; COMPLETED: 'completed' };
+}
+export interface ThreadLookupContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly registers: TaskRegisters;
+}
+export interface AsyncThreadClassContext extends ThreadLookupContext {
+    readonly traps: ComponentRecordTrapContext;
+}
+export interface ThreadControlContext extends ThreadLookupContext, TrapContext {
+    readonly AsyncThread: AsyncThreadConstructor;
+}
+export interface ThreadOperationOptions {
+    componentIdx: number;
+    isCancellable?: boolean;
+}
+export interface ThreadStartPlatform {
+    readonly Module: typeof WebAssembly.Module;
+    readonly Instance: typeof WebAssembly.Instance;
+    readonly LinkError: typeof WebAssembly.LinkError;
+    readonly promising: (fn: Function) => (...args: number[]) => Promise<unknown>;
+}
+export interface ThreadStartChecks {
+    readonly platform: ThreadStartPlatform;
+    readonly checked: WeakSet<Function>;
+    readonly typeCheck: WebAssembly.Module;
+}
+export interface ThreadNewContext extends ThreadControlContext {
+    readonly start: ThreadStartChecks;
+}
+export interface AsyncThreadMeta {
+    id: number;
+    componentIdx: number;
+    taskID: bigint;
+    task: AsyncTask;
+    thread: AsyncThread;
+}
+
+export interface AsyncTask extends ComponentTask, WaitableTask {
+    readonly calleeIsAsync: () => boolean;
+    readonly addThread: (thread: AsyncThread) => AsyncThread;
+    readonly removeThread: (thread: AsyncThread) => void;
+    readonly defaultThread: () => AsyncThread;
+    readonly enterHost: () => boolean;
+    readonly cancellationPending: () => boolean;
+    cancelled: boolean;
+    cancelRequested: boolean;
+    alwaysTaskReturn: boolean;
+    returnCalls: number;
+    storage: number[];
+    tmpRetI64HighBits: number;
+    callbackFnIdx?: number | null;
+    readonly taskState: () => TaskState;
+    readonly resourceScopeId: () => number;
+    readonly addBorrowedHandle: () => void;
+    readonly removeBorrowedHandle: () => void;
+    readonly addResourceLender: (table: ResourceTable, handle: number) => void;
+    readonly validateResourceBorrowScope: () => void;
+    readonly completionPromise: () => Promise<unknown>;
+    readonly settleCompletion: () => void;
+    readonly exitPromise: () => Promise<void>;
+    readonly waitForProgress: () => Promise<void>;
+    readonly isAsync: () => boolean;
+    readonly isManualAsync: () => boolean;
+    readonly isSync: () => boolean;
+    readonly getErrHandling: () => unknown;
+    readonly hasCallback: () => boolean;
+    readonly getReturnMemoryIdx: () => number | null | undefined;
+    readonly setReturnMemoryIdx: (idx: number | null | undefined) => void;
+    readonly getReturnMemory: () => RuntimeMemory | null | undefined;
+    readonly setReturnMemory: (memory: RuntimeMemory | null | undefined) => void;
+    readonly setReturnLowerFns: (fns: TaskLowerFn[]) => void;
+    readonly getReturnLowerFns: () => TaskLowerFn[] | null;
+    readonly setCalleeIsAsync: (value: boolean) => void;
+    readonly setParentSubtask: (subtask: AsyncSubtask | null) => void;
+    readonly getParentSubtask: () => AsyncSubtask | null;
+    readonly getRootTask: () => AsyncTask;
+    readonly setPostReturnFn: (fn?: TaskPostReturn | null) => void;
+    readonly setCallbackFn: (fn?: TaskCallback | null, name?: string | null) => void;
+    readonly getCallbackFnName: () => string | undefined;
+    readonly runCallbackFn: (...args: number[]) => number | Promise<number>;
+    readonly getCalleeParams: () => unknown[];
+    readonly mayBlock: () => boolean;
+    readonly setFuncTypeIsAsync: (value: boolean) => void;
+    readonly setReturnResultTypeIdx: (value: number | null) => void;
+    readonly returnResultTypeIdx: () => number | null;
+    readonly mayEnter: (task: AsyncTask) => boolean;
+    readonly enterSync: () => boolean;
+    readonly tryEnter: () => boolean | null;
+    readonly enter: (options?: { isHost?: boolean }) => Promise<boolean>;
+    readonly isRunningState: () => boolean;
+    readonly isResolved: () => boolean;
+    readonly isExited: () => boolean;
+    readonly waitUntil: (options: TaskSuspendOptions) => Promise<boolean>;
+    readonly yieldUntil: (options: TaskSuspendOptions) => Promise<WaitableEvent>;
+    readonly suspendUntil: (options: TaskSuspendOptions) => Promise<boolean>;
+    readonly suspendUntilCallback: (options: TaskSuspendOptions, onResume: (keepGoing: boolean) => void) => void;
+    readonly immediateSuspendUntil: (options: TaskSuspendOptions) => Promise<boolean>;
+    readonly immediateSuspend: (options: TaskSuspendOptions) => Promise<boolean>;
+    readonly deliverPendingCancel: (options: { cancellable?: boolean }) => boolean;
+    readonly cancellationRequested: () => boolean;
+    readonly requestCancellation: () => void;
+    readonly cancel: (args?: { error?: unknown }) => void;
+    readonly onResolve: (value: unknown) => void;
+    readonly registerOnResolveHandler: (fn: (value: unknown) => void) => void;
+    readonly isErrored: () => unknown;
+    readonly resolve: (results: unknown[]) => void;
+    readonly exit: (args?: { skipExclusiveLockCheck?: boolean }) => void;
+    readonly createSubtask: (args: CreateSubtaskOptions) => AsyncSubtask;
+    readonly getLatestSubtask: () => AsyncSubtask | undefined;
+    readonly getSubtaskByWaitableRep: (rep: number) => AsyncSubtask | undefined;
+    readonly currentSubtask: () => AsyncSubtask | undefined;
+    readonly removeSubtask: (subtask: AsyncSubtask) => AsyncSubtask;
+}
+
+export interface AsyncTaskConstructor {
+    new (options: AsyncTaskOptions): AsyncTask;
+    _ID: bigint;
+    readonly State: {
+        INITIAL: 'initial';
+        CANCELLED: 'cancelled';
+        CANCEL_PENDING: 'cancel-pending';
+        CANCEL_DELIVERED: 'cancel-delivered';
+        RESOLVED: 'resolved';
+    };
+    readonly BlockResult: {
+        CANCELLED: 'block.cancelled';
+        NOT_CANCELLED: 'block.not-cancelled';
+    };
+}
+
+export interface AsyncSubtask {
+    fnName: string | undefined;
+    target: unknown;
+    isAsync: boolean | undefined;
+    isManualAsync: boolean | undefined;
+    cancelProgress: Promise<unknown> | null;
+    readonly id: () => bigint;
+    readonly parentTaskID: () => bigint;
+    readonly childTaskID: () => bigint | undefined;
+    readonly state: () => number;
+    readonly getWaitable: () => ComponentWaitable;
+    readonly waitable: () => ComponentWaitable;
+    readonly waitableRep: () => number | null;
+    readonly ensureHandle: () => number;
+    readonly join: (set: ComponentWaitableSet | null) => void;
+    readonly getPendingEvent: () => WaitableEvent | null;
+    readonly hasPendingEvent: () => boolean;
+    readonly setPendingEvent: (fn: () => WaitableEvent) => void;
+    readonly setTarget: (value: unknown) => void;
+    readonly getResult: () => unknown;
+    readonly setResult: (value: unknown) => void;
+    readonly componentIdx: () => number;
+    readonly setChildTask: (task: AsyncTask) => void;
+    readonly getChildTask: () => AsyncTask | null;
+    readonly getParentTask: () => AsyncTask;
+    readonly setCallbackFn: (fn?: TaskCallback | null, name?: string | null) => void;
+    readonly getCallbackFnName: () => string | undefined;
+    readonly setPostReturnFn: (fn?: TaskPostReturn | null) => void;
+    readonly setOnProgressFn: (fn: () => void) => void;
+    readonly isNotStarted: () => boolean;
+    readonly cancellationRequested: () => boolean;
+    readonly requestCancellation: () => void;
+    readonly setHostPendingResult: (value: unknown) => void;
+    readonly registerOnStartHandler: (fn: () => void) => void;
+    readonly onStart: (args?: { startFnParams?: unknown[] }) => unknown;
+    readonly registerOnResolveHandler: (fn: (value: unknown) => void) => void;
+    readonly reject: (error: unknown) => void;
+    readonly onResolve: (value: unknown) => void;
+    readonly getStateNumber: () => number;
+    readonly isReturned: () => boolean;
+    readonly getCallMetadata: () => TaskCallMetadata;
+    readonly isResolved: () => boolean;
+    readonly addLender: (lender: SubtaskLender) => void;
+    readonly deliverResolve: () => void;
+    readonly resolveDelivered: () => boolean;
+    readonly drop: () => void;
+    readonly getWaitableHandleIdx: () => number | null;
+}
+
+export interface AsyncSubtaskConstructor {
+    new (options: AsyncSubtaskOptions): AsyncSubtask;
+    _ID: bigint;
+    readonly State: {
+        STARTING: 0;
+        STARTED: 1;
+        RETURNED: 2;
+        CANCELLED_BEFORE_STARTED: 3;
+        CANCELLED_BEFORE_RETURNED: 4;
+    };
+}
+
+export interface TaskIdentity {
+    readonly id: () => bigint;
+}
+export interface AsyncTaskMeta<T extends TaskIdentity = AsyncTask> {
+    id: bigint;
+    componentIdx: number;
+    task: T;
+}
+
+export interface TaskReturnOptions {
+    componentIdx: number;
+    readonly getMemoryFn: () => RuntimeMemory | null | undefined;
+    memoryIdx?: number | null;
+    callbackFnIdx?: number | null;
+    liftFns: TaskLiftFn[];
+    lowerFns?: TaskLowerFn[];
+    stringEncoding?: string;
+    useDirectParams?: boolean;
+    resultTypeIdx?: number;
+}
+
+export interface TaskLowerImportOptions {
+    componentIdx: number;
+    functionIdx?: number;
+    trampolineIdx?: number;
+    isAsync: boolean;
+    isManualAsync?: boolean;
+    paramLiftFns?: TaskLiftFn[];
+    resultLowerFns?: TaskLowerFn[];
+    hasResultPointer?: boolean;
+    funcTypeIsAsync?: boolean;
+    metadata?: unknown;
+    memoryIdx?: number | null;
+    readonly getMemoryFn: () => RuntimeMemory | null | undefined;
+    readonly getCallbackFn?: () => TaskCallback | null;
+    readonly getPostReturnFn?: () => TaskPostReturn | null;
+    isCancellable?: boolean;
+    getReallocFn?: () => StringRealloc;
+    stringEncoding?: string;
+    importFn: ((...params: unknown[]) => unknown) & {
+        fnName?: string;
+    };
+}
+
+export interface TaskFutureValue {
+    readonly resolveAsValue: (resolve: (value: unknown) => void) => void;
+}
+
+export interface SymmetricSyncGuestCall {
+    threadID: number;
+    callerThreadID: number;
+    componentIdx: number;
+    previousTaskMayBlock: number;
+}
+
+/** Actual task owners; no operation namespace is retained. */
+export type AsyncTasksByComponent<T extends TaskIdentity = AsyncTask> = Map<number, AsyncTaskMeta<T>[]>;
+export interface TaskLookupContext<T extends TaskIdentity = AsyncTask> {
+    readonly registers: TaskRegisters;
+    readonly tasks: Pick<AsyncTasksByComponent<T>, 'get'>;
+}
+export interface TaskClearContext<T extends TaskIdentity = AsyncTask> {
+    readonly tasks: Pick<AsyncTasksByComponent<T>, 'get'>;
+    readonly taskIds: bigint[];
+    readonly componentIdxs: number[];
+}
+export interface TaskCreateContext<T extends AsyncTask = AsyncTask> {
+    readonly AsyncThread: AsyncThreadConstructor;
+    readonly AsyncTask: new (options: AsyncTaskOptions) => T;
+    readonly tasks: Pick<AsyncTasksByComponent<T>, 'get' | 'set'>;
+    readonly taskIds: bigint[];
+    readonly componentIdxs: number[];
+}
+export interface TaskReturnRuntimeContext extends TaskLookupContext, TrapContext {}
+export interface TaskCancelContext extends TaskLookupContext {
+    readonly lookup: ComponentStateLookupContext;
+}
+export interface SubtaskCancelContext extends TaskCancelContext, TrapContext {
+    readonly AsyncSubtask: AsyncSubtaskConstructor;
+}
+export interface TaskDriverContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly WaitableSet: WaitableSetConstructor;
+    readonly events: Pick<AsyncEventCodes, 'NONE' | 'TASK_CANCELLED'>;
+    readonly strictNumeric: StrictNumericContext;
+}
+export interface TaskLowerImportRuntimeContext extends TaskCancelContext {
+    readonly AsyncTask: Pick<AsyncTaskConstructor, 'State'>;
+    readonly mayLeave: ComponentMayLeaveContext;
+    readonly events: Pick<AsyncEventCodes, 'SUBTASK'>;
+}
+export interface TaskCompatImportRuntimeContext extends TaskCancelContext {
+    readonly creation: TaskCreateContext;
+    readonly mayLeave: ComponentMayLeaveContext;
+    readonly events: Pick<AsyncEventCodes, 'SUBTASK'>;
+}
+export interface TaskSymmetricExitContext extends TaskCancelContext {
+    readonly mayBlock: TaskMayBlockGlobal;
+    readonly stack: SymmetricSyncGuestCall[];
+}
+export interface TaskSymmetricEnterContext extends TaskSymmetricExitContext {
+    readonly creation: TaskCreateContext;
+}
+export interface SubtaskDropContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly AsyncSubtask: AsyncSubtaskConstructor;
+}
+export interface AsyncSubtaskClassContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly memories: MemoryLookupCapability;
+    readonly disposeSymbol: symbol;
+}
+export interface AsyncTaskClassContext extends TrapContext {
+    readonly traps: ComponentRecordTrapContext;
+    readonly postReturn: ComponentPostReturnTrapContext;
+    readonly AsyncSubtask: AsyncSubtaskConstructor;
+    readonly Waitable: WaitableConstructor;
+    readonly lookup: ComponentStateLookupContext;
+    readonly events: Pick<AsyncEventCodes, 'NONE' | 'TASK_CANCELLED'>;
+    readonly determinism: AsyncDeterminism;
+    readonly scopeCounter: ResourceScopeCell;
+    readonly scopeTasks: ResourceScopeTasks;
+    readonly clearing: TaskClearContext;
+    readonly registers: TaskRegisters;
+    /** Lazy bridge to the still-inline FutureValue constructor until N17. */
+    readonly isFutureValue: (value: unknown) => value is TaskFutureValue;
+}
+/** A narrow selected platform, distinct from an absent WebAssembly implementation. */
+export interface TaskGlobalPlatform {
+    readonly Global?: new (descriptor: { value: 'i32'; mutable: true }, value: number) => TaskMutableRegister;
+}
+export interface TaskMutableRegister {
+    value: number;
+}
+export type TaskMayBlockGlobal = TaskMutableRegister | false;
+export interface AsyncTaskModule {
+    readonly initializeThreadStartChecks: (platform: ThreadStartPlatform) => ThreadStartChecks;
+    readonly threadIndex: (context: ThreadLookupContext, componentIdx: number) => number;
+    readonly threadNewIndirect: (
+        context: ThreadNewContext,
+        options: { componentIdx: number; getStartFuncTableFn: () => WebAssembly.Table },
+        index: number,
+        value: number,
+    ) => number;
+    readonly threadResumeLater: (
+        context: ThreadControlContext,
+        options: { componentIdx: number },
+        handle: number,
+    ) => void;
+    readonly threadSuspend: (context: ThreadControlContext, options: ThreadOperationOptions) => Promise<number>;
+    readonly threadSuspendThenResume: (
+        context: ThreadControlContext,
+        options: ThreadOperationOptions,
+        index: number,
+    ) => Promise<number>;
+    readonly threadYieldThenResume: (
+        context: ThreadControlContext,
+        options: ThreadOperationOptions,
+        index: number,
+    ) => Promise<number>;
+    readonly threadSuspendThenPromote: (
+        context: ThreadControlContext,
+        options: ThreadOperationOptions,
+        index: number,
+    ) => number | Promise<number>;
+    readonly threadYieldThenPromote: (
+        context: ThreadControlContext,
+        options: ThreadOperationOptions,
+        index: number,
+    ) => number | Promise<number>;
+
+    readonly initializeAsyncThreadClass: (context: AsyncThreadClassContext) => AsyncThreadConstructor;
+    readonly getCurrentThread: (
+        context: ThreadLookupContext,
+        componentIdx: number,
+        threadID?: number,
+        taskID?: bigint,
+    ) => AsyncThreadMeta | undefined;
+    readonly currentThreadOrThrow: (context: ThreadLookupContext, componentIdx: number) => AsyncThreadMeta;
+    readonly createNewCurrentImplicitThread: (
+        context: TaskCreateContext,
+        args: CreateTaskOptions,
+    ) => { task: AsyncTask; thread: AsyncThread; taskID: bigint; threadID: number };
+    readonly clearCurrentThread: <T extends TaskIdentity = AsyncTask>(
+        context: TaskClearContext<T>,
+        componentIdx: number,
+        taskID?: bigint,
+        options?: { preserveTask?: boolean },
+    ) => T | undefined;
+    readonly initializeCurrentTaskMayBlock: (platform: TaskGlobalPlatform | false) => TaskMayBlockGlobal;
+    readonly initializeAsyncBlockingCallDepth: (platform: TaskGlobalPlatform | false) => TaskMutableRegister;
+    readonly asyncBlockedCode: 4294967295;
+    readonly initializeAsyncSubtaskClass: (context: AsyncSubtaskClassContext) => AsyncSubtaskConstructor;
+    readonly initializeAsyncTaskClass: (context: AsyncTaskClassContext) => AsyncTaskConstructor;
+    readonly initializeTasksByComponent: () => AsyncTasksByComponent;
+    readonly initializeCurrentTaskIds: () => bigint[];
+    readonly initializeCurrentComponentIdxs: () => number[];
+    readonly initializeSymmetricSyncGuestCallStack: () => SymmetricSyncGuestCall[];
+    readonly contextSet: (
+        context: ThreadLookupContext,
+        options: { componentIdx?: number; slot: number },
+        value: number,
+    ) => void;
+    readonly contextGet: (context: ThreadLookupContext, options: { componentIdx?: number; slot: number }) => number;
+    readonly taskReturn: (context: TaskReturnRuntimeContext, options: TaskReturnOptions, ...params: unknown[]) => void;
+    readonly subtaskDrop: (context: SubtaskDropContext, componentIdx: number, rep: number) => void;
+    readonly asyncYield: (
+        context: ThreadControlContext,
+        options: { componentIdx: number; isCancellable?: boolean },
+    ) => number | Promise<number>;
+    readonly subtaskCancel: (
+        context: SubtaskCancelContext,
+        componentIdx: number,
+        isAsync: boolean,
+        rep: number,
+        slowOnly?: boolean,
+    ) => number | Promise<number>;
+    readonly taskCancel: (context: TaskCancelContext, componentIdx: number) => void;
+    readonly createNewCurrentTask: <T extends AsyncTask = AsyncTask>(
+        context: TaskCreateContext<T>,
+        args: CreateTaskOptions,
+    ) => [T, bigint];
+    readonly getCurrentTask: <T extends TaskIdentity = AsyncTask>(
+        context: TaskLookupContext<T>,
+        componentIdx: number,
+        taskID?: bigint,
+    ) => AsyncTaskMeta<T> | undefined;
+    readonly clearCurrentTask: <T extends TaskIdentity = AsyncTask>(
+        context: TaskClearContext<T>,
+        componentIdx: number,
+        taskID?: bigint,
+    ) => T | undefined;
+    readonly unpackCallbackResult: (context: TrapContext, result: number) => [number, number];
+    readonly driverLoop: (
+        context: TaskDriverContext,
+        args: {
+            componentState: ComponentAsyncState;
+            task: AsyncTask;
+            fnName?: string;
+            isAsync?: boolean;
+            callbackResult: unknown;
+        },
+    ) => unknown;
+    readonly lowerImport: (
+        context: TaskLowerImportRuntimeContext,
+        args: TaskLowerImportOptions,
+        ...params: unknown[]
+    ) => unknown;
+    readonly lowerImportBackwardsCompat: (
+        context: TaskCompatImportRuntimeContext,
+        args: TaskLowerImportOptions,
+        ...params: unknown[]
+    ) => unknown;
+    readonly symmetricSyncGuestCallEnter: (
+        context: TaskSymmetricEnterContext,
+        callerComponentIdx: number,
+        calleeIsAsync: boolean,
+        calleeComponentIdx: number,
+        syncOnly?: boolean,
+    ) => number | Promise<number>;
+    readonly symmetricSyncGuestCallExit: (context: TaskSymmetricExitContext) => void;
 }

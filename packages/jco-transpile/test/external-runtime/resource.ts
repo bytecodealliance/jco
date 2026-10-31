@@ -18,7 +18,8 @@ export function initializeResourceScopeCounter() { const state = defaults.initia
 export function initializeResourceScopeTasks() { const state = defaults.initializeResourceScopeTasks(); scopeMaps.push(state); return state; }
 export function initializeHandleTables() { const state = defaults.initializeHandleTables(); tables.push(state); return state; }
 export function callDestructor(context, args) {
-  if (Object.keys(context).sort().join() !== 'createTask,registers') throw new Error('broad destructor context');
+  if (Object.keys(context).sort().join() !== 'creation,registers') throw new Error('broad destructor context');
+  if (Object.keys(context.creation).sort().join() !== 'AsyncTask,AsyncThread,componentIdxs,taskIds,tasks' || typeof context.creation.AsyncTask !== 'function') throw new Error('detached task creation owners');
   calls.push('callDestructor'); return defaults.callDestructor(context, args);
 }
 export function tableRemove(context, table, handle) {
@@ -44,6 +45,12 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     join(dir, 'provider/intrinsics/error-context.js'),
                     'export * from ' +
                         JSON.stringify(new URL('intrinsics/error-context.js', defaultRuntimeUrl).href) +
+                        ';',
+                );
+                await writeFile(
+                    join(dir, 'provider/intrinsics/async-task.js'),
+                    'export * from ' +
+                        JSON.stringify(new URL('intrinsics/async-task.js', defaultRuntimeUrl).href) +
                         ';',
                 );
                 await writeFile(
@@ -76,7 +83,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.notInclude(source, 'function callResourceDestructor(');
                     assert.include(source, 'const HANDLE_TABLES = _jcoInitializeHandleTables();');
                     assert.notInclude(source, 'let RESOURCE_SCOPE_ID =');
-                    assert.include(source, '++_jcoResourceScopeCounterContext.value');
+                    assert.include(source, 'scopeCounter: _jcoResourceScopeCounterContext');
+                    assert.notInclude(source, 'class AsyncTask');
                 }
                 const bindings = await import(pathToFileURL(join(dir, 'resources.js')).href);
                 const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/resource.js')).href);

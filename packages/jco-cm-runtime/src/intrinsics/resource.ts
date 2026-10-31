@@ -1,4 +1,5 @@
 import { getCurrentTaskMeta, withCurrentTaskMeta } from './task-context.js';
+import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
 import type { ResourceModule, ResourceHandleTables, ResourceTable } from '../runtime.js';
 
 // Bit 30 of a scope marks a freed entry. An owned entry stores its u32 rep plus 2 ** 32.
@@ -99,8 +100,9 @@ export const transferBorrow: ResourceModule['transferBorrow'] = (context, handle
     const { rep, own } = tableGet(context, fromTable, handle);
     const toTable = getOrCreateTable(context.tables, toTid);
     const componentIdx = toTable._componentIdx;
-    const meta = componentIdx === undefined ? undefined : getCurrentTaskMeta(context.registers, componentIdx);
-    const borrowTask = meta ? context.getTask?.(meta.componentIdx, meta.taskID) : undefined;
+    const meta =
+        componentIdx === undefined ? undefined : getCurrentTaskMeta(context.taskLookup.registers, componentIdx);
+    const borrowTask = meta ? getCurrentTask(context.taskLookup, meta.componentIdx, meta.taskID)?.task : undefined;
     if (borrowTask && own) {
         fromTable[handle << 1]++;
         borrowTask.addResourceLender(fromTable, handle);
@@ -127,10 +129,10 @@ export const transferOwn: ResourceModule['transferOwn'] = (context, handle, from
     return tableCreateOwn(context.indexSpaces, getOrCreateTable(context.tables, toTid), rep);
 };
 export const callDestructor: ResourceModule['callDestructor'] = (context, { componentIdx, dtor, rep }) => {
-    if (!context.createTask || !context.registers) {
-        throw new TypeError('resource destructors require createTask and registers');
+    if (!context.creation || !context.registers) {
+        throw new TypeError('resource destructors require task creation state and registers');
     }
-    const { task, threadID } = context.createTask({
+    const { task, threadID } = createNewCurrentImplicitThread(context.creation, {
         componentIdx,
         isAsync: false,
         callingWasmExport: true,

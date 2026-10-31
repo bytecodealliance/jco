@@ -1,6 +1,7 @@
 import { debugLog } from './core-debug.js';
 import { promiseWithResolvers } from './core-promises.js';
 import { getOrCreateAsyncState } from './component.js';
+import { getCurrentTask } from './task-operations.js';
 
 /** Fresh class identity per store, with no state or platform capability required. */
 export function initializeWaitableClass() {
@@ -368,11 +369,11 @@ export function waitableSetNew(context, componentIdx) {
 }
 
 export function waitableSetWait(context, ctx, waitableSetRep, resultPtr, syncOnly = false) {
-    const { RuntimeError, WaitableSet, getCurrentTask, storeEventInComponentMemory } = context;
+    const { RuntimeError, WaitableSet, storeEventInComponentMemory } = context;
     debugLog('[waitableSetWait()] args', { ctx, waitableSetRep, resultPtr });
     const { componentIdx, memoryIdx, getMemoryFn } = ctx;
 
-    const taskMeta = getCurrentTask(componentIdx);
+    const taskMeta = getCurrentTask(context.taskLookup, componentIdx);
     if (!taskMeta) {
         throw Error('invalid/missing async task meta');
     }
@@ -417,7 +418,7 @@ export function waitableSetWait(context, ctx, waitableSetRep, resultPtr, syncOnl
 }
 
 export function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
-    const { RuntimeError, WaitableSet, getCurrentTask, storeEventInComponentMemory, events: asyncEventCode } = context;
+    const { RuntimeError, WaitableSet, storeEventInComponentMemory, events: asyncEventCode } = context;
     const { componentIdx, memoryIdx, getMemoryFn } = ctx;
     debugLog('[waitableSetPoll()] args', {
         componentIdx,
@@ -426,7 +427,7 @@ export function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
         resultPtr,
     });
 
-    const taskMeta = getCurrentTask(componentIdx);
+    const taskMeta = getCurrentTask(context.taskLookup, componentIdx);
     if (!taskMeta) {
         throw Error('invalid/missing current task meta');
     }
@@ -480,9 +481,8 @@ export function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
 }
 
 export function waitableSetDrop(context, componentIdx, waitableSetRep) {
-    const { getCurrentTask } = context;
     debugLog('[waitableSetDrop()] args', { componentIdx, waitableSetRep });
-    const task = getCurrentTask(componentIdx);
+    const task = getCurrentTask(context.taskLookup, componentIdx);
 
     if (!task) {
         throw new Error('invalid/missing async task');

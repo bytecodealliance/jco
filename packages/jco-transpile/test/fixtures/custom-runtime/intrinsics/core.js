@@ -1,4 +1,5 @@
 import { checkMayLeave, recordTrap, getOrCreateAsyncState } from './component.js';
+import { getCurrentThread } from './thread-operations.js';
 export { debugLog } from './core-debug.js';
 export { initializeRepTableClass } from './rep-table.js';
 export { initializeManagedBufferClass, initializeBufferManagerClass } from './buffers.js';
@@ -10,6 +11,7 @@ export {
     withCurrentTaskMetaAsync,
     clearCurrentTaskMeta,
 } from './task-context.js';
+
 export const i32Min = -2_147_483_648;
 export const i32Max = 2_147_483_647;
 export const initializeAsyncDeterminism = (mode) => mode;
@@ -143,6 +145,7 @@ export const throwUninitialized = () => {
     throw new TypeError('Wasm uninitialized use `await $init` first');
 };
 export { promiseWithResolvers } from './core-promises.js';
+
 export const registerMemory = (map, args) => {
     const { componentIdx, memory, memoryIdx } = args ?? {};
     if (componentIdx === undefined) {
@@ -158,6 +161,7 @@ export const registerMemory = (map, args) => {
     }
     inner[String(memoryIdx)] = { memory, memoryIdx, componentIdx };
 };
+
 export function lookupMemories(map, args) {
     const { componentIdx } = args ?? {};
     if (args.componentIdx === undefined) {
@@ -169,6 +173,7 @@ export function lookupMemories(map, args) {
     }
     return args.memoryIdx === undefined ? Object.values(metas) : metas[args.memoryIdx]?.memory;
 }
+
 export const suspendingImport = (
     context,
     componentIdx,
@@ -182,10 +187,12 @@ export const suspendingImport = (
     return function (...args) {
         checkMayLeave(context.mayLeave, componentIdx);
         const saved = currentTaskMeta[componentIdx] ?? null;
-        const savedTask = saved
-            ? context.getCurrentThread(saved.componentIdx, saved.threadID, saved.taskID)?.task
+        const savedThread = saved
+            ? getCurrentThread(context.threadLookup, saved.componentIdx, saved.threadID, saved.taskID)
             : null;
-        const mayBlock = savedTask ? (savedTask.mayBlock() ?? context.currentTaskMayBlock() !== 0) : false;
+        const mayBlock = savedThread
+            ? (savedThread.task.mayBlock() ?? (context.mayBlock ? context.mayBlock.value : 0) !== 0)
+            : false;
         if (!saved && !mayBlock && !callsHost) {
             throw new RuntimeError('cannot block a synchronous task before returning');
         }

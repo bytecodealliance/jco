@@ -83,6 +83,7 @@ suite('runtime package', () => {
                     'ComponentModule',
                     'WaitableModule',
                     'ErrorContextModule',
+                    'AsyncTaskModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -94,6 +95,7 @@ suite('runtime package', () => {
             const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
             expect(Object.keys(manifest.exports).sort()).toEqual([
                 '.',
+                './intrinsics/async-task',
                 './intrinsics/component',
                 './intrinsics/conversion',
                 './intrinsics/core',
@@ -114,6 +116,10 @@ suite('runtime package', () => {
 
             // The independent provider needs only the published declaration, without private files.
             await writeFile(join(consumer, 'contract.d.ts'), contract);
+            await writeFile(
+                join(consumer, 'contract-exports.ts'),
+                `export default ${JSON.stringify(contractExports)};`,
+            );
             await writeFile(
                 join(consumer, 'contract-exports.ts'),
                 `export default ${JSON.stringify(contractExports)};`,

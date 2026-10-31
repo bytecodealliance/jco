@@ -132,7 +132,7 @@ impl ResourceIntrinsic {
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
             Self::ResourceDestructorCall => {
-                let create_current_task = render_args.require_intrinsic(Intrinsic::AsyncTask(
+                let create_current_task = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
                 ));
                 let with_current_task =
@@ -149,7 +149,7 @@ impl ResourceIntrinsic {
                           // empty: SDK task hooks allocate and free a stack through them.
                           // The enclosing task's register is restored after the call.
 
-                          const {{ task, threadID }} = {create_current_task}({{
+                          const {{ task, threadID }} = {create_current_task}{{
                               componentIdx,
                               isAsync: false,
                               callingWasmExport: true,
@@ -353,8 +353,9 @@ impl ResourceIntrinsic {
                 let table_flag = render_args.require_intrinsic(Self::ResourceTableFlag);
                 let get_global_current_thread_meta =
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
-                let get_current_task = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let get_current_task = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
 
                 uwriteln!(
                     output,
@@ -375,7 +376,7 @@ impl ResourceIntrinsic {
                             ? undefined
                             : {get_global_current_thread_meta}(componentIdx);
                         const borrowTask = currentTaskMeta
-                            ? {get_current_task}(componentIdx, currentTaskMeta.taskID)?.task
+                            ? {get_current_task}componentIdx, currentTaskMeta.taskID)?.task
                             : undefined;
 
                         if (borrowTask && own) {{

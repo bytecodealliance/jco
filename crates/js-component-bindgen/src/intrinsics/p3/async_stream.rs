@@ -1096,8 +1096,9 @@ impl AsyncStreamIntrinsic {
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
 
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
 
                 // NOTE: This shared copy impl is meant to be called from *outside* the stream end class in question,
                 // but internally to the bindgen-generated code (i.e. from `stream.{read,write}` or from a
@@ -1247,7 +1248,7 @@ impl AsyncStreamIntrinsic {
                                  }} else {{
                                      this.setCopyState({stream_end_class}.CopyState.SYNC_COPYING);
 
-                                     const taskMeta = {current_task_get_fn}(componentIdx);
+                                     const taskMeta = {current_task_get_fn}componentIdx);
                                      if (!taskMeta) {{ throw new Error(`missing task meta for component idx [${{componentIdx}}]`); }}
 
                                      const task = taskMeta.task;
@@ -2169,8 +2170,9 @@ impl AsyncStreamIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_new_fn = render_args.require_intrinsic(Self::StreamNew);
                 let create_stream_fn = render_args.require_intrinsic(Self::CreateStream);
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -2184,7 +2186,7 @@ impl AsyncStreamIntrinsic {
                         }} = ctx;
                         if (callerComponentIdx === undefined) {{ throw new Error("missing caller component idx during stream.new"); }}
 
-                        const taskMeta = {current_task_get_fn}(callerComponentIdx);
+                        const taskMeta = {current_task_get_fn}callerComponentIdx);
                         if (!taskMeta) {{ throw new Error('missing async task metadata during stream.new'); }}
 
                         const task = taskMeta.task
@@ -2404,8 +2406,9 @@ impl AsyncStreamIntrinsic {
                 } else {
                     render_args.require_intrinsic(Self::StreamReadableEndClass)
                 };
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -2446,7 +2449,7 @@ impl AsyncStreamIntrinsic {
                             if (!streamEnd.hasPendingEvent()) {{
                                 if (isAsync) {{ return {async_blocked_const}; }}
 
-                                const taskMeta = {current_task_get_fn}(componentIdx);
+                                const taskMeta = {current_task_get_fn}componentIdx);
                                 if (!taskMeta) {{ throw new Error('missing current task metadata while doing stream transfer'); }}
                                 const task = taskMeta.task;
                                 if (!task) {{ throw new Error('missing task while doing stream transfer'); }}
@@ -2469,8 +2472,9 @@ impl AsyncStreamIntrinsic {
                 let stream_drop_fn = self.name();
                 let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let delete_stream_end_fn = render_args.require_intrinsic(Self::DeleteStreamEnd);
-                let current_task_get_fn = render_args
-                    .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
                 let is_write = matches!(self, Self::StreamDropWritable);
                 let stream_end_class = if is_write {
                     render_args.require_intrinsic(Self::StreamWritableEndClass)
@@ -2492,7 +2496,7 @@ impl AsyncStreamIntrinsic {
                         {debug_log_fn}('[{stream_drop_fn}()] args', {{ ctx, streamEndWaitableIdx }});
                         const {{ streamTableIdx, componentIdx }} = ctx;
 
-                        const task = {current_task_get_fn}(componentIdx);
+                        const task = {current_task_get_fn}componentIdx);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const cstate = {get_or_create_async_state_fn}componentIdx);
