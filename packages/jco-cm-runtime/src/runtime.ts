@@ -40,6 +40,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/conversion': ConversionModule;
     readonly 'intrinsics/js-helper': JsHelperModule;
     readonly 'intrinsics/string': StringModule;
+    readonly 'intrinsics/webidl': WebIdlModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -167,4 +168,14 @@ export interface StringModule {
     ) => Promise<StringAllocation>;
     readonly validateGuestChar: (value: number) => string;
     readonly validateHostChar: (value: unknown) => number | undefined;
+}
+
+/** Mutable cache owner; proxy internals are created only on first use. */
+export interface WebIdlProxyCacheContext {
+    proxy: object | undefined;
+}
+
+export interface WebIdlModule {
+    readonly initializeWebIdlProxyCache: () => WebIdlProxyCacheContext;
+    readonly globalThisIdlProxy: (context: WebIdlProxyCacheContext) => object;
 }

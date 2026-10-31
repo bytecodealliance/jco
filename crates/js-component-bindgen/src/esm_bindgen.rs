@@ -3,7 +3,7 @@ use std::fmt::Write;
 
 use heck::ToLowerCamelCase;
 
-use crate::intrinsics::webidl::WebIdlIntrinsic;
+use crate::intrinsics::{Intrinsic, webidl::WebIdlIntrinsic};
 use crate::names::{LocalNames, js_string_literal, maybe_quote_id, maybe_quote_member};
 use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
@@ -310,6 +310,7 @@ impl EsmBindgen {
         output: &mut Source,
         imports_object: Option<&str>,
         local_names: &mut LocalNames,
+        external_runtime: bool,
     ) {
         let mut iface_imports = Vec::new();
 
@@ -453,11 +454,9 @@ impl EsmBindgen {
                             );
                         }
                     } else if let Some(idl_binding) = idl_binding {
-                        uwrite!(
-                            output,
-                            "}} = {}()",
-                            WebIdlIntrinsic::GlobalThisIdlProxy.name()
-                        );
+                        let proxy = crate::intrinsics::runtime::select(external_runtime)
+                            .call(Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy), "");
+                        uwrite!(output, "}} = {proxy}");
                         if !idl_binding.is_empty() {
                             for segment in idl_binding.split('-') {
                                 uwrite!(output, ".{}()", segment.to_lowercase());
