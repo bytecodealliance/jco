@@ -2805,10 +2805,10 @@ impl<'a> Instantiator<'a, '_> {
                         )
                     }
                     wasmtime_environ::component::StringEncoding::CompactUtf16 => {
-                        let decoder = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::CompactUtf16Decode));
-                        format!("{decoder}(memory{memory_idx}, ptr, len)")
+                        self.bindgen.intrinsic_call(
+                            Intrinsic::String(StringIntrinsic::CompactUtf16Decode),
+                            &format!("memory{memory_idx}, ptr, len"),
+                        )
                     }
                 };
                 uwriteln!(
@@ -2876,12 +2876,15 @@ impl<'a> Instantiator<'a, '_> {
                         StringIntrinsic::CompactUtf16Encode
                     }
                 };
-                let encode_fn = self.bindgen.intrinsic(Intrinsic::String(encode_intrinsic));
+                let encode_fn = self.bindgen.intrinsic_call(
+                    Intrinsic::String(encode_intrinsic),
+                    &format!("s, realloc{realloc_fn_idx}, memory"),
+                );
                 uwriteln!(
                     self.src.js,
                     "function trampoline{i}OutputStr(s, outputPtr) {{
                          const memory = memory{memory_idx};
-                         const {{ ptr, len }} = {encode_fn}(s, realloc{realloc_fn_idx}, memory);
+                         const {{ ptr, len }} = {encode_fn};
                          outputPtr >>>= 0;
                          const view = new DataView(memory.buffer);
                          view.setUint32(outputPtr, ptr, true);

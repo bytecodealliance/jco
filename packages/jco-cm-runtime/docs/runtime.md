@@ -5,7 +5,8 @@
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
 `tableGet` from `intrinsics/resource` and selected conversions from
-`intrinsics/conversion` and JavaScript helpers from `intrinsics/js-helper`.
+`intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
+string operations/codecs from `intrinsics/string`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -45,7 +46,7 @@ const conformance: ResourceModule = resource;
 
 Export `CM_RUNTIME_API_VERSION = 1` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
-`./intrinsics/js-helper` subpaths
+`./intrinsics/js-helper` and `./intrinsics/string` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.

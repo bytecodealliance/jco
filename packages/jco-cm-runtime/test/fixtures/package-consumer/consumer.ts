@@ -3,6 +3,7 @@ import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime
 import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
 import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
+import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as custom from './provider.js';
 import type {
     ResourceModule,
@@ -12,6 +13,16 @@ import type {
 const defaultModule: ResourceModule = resource;
 const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
 const helpers: RuntimeModuleContracts['intrinsics/js-helper'] = jsHelper;
+const strings: RuntimeModuleContracts['intrinsics/string'] = string;
+const encoder = strings.initializeUtf8Encoder();
+const stringMemory = { buffer: new ArrayBuffer(8) };
+const allocation = strings.utf8Encode(encoder, 'é', () => 0, stringMemory);
+if (
+    allocation.len !== 2 ||
+    strings.initializeUtf8Decoder().decode(new Uint8Array(stringMemory.buffer, 0, 2)) !== 'é' ||
+    custom.validateHostChar('🚀') !== 0x1f680
+)
+    throw new Error('string consumer failed');
 const cache = helpers.initializeDataViewCache();
 const memory = { buffer: new ArrayBuffer(8) };
 const view = helpers.dataView(cache, memory);
