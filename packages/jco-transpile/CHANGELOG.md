@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.22.0] - 2026-10-31
+
+### 🧪 Testing
+
+- _(transpile)_ skip clocks until the shim release by @vados-cosmonic
+
+- _(transpile)_ cover async host import ordering by @vados-cosmonic
+
+- _(transpile)_ cover exclusive task locks with Rust components by @vados-cosmonic in #2361
+
+- _(transpile)_ cover task.return validation with a Rust component by @vados-cosmonic in #2360
+
+- _(transpile)_ cover future resource transfers with Rust components by @vados-cosmonic in #2356
+
+- _(transpile)_ cover synchronous stream writes with a Rust component by @vados-cosmonic in #2357
+
+- _(transpile)_ cover compact strings with a Rust component by @vados-cosmonic in #2358
+
+- _(transpile)_ cover thread index reuse with a Rust component by @vados-cosmonic in #2359
+
+- _(transpile)_ cover invalid handle kinds with a Rust component by @vados-cosmonic
+
+- _(transpile)_ cover unresolved callback exits with Rust components by @vados-cosmonic in #2354
+
+- _(transpile)_ configure HTTP keep-alive timeout explicitly by @vados-cosmonic in #2355
+
+- _(transpile)_ cover returned resource handles with Rust components by @vados-cosmonic
+
+- _(transpile)_ cover Python cooperative threading by @vados-cosmonic
+
 ## [0.21.0] - 2026-10-28
 
 ### 🚀 Features
