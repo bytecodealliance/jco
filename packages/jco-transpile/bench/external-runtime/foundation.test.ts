@@ -106,7 +106,7 @@ test(
         }
         const mappingSources = Object.fromEntries(
             await Promise.all(
-                ['runtime.rs', 'runtime/core.rs'].map(async (name) => [
+                ['runtime.rs', 'runtime/core.rs', 'runtime/component.rs'].map(async (name) => [
                     name,
                     hash(
                         await readFile(
@@ -159,15 +159,22 @@ test(
                 await mkdir(controlDir, { recursive: true });
                 await installRuntime(controlDir);
                 for (const control of importControls) {
-                    const specifier =
-                        resolution === 'file'
-                            ? new URL(control.suffix + '.js', defaultRuntimeUrl).href
-                            : '@bytecodealliance/jco-cm-runtime/' + control.suffix;
+                    const groups = [control, ...('imports' in control ? control.imports : [])];
+                    const imports = groups
+                        .map((group) => {
+                            const specifier =
+                                resolution === 'file'
+                                    ? new URL(group.suffix + '.js', defaultRuntimeUrl).href
+                                    : '@bytecodealliance/jco-cm-runtime/' + group.suffix;
+                            return `import { ${group.names.join(', ')} } from ${JSON.stringify(specifier)};`;
+                        })
+                        .join('\n');
                     for (const used of [false, true]) {
                         const entry = join(controlDir, `entry-${control.id}-${used}.mjs`);
                         await writeFile(
                             entry,
-                            `import { ${control.names.join(', ')} } from ${JSON.stringify(specifier)};\n` +
+                            imports +
+                                '\n' +
                                 (used
                                     ? control.setup + ` export function answer() { return ${control.answer}; }`
                                     : 'export const answer = 42;'),

@@ -91,6 +91,17 @@ pub(crate) trait IntrinsicRuntime:
         format!("{}(", binding(self, intrinsic).local_name())
     }
 
+    /// Partially apply an intrinsic with its selected context and bound operands.
+    fn bind_callback(&self, intrinsic: Intrinsic, operands: &str) -> String {
+        let call = self.call(intrinsic, operands);
+        let (name, args) = call.split_once('(').expect("intrinsic call");
+        if args == ")" {
+            format!("{name}.bind(null)")
+        } else {
+            format!("{name}.bind(null, {args}")
+        }
+    }
+
     /// Render a call to `intrinsic`. Runtimes may add implicit leading operands.
     fn call(&self, intrinsic: Intrinsic, operands: &str) -> String {
         format!(

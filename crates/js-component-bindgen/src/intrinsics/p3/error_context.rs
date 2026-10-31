@@ -281,8 +281,9 @@ impl ErrCtxIntrinsic {
                 let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
                 let err_ctx_debug_msg_fn =
                     render_args.require_intrinsic(Self::ErrorContextDebugMessage);
-                let get_or_create_async_state_fn =
-                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 output.push_str(&format!(r#"
                     function {err_ctx_debug_msg_fn}(ctx, handle, outputStrPtr) {{
@@ -290,7 +291,7 @@ impl ErrCtxIntrinsic {
                         const {{ componentIdx, writeStrFn }} = ctx;
                         const globalTable = {global_tbl}.get();
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         const errCtx = cstate.handles.get(handle);
                         if (!errCtx || errCtx.globalRep === undefined) {{
                             throw new {runtime_error_class}(`missing error context (handle [${{handle}}]) in component idx [${{componentIdx}}] during debug msg`);
@@ -311,8 +312,9 @@ impl ErrCtxIntrinsic {
                 let err_ctx_drop_fn = render_args.require_intrinsic(Self::ErrorContextDrop);
                 let get_local_tbl_fn = render_args.require_intrinsic(Self::GetLocalTable);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let get_or_create_async_state_fn =
-                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 output.push_str(&format!(r#"
                     function {err_ctx_drop_fn}(ctx, handle) {{
@@ -320,7 +322,7 @@ impl ErrCtxIntrinsic {
                         const {{ componentIdx, localTableIdx }} = ctx;
                         const globalTable = {global_tbl}.get();
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         const errCtx = cstate.handles.get(handle);
                         if (!errCtx || errCtx.globalRep === undefined) {{
                             throw new {runtime_error_class}(`missing error context (handle [${{handle}}]) in component idx [${{componentIdx}}] during drop`);
@@ -353,8 +355,9 @@ impl ErrCtxIntrinsic {
                 let create_local_handle_fn = render_args.require_intrinsic(Self::CreateLocalHandle);
                 let global_err_ctx_table_map =
                     render_args.require_intrinsic(Self::GlobalErrCtxTableMap);
-                let get_or_create_async_state_fn =
-                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 // TODO: error contexts should be stored in handles like streams are
 
@@ -375,7 +378,7 @@ impl ErrCtxIntrinsic {
                         const fromTbl = {get_local_tbl_fn}(srcComponentIdx, srcTableIdx);
                         const toTbl = {get_local_tbl_fn}(destComponentIdx, destTableIdx, {{ upsert: true }});
 
-                        const srcComponentState = {get_or_create_async_state_fn}(srcComponentIdx);
+                        const srcComponentState = {get_or_create_async_state_fn}srcComponentIdx);
 
                         const errCtx = srcComponentState.handles.get(waitableIdx);
                         if (!errCtx) {{
@@ -472,8 +475,9 @@ impl ErrCtxIntrinsic {
                 // NOTE: `rep`s are global component model representations, `handle`s are component-local table indices
                 let create_local_handle_fn = render_args.require_intrinsic(Self::CreateLocalHandle);
                 let global_tbl = render_args.require_intrinsic(Self::ComponentGlobalTable);
-                let get_or_create_async_state_fn =
-                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 output.push_str(&format!(r#"
                     function {create_local_handle_fn}(componentIdx, componentLocalTable, globalRep) {{
@@ -482,7 +486,7 @@ impl ErrCtxIntrinsic {
                             throw new Error(`missing global error-context [${{globalRep}}] during local handle create`);
                         }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         const newErrCtx = {{ globalRep, refCount: 1 }};
                         const waitableIdx = cstate.handles.insert(newErrCtx);

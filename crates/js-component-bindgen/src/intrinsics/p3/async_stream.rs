@@ -326,7 +326,7 @@ impl AsyncStreamIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
                     render_args.require_intrinsic(Self::GlobalStreamTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 output.push_str(&format!(
@@ -345,7 +345,7 @@ impl AsyncStreamIntrinsic {
                         streamEnd.setHandle(handle);
                         streamEnd.setStreamTableIdx(tableIdx);
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         const waitableIdx = cstate.handles.insert(streamEnd);
                         streamEnd.setWaitableIdx(waitableIdx);
 
@@ -443,7 +443,7 @@ impl AsyncStreamIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
                     render_args.require_intrinsic(Self::GlobalStreamTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -457,7 +457,7 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         let streamEnd;
                         if (streamEndWaitableIdx !== undefined) {{
@@ -491,7 +491,7 @@ impl AsyncStreamIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
                     render_args.require_intrinsic(Self::GlobalStreamTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -504,7 +504,7 @@ impl AsyncStreamIntrinsic {
                         if (streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
 
                         const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         const streamEnd = cstate.handles.get(streamEndWaitableIdx);
                         if (!(streamEnd instanceof {stream_end_class}) || streamEnd.streamTableIdx() !== tableIdx) {{
@@ -536,7 +536,7 @@ impl AsyncStreamIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_stream_table_map =
                     render_args.require_intrinsic(Self::GlobalStreamTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -554,7 +554,7 @@ impl AsyncStreamIntrinsic {
                         const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
                         if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while removing stream end`); }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         const streamEnd = cstate.handles.get(streamWaitableIdx);
                         if (!(streamEnd instanceof {stream_end_class}) || streamEnd.streamTableIdx() !== tableIdx) {{
@@ -775,13 +775,14 @@ impl AsyncStreamIntrinsic {
                     render_args.require_intrinsic(Intrinsic::ManagedBufferClass);
                 let global_buffer_manager =
                     render_args.require_intrinsic(Intrinsic::GlobalBufferManager);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
-                let track_host_operation =
-                    render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
+                let track_host_operation = render_args.intrinsic_call_prefix(Intrinsic::Component(
+                    ComponentIntrinsic::TrackHostOperation,
+                ));
 
                 // Internal helper fn that sets up for a `copy()` call
                 let copy_setup_impl = format!(
@@ -1573,7 +1574,7 @@ impl AsyncStreamIntrinsic {
                                 // resource, which cannot itself wait for a contended lock.
                                 const componentIdx = this.getWaitable().componentIdx();
                                 if (componentIdx !== -1) {{
-                                    await {get_or_create_async_state_fn}(componentIdx).waitForExclusiveRelease();
+                                    await {get_or_create_async_state_fn}componentIdx).waitForExclusiveRelease();
                                 }}
 
                                 if (resultKind === {stream_end_class}.CopyResult.DROPPED) {{
@@ -1750,7 +1751,7 @@ impl AsyncStreamIntrinsic {
                                 // suspended in a synchronous cancel resumes only when it runs.
                                 // Count it like a host operation so a deadlock check scheduled
                                 // before this timer does not report the wait as a deadlock.
-                                {track_host_operation}(() => new Promise((resolve) => {{
+                                {track_host_operation}() => new Promise((resolve) => {{
                                     setTimeout(() => {{
                                         try {{ completeCancel(); }} finally {{ resolve(); }}
                                     }}, 0);
@@ -1863,7 +1864,7 @@ impl AsyncStreamIntrinsic {
                 let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
                 let external_stream_class =
                     render_args.require_intrinsic(Self::ExternalStreamClass);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let runtime_error_class =
@@ -1907,7 +1908,7 @@ impl AsyncStreamIntrinsic {
                            if (this.#userStream) {{ return this.#userStream; }}
                            if (this.#rep === null) {{ throw new Error("unexpectedly missing rep for host stream"); }}
 
-                           const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                           const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
                            const streamEnd = {get_stream_end_fn}({{
@@ -1945,8 +1946,9 @@ impl AsyncStreamIntrinsic {
 
             Self::PendingValueQueueClass => {
                 let pending_value_queue_class = self.name();
-                let track_host_operation =
-                    render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
+                let track_host_operation = render_args.intrinsic_call_prefix(Intrinsic::Component(
+                    ComponentIntrinsic::TrackHostOperation,
+                ));
 
                 output.push_str(&format!(
                     r#"
@@ -1991,7 +1993,7 @@ impl AsyncStreamIntrinsic {
                           async readSource() {{
                               if (!this.#sourceReadPromise) {{
                                   this.#sourceReadPromise = (async () => {{
-                                      const res = await {track_host_operation}(() => this.#readFn());
+                                      const res = await {track_host_operation}() => this.#readFn());
                                       const appended = this.appendReadValue(res.value);
                                       this.#done = res.done;
                                       return appended;
@@ -2169,7 +2171,7 @@ impl AsyncStreamIntrinsic {
                 let create_stream_fn = render_args.require_intrinsic(Self::CreateStream);
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 output.push_str(&format!(r#"
@@ -2192,7 +2194,7 @@ impl AsyncStreamIntrinsic {
                             throw new Error(`task component idx [${{task.componentIdx()}}] does not match stream new intrinsic component idx [${{callerComponentIdx}}]`);
                         }}
 
-                        const cstate = {get_or_create_async_state_fn}(callerComponentIdx);
+                        const cstate = {get_or_create_async_state_fn}callerComponentIdx);
                         if (!cstate.mayLeave) {{
                             throw new Error('component instance is not marked as may leave during stream.new');
                         }}
@@ -2268,7 +2270,7 @@ impl AsyncStreamIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_op_fn = self.name();
                 let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let may_block =
@@ -2323,7 +2325,7 @@ impl AsyncStreamIntrinsic {
                         // count may come in as u32::MAX which is mangled by JS into a negative value
                         count = Math.min(count >>> 0, {managed_buffer_class}.MAX_LENGTH);
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         if (!{may_block} && !isAsync) {{
@@ -2404,7 +2406,7 @@ impl AsyncStreamIntrinsic {
                 };
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 output.push_str(&format!(r#"
@@ -2412,7 +2414,7 @@ impl AsyncStreamIntrinsic {
                         {debug_log_fn}('[{stream_cancel_fn}()] args', {{ ctx, streamEndWaitableIdx }});
                         const {{ streamTableIdx, isAsync, componentIdx }} = ctx;
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const streamEnd = {get_stream_end_fn}({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
@@ -2480,7 +2482,7 @@ impl AsyncStreamIntrinsic {
                 } else {
                     "cannot remove busy stream"
                 };
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let runtime_error_class =
@@ -2493,7 +2495,7 @@ impl AsyncStreamIntrinsic {
                         const task = {current_task_get_fn}(componentIdx);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate) {{ throw new Error(`missing component state for component idx [${{componentIdx}}]`); }}
 
                         const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
@@ -2526,7 +2528,7 @@ impl AsyncStreamIntrinsic {
                     render_args.require_intrinsic(Self::RemoveStreamEndFromTable);
                 let add_stream_end_to_table_fn =
                     render_args.require_intrinsic(Self::AddStreamEndToTable);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let global_stream_table_map =
@@ -2561,7 +2563,7 @@ impl AsyncStreamIntrinsic {
                         // from the source stream's owning component is unsatisfiable
                         // there.
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
                         const streamEnd = {get_stream_end_fn}({{ tableIdx: srcTableIdx, streamEndWaitableIdx: srcStreamWaitableIdx }});

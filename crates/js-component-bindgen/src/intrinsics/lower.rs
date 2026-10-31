@@ -1113,8 +1113,9 @@ impl LowerIntrinsic {
                 let symbol_cabi_rep = render_args.require_intrinsic(Intrinsic::SymbolResourceRep);
                 let global_future_map =
                     render_args.require_intrinsic(AsyncFutureIntrinsic::GlobalFutureMap);
-                let get_or_create_async_state_fn =
-                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 let gen_future_host_inject_fn = render_args.require_intrinsic(
                     Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
                 );
@@ -1158,7 +1159,7 @@ impl LowerIntrinsic {
                                 }}
                                 waitableIdx = hostFuture.getFutureEndWaitableIdx();
                             }} else {{
-                                const cstate = {get_or_create_async_state_fn}(componentIdx);
+                                const cstate = {get_or_create_async_state_fn}componentIdx);
                                 if (!cstate) {{
                                     throw new Error(`missing async state for component [${{componentIdx}}]`);
                                 }}
@@ -1222,8 +1223,9 @@ impl LowerIntrinsic {
                 let is_stream_lowerable_object =
                     render_args.require_intrinsic(AsyncStreamIntrinsic::IsStreamLowerableObject);
                 let symbol_cabi_rep = render_args.require_intrinsic(Intrinsic::SymbolResourceRep);
-                let get_or_create_async_state_fn =
-                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 let gen_read_fn_from_lowerable_stream_fn = render_args
                     .require_intrinsic(AsyncStreamIntrinsic::GenReadFnFromLowerableStream);
                 let gen_stream_host_inject_fn = render_args.require_intrinsic(
@@ -1267,7 +1269,7 @@ impl LowerIntrinsic {
                                     }}
                                     waitableIdx = hostStream.getStreamEndWaitableIdx();
                                 }} else {{
-                                    const cstate = {get_or_create_async_state_fn}(componentIdx);
+                                    const cstate = {get_or_create_async_state_fn}componentIdx);
                                     if (!cstate) {{
                                         throw new Error(`missing async state for component [${{componentIdx}}]`);
                                     }}
@@ -1320,8 +1322,9 @@ impl LowerIntrinsic {
                     render_args.require_intrinsic(ErrCtxIntrinsic::CreateLocalHandle);
                 let err_ctx_global_ref_count_add_fn =
                     render_args.require_intrinsic(ErrCtxIntrinsic::GlobalRefCountAdd);
-                let get_or_create_async_state_fn =
-                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 let global_tbl =
                     render_args.require_intrinsic(ErrCtxIntrinsic::ComponentGlobalTable);
                 let get_local_tbl_fn =
@@ -1340,7 +1343,7 @@ impl LowerIntrinsic {
                         const globalErrCtx = globalTable.get(errCtxGlobalRep);
 
                         // Clean up the previous error context, if necessary
-                        const prevComponentState = {get_or_create_async_state_fn}(globalErrCtx.componentIdx);
+                        const prevComponentState = {get_or_create_async_state_fn}globalErrCtx.componentIdx);
                         const prevLocalErrCtx = prevComponentState.handles.get(globalErrCtx.waitableIdx);
                         if (prevLocalErrCtx.refCount === 0) {{
                             const removed = prevComponentState.remove(globalErrCtx.waitableIdx);
@@ -1363,7 +1366,7 @@ impl LowerIntrinsic {
                             );
                             handle = waitableIdx;
                         }} else {{
-                            const cstate = {get_or_create_async_state_fn}(componentIdx);
+                            const cstate = {get_or_create_async_state_fn}componentIdx);
                             const localErrCtx = cstate.handles.get(handle);
                             localErrCtx.refCount += 1;
                             localErrCtx.componentIdx = componentIdx;
