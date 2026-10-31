@@ -7,6 +7,7 @@ import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
 import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
 import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
 import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
+import * as asyncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/async-task';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -26,9 +27,11 @@ const publicModules: Record<string, Record<string, unknown>> = {
     ComponentModule: component,
     WaitableModule: waitable,
     ErrorContextModule: errorContext,
+    AsyncTaskModule: asyncTask,
 };
 
 const constants = new Set([
+    'AsyncTaskModule.asyncBlockedCode',
     'ResourceModule.tableFlag',
     'ResourceModule.tableOwn',
     'CoreModule.i32Min',
@@ -47,6 +50,19 @@ for (const [name, exports] of Object.entries(expectedExports)) {
 }
 const defaultModule: ResourceModule = resource;
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
+const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
+if (custom.getCurrentTask({ tasks: custom.initializeTasksByComponent(), registers: {} }, 0) !== undefined) {
+    throw new Error('copied task contract consumer failed');
+}
+const taskOwners = defaultTasks.initializeTasksByComponent();
+if (
+    defaultTasks.asyncBlockedCode !== 0xffffffff ||
+    defaultTasks.getCurrentTask({ tasks: taskOwners, registers: {} }, 0) !== undefined ||
+    defaultTasks.initializeCurrentTaskMayBlock(false) !== false ||
+    defaultTasks.initializeAsyncBlockingCallDepth(false).value !== 0
+) {
+    throw new Error('task owner/register consumer failed');
+}
 const registers = custom.initializeTaskRegisters();
 defaultCore.setCurrentTaskMeta(registers, { componentIdx: 0, taskID: 1n, threadID: 1 });
 if (

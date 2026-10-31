@@ -1396,8 +1396,8 @@ impl Intrinsic {
                     args.intrinsic_call_prefix(ComponentIntrinsic::CheckMayLeave);
                 let current_task_may_block =
                     args.require_intrinsic(p3::async_task::AsyncTaskIntrinsic::CurrentTaskMayBlock);
-                let get_current_thread =
-                    args.require_intrinsic(p3::async_task::AsyncTaskIntrinsic::GetCurrentThread);
+                let get_current_thread = args
+                    .intrinsic_call_prefix(p3::async_task::AsyncTaskIntrinsic::GetCurrentThread);
                 let runtime_error_class =
                     args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
@@ -1409,7 +1409,7 @@ impl Intrinsic {
                               const saved = {global_current_thread_meta_obj}[componentIdx] ?? null;
 
                               const savedThread = saved
-                                  ? {get_current_thread}(saved.componentIdx, saved.threadID, saved.taskID)
+                                  ? {get_current_thread}saved.componentIdx, saved.threadID, saved.taskID)
                                   : null;
                               const mayBlock = savedThread
                                   ? (savedThread?.task.mayBlock() ?? ({current_task_may_block}.value !== 0))

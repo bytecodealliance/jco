@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { createTestIntrinsics, type CoreBridgeCapabilities as CoreContext } from './core-test-helpers.js';
-import { create as createComponent } from './component-helpers.js';
+import { create as createComponent, task } from './component-helpers.js';
 function create(coreContext?: CoreContext) {
     return createTestIntrinsics({ coreContext }).core;
 }
@@ -106,12 +106,15 @@ function bridge(mayBlock: boolean) {
         },
     });
     const states = { asyncState: component.asyncState, ComponentAsyncState: component.ComponentAsyncState };
+    const current = task(1n);
+    Object.defineProperty(current.value, 'mayBlock', { value: () => mayBlock });
+    state.threads.insert(current.thread);
     const context: CoreContext = {
         mayLeave: { RuntimeError: core.RuntimeError, instanceFlags: component.instanceFlags },
         traps: { RuntimeError: core.RuntimeError, registers: core.currentTaskMeta, lookup: states },
         states,
-        getCurrentThread: () => ({ task: { mayBlock: () => mayBlock } }),
-        currentTaskMayBlock: () => 0,
+        threadLookup: { lookup: states, registers: core.currentTaskMeta },
+        mayBlock: { value: 0 },
     };
     return { context, traps, checks, state };
 }

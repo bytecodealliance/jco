@@ -118,25 +118,3 @@ pub(crate) fn resource_owner_import(intrinsic: Intrinsic) -> RuntimeImport {
         kind,
     }
 }
-
-/// Capabilities which still live in generated code are looked up only when used.
-pub(crate) fn discover_inline_dependencies(
-    intrinsic: Intrinsic,
-    args: &crate::intrinsics::RenderIntrinsicsArgs<'_>,
-) {
-    use crate::intrinsics::{p3::async_task::AsyncTaskIntrinsic, resource::ResourceIntrinsic};
-    match intrinsic {
-        Intrinsic::Resource(
-            ResourceIntrinsic::ResourceTransferBorrow
-            | ResourceIntrinsic::ResourceTransferBorrowValidLifting,
-        ) => {
-            args.require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-        }
-        Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall) => {
-            args.require_intrinsic(Intrinsic::AsyncTask(
-                AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
-            ));
-        }
-        _ => {}
-    }
-}
