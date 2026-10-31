@@ -25,6 +25,41 @@ export function componentPath(id: ComponentId) {
 /** Keep selected scratch families separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        suffix: 'intrinsics/error-context',
+        id: 'error-context-owners',
+        names: ['initializeLocalErrorContextTables', 'initializeErrorContextTableRegistrations'],
+        setup: 'const local = initializeLocalErrorContextTables(), tables = initializeErrorContextTableRegistrations();',
+        answer: 'local.size === 0 && Object.keys(tables).length === 0 ? 42 : 0',
+        allocations: { Map: 1 },
+    },
+    {
+        suffix: 'intrinsics/error-context',
+        id: 'error-context-global-class',
+        names: ['initializeGlobalErrorContextTableClass'],
+        imports: [{ suffix: 'intrinsics/core', names: ['initializeRepTableClass'] }],
+        setup: 'const RepTable = initializeRepTableClass({ RuntimeError: Error }), GlobalTable = initializeGlobalErrorContextTableClass(RepTable);',
+        answer: 'GlobalTable.data === null && typeof GlobalTable.get === "function" ? 42 : 0',
+        allocations: { Symbol: 1 },
+    },
+    {
+        suffix: 'intrinsics/error-context',
+        id: 'error-context-global-reserve',
+        names: ['initializeGlobalErrorContextTableClass', 'errCtxReserveGlobalRep', 'errCtxGlobalRefCountAdd'],
+        imports: [{ suffix: 'intrinsics/core', names: ['initializeRepTableClass'] }],
+        setup: 'const RepTable = initializeRepTableClass({ RuntimeError: Error }), GlobalTable = initializeGlobalErrorContextTableClass(RepTable); const { globalRep } = errCtxReserveGlobalRep(GlobalTable, "42", 0);',
+        answer: 'errCtxGlobalRefCountAdd(GlobalTable, globalRep) === 1 && Number(GlobalTable.get().get(globalRep).debugMessage) === 42 ? 42 : 0',
+        allocations: { Symbol: 1 },
+    },
+    {
+        suffix: 'intrinsics/error-context',
+        id: 'error-context-local-upsert',
+        names: ['initializeLocalErrorContextTables', 'errCtxGetLocalTable'],
+        imports: [{ suffix: 'intrinsics/core', names: ['initializeRepTableClass'] }],
+        setup: 'const context = { localTables: initializeLocalErrorContextTables(), RepTable: initializeRepTableClass({ RuntimeError: Error }) }; const table = errCtxGetLocalTable(context, 0, 0, { upsert: true });',
+        answer: 'table.get(table.insert(42)) === 42 ? 42 : 0',
+        allocations: { Map: 2, Symbol: 1 },
+    },
+    {
         suffix: 'intrinsics/waitable',
         id: 'waitable-selected-class',
         names: ['initializeWaitableClass'],

@@ -350,13 +350,12 @@ mod tests {
     }
 
     #[test]
-    fn shorthand_lowerers_and_error_context_calls_receive_their_owner() {
-        use crate::intrinsics::{lower::LowerIntrinsic, p3::error_context::ErrCtxIntrinsic};
+    fn shorthand_lowerers_receive_their_component_owner() {
+        use crate::intrinsics::lower::LowerIntrinsic;
         for selected in [
             Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture),
             Intrinsic::Lower(LowerIntrinsic::LowerFlatStream),
             Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext),
-            Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDebugMessage),
         ] {
             let (source, _) = generated_intrinsics([selected]);
             assert!(

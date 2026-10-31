@@ -128,6 +128,17 @@
         "Waitable(WaitableSetDrop)",
         "Waitable(RemoveWaitableSet)",
         "Waitable(WaitableJoin)",
+        "ErrCtx(ComponentGlobalTable)",
+        "ErrCtx(GlobalErrCtxTableMap)",
+        "ErrCtx(ComponentLocalTable)",
+        "ErrCtx(ErrorContextNew)",
+        "ErrCtx(ErrorContextDrop)",
+        "ErrCtx(ErrorContextTransfer)",
+        "ErrCtx(ErrorContextDebugMessage)",
+        "ErrCtx(GetLocalTable)",
+        "ErrCtx(GlobalRefCountAdd)",
+        "ErrCtx(CreateLocalHandle)",
+        "ErrCtx(ReserveGlobalRep)",
         "String(CompactUtf16Decode)",
         "String(CompactUtf16Encode)"
     ]

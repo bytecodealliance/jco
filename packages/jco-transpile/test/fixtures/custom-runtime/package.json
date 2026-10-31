@@ -10,6 +10,7 @@
         "./intrinsics/webidl": "./intrinsics/webidl.js",
         "./intrinsics/core": "./intrinsics/core.js",
         "./intrinsics/component": "./intrinsics/component.js",
-        "./intrinsics/waitable": "./intrinsics/waitable.js"
+        "./intrinsics/waitable": "./intrinsics/waitable.js",
+        "./intrinsics/error-context": "./intrinsics/error-context.js"
     }
 }

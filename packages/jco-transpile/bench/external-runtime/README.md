@@ -99,6 +99,16 @@ without constructing a waitable. The checkpoint hashes the nested waitable
 descriptor source. Four paired inline waitable fixes are included, so every
 comparison uses fresh inline output from this revision.
 
+N10 expands coverage to 137 variants and adds four error-context controls.
+Empty owners allocate one Map; selecting the lazy global-table class allocates
+only the selected representation-table class's private symbol. Global reservation
+and refcount adjustment use that same class without selecting component/task
+state. Local upsert allocates two Maps and one symbol. These native-constructor
+counts exclude ordinary objects, arrays, functions and class environments. The
+manifest hashes the nested error-context descriptor source. The checkpoint
+compares every bundle with N09 before attributing any new graph cost to this
+family; the broader error-context/shared portfolio remains N14/N19 work.
+
 All bundles and correctness checks finish before timing starts. Defaults are five
 fresh processes per matrix entry, each with 15 alternating paired samples after
 common warmup/calibration. Scenario order rotates deterministically (seed 20261021).

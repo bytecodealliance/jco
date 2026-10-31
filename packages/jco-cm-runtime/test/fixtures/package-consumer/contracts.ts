@@ -173,3 +173,22 @@ export const privateWaitContext: WaitableModule['waitableSetWait'] = (
 waitable.waitableSetWait({ componentIdx: 0, isAsync: true, getMemoryFn: () => ({ buffer: new ArrayBuffer(8) }) }, 1, 0);
 // @ts-expect-error public operation properties are readonly
 defaultWaitable.waitableJoin = () => {};
+
+import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
+import type { ErrorContextModule, ErrorContextNewContext } from '@bytecodealliance/jco-cm-runtime/runtime';
+export const defaultErrorContext: ErrorContextModule = errorContext;
+export const errorContextMapEntry: RuntimeModuleContracts['intrinsics/error-context'] = errorContext;
+// @ts-expect-error providers must supply every named export and state initializer
+export const missingErrorContext: ErrorContextModule = {};
+// @ts-expect-error context-free map initializers accept no universal context
+errorContext.initializeLocalErrorContextTables({});
+// @ts-expect-error global storage requires its selected representation-table constructor
+errorContext.initializeGlobalErrorContextTableClass({});
+// @ts-expect-error narrower private state must not become a provider requirement
+export const privateErrorContext: ErrorContextModule['errCtxNew'] = (
+    _ctx: ErrorContextNewContext & { privateState: number },
+) => 0;
+// @ts-expect-error string reading remains per-call metadata, not a substitute for state capabilities
+errorContext.errCtxNew({ componentIdx: 0, localTableIdx: 0, readStrFn: () => '' }, 0, 0);
+// @ts-expect-error public function properties are readonly
+defaultErrorContext.errCtxTransfer = () => 0;
