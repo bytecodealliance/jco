@@ -8,7 +8,8 @@ resource operations and storage initializers from `intrinsics/resource`, selecte
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
-from `intrinsics/core`, and component state/scheduling from `intrinsics/component`.
+from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
+and waitable constructors/operations from `intrinsics/waitable`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -34,7 +35,7 @@ Bindings check version 1 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 17 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(118/274 logical intrinsic variants, including all 16 component variants);
+(126/274 logical intrinsic variants, including all 16 component and eight waitable variants);
 other families remain inline during migration.
 
 ## Implementing an alternative runtime

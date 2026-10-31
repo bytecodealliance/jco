@@ -25,6 +25,23 @@ export function componentPath(id: ComponentId) {
 /** Keep selected scratch families separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        suffix: 'intrinsics/waitable',
+        id: 'waitable-selected-class',
+        names: ['initializeWaitableClass'],
+        setup: 'const Waitable = initializeWaitableClass(); const waitable = new Waitable({ target: 42 });',
+        answer: 'waitable instanceof Waitable && waitable.target === 42 && !waitable.hasPendingEvent() ? 42 : 0',
+        allocations: {},
+    },
+    {
+        suffix: 'intrinsics/waitable',
+        id: 'waitable-set-selected-class',
+        names: ['initializeWaitableSetClass'],
+        imports: [{ suffix: 'intrinsics/core', names: ['initializeAsyncEventCodes'] }],
+        setup: 'const WaitableSet = initializeWaitableSetClass(initializeAsyncEventCodes()); const set = new WaitableSet(42);',
+        answer: 'set instanceof WaitableSet && set.componentIdx() === 42 && set.numWaitables() === 0 && set.numWaiting() === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
         suffix: 'intrinsics/component',
         id: 'component-owners',
         names: [
@@ -81,8 +98,9 @@ export const importControls = [
         imports: [
             { suffix: 'intrinsics/core', names: ['initializeRepTableClass'] },
             { suffix: 'intrinsics/resource', names: ['initializeHandleIndexSpaces'] },
+            { suffix: 'intrinsics/waitable', names: ['initializeWaitableClass'] },
         ],
-        setup: 'const RuntimeError = Error, RepTable = initializeRepTableClass({ RuntimeError }), indexSpaces = initializeHandleIndexSpaces(), instanceFlags = initializeInstanceFlags(), storeTrap = initializeStoreTrap(), storeAsyncState = initializeStoreAsyncState(), asyncState = initializeComponentAsyncStates(); const normalization = { RuntimeError, messages: initializeCoreTrapMessages({}) }, deadlock = { RuntimeError, storeTrap, storeAsyncState, asyncState }; const State = initializeComponentAsyncStateClass({ RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, deadlock, cannotEnter: "cannot enter" }); const state = getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);',
+        setup: 'const RuntimeError = Error, RepTable = initializeRepTableClass({ RuntimeError }), indexSpaces = initializeHandleIndexSpaces(), instanceFlags = initializeInstanceFlags(), storeTrap = initializeStoreTrap(), storeAsyncState = initializeStoreAsyncState(), asyncState = initializeComponentAsyncStates(); const normalization = { RuntimeError, messages: initializeCoreTrapMessages({}) }, deadlock = { RuntimeError, storeTrap, storeAsyncState, asyncState }; const State = initializeComponentAsyncStateClass({ RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, deadlock, cannotEnter: "cannot enter", Waitable: initializeWaitableClass() }); const state = getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);',
         answer: 'state instanceof State && state.handles instanceof RepTable && state.handles.get(state.handles.insert(42)) === 42 && state.getBackpressure() === 0 ? 42 : 0',
         allocations: { Map: 6, Symbol: 1 },
     },

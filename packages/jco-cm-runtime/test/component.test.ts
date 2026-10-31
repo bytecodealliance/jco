@@ -161,16 +161,16 @@ test.concurrent('sync import completion wakes the current generation of waiters'
 
 test.concurrent('waitable creation is lazy and setAllError marks every existing component', () => {
     let calls = 0;
-    // Only identity matters here; the factory may return an inline class instance.
+    // The selected constructor is retained without constructing an instance yet.
     const waitable = {} as ComponentWaitable;
     const { component } = create({
-        componentContext: {
-            createWaitable(args) {
+        Waitable: class {
+            constructor(args: { target?: unknown }) {
                 expect(args).toEqual({ target: 'future' });
                 calls++;
                 return waitable;
-            },
-        },
+            }
+        } as new (args: { target?: unknown }) => ComponentWaitable,
     });
     const a = component.getOrCreateAsyncState(0);
     const b = component.getOrCreateAsyncState(1);
@@ -181,7 +181,9 @@ test.concurrent('waitable creation is lazy and setAllError marks every existing 
     expect(a.errored()).toBe(true);
     expect(b.errored()).toBe(true);
     expect(a.isTrapped()).toBe(false);
-    expect(() => create().component.getOrCreateAsyncState(0).createWaitable()).toThrow('requires createWaitable');
+    const other = create().component.getOrCreateAsyncState(0).createWaitable({ target: 'other' });
+    expect(other.target).toBe('other');
+    expect(other.isInSet()).toBe(false);
 });
 
 test.concurrent.each([false, true])(

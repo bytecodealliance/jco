@@ -1548,6 +1548,18 @@ mod tests {
     }
 
     #[test]
+    fn waitable_task_mismatch_diagnostics_read_available_numeric_indices() {
+        let wait = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
+        assert!(wait.contains("task component [${task.componentIdx()}]"));
+        assert!(!wait.contains("task component [${task.componentIdx}]"));
+
+        let poll = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
+        let before_task = poll.split("const task = taskMeta.task;").next().unwrap();
+        assert!(before_task.contains("'task component idx [' + taskMeta.componentIdx"));
+        assert!(!before_task.contains("'task component idx [' + task.componentIdx"));
+    }
+
+    #[test]
     fn renders_only_requested_and_discovered_intrinsics() {
         let (source, intrinsics) = render([Intrinsic::CoinFlip]);
 

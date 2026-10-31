@@ -106,7 +106,7 @@ test(
         }
         const mappingSources = Object.fromEntries(
             await Promise.all(
-                ['runtime.rs', 'runtime/core.rs', 'runtime/component.rs'].map(async (name) => [
+                ['runtime.rs', 'runtime/core.rs', 'runtime/component.rs', 'runtime/waitable.rs'].map(async (name) => [
                     name,
                     hash(
                         await readFile(

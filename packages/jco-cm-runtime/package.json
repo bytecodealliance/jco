@@ -58,6 +58,10 @@
         "./intrinsics/component": {
             "types": "./dist/intrinsics/component.d.ts",
             "default": "./dist/intrinsics/component.js"
+        },
+        "./intrinsics/waitable": {
+            "types": "./dist/intrinsics/waitable.d.ts",
+            "default": "./dist/intrinsics/waitable.js"
         }
     },
     "scripts": {

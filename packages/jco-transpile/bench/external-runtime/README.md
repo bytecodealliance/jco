@@ -89,6 +89,16 @@ the same file/package resolution policy. The manifest also hashes the nested
 component descriptor source. The paired inline backpressure fix is part of this
 checkpoint's same-revision comparison; older inline bundle hashes can change.
 
+N09 expands coverage to 126 variants and adds selected waitable/set constructor
+controls. The waitable initializer takes no context, and the set initializer
+receives only the selected live cancellation code. These controls create no
+instances of the traced native constructors; ordinary objects, arrays, class
+environments and Promises are outside those counters. The component-class
+control now explicitly selects its waitable constructor from the new subpath,
+without constructing a waitable. The checkpoint hashes the nested waitable
+descriptor source. Four paired inline waitable fixes are included, so every
+comparison uses fresh inline output from this revision.
+
 All bundles and correctness checks finish before timing starts. Defaults are five
 fresh processes per matrix entry, each with 15 alternating paired samples after
 common warmup/calibration. Scenario order rotates deterministically (seed 20261021).

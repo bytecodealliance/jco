@@ -20,7 +20,7 @@ async function writeProvider(dir: string, source: string) {
     await writeFile(join(dir, 'package.json'), '{"type":"module"}');
     await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
     await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    for (const suffix of ['conversion', 'js-helper', 'string', 'webidl', 'resource', 'core']) {
+    for (const suffix of ['conversion', 'js-helper', 'string', 'webidl', 'resource', 'core', 'waitable']) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),
             'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',
@@ -37,7 +37,7 @@ export function initializeStoreTrap() { const owner = defaults.initializeStoreTr
 export function initializeStoreAsyncState() { const owner = defaults.initializeStoreAsyncState(); stores.push(owner); return owner; }
 export function initializeComponentAsyncStates() { const owner = defaults.initializeComponentAsyncStates(); states.push(owner); return owner; }
 export function initializeComponentAsyncStateClass(context) {
- if (Object.keys(context).sort().join() !== 'RepTable,RuntimeError,cannotEnter,createWaitable,deadlock,indexSpaces,instanceFlags,normalization,storeTrap') throw new Error('broad component constructor context');
+ if (Object.keys(context).sort().join() !== 'RepTable,RuntimeError,Waitable,cannotEnter,deadlock,indexSpaces,instanceFlags,normalization,storeTrap') throw new Error('broad component constructor context');
  if (!flags.includes(context.instanceFlags) || !traps.includes(context.storeTrap) || !states.includes(context.deadlock.asyncState)) throw new Error('detached component owner');
  const constructor = defaults.initializeComponentAsyncStateClass(context); constructors.push(constructor); contexts.push(context); return constructor;
 }
@@ -76,7 +76,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.notInclude(source, 'const INSTANCE_FLAGS = new Map()');
                     assert.notInclude(source, 'function _recordTrap(');
                     assert.include(source, 'initializeComponentAsyncStateClass');
-                    assert.include(source, 'createWaitable: args => new Waitable(args)');
+                    assert.notInclude(source, 'createWaitable: args =>');
+                    assert.include(source, 'initializeWaitableClass');
                     assert.notInclude(source, 'checkMayLeave: componentIdx =>');
                     assert.notInclude(source, 'throwIfInterrupted: componentIdx =>');
                 }

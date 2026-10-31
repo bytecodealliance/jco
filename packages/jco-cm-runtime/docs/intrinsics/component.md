@@ -16,8 +16,8 @@ and forwards disposal with the host value's receiver.
 `initializeComponentAsyncStateClass(context)` returns a per-instantiation class,
 with its own statics and identity. It receives the selected representation-table
 constructor, shared handle allocator and flag/trap owners, narrow normalization
-and deadlock contexts, and a lazy `createWaitable` capability while waitables remain
-inline. State lookup receives the selected class and actual state Map. Handles
+and deadlock contexts, and the actual selected `Waitable` constructor. State
+lookup receives the selected class and actual state Map. Handles
 share the component allocator with resources; subtasks keep their own table.
 The class preserves FIFO lock handoff and admission, one resumption per tick,
 backpressure accounting and trap interruption. Backpressure waiters resolve only

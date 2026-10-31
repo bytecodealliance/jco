@@ -410,7 +410,7 @@ impl WaitableIntrinsic {
                                 isRemoval: waitableSet === null,
                             }});
 
-                            if (this.#waitableSet === undefined) {{
+                            if (waitableSet === undefined) {{
                                 throw new TypeError('waitable set must be not be undefined');
                             }}
 
@@ -441,11 +441,14 @@ impl WaitableIntrinsic {
                                 throw new Error("waitable is already in a set/has a sync waiter");
                             }}
                             this.#hasSyncWaiter = true;
-                            await cstate.waitUntil({{
-                                cancellable: false,
-                                readyFn: () => this.hasPendingEvent(),
-                            }});
-                            this.#hasSyncWaiter = false;
+                            try {{
+                                await cstate.waitUntil({{
+                                    cancellable: false,
+                                    readyFn: () => this.hasPendingEvent(),
+                                }});
+                            }} finally {{
+                                this.#hasSyncWaiter = false;
+                            }}
                         }}
 
                     }}
@@ -508,7 +511,7 @@ impl WaitableIntrinsic {
                         if (!task) {{ throw Error('invalid/missing async task'); }}
 
                         if (task.componentIdx() !== componentIdx) {{
-                            throw Error(`task component [${{task.componentIdx}}] !== executing component [${{componentIdx}}]`);
+                            throw Error(`task component [${{task.componentIdx()}}] !== executing component [${{componentIdx}}]`);
                         }}
 
                         const memory = getMemoryFn();
@@ -568,7 +571,7 @@ impl WaitableIntrinsic {
                         const taskMeta = {current_task_get_fn}(componentIdx);
                         if (!taskMeta) {{ throw Error('invalid/missing current task meta'); }}
                         if (taskMeta.componentIdx !== componentIdx) {{
-                            throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentIdx + ']');
+                            throw Error('task component idx [' + taskMeta.componentIdx + '] != component instance ID [' + componentIdx + ']');
                         }}
 
                         const task = taskMeta.task;
