@@ -24,6 +24,22 @@ export function componentPath(id: ComponentId) {
 /** Keep selected scratch families separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        id: 'empty-func',
+        suffix: 'intrinsics/js-helper',
+        names: ['emptyFunc'],
+        setup: '',
+        answer: '(emptyFunc(7), 42)',
+        allocations: {},
+    },
+    {
+        id: 'data-view',
+        suffix: 'intrinsics/js-helper',
+        names: ['initializeDataViewCache', 'dataView'],
+        setup: 'const context = initializeDataViewCache(); const memory = { buffer: new ArrayBuffer(8) };',
+        answer: '(dataView(context, memory).setUint32(0, 42, true), dataView(context, memory).getUint32(0, true))',
+        allocations: { DataView: 2, ArrayBuffer: 2 },
+    },
+    {
         id: 'resource',
         suffix: 'intrinsics/resource',
         names: ['tableGet'],

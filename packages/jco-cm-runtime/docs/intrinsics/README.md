@@ -5,3 +5,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 
 - [`intrinsics/resource`](resource.md): resource table.
 - [`intrinsics/conversion`](conversion.md): conversion.
+- [`intrinsics/js-helper`](js-helper.md): javascript helper.

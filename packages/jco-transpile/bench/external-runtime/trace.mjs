@@ -4,6 +4,8 @@ import { writeFile } from 'node:fs/promises';
 const counts = {};
 for (const key of [
     'Map',
+    'DataView',
+    'ArrayBuffer',
     'Int32Array',
     'Float32Array',
     'BigInt64Array',
