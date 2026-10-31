@@ -72,6 +72,10 @@ async function writeProvider(dir: string) {
         'export * from ' + JSON.stringify(new URL('intrinsics/async-task.js', defaultRuntimeUrl).href) + ';',
     );
     await writeFile(
+        join(dir, 'provider/intrinsics/host.js'),
+        'export * from ' + JSON.stringify(new URL('intrinsics/host.js', defaultRuntimeUrl).href) + ';',
+    );
+    await writeFile(
         join(dir, 'provider/intrinsics/waitable.js'),
         'export * from ' + JSON.stringify(new URL('intrinsics/waitable.js', defaultRuntimeUrl).href) + ';',
     );

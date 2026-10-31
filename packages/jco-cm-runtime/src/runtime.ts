@@ -171,6 +171,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/waitable': WaitableModule;
     readonly 'intrinsics/error-context': ErrorContextModule;
     readonly 'intrinsics/async-task': AsyncTaskModule;
+    readonly 'intrinsics/host': HostModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -934,10 +935,7 @@ export interface WaitableSetNewContext {
     readonly lookup: ComponentStateLookupContext;
     readonly WaitableSet: WaitableSetConstructor;
 }
-export interface WaitableSetWaitContext extends TrapContext, WaitableSetNewContext, WaitableTaskLookup {
-    /** Lazy inline host capability until N12. */
-    readonly storeEventInComponentMemory: (args: WaitableStoreEventOptions) => number;
-}
+export interface WaitableSetWaitContext extends TrapContext, WaitableSetNewContext, WaitableTaskLookup {}
 export interface WaitableSetPollContext extends WaitableSetWaitContext {
     readonly events: Pick<AsyncEventCodes, 'NONE'>;
 }
@@ -1125,11 +1123,12 @@ export type TaskLowerFn = (ctx: TaskLowerContext) => unknown;
 
 export interface TaskCallMetadata {
     callerThreadID?: number;
+    readonly getMemoryFn?: () => RuntimeMemory | null | undefined;
     startFn?: (...args: unknown[]) => unknown;
     returnFn?: (...args: unknown[]) => unknown;
     returnFnCalled?: boolean;
     returnFnResult?: unknown;
-    resultPtr?: number;
+    resultPtr?: number | null;
     memoryIdx?: number | null;
     memory?: RuntimeMemory | null;
     realloc?: StringRealloc | null;
@@ -1248,6 +1247,7 @@ export interface AsyncTask extends ComponentTask, WaitableTask {
     readonly defaultThread: () => AsyncThread;
     readonly enterHost: () => boolean;
     readonly cancellationPending: () => boolean;
+    subtaskMeta?: HostSubtaskMetadata;
     cancelled: boolean;
     cancelRequested: boolean;
     alwaysTaskReturn: boolean;
@@ -1637,7 +1637,7 @@ export interface AsyncTaskModule {
             isAsync?: boolean;
             callbackResult: unknown;
         },
-    ) => unknown;
+    ) => void | Promise<void>;
     readonly lowerImport: (
         context: TaskLowerImportRuntimeContext,
         args: TaskLowerImportOptions,
@@ -1656,4 +1656,81 @@ export interface AsyncTaskModule {
         syncOnly?: boolean,
     ) => number | Promise<number>;
     readonly symmetricSyncGuestCallExit: (context: TaskSymmetricExitContext) => void;
+}
+
+/** Per-call fused-call metadata; runtime owners are separate context operands. */
+export interface HostSyncStartOptions {
+    readonly callbackIdx?: number | null;
+    readonly getCallbackFn: () => (TaskCallback & { fnName?: string }) | null | undefined;
+}
+export interface HostStartOptions extends HostSyncStartOptions {
+    readonly postReturnIdx?: number | null;
+    readonly getPostReturnFn: () => TaskPostReturn | null | undefined;
+}
+export type HostCallee = ((...params: unknown[]) => unknown) & {
+    _jcoMaySuspend?: boolean;
+    _cachedPromising?: (...params: unknown[]) => Promise<unknown>;
+};
+export interface StoreEventOptions {
+    readonly memory: RuntimeMemory;
+    readonly ptr: number;
+    readonly event: WaitableEvent | null;
+}
+export interface HostSubtaskMetadata {
+    subtask: AsyncSubtask;
+    calleeComponentIdx: number;
+    callerComponentIdx: number;
+    getCalleeParamsFn: () => unknown[];
+    stringEncoding: string;
+    isAsync: boolean;
+}
+/** Actual selected platform object; optional JSPI is read only at a cache miss. */
+export interface HostPromisingPlatform {
+    readonly promising?: (callee: HostCallee) => (...params: unknown[]) => Promise<unknown>;
+}
+export interface HostPrepareContext extends TaskLookupContext, TrapContext {
+    readonly creation: TaskCreateContext;
+    readonly mayBlock: TaskMayBlockGlobal;
+}
+export interface HostSyncStartContext extends TaskLookupContext {
+    readonly componentIdxs: readonly number[];
+    readonly lookup: ComponentStateLookupContext;
+    readonly driver: TaskDriverContext;
+    readonly platform: HostPromisingPlatform | undefined;
+}
+export interface HostAsyncStartContext extends HostSyncStartContext {
+    readonly blockingDepth: TaskMutableRegister;
+    readonly memories: MemoryLookupCapability;
+    readonly events: Pick<AsyncEventCodes, 'SUBTASK'>;
+}
+export interface HostModule {
+    readonly prepareCall: (
+        context: HostPrepareContext,
+        memoryIdx: number | null,
+        getMemoryFn: () => RuntimeMemory | null | undefined,
+        startFn: (...params: unknown[]) => unknown,
+        returnFn: (...params: unknown[]) => unknown,
+        callerComponentIdx: number,
+        calleeComponentIdx: number,
+        taskReturnTypeIdx: number,
+        calleeIsAsyncInt: number,
+        stringEncoding: number,
+        resultCountOrAsync: number,
+        ...params: unknown[]
+    ) => void;
+    readonly asyncStartCall: (
+        context: HostAsyncStartContext,
+        args: HostStartOptions,
+        callee: HostCallee,
+        paramCount: number,
+        resultCount: number,
+        flags: number,
+    ) => number;
+    readonly syncStartCall: (
+        context: HostSyncStartContext,
+        args: HostSyncStartOptions,
+        callee: HostCallee,
+        paramCount: number,
+    ) => Promise<unknown>;
+    readonly storeEventInComponentMemory: (args: StoreEventOptions) => number;
 }

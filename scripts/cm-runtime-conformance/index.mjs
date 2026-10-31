@@ -1,3 +1,4 @@
+import { testHostIntrinsics } from './host.mjs';
 import { testAsyncTaskIntrinsics } from './async-task.mjs';
 import { testErrorContextIntrinsics } from './error-context.mjs';
 import { testWaitableIntrinsics } from './waitable.mjs';
@@ -16,6 +17,7 @@ export const DEFAULT_RUNTIME_BASE = '@bytecodealliance/jco-cm-runtime';
 const TEST_GROUPS = new Map([
     ['runtime', testRuntimeExports],
     ['resource', testResourceIntrinsics],
+    ['host', testHostIntrinsics],
     ['async-task', testAsyncTaskIntrinsics],
     ['error-context', testErrorContextIntrinsics],
     ['waitable', testWaitableIntrinsics],
