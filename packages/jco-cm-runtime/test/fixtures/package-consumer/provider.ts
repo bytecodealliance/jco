@@ -5,7 +5,21 @@ import type {
     WebIdlModule,
     CoreModule,
     ComponentModule,
+    AsyncTaskModule,
 } from './contract.js';
+export const initializeTasksByComponent: AsyncTaskModule['initializeTasksByComponent'] = () => new Map();
+export const getCurrentTask: AsyncTaskModule['getCurrentTask'] = ({ tasks, registers }, componentIdx, taskID) => {
+    const entries = tasks.get(componentIdx);
+    if (!entries?.length) {
+        return undefined;
+    }
+    if (taskID) {
+        return entries.find((meta) => meta.task.id() === taskID);
+    }
+    const current = registers[componentIdx];
+    const executing = current && entries.find((meta) => meta.task.id() === current.taskID);
+    return executing || entries.at(-1);
+};
 export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTrap = null) => ({
     error: null,
     stopped: false,

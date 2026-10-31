@@ -1,6 +1,13 @@
 import { expect, test } from 'vitest';
 import { create } from './waitable-test-helpers.js';
-import type { WaitableEvent, WaitableSuspendOptions, WaitableTask, WaitableSet } from '../src/index.js';
+import type {
+    WaitableEvent,
+    WaitableSuspendOptions,
+    WaitableTask,
+    WaitableSet,
+    TaskIdentity,
+    TaskLookupContext,
+} from '../src/index.js';
 
 function task() {
     const pending = Promise.withResolvers<boolean>();
@@ -8,7 +15,8 @@ function task() {
     let callback: ((keepGoing: boolean) => void) | undefined;
     let cancelled = false;
     let error: unknown;
-    const value: WaitableTask = {
+    const value: WaitableTask & TaskIdentity = {
+        id: () => 1n,
         componentIdx: () => 0,
         deliverPendingCancel: ({ cancellable }) => cancelled && cancellable,
         isErrored: () => error,
@@ -36,6 +44,24 @@ function task() {
         trap(err: unknown) {
             error = err;
         },
+    };
+}
+function lookupTask(
+    value: WaitableTask & TaskIdentity,
+    componentIdx = 0,
+    read?: () => void,
+): TaskLookupContext<WaitableTask & TaskIdentity> {
+    const tasks = new Map([[componentIdx, [{ id: value.id(), componentIdx, task: value }]]]);
+    return {
+        registers: {},
+        tasks: read
+            ? {
+                  get(index) {
+                      read();
+                      return tasks.get(index);
+                  },
+              }
+            : tasks,
     };
 }
 const event: WaitableEvent = { code: 1, payload0: 17, payload1: 23 };
@@ -199,7 +225,7 @@ test.concurrent.each([false, true])('callback waits resume synchronously (cancel
 test.concurrent('component factory, handle tables, and waitable operations share a store', () => {
     const t = task();
     const { waitable, component, resource } = create({
-        waitableContext: { getCurrentTask: () => ({ componentIdx: 0, task: t.value }) },
+        waitableContext: { taskLookup: lookupTask(t.value) },
     });
     const state = component.getOrCreateAsyncState(0);
     const w = state.createWaitable({ target: 'subtask' });
@@ -230,17 +256,16 @@ test.concurrent('component factory, handle tables, and waitable operations share
     expect(waitable.waitableSetNew(0)).toBe(setRep);
 });
 
-test.concurrent('wait/poll use lazy task and memory bridges and preserve synchronous paths', async () => {
+test.concurrent('wait/poll use live task owners and a lazy memory bridge and preserve synchronous paths', async () => {
     const t = task();
     const memory = { buffer: new ArrayBuffer(32) };
     let reads = 0;
     let writes = 0;
     const { waitable, component, core } = create({
         waitableContext: {
-            getCurrentTask: () => {
+            taskLookup: lookupTask(t.value, 0, () => {
                 reads++;
-                return { componentIdx: 0, task: t.value };
-            },
+            }),
             storeEventInComponentMemory(args) {
                 expect(args.task).toBe(t.value);
                 expect(args.memory).toBe(memory);
@@ -280,10 +305,10 @@ test.concurrent('wait/poll use lazy task and memory bridges and preserve synchro
 test.concurrent('invalid handles trap in the selected realm and mismatched task metadata is diagnosed', () => {
     class RuntimeError extends Error {}
     const t = task();
-    let componentIdx = 0;
+    const metadata = { id: 1n, componentIdx: 0, task: t.value };
     const { waitable, component } = create({
         platform: { WebAssembly: { RuntimeError } },
-        waitableContext: { getCurrentTask: () => ({ componentIdx, task: t.value }) },
+        waitableContext: { taskLookup: { registers: {}, tasks: new Map([[0, [metadata]]]) } },
     });
     const ctx = { componentIdx: 0, isAsync: false, getMemoryFn: () => ({ buffer: new ArrayBuffer(8) }) };
     const state = component.getOrCreateAsyncState(0);
@@ -294,10 +319,10 @@ test.concurrent('invalid handles trap in the selected realm and mismatched task 
     }
     expect(() => waitable.waitableJoin(0, w, 999)).toThrow(RuntimeError);
     expect(() => waitable.removeWaitableSet({ state, waitableSetRep: 999 })).toThrow(RuntimeError);
-    componentIdx = 3;
+    metadata.componentIdx = 3;
     expect(() => waitable.waitableSetPoll(ctx, w, 0)).toThrow('task component idx [3] != component instance ID [0]');
     expect(() => waitable.waitableSetDrop(0, w)).toThrow('task component idx [3]');
-    expect(() => create().waitable.waitableSetDrop(0, w)).toThrow('waitableContext.getCurrentTask');
+    expect(() => create().waitable.waitableSetDrop(0, w)).toThrow('invalid/missing async task');
 });
 
 test.concurrent('selected event codes stay live and cancellation does not consume a ready event', () => {
@@ -322,7 +347,10 @@ test.concurrent('selected event codes stay live and cancellation does not consum
 test.concurrent.each([undefined, { componentIdx: 0 }])(
     'missing task metadata is checked before memory access (%s)',
     (meta) => {
-        const { waitable } = create({ waitableContext: { getCurrentTask: () => meta } });
+        const entries = meta ? [{ id: 1n, componentIdx: meta.componentIdx, task: undefined as never }] : [];
+        const { waitable } = create({
+            waitableContext: { taskLookup: { registers: {}, tasks: new Map([[0, entries]]) } },
+        });
         const memory = {
             componentIdx: 0,
             isAsync: false,
@@ -341,7 +369,7 @@ test.concurrent('suspended waits write through the live memory buffer after grow
     const oldBuffer = memory.buffer;
     const { waitable, component } = create({
         waitableContext: {
-            getCurrentTask: () => ({ componentIdx: 0, task: t.value }),
+            taskLookup: lookupTask(t.value),
             storeEventInComponentMemory({ memory: selected, event, ptr }) {
                 expect(selected).toBe(memory);
                 expect(selected.buffer).not.toBe(oldBuffer);

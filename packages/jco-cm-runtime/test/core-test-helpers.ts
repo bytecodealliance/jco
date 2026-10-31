@@ -10,16 +10,20 @@ import type {
     ResourceTable,
     SuspendingImportContext,
     TaskMeta,
+    TaskRegisters,
+    TaskGlobalPlatform,
 } from '../src/runtime.js';
 
 export type CoreBridgeCapabilities = Omit<SuspendingImportContext, 'RuntimeError' | 'registers'>;
 export interface CoreTestOptions {
+    registers?: TaskRegisters;
     nodejsCompat?: boolean;
     asyncDeterminism?: AsyncDeterminism;
     platform?: {
-        WebAssembly: Partial<CoreStreamingCompilePlatform & CoreInstantiatePlatform> & {
-            RuntimeError: RuntimeErrorConstructor;
-        };
+        WebAssembly: Partial<CoreStreamingCompilePlatform & CoreInstantiatePlatform> &
+            TaskGlobalPlatform & {
+                RuntimeError: RuntimeErrorConstructor;
+            };
     };
     coreContext?: CoreBridgeCapabilities;
 }
@@ -33,7 +37,7 @@ export function createTestIntrinsics(options: CoreTestOptions = {}) {
     const resourceContext = { RuntimeError, indexSpaces, tables, scopeTasks };
     const ManagedBuffer = operations.initializeManagedBufferClass(resourceContext);
     const BufferManager = operations.initializeBufferManagerClass(ManagedBuffer);
-    const registers = options.coreContext?.traps.registers ?? operations.initializeTaskRegisters();
+    const registers = options.registers ?? options.coreContext?.traps.registers ?? operations.initializeTaskRegisters();
     const memoryMap = operations.initializeComponentMemoryMap();
     const asyncConstructor = operations.initializeAsyncFunctionConstructor();
     const ownProperty = operations.initializeHasOwnProperty();
@@ -116,7 +120,7 @@ export function createTestIntrinsics(options: CoreTestOptions = {}) {
         resource: {
             indexSpaces,
             tableFlag: resources.tableFlag,
-            state: { handleTables: tables },
+            state: { handleTables: tables, scopeTasks },
             getHandleIndexSpace: (key: number | ResourceTable) => resources.getHandleIndexSpace(indexSpaces, key),
             tableCreateOwn: (table: ResourceTable, rep: number) => resources.tableCreateOwn(indexSpaces, table, rep),
             tableGet: (table: ResourceTable, handle: number) => resources.tableGet({ RuntimeError }, table, handle),
