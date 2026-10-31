@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.23.0] - 2026-10-31
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update preview3-shim to 0.13.0 by @vados-cosmonic in #2367
+
 ## [0.22.0] - 2026-10-31
 
 ### 🧪 Testing
