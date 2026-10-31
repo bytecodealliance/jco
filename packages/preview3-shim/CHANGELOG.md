@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.13.0] - 2026-10-31
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ complete ready clock waits synchronously by @vados-cosmonic
+
 ## [0.12.0] - 2026-10-28
 
 ### ⚙️ Miscellaneous Tasks
