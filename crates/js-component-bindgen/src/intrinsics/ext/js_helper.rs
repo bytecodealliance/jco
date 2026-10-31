@@ -5,6 +5,7 @@ use crate::intrinsics::js_helper::JsHelperIntrinsic;
 
 pub(crate) fn import(intrinsic: JsHelperIntrinsic) -> Option<RuntimeImport> {
     Some(RuntimeImport {
+        kind: super::RuntimeImportKind::Call,
         suffix: "intrinsics/js-helper",
         export: intrinsic.name(),
         context: match intrinsic {

@@ -18,6 +18,10 @@ await import('@bytecodealliance/jco-cm-runtime/runtime');
 const { tableGet } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/resource');
 const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
 const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
+const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
+if (validateGuestChar(0x1f680) !== '🚀' || !utf16ValidatingCopy(new Uint16Array([97]), new Uint16Array(1))) {
+    throw new Error('string capability leak');
+}
 if (emptyFunc(42) !== undefined) {
     throw new Error('empty function capability leak');
 }

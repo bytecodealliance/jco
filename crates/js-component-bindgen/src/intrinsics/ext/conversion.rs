@@ -26,6 +26,7 @@ pub(crate) fn import(intrinsic: ConversionIntrinsic) -> RuntimeImport {
         ConversionIntrinsic::SplitBigInt64 => ("splitInt64", None),
     };
     RuntimeImport {
+        kind: super::RuntimeImportKind::Call,
         suffix: "intrinsics/conversion",
         export,
         context,
