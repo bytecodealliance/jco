@@ -2271,9 +2271,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamNew { ty, instance } => {
-                let stream_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
+                let stream_new_fn =
+                    self.bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamNew,
+                        ));
                 let instance_idx = instance.as_u32();
                 let stream_table_idx = ty.as_u32();
 
@@ -2281,7 +2283,7 @@ impl<'a> Instantiator<'a, '_> {
 
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_new_fn}.bind(null, {{
+                    "const trampoline{i} = {stream_new_fn}{{
                         streamTableIdx: {stream_table_idx},
                         callerComponentIdx: {instance_idx},
                         elemMeta: {elem_meta_js},
@@ -2335,9 +2337,11 @@ impl<'a> Instantiator<'a, '_> {
                 let string_encoding = string_encoding_js_literal(string_encoding);
                 let stream_table_idx = ty.as_u32();
                 let elem_meta_js = self.stream_elem_meta_js(*ty);
-                let stream_read_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
+                let stream_read_fn =
+                    self.bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamRead,
+                        ));
 
                 // PrepareCall for an async call is sometimes missing memories,
                 // so we augment and save here, knowing that any stream.write/read operation
@@ -2372,10 +2376,7 @@ impl<'a> Instantiator<'a, '_> {
                 }}"#
                 );
                 if *async_ {
-                    uwriteln!(
-                        self.src.js,
-                        "const trampoline{i} = {stream_read_fn}.bind(null, {ctx});",
-                    );
+                    uwriteln!(self.src.js, "const trampoline{i} = {stream_read_fn}{ctx});",);
                 } else {
                     let suspending_wrap_fn = self
                         .bindgen
@@ -2390,8 +2391,8 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}
-                            {guard_trap_fn}{component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
-                            {suspending_wrap_fn}{component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                            {guard_trap_fn}{component_instance_id}, {stream_read_fn}{{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
+                            {suspending_wrap_fn}{component_instance_id}, {stream_read_fn}{{ ...{ctx}, deferSyncFinish: true }})),
                         );"#,
                     );
                 }
@@ -2443,9 +2444,11 @@ impl<'a> Instantiator<'a, '_> {
                 let string_encoding = string_encoding_js_literal(string_encoding);
                 let stream_table_idx = ty.as_u32();
                 let elem_meta_js = self.stream_elem_meta_js(*ty);
-                let stream_write_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
+                let stream_write_fn =
+                    self.bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamWrite,
+                        ));
 
                 // PrepareCall for an async call is sometimes missing memories,
                 // so we augment and save here, knowing that any stream.write/read operation
@@ -2481,7 +2484,7 @@ impl<'a> Instantiator<'a, '_> {
                 if *async_ {
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = {stream_write_fn}.bind(null, {ctx});",
+                        "const trampoline{i} = {stream_write_fn}{ctx});",
                     );
                 } else {
                     let suspending_wrap_fn = self
@@ -2497,8 +2500,8 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}
-                            {guard_trap_fn}{component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
-                            {suspending_wrap_fn}{component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                            {guard_trap_fn}{component_instance_id}, {stream_write_fn}{{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
+                            {suspending_wrap_fn}{component_instance_id}, {stream_write_fn}{{ ...{ctx}, deferSyncFinish: true }})),
                         );"#,
                     );
                 }
@@ -2515,12 +2518,16 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
             } => {
                 let stream_cancel_fn = match trampoline {
-                    Trampoline::StreamCancelRead { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelRead),
-                    ),
-                    Trampoline::StreamCancelWrite { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelWrite),
-                    ),
+                    Trampoline::StreamCancelRead { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamCancelRead,
+                        )),
+                    Trampoline::StreamCancelWrite { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamCancelWrite,
+                        )),
                     _ => unreachable!("unexpected trampoline"),
                 };
 
@@ -2536,7 +2543,7 @@ impl<'a> Instantiator<'a, '_> {
                 if *async_ {
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = {stream_cancel_fn}.bind(null, {ctx});",
+                        "const trampoline{i} = {stream_cancel_fn}{ctx});",
                     );
                 } else {
                     let suspending_wrap_fn = self
@@ -2544,7 +2551,7 @@ impl<'a> Instantiator<'a, '_> {
                         .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {stream_cancel_fn}.bind(null, {ctx})));",
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {stream_cancel_fn}{ctx})));",
                     );
                 }
             }
@@ -2552,19 +2559,23 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::StreamDropReadable { ty, instance }
             | Trampoline::StreamDropWritable { ty, instance } => {
                 let intrinsic_fn = match trampoline {
-                    Trampoline::StreamDropReadable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamDropReadable),
-                    ),
-                    Trampoline::StreamDropWritable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamDropWritable),
-                    ),
+                    Trampoline::StreamDropReadable { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamDropReadable,
+                        )),
+                    Trampoline::StreamDropWritable { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamDropWritable,
+                        )),
                     _ => unreachable!("unexpected trampoline"),
                 };
                 let stream_idx = ty.as_u32();
                 let instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {intrinsic_fn}.bind(null, {{
+                    "const trampoline{i} = {intrinsic_fn}{{
                         streamTableIdx: {stream_idx},
                         componentIdx: {instance_idx},
                     }});\n",
@@ -2572,9 +2583,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamTransfer => {
-                let stream_transfer_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamTransfer));
+                let stream_transfer_fn =
+                    self.bindgen
+                        .intrinsic_callback_reference(Intrinsic::AsyncStream(
+                            AsyncStreamIntrinsic::StreamTransfer,
+                        ));
                 uwriteln!(self.src.js, "const trampoline{i} = {stream_transfer_fn};\n",);
             }
 

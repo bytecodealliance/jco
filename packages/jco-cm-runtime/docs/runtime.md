@@ -40,9 +40,8 @@ Bindings check version 1 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 17 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(248/274 logical intrinsic variants, including all 16 component, eight waitable,
-eleven error-context, 25 async-task, four host, 29 lift, 29 lower and 24 future variants);
-other families remain inline during migration.
+(277/277 logical intrinsic variants, including all 18 component, eight waitable,
+eleven error-context, 25 async-task, four host, 29 lift, 29 lower, 24 future and 26 stream variants).
 
 ## Implementing an alternative runtime
 

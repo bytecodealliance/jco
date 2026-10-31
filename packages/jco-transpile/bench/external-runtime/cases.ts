@@ -85,6 +85,14 @@ const taskClassBase = `
 /** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        id: 'stream-tables',
+        suffix: 'intrinsics/stream',
+        names: ['initializeStreamTables'],
+        setup: 'const a = initializeStreamTables(), b = initializeStreamTables();',
+        answer: 'a !== b && Object.keys(a).length === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
         id: 'future-value',
         suffix: 'intrinsics/future',
         names: ['initializeFutureValueClass'],

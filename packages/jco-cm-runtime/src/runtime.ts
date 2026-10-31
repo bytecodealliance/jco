@@ -175,6 +175,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/lift': LiftModule;
     readonly 'intrinsics/lower': LowerModule;
     readonly 'intrinsics/future': FutureModule;
+    readonly 'intrinsics/stream': StreamModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -386,6 +387,7 @@ export interface BufferElementContext {
 }
 export interface BufferElementMetadata {
     size32?: number;
+    isNumeric?: boolean;
     align32: number;
     isNone?: boolean;
     payloadTypeName?: string;
@@ -395,6 +397,8 @@ export interface BufferElementMetadata {
     getReallocFn?: () => StringRealloc;
 }
 export interface ManagedBufferOptions {
+    isReadable?: boolean;
+    isWritable?: boolean;
     componentIdx: number;
     capacity: number;
     elemMeta: BufferElementMetadata;
@@ -1821,33 +1825,10 @@ export interface LiftEndpoint {
     readonly isIdleState: () => boolean;
     readonly isInSet: () => boolean;
 }
-export interface LiftStreamEndpoint extends LiftEndpoint {
-    readonly isReadable: () => boolean;
-    readonly globalStreamMapRep: () => number;
-    readonly write: (value: unknown) => unknown;
-    readonly read: (options: unknown) => unknown;
-    readonly drop: (options: { allowPendingEvent: true }) => unknown;
-}
-export interface LiftEndpointTable {
-    readonly componentIdx: number;
-    readonly table: unknown;
-}
-/** Actual owners shared with the named future operations. */
+/** Actual named owner views used by lifting. */
 export type LiftFutureContext = FutureEndLookupContext;
-
-export interface LiftExternalStreamOptions {
-    readonly globalRep: number;
-    readonly isReadable: boolean;
-    readonly isWritable: boolean;
-    readonly writeFn: (value: unknown) => unknown;
-    readonly readFn: (options: unknown) => unknown;
-    readonly dropFn: () => unknown;
-}
-export interface LiftStreamContext extends TrapContext {
-    readonly lookup: ComponentStateLookupContext;
-    readonly getTables: () => Readonly<Record<number, LiftEndpointTable>>;
-    readonly getEnd: (options: { tableIdx: number; streamEndWaitableIdx: number }) => LiftStreamEndpoint | undefined;
-    readonly getExternalStream: () => new (options: LiftExternalStreamOptions) => unknown;
+export interface LiftStreamContext extends StreamEndLookupContext {
+    readonly Stream: ExternalStreamConstructor;
 }
 export interface LiftErrorContext extends ErrorContextHandleContext {
     readonly local: ErrorContextLocalTableContext;
@@ -1953,27 +1934,6 @@ export interface LowerStreamMeta {
     readonly streamTableIdx: number;
     readonly elemMeta: LowerElementMeta;
 }
-export interface LowerReadEnd {
-    readonly waitableIdx: () => number;
-    readonly setHostInjectFn: (fn: unknown) => void;
-    readonly setHostDropFn: (fn: (reason?: unknown) => unknown) => void;
-}
-export interface LowerCreatedStream {
-    readonly writeEnd: unknown;
-    readonly readEnd: LowerReadEnd;
-}
-export interface LowerStoredStream {
-    readonly readEnd?: () => LowerReadEnd;
-    readonly getStreamEndWaitableIdx?: () => number;
-}
-export interface LowerInternalStream {
-    readonly readEnd: () => LowerReadEnd;
-}
-export interface LowerStreamReadFn {
-    (): Promise<IteratorResult<unknown>>;
-    readonly drop: (reason?: unknown) => unknown;
-}
-/** Specific pending-family capabilities are lazy until their own conversions replace the bridges. */
 export interface LowerFutureContext {
     readonly numeric: StrictNumericContext;
     readonly lookup: ComponentStateLookupContext;
@@ -1988,20 +1948,12 @@ export interface LowerStreamContext {
     readonly numeric: StrictNumericContext;
     readonly lookup: ComponentStateLookupContext;
     readonly resourceRep: symbol;
-    readonly getGlobal: () => Pick<RepTable<LowerStoredStream>, 'get'>;
-    readonly getExternalClass: () => abstract new (...args: never[]) => object;
-    readonly getInternalClass: () => abstract new (...args: never[]) => LowerInternalStream;
-    readonly isLowerable: (value: unknown) => boolean;
-    readonly create: (
-        state: ComponentAsyncState,
-        options: { tableIdx: number; elemMeta: LowerElementMeta },
-    ) => LowerCreatedStream;
-    readonly genRead: (value: unknown) => LowerStreamReadFn;
-    readonly genHostInject: (options: {
-        readFn: LowerStreamReadFn;
-        hostWriteEnd: unknown;
-        readEnd: LowerReadEnd;
-    }) => unknown;
+    readonly streams: StreamGlobalMap;
+    readonly InternalStream: InternalStreamConstructor;
+    readonly lowerable: StreamLowerableContext;
+    readonly creation: StreamCreateContext;
+    readonly source: StreamSourceContext;
+    readonly injection: StreamHostInjectContext;
 }
 export interface LowerErrorContext extends ErrorContextNewContext {
     readonly numeric: StrictNumericContext;
@@ -2427,4 +2379,473 @@ export interface FutureModule {
         options: FutureHostInjectOptions,
     ) => FutureHostInjectFn;
     readonly isFutureLowerableObject: (value: unknown) => boolean;
+}
+
+/** Stream classes and owners are selected once for each generated store. */
+export interface StreamCopyResults {
+    readonly COMPLETED: number;
+    readonly DROPPED: number;
+    readonly CANCELLED: number;
+}
+export interface StreamCopyStates {
+    readonly IDLE: number;
+    readonly SYNC_COPYING: number;
+    readonly ASYNC_COPYING: number;
+    readonly CANCELLING_COPY: number;
+    readonly DONE: number;
+    readonly CANCELLED?: number;
+}
+export interface StreamEvent extends WaitableEvent {
+    rejectedLength?: number;
+}
+export type StreamOnCopyDone = (result: number, rejectedLength?: number) => void;
+export type StreamOnCopy = (reclaim: () => void, result?: number) => void;
+export interface StreamPendingBufferMeta {
+    componentIdx?: number | null;
+    buffer?: ManagedBuffer | null;
+    onCopyFn?: StreamOnCopy | null;
+    onCopyDoneFn?: StreamOnCopyDone | null;
+    rejectLength?: number;
+    dropAfterCopy?: boolean;
+}
+export interface StreamEndOptions {
+    readonly tableIdx: number;
+    readonly componentIdx?: number;
+    readonly waitable: ComponentWaitable;
+    readonly isPeerDroppedFn?: () => boolean;
+    readonly notifyPeerDroppedFn?: () => void;
+    readonly target?: unknown;
+}
+export interface StreamEndBase {
+    target: unknown;
+    readonly tableIdx: () => number;
+    readonly idx: () => number | null;
+    readonly setIdx: (index: number) => void;
+    readonly setTarget: (target: unknown) => void;
+    readonly getWaitable: () => ComponentWaitable;
+    readonly setWaitable: (waitable: ComponentWaitable) => void;
+    readonly setCopyState: (state: number) => void;
+    readonly getCopyState: () => number;
+    readonly isCopying: () => boolean;
+    readonly setPendingEvent: (fn: () => StreamEvent) => void;
+    readonly hasPendingEvent: () => boolean;
+    readonly isInSet: () => boolean;
+    readonly getPendingEvent: () => StreamEvent | null;
+    readonly isDropped: () => boolean;
+    readonly isPeerDropped: () => boolean;
+    readonly notifyDropped: () => void;
+    readonly drop: (options?: { allowPendingEvent?: boolean }) => void;
+}
+export interface StreamEndConstructor {
+    new (options: StreamEndOptions): StreamEndBase;
+    readonly prototype: StreamEndBase;
+    readonly CopyResult: StreamCopyResults;
+    readonly CopyState: StreamCopyStates;
+}
+export interface StreamElementMetadata extends FutureElementMetadata {
+    typedArray?: new (values: unknown[]) => unknown;
+    string?: string;
+}
+export type StreamCleanup = () => void;
+export type StreamHostInjectFn = (args: { count: number }) => Promise<StreamCleanup>;
+export interface StreamEndpointOptions extends StreamEndOptions {
+    readonly elemMeta: StreamElementMetadata;
+    readonly pendingBufferMeta: StreamPendingBufferMeta;
+    readonly hostInjectFn?: StreamHostInjectFn;
+    readonly hostOwned?: boolean;
+}
+export interface StreamCopyOptions {
+    readonly isAsync?: boolean;
+    readonly memory?: RuntimeMemory;
+    readonly componentIdx: number;
+    readonly ptr?: number;
+    readonly count: number;
+    readonly eventCode: number;
+    readonly initial?: boolean;
+    readonly skipStateCheck?: boolean;
+    readonly stringEncoding?: string;
+    readonly reallocFn?: StringRealloc;
+    readonly realloc?: StringRealloc;
+    readonly getReallocFn?: () => StringRealloc;
+    readonly rejectLength?: number;
+    readonly elemMeta?: StreamElementMetadata;
+    readonly dropAfterCopy?: boolean;
+    readonly deferSyncFinish?: boolean;
+    readonly buffer?: ManagedBuffer;
+    readonly bufferID?: bigint;
+}
+export interface StreamInnerCopyOptions {
+    readonly buffer: ManagedBuffer;
+    readonly onCopyFn: StreamOnCopy;
+    readonly onCopyDoneFn: StreamOnCopyDone;
+    readonly componentIdx: number;
+    readonly rejectLength?: number;
+    readonly dropAfterCopy?: boolean;
+}
+export interface StreamReadOptions {
+    readonly count?: number;
+    readonly rejectLength?: number;
+    readonly dropAfterCopy?: boolean;
+}
+export interface StreamReadResult {
+    value: unknown;
+    done: boolean;
+    rejectedLength?: number;
+}
+export interface StreamPayloadEnd extends StreamEndBase {
+    readonly streamTableIdx: () => number;
+    readonly setStreamTableIdx: (index: number) => void;
+    readonly handle: () => number | undefined;
+    readonly setHandle: (handle: number) => void;
+    readonly globalStreamMapRep: () => number | undefined;
+    readonly setGlobalStreamMapRep: (rep: number) => void;
+    readonly waitableIdx: () => number | null;
+    readonly setWaitableIdx: (index: number) => void;
+    readonly setHostInjectFn: (fn: StreamHostInjectFn) => void;
+    readonly setHostDropFn: (fn: (reason?: unknown) => unknown) => void;
+    readonly setHostCancelFn: (fn: () => boolean) => void;
+    readonly hasHostInject: () => boolean;
+    readonly setSourceRebufferFn: (fn: (items: unknown[]) => void) => void;
+    readonly getElemMeta: () => StreamElementMetadata;
+    readonly isReadable: () => boolean;
+    readonly isWritable: () => boolean;
+    readonly isDoneState: () => boolean;
+    readonly isCancelledState: () => boolean;
+    readonly isIdleState: () => boolean;
+    readonly setupCopy: (args: StreamCopyOptions) => {
+        bufferID: bigint | undefined;
+        buffer: ManagedBuffer;
+        onCopyFn: StreamOnCopy;
+        onCopyDoneFn: StreamOnCopyDone;
+    };
+    readonly copy: (args: StreamCopyOptions) => number | Promise<number>;
+    readonly setPendingBufferMeta: (args: StreamPendingBufferMeta) => void;
+    readonly resetPendingBufferMeta: () => void;
+    readonly getPendingBufferMeta: () => StreamPendingBufferMeta;
+    readonly hasPendingBuffer: () => boolean;
+    readonly resetAndNotifyPending: (result: number) => void;
+    readonly cancel: () => void;
+}
+export interface StreamReadableEnd extends StreamPayloadEnd {
+    readonly read: (options?: number | StreamReadOptions) => Promise<StreamReadResult>;
+    readonly _read: (args: StreamInnerCopyOptions) => void;
+}
+export interface StreamWritableEnd extends StreamPayloadEnd {
+    readonly write: (value: unknown) => Promise<void>;
+    readonly writeMany: (values: unknown[], opts?: { dropAfterCopy?: boolean }) => Promise<void>;
+    readonly _write: (args: StreamInnerCopyOptions) => void;
+}
+export interface StreamReadableEndConstructor extends Pick<StreamEndConstructor, 'CopyState' | 'CopyResult'> {
+    new (args: StreamEndpointOptions): StreamReadableEnd;
+    readonly prototype: StreamReadableEnd;
+}
+export interface StreamWritableEndConstructor extends Pick<StreamEndConstructor, 'CopyState' | 'CopyResult'> {
+    new (args: StreamEndpointOptions): StreamWritableEnd;
+    readonly prototype: StreamWritableEnd;
+}
+export interface StreamEndpointClassContext extends TrapContext {
+    readonly StreamEnd: StreamEndConstructor;
+    readonly ManagedBuffer: Pick<ManagedBufferConstructor, 'MAX_LENGTH'>;
+    readonly buffers: BufferManager;
+    readonly lookup: ComponentStateLookupContext;
+    readonly taskLookup: TaskLookupContext<FutureTask>;
+    readonly tracking: ComponentHostOperationContext;
+    readonly events: Pick<AsyncEventCodes, 'STREAM_READ' | 'STREAM_WRITE'>;
+}
+export interface InternalStreamOptions {
+    readonly tableIdx: number;
+    readonly elemMeta: StreamElementMetadata;
+    readonly readWaitable: ComponentWaitable;
+    readonly writeWaitable: ComponentWaitable;
+    readonly hostInjectFn?: StreamHostInjectFn;
+}
+export interface InternalStream {
+    readonly elemMeta: () => StreamElementMetadata;
+    readonly readEnd: () => StreamReadableEnd;
+    readonly writeEnd: () => StreamWritableEnd;
+    readonly globalStreamMapRep: () => number | undefined;
+    readonly setGlobalStreamMapRep: (rep: number) => void;
+}
+export interface InternalStreamConstructor {
+    new (args: InternalStreamOptions): InternalStream;
+    readonly prototype: InternalStream;
+}
+export interface InternalStreamClassContext {
+    readonly StreamReadableEnd: StreamReadableEndConstructor;
+    readonly StreamWritableEnd: StreamWritableEndConstructor;
+}
+export interface HostStreamOptions {
+    readonly componentIdx: number;
+    readonly streamEndWaitableIdx: number;
+    readonly streamTableIdx: number;
+    readonly payloadLiftFn: TaskLiftFn;
+    readonly payloadLowerFn: TaskLowerFn;
+}
+export interface HostStream {
+    readonly setRep: (rep: number) => void;
+    readonly getStreamEndWaitableIdx: () => number;
+    readonly createUserStream: () => ExternalStream;
+}
+export interface HostStreamConstructor {
+    new (args: HostStreamOptions): HostStream;
+    readonly prototype: HostStream;
+}
+export interface ExternalStreamOptions {
+    readonly globalRep: number | undefined;
+    readonly isReadable: boolean;
+    readonly isWritable: boolean;
+    readonly writeFn?: (value: unknown) => unknown;
+    readonly readFn?: (options: StreamReadOptions) => unknown;
+    readonly dropFn?: () => unknown;
+}
+export interface ExternalStream {
+    readonly return: () => Promise<{ done: true }>;
+    readonly next: () => Promise<unknown>;
+    readonly read: (options?: number | StreamReadOptions) => Promise<unknown>;
+    readonly write: (...values: unknown[]) => Promise<void>;
+}
+export interface ExternalStreamConstructor {
+    new (args: ExternalStreamOptions): ExternalStream;
+    readonly prototype: ExternalStream;
+}
+export interface ExternalStreamClassContext {
+    readonly disposeSymbol: symbol;
+    readonly asyncIteratorSymbol: symbol;
+    readonly resourceRep: symbol;
+}
+export interface HostStreamClassContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly ends: StreamEndLookupContext;
+    readonly Stream: ExternalStreamConstructor;
+}
+export type StreamChunk = ArrayLike<unknown> & { slice(start: number): StreamChunk };
+export interface StreamReadFn {
+    (): IteratorResult<unknown> | PromiseLike<IteratorResult<unknown>>;
+    drop?: (reason?: unknown) => unknown;
+    sourceIsSync?: boolean;
+}
+export interface PendingValueQueue {
+    readonly length: number;
+    readonly done: boolean;
+    readonly sourceIsSync: boolean;
+    readonly push: (source: StreamChunk) => number;
+    readonly appendReadValue: (value: unknown) => number;
+    readonly readSource: () => Promise<number>;
+    readonly prepend: (source: StreamChunk) => void;
+    readonly drainInto: (target: unknown[], maxCount: number) => number;
+}
+export interface PendingValueQueueConstructor {
+    new (readFn: StreamReadFn, elemMeta: StreamElementMetadata): PendingValueQueue;
+    readonly prototype: PendingValueQueue;
+}
+export type StreamGlobalMap = RepTable<InternalStream | HostStream>;
+export type StreamTables = Record<
+    number,
+    { readonly componentIdx: number; readonly table: RepTable<StreamPayloadEnd> }
+>;
+export interface StreamCreateContext {
+    readonly InternalStream: InternalStreamConstructor;
+    readonly streams: StreamGlobalMap;
+    readonly tables: StreamTables;
+}
+export interface StreamCreateOptions {
+    readonly tableIdx: number;
+    readonly elemMeta: StreamElementMetadata;
+    readonly hostInjectFn?: StreamHostInjectFn;
+}
+export interface StreamCreated {
+    readonly writeEnd: StreamWritableEnd;
+    readonly writeEndWaitableIdx: number | null;
+    readonly writeEndHandle: number | undefined;
+    readonly readEndWaitableIdx: number | null;
+    readonly readEndHandle: number | undefined;
+    readonly readEnd: StreamReadableEnd;
+}
+export interface StreamTableContext extends TrapContext {
+    readonly StreamEnd: StreamEndConstructor;
+    readonly tables: StreamTables;
+    readonly lookup: ComponentStateLookupContext;
+}
+export interface StreamEndLookupContext extends TrapContext, StreamTableContext {}
+export interface StreamEndLocation {
+    readonly tableIdx: number;
+    readonly streamEndHandle?: number;
+    readonly streamEndWaitableIdx?: number;
+}
+export interface StreamEndInsertion {
+    readonly tableIdx: number;
+    readonly streamEnd: StreamPayloadEnd;
+}
+export interface StreamEndRemoval {
+    readonly tableIdx: number;
+    readonly streamWaitableIdx: number;
+}
+export interface StreamDeleteOptions {
+    readonly tableIdx: number;
+    readonly streamEndWaitableIdx: number;
+}
+export interface StreamNewOptions {
+    readonly callerComponentIdx: number;
+    readonly streamTableIdx: number;
+    readonly elemMeta: StreamElementMetadata;
+}
+export interface StreamTask extends FutureTask {
+    readonly componentIdx: () => number;
+}
+export interface StreamNewContext {
+    readonly taskLookup: TaskLookupContext<StreamTask>;
+    readonly lookup: ComponentStateLookupContext;
+    readonly creation: StreamCreateContext;
+}
+export interface StreamNewFromLiftOptions extends HostStreamOptions {
+    readonly payloadTypeSize32?: number;
+}
+export interface StreamNewFromLiftContext {
+    readonly HostStream: HostStreamConstructor;
+    readonly streams: StreamGlobalMap;
+}
+export interface StreamOperationOptions {
+    readonly componentIdx: number;
+    readonly streamTableIdx: number;
+    readonly memoryIdx?: number;
+    readonly getMemoryFn?: () => RuntimeMemory;
+    readonly reallocIdx?: number;
+    readonly getReallocFn?: () => StringRealloc;
+    readonly stringEncoding?: string;
+    readonly isAsync?: boolean;
+    readonly elemMeta?: StreamElementMetadata;
+    readonly syncFastOnly?: boolean;
+    readonly deferSyncFinish?: boolean;
+}
+export interface StreamOperationContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly ends: StreamEndLookupContext;
+    readonly mayBlock: TaskMayBlockGlobal;
+    readonly ManagedBuffer: Pick<ManagedBufferConstructor, 'MAX_LENGTH' | 'validateGuestBuffer'>;
+    readonly events: Pick<AsyncEventCodes, 'STREAM_READ' | 'STREAM_WRITE'>;
+}
+export interface StreamReadContext extends StreamOperationContext {
+    readonly StreamEnd: StreamReadableEndConstructor;
+}
+export interface StreamWriteContext extends StreamOperationContext {
+    readonly StreamEnd: StreamWritableEndConstructor;
+}
+export interface StreamCancelContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly ends: StreamEndLookupContext;
+    readonly taskLookup: TaskLookupContext<FutureTask>;
+    readonly events: Pick<AsyncEventCodes, 'STREAM_READ' | 'STREAM_WRITE'>;
+}
+export interface StreamCancelReadContext extends StreamCancelContext {
+    readonly StreamEnd: StreamReadableEndConstructor;
+}
+export interface StreamCancelWriteContext extends StreamCancelContext {
+    readonly StreamEnd: StreamWritableEndConstructor;
+}
+export interface StreamDropContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly ends: StreamEndLookupContext;
+    readonly taskLookup: TaskLookupContext<FutureTask>;
+}
+export interface StreamDropReadableContext extends StreamDropContext {
+    readonly StreamEnd: StreamReadableEndConstructor;
+}
+export interface StreamDropWritableContext extends StreamDropContext {
+    readonly StreamEnd: StreamWritableEndConstructor;
+}
+export interface StreamLowerableContext {
+    readonly Stream: ExternalStreamConstructor;
+    readonly asyncIteratorSymbol: symbol;
+    readonly iteratorSymbol: symbol;
+    readonly ReadableStream: abstract new (...args: never[]) => ReadableStream;
+}
+export interface StreamSourceContext {
+    readonly lowerable: StreamLowerableContext;
+    readonly disposeSymbol: symbol;
+}
+export interface StreamHostInjectContext {
+    readonly PendingValueQueue: PendingValueQueueConstructor;
+}
+export interface StreamHostInjectOptions {
+    readonly readFn: StreamReadFn;
+    readonly hostWriteEnd: StreamWritableEnd;
+    readonly readEnd: StreamReadableEnd;
+}
+export interface StreamModule {
+    readonly initializeStreams: (RepTable: RepTableConstructor) => StreamGlobalMap;
+    readonly initializeStreamTables: () => StreamTables;
+    readonly initializeStreamEndClass: (
+        events: Pick<AsyncEventCodes, 'STREAM_READ' | 'STREAM_WRITE'>,
+    ) => StreamEndConstructor;
+    readonly initializeStreamReadableEndClass: (context: StreamEndpointClassContext) => StreamReadableEndConstructor;
+    readonly initializeStreamWritableEndClass: (context: StreamEndpointClassContext) => StreamWritableEndConstructor;
+    readonly initializeInternalStreamClass: (context: InternalStreamClassContext) => InternalStreamConstructor;
+    readonly initializeHostStreamClass: (context: HostStreamClassContext) => HostStreamConstructor;
+    readonly initializeExternalStreamClass: (context: ExternalStreamClassContext) => ExternalStreamConstructor;
+    readonly initializePendingValueQueueClass: (
+        tracking: ComponentHostOperationContext,
+    ) => PendingValueQueueConstructor;
+    readonly createStream: (
+        context: StreamCreateContext,
+        state: ComponentAsyncState,
+        options: StreamCreateOptions,
+    ) => StreamCreated;
+    readonly getStreamEnd: (context: StreamEndLookupContext, options: StreamEndLocation) => StreamPayloadEnd;
+    readonly addStreamEndToTable: (
+        context: StreamTableContext,
+        options: StreamEndInsertion,
+    ) => { handle: number; waitableIdx: number };
+    readonly deleteStreamEnd: (context: StreamTableContext, options: StreamDeleteOptions) => StreamPayloadEnd;
+    readonly removeStreamEndFromTable: (context: StreamTableContext, options: StreamEndRemoval) => StreamPayloadEnd;
+    readonly streamNew: (context: StreamNewContext, options: StreamNewOptions) => bigint;
+    readonly streamNewFromLift: (
+        context: StreamNewFromLiftContext,
+        options: StreamNewFromLiftOptions,
+    ) => ExternalStream;
+    readonly streamRead: (
+        context: StreamReadContext,
+        options: StreamOperationOptions,
+        index: number,
+        ptr: number,
+        count: number,
+    ) => number | Promise<number>;
+    readonly streamWrite: (
+        context: StreamWriteContext,
+        options: StreamOperationOptions,
+        index: number,
+        ptr: number,
+        count: number,
+    ) => number | Promise<number>;
+    readonly streamCancelRead: (
+        context: StreamCancelReadContext,
+        options: StreamOperationOptions,
+        index: number,
+    ) => number | Promise<number>;
+    readonly streamCancelWrite: (
+        context: StreamCancelWriteContext,
+        options: StreamOperationOptions,
+        index: number,
+    ) => number | Promise<number>;
+    readonly streamDropReadable: (
+        context: StreamDropReadableContext,
+        options: StreamOperationOptions,
+        index: number,
+    ) => void;
+    readonly streamDropWritable: (
+        context: StreamDropWritableContext,
+        options: StreamOperationOptions,
+        index: number,
+    ) => void;
+    readonly streamTransfer: (
+        context: StreamEndLookupContext,
+        index: number,
+        srcTable: number,
+        destTable: number,
+    ) => number;
+    readonly isStreamLowerableObject: (context: StreamLowerableContext, value: unknown) => boolean;
+    readonly genReadFnFromLowerableStream: (context: StreamSourceContext, value: unknown) => StreamReadFn;
+    readonly genStreamHostInjectFn: (
+        context: StreamHostInjectContext,
+        options: StreamHostInjectOptions,
+    ) => StreamHostInjectFn;
 }
