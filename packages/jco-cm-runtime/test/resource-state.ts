@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 
 import * as operations from '../src/intrinsics/resource.js';
+import { initializeTaskRegisters } from '../src/intrinsics/task-context.js';
 import type {
     ResourceBorrowTask,
     ResourceDestructorTask,
@@ -9,9 +10,10 @@ import type {
     ResourceTransferBorrowContext,
     ResourceModule,
     RuntimeErrorConstructor,
+    TaskRegisters,
 } from '../src/runtime.js';
 
-type TaskCapabilities = Partial<ResourceDestructorContext> & Pick<ResourceTransferBorrowContext, 'getCurrentTask'>;
+type TaskCapabilities = Partial<ResourceDestructorContext> & Pick<ResourceTransferBorrowContext, 'getTask'>;
 // Test-only assembly exercises independently selected state owners and operations.
 function createResource(
     tasks: TaskCapabilities = {},
@@ -24,8 +26,9 @@ function createResource(
     const counter = operations.initializeResourceScopeCounter();
     const callBorrows = operations.initializeCallBorrows();
     const currentBorrows = operations.initializeCurrentBorrows();
+    const registers = tasks.registers ?? initializeTaskRegisters();
     const remove = { RuntimeError, indexSpaces, scopeTasks };
-    const transfer = { RuntimeError, indexSpaces, tables, scope, callBorrows, getCurrentTask: tasks.getCurrentTask };
+    const transfer = { RuntimeError, indexSpaces, tables, scope, callBorrows, registers, getTask: tasks.getTask };
     const transferBorrow = (handle: number, from: number, to: number) =>
         operations.transferBorrow(transfer, handle, from, to);
     return {
@@ -33,6 +36,7 @@ function createResource(
             handleIndexSpaces: indexSpaces,
             handleTables: tables,
             scopeTasks,
+            registers,
             get scopeId() {
                 return scope.value;
             },
@@ -70,7 +74,7 @@ function createResource(
         transferOwn: (handle: number, from: number, to: number) =>
             operations.transferOwn({ ...remove, tables }, handle, from, to),
         callDestructor: <T>(args: Parameters<ResourceModule['callDestructor']>[1] & { dtor: (rep: number) => T }) =>
-            operations.callDestructor(tasks as ResourceDestructorContext, args),
+            operations.callDestructor({ ...tasks, registers } as ResourceDestructorContext, args),
     };
 }
 
@@ -206,7 +210,7 @@ test.concurrent.each([false, true])('task borrow accounting and lender tracking 
         },
     };
     const resource = createResource({
-        getCurrentTask(componentIdx) {
+        getTask(componentIdx) {
             expect(componentIdx).toBe(2);
             return task;
         },
@@ -215,6 +219,7 @@ test.concurrent.each([false, true])('task borrow accounting and lender tracking 
     const to = table(2);
     resource.state.handleTables[0] = from;
     resource.state.handleTables[1] = to;
+    resource.state.registers[2] = { taskID: 7n, threadID: 7, componentIdx: 2 };
     resource.state.scopeTasks.set(17, task);
     const handle = borrowed ? resource.tableCreateBorrow(from, 42, 3) : resource.tableCreateOwn(from, 42);
     const transferred = resource.transferBorrow(handle, 0, 1);
@@ -239,7 +244,7 @@ test.concurrent('a borrow returning to its defining table yields the rep and ret
     let lends = 0;
     let borrows = 0;
     const resource = createResource({
-        getCurrentTask: () => ({
+        getTask: () => ({
             resourceScopeId: () => 7,
             addResourceLender: () => {
                 lends++;
@@ -256,6 +261,7 @@ test.concurrent('a borrow returning to its defining table yields the rep and ret
     const to = table(2);
     resource.state.handleTables[0] = from;
     resource.state.handleTables[1] = to;
+    resource.state.registers[2] = { taskID: 7n, threadID: 7, componentIdx: 2 };
     const handle = resource.tableCreateOwn(from, 42);
     to._createdReps.add(42);
     expect(resource.transferBorrowValidLifting(handle, 0, 1)).toBe(42);
@@ -271,8 +277,10 @@ test.concurrent.each(['success', 'throw', 'exit-throw', 'already-exited'] as con
         const failure = new Error('destructor failed');
         let resolved = false;
         let exited = false;
-        let current = 99n;
-        let currentThread = 41;
+        const registers: TaskRegisters = {
+            current: { taskID: 99n, threadID: 41, componentIdx: 2 },
+            2: { taskID: 99n, threadID: 41, componentIdx: 2 },
+        };
         const task: ResourceDestructorTask = {
             id: () => 7n,
             enterSync: () => {
@@ -309,20 +317,7 @@ test.concurrent.each(['success', 'throw', 'exit-throw', 'already-exited'] as con
                 events.push('create');
                 return { task, threadID: 17 };
             },
-            withTask({ taskID, threadID, componentIdx, fn }) {
-                expect(threadID).toBe(17);
-                expect(componentIdx).toBe(2);
-                const previous = current;
-                const previousThread = currentThread;
-                current = taskID;
-                currentThread = threadID;
-                try {
-                    return fn();
-                } finally {
-                    current = previous;
-                    currentThread = previousThread;
-                }
-            },
+            registers,
         });
         expect(events).toEqual([]); // Runtime creation must not touch the bridge.
         const call = () =>
@@ -331,8 +326,9 @@ test.concurrent.each(['success', 'throw', 'exit-throw', 'already-exited'] as con
                 rep: 42,
                 dtor(rep) {
                     expect(rep).toBe(42);
-                    expect(current).toBe(7n);
-                    expect(currentThread).toBe(17);
+                    expect(registers.current?.taskID).toBe(7n);
+                    expect(registers.current?.threadID).toBe(17);
+                    expect(registers[2]?.taskID).toBe(7n);
                     events.push('dtor');
                     if (mode === 'already-exited') {
                         exited = true;
@@ -368,8 +364,9 @@ test.concurrent.each(['success', 'throw', 'exit-throw', 'already-exited'] as con
                 ]);
             }
         }
-        expect(current).toBe(99n);
-        expect(currentThread).toBe(41);
+        expect(registers.current?.taskID).toBe(99n);
+        expect(registers.current?.threadID).toBe(41);
+        expect(registers[2]?.taskID).toBe(99n);
     },
 );
 
@@ -384,7 +381,7 @@ test.concurrent('destructors report a missing task bridge before invoking the gu
                 called = true;
             },
         }),
-    ).toThrow('resource destructors require resourceTasks.createTask and resourceTasks.withTask');
+    ).toThrow('resource destructors require createTask and registers');
     expect(called).toBe(false);
 });
 

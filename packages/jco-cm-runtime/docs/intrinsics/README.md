@@ -9,3 +9,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - `intrinsics/js-helper`: javascript helper.
 - `intrinsics/string`: string.
 - `intrinsics/webidl`: webidl.
+- `intrinsics/core`: core.

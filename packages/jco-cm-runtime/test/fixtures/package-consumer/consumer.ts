@@ -2,6 +2,7 @@ import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-
 import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
 import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
 import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
+import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -12,6 +13,46 @@ import type {
     RuntimeModuleContracts,
 } from '@bytecodealliance/jco-cm-runtime/runtime';
 const defaultModule: ResourceModule = resource;
+const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
+const registers = custom.initializeTaskRegisters();
+defaultCore.setCurrentTaskMeta(registers, { componentIdx: 0, taskID: 1n, threadID: 1 });
+if (
+    defaultCore.withCurrentTaskMeta(registers, {
+        componentIdx: 1,
+        taskID: 2n,
+        threadID: 2,
+        fn: () => defaultCore.getCurrentTaskMeta(registers)?.taskID,
+    }) !== 2n ||
+    defaultCore.getCurrentTaskMeta(registers)?.taskID !== 1n
+) {
+    throw new Error('task register consumer failed');
+}
+const Rep = defaultCore.initializeRepTableClass({ RuntimeError: Error });
+const OtherRep = defaultCore.initializeRepTableClass({ RuntimeError: Error });
+const reps = new Rep<string>();
+if (
+    Rep === OtherRep ||
+    Rep.FREE === OtherRep.FREE ||
+    !(reps instanceof Rep) ||
+    reps.get(reps.insert('value')) !== 'value'
+) {
+    throw new Error('constructor consumer failed');
+}
+const ErrorClass = defaultCore.initializeComponentErrorClass();
+const payload = { message: 'payload' };
+const error = new ErrorClass(payload);
+if (
+    defaultCore.getErrorPayload(defaultCore.initializeHasOwnProperty(), error) !== payload ||
+    custom.clampGuest(42, 0, 100) !== 42
+) {
+    throw new Error('error capability consumer failed');
+}
+const memoryMap = defaultCore.initializeComponentMemoryMap();
+const wasmMemory = new WebAssembly.Memory({ initial: 1 });
+defaultCore.registerMemory(memoryMap, { componentIdx: 0, memoryIdx: 0, memory: wasmMemory });
+if (defaultCore.lookupMemories(memoryMap, { componentIdx: 0, memoryIdx: 0 }) !== wasmMemory) {
+    throw new Error('memory owner consumer failed');
+}
 const indexSpaces = defaultModule.initializeHandleIndexSpaces();
 const scopeTasks = defaultModule.initializeResourceScopeTasks();
 const removal = { RuntimeError: Error, indexSpaces, scopeTasks };

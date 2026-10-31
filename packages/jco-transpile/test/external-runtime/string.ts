@@ -59,6 +59,10 @@ export function validateGuestChar(...args) { calls.push('validateGuestChar'); re
 async function writeProvider(dir: string) {
     await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
     await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
+    await writeFile(
+        join(dir, 'provider/intrinsics/core.js'),
+        'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
+    );
     for (const suffix of ['conversion', 'js-helper', 'resource']) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),

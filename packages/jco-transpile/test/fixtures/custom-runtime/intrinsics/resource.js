@@ -34,6 +34,7 @@ export function tableGet(context, table, handle) {
 }
 
 // Independent API-v2 resource implementation; internal calls have no namespace receiver.
+import { getCurrentTaskMeta, withCurrentTaskMeta } from './task-context.js';
 const RESOURCE_TABLE_FLAG = 1 << 30;
 const readTable = (context, table, handle) => {
     const scope = table[handle << 1];
@@ -127,7 +128,8 @@ export const transferBorrow = (context, handle, fromTid, toTid) => {
     const { rep, own } = readTable(context, fromTable, handle);
     const toTable = getOrCreateTable(context.tables, toTid);
     const componentIdx = toTable._componentIdx;
-    const borrowTask = componentIdx === undefined ? undefined : context.getCurrentTask?.(componentIdx);
+    const meta = componentIdx === undefined ? undefined : getCurrentTaskMeta(context.registers, componentIdx);
+    const borrowTask = meta ? context.getTask?.(meta.componentIdx, meta.taskID) : undefined;
     if (borrowTask && own) {
         fromTable[handle << 1]++;
         borrowTask.addResourceLender(fromTable, handle);
@@ -154,8 +156,8 @@ export const transferOwn = (context, handle, fromTid, toTid) => {
     return tableCreateOwn(context.indexSpaces, getOrCreateTable(context.tables, toTid), rep);
 };
 export const callDestructor = (context, { componentIdx, dtor, rep }) => {
-    if (!context.createTask || !context.withTask) {
-        throw new TypeError('resource destructors require resourceTasks.createTask and resourceTasks.withTask');
+    if (!context.createTask || !context.registers) {
+        throw new TypeError('resource destructors require createTask and registers');
     }
     const { task, threadID } = context.createTask({
         componentIdx,
@@ -164,7 +166,7 @@ export const callDestructor = (context, { componentIdx, dtor, rep }) => {
         entryFnName: '<resource-drop>',
     });
     task.enterSync();
-    return context.withTask({
+    return withCurrentTaskMeta(context.registers, {
         taskID: task.id(),
         threadID,
         componentIdx,

@@ -2635,7 +2635,8 @@ impl AsyncStreamIntrinsic {
                 let iterator_symbol = render_args.require_intrinsic(Intrinsic::SymbolIterator);
                 let external_readable_stream_class =
                     render_args.require_intrinsic(Intrinsic::PlatformReadableStreamClass);
-                let dispose_host_value = render_args.require_intrinsic(Intrinsic::DisposeHostValue);
+                let dispose_host_value =
+                    render_args.intrinsic_call_prefix(Intrinsic::DisposeHostValue);
 
                 output.push_str(&format!(
                     r#"
@@ -2649,14 +2650,14 @@ impl AsyncStreamIntrinsic {
                               let asyncIterator = stream[{async_iterator_symbol}]();
                               readFn = () => asyncIterator.next();
                               readFn.drop = (reason) => asyncIterator.return
-                                  ? {dispose_host_value}(asyncIterator, () => asyncIterator.return(reason))
-                                  : {dispose_host_value}(stream);
+                                  ? {dispose_host_value}asyncIterator, () => asyncIterator.return(reason))
+                                  : {dispose_host_value}stream);
                           }} else if ({iterator_symbol} in stream) {{
                               let iterator = stream[{iterator_symbol}]();
                               readFn = async () => iterator.next();
                               readFn.drop = (reason) => iterator.return
-                                  ? {dispose_host_value}(iterator, () => iterator.return(reason))
-                                  : {dispose_host_value}(stream);
+                                  ? {dispose_host_value}iterator, () => iterator.return(reason))
+                                  : {dispose_host_value}stream);
                               // Synchronous sources can be drained eagerly (up to a
                               // requested count) without risking an indefinite wait
                               readFn.sourceIsSync = true;
@@ -2665,7 +2666,7 @@ impl AsyncStreamIntrinsic {
                               // implement the async iterator protocol.
                               const lockedReader = stream.getReader();
                               readFn = () => lockedReader.read();
-                              readFn.drop = (reason) => {dispose_host_value}(
+                              readFn.drop = (reason) => {dispose_host_value}
                                   lockedReader,
                                   () => lockedReader.cancel(reason).finally(() => lockedReader.releaseLock()),
                               );
