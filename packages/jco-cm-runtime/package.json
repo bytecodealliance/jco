@@ -74,6 +74,10 @@
         "./intrinsics/host": {
             "types": "./dist/intrinsics/host.d.ts",
             "default": "./dist/intrinsics/host.js"
+        },
+        "./intrinsics/lift": {
+            "types": "./dist/intrinsics/lift.d.ts",
+            "default": "./dist/intrinsics/lift.js"
         }
     },
     "scripts": {

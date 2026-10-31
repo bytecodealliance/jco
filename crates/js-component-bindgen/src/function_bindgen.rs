@@ -566,11 +566,11 @@ impl FunctionBindgen<'_> {
             .as_ref()
             .map(|state| state.get_js_exprs().component_idx)
             .unwrap_or_else(|| "-1".into());
-        let lift_fn = self.intrinsic(Intrinsic::Lift(lift_intrinsic));
+        let lift_fn = self.intrinsic_call_prefix(Intrinsic::Lift(lift_intrinsic));
         let result_var = format!("directAsyncResult{}", self.tmp());
         let code = format!(
             r#"
-              const [{result_var}] = {lift_fn}({{
+              const [{result_var}] = {lift_fn}{{
                   {table_field}: {table_idx},
                   componentIdx: {component_idx},
               }})({{

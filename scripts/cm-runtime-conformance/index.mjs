@@ -1,3 +1,4 @@
+import { testLiftIntrinsics } from './lift.mjs';
 import { testHostIntrinsics } from './host.mjs';
 import { testAsyncTaskIntrinsics } from './async-task.mjs';
 import { testErrorContextIntrinsics } from './error-context.mjs';
@@ -17,6 +18,7 @@ export const DEFAULT_RUNTIME_BASE = '@bytecodealliance/jco-cm-runtime';
 const TEST_GROUPS = new Map([
     ['runtime', testRuntimeExports],
     ['resource', testResourceIntrinsics],
+    ['lift', testLiftIntrinsics],
     ['host', testHostIntrinsics],
     ['async-task', testAsyncTaskIntrinsics],
     ['error-context', testErrorContextIntrinsics],

@@ -14,3 +14,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - [`intrinsics/error-context`](error-context.md): error-context.
 - [`intrinsics/async-task`](async-task.md): async-task.
 - [`intrinsics/host`](host.md): host-call.
+- [`intrinsics/lift`](lift.md): lift.

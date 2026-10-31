@@ -28,6 +28,7 @@ async function writeProvider(dir: string, source: string) {
         'error-context',
         'async-task',
         'host',
+        'lift',
     ]) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),

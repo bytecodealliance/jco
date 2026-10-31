@@ -85,6 +85,22 @@ const taskClassBase = `
 /** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        id: 'lift-u32',
+        suffix: 'intrinsics/lift',
+        names: ['liftFlatU32'],
+        setup: '',
+        answer: 'liftFlatU32({ useDirectParams: true, params: [42] })[0]',
+        allocations: {},
+    },
+    {
+        id: 'lift-variant-scratch',
+        suffix: 'intrinsics/lift',
+        names: ['initializeLiftVariant'],
+        setup: 'const context = initializeLiftVariant();',
+        answer: '(context.scratch.setInt32(0, 42, true), context.scratch.getInt32(0, true))',
+        allocations: { DataView: 1, ArrayBuffer: 1 },
+    },
+    {
         suffix: 'intrinsics/host',
         id: 'host-event-memory',
         names: ['storeEventInComponentMemory'],

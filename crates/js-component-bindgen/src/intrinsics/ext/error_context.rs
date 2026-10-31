@@ -275,10 +275,16 @@ mod tests {
 
     #[test]
     fn lift_and_lower_shorthand_calls_receive_actual_error_context_owners() {
-        for intrinsic in [
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext),
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext),
-        ] {
+        let lift = Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext);
+        let source = generated([lift]);
+        assert!(!source.contains("function _liftFlatErrorContext("));
+        assert!(source.contains("local: _jcoErrorContextLocalTableContext"));
+        assert!(source.contains("globalTable: GlobalErrorContextTable"));
+        assert_eq!(
+            runtime::select(true).bind_callback(lift, "2"),
+            "_liftFlatErrorContext.bind(null, _jcoErrorContextNewContext, 2)"
+        );
+        for intrinsic in [Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext)] {
             let source = generated([intrinsic]);
             assert!(source.contains("errCtxGetLocalTable(_jcoErrorContextLocalTableContext, "));
             assert!(source.contains("errCtxGlobalRefCountAdd(GlobalErrorContextTable, "));
