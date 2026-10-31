@@ -92,3 +92,21 @@ webIdlCache.proxy = undefined;
 webIdlModule.globalThisIdlProxy();
 // @ts-expect-error the cache is structural and contains no runtime registry
 webIdlModule.globalThisIdlProxy({ runtime: {} });
+
+const indexSpaces = resource.initializeHandleIndexSpaces();
+const tables = resource.initializeHandleTables();
+const scopeTasks = resource.initializeResourceScopeTasks();
+const scope = resource.initializeScopeId();
+const callBorrows = resource.initializeCallBorrows();
+const removal = { RuntimeError: WebAssembly.RuntimeError, indexSpaces, scopeTasks };
+const table = Object.assign([resource.tableFlag, 0], { _createdReps: new Set<number>() });
+resource.tableRemove(removal, table, resource.tableCreateOwn(indexSpaces, table, 42));
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, callBorrows }, 1, 0, 1);
+// @ts-expect-error removal needs the shared allocator and scope-task lookup
+resource.tableRemove({ RuntimeError: Error }, table, 1);
+// @ts-expect-error transfer requires the live scope cell, not its numeric snapshot
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope: 0, callBorrows }, 1, 0, 1);
+// @ts-expect-error borrow-list replacement must go through its actual mutable owner
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, callBorrows: [] }, 1, 0, 1);
+// @ts-expect-error task construction is a required explicit capability
+resource.callDestructor({ withTask: ({ fn }) => fn() }, { componentIdx: 0, rep: 42, dtor: () => {} });

@@ -81,6 +81,11 @@ pub(crate) trait IntrinsicRuntime:
     /// Code emitted once before any intrinsic, given the full set of intrinsics.
     fn render_prelude(&self, _args: &RenderIntrinsicsArgs<'_>, _output: &mut Source) {}
 
+    /// Refer to the live storage selected by this runtime.
+    fn reference(&self, intrinsic: Intrinsic) -> &'static str {
+        binding(self, intrinsic).local_name()
+    }
+
     /// Render a call to `intrinsic`. Runtimes may add implicit leading operands.
     fn call(&self, intrinsic: Intrinsic, operands: &str) -> String {
         format!("{}({operands})", binding(self, intrinsic).local_name())
@@ -148,11 +153,11 @@ mod tests {
 
     const TABLE_GET: Intrinsic = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
     const SAMPLES: [Intrinsic; 5] = [
-        Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateBorrow),
+        Intrinsic::WebAssemblyRuntimeError,
         Intrinsic::DebugLog,
         Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn),
         Intrinsic::Base64Compile,
-        Intrinsic::HandleTables,
+        Intrinsic::SymbolDispose,
     ];
 
     fn render_with(runtime: &dyn IntrinsicRuntime, intrinsic: Intrinsic) -> String {

@@ -224,12 +224,12 @@ suite('resources', () => {
 
         assert.match(
             source,
-            /const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?\[['"]0['"]\]\(handleEntry\.rep\);/,
+            /const handleEntry = rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]{0,300}?\[['"]0['"]\]\(handleEntry\.rep\);/,
             'explicit disposal should call the destructor with the representation returned while removing the handle',
         );
         assert.notMatch(
             source,
-            /rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]{0,300}?handleTable\d+\[\(handle\d+ << 1\) \+ 1\]/,
+            /rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]{0,300}?handleTable\d+\[\(handle\d+ << 1\) \+ 1\]/,
             'explicit disposal must not read a representation from a removed handle-table entry',
         );
         assert.notMatch(
@@ -325,7 +325,7 @@ suite('resources', () => {
 
         assert.match(
             source,
-            /Object\.defineProperty\(rsc\d+, symbolDispose,[\s\S]*?const handleEntry = rscTableRemove\(handleTable\d+, handle\d+\);[\s\S]*?symbolRscHandle\] = undefined;/,
+            /Object\.defineProperty\(rsc\d+, symbolDispose,[\s\S]*?const handleEntry = rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]*?symbolRscHandle\] = undefined;/,
             'explicit disposal should release and invalidate an owned handle even without a guest destructor',
         );
     });

@@ -4,7 +4,7 @@
 
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
-`tableGet` from `intrinsics/resource` and selected conversions from
+resource operations and storage initializers from `intrinsics/resource`, selected conversions from
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`.
