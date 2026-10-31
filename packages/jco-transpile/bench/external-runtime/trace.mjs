@@ -11,6 +11,8 @@ export async function main(moduleUrl, outputPath) {
     try {
         for (const key of [
             'Map',
+            'DataView',
+            'ArrayBuffer',
             'Int32Array',
             'Float32Array',
             'BigInt64Array',

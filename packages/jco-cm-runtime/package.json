@@ -38,6 +38,10 @@
         "./intrinsics/conversion": {
             "types": "./dist/intrinsics/conversion.d.ts",
             "default": "./dist/intrinsics/conversion.js"
+        },
+        "./intrinsics/js-helper": {
+            "types": "./dist/intrinsics/js-helper.d.ts",
+            "default": "./dist/intrinsics/js-helper.js"
         }
     },
     "scripts": {

@@ -26,6 +26,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 pub(crate) mod conversion;
+pub(crate) mod js_helper;
 
 pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
@@ -37,6 +38,7 @@ pub(crate) enum RuntimeContext {
     StrictNumeric,
     Bitcast32,
     Bitcast64,
+    DataViewCache,
 }
 
 impl RuntimeContext {
@@ -48,6 +50,8 @@ impl RuntimeContext {
             "_jcoBitcast64Context",
             "_jcoInitializeBitcast32",
             "_jcoInitializeBitcast64",
+            "_jcoDataViewCacheContext",
+            "_jcoInitializeDataViewCache",
         ]
     }
 
@@ -57,18 +61,32 @@ impl RuntimeContext {
             Self::StrictNumeric => "_jcoStrictNumericContext",
             Self::Bitcast32 => "_jcoBitcast32Context",
             Self::Bitcast64 => "_jcoBitcast64Context",
+            Self::DataViewCache => "_jcoDataViewCacheContext",
         }
     }
 
     /// Initializers return narrow state, never operation tables.
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
-        let (export, local_name) = match self {
-            Self::Bitcast32 => ("initializeBitcast32", "_jcoInitializeBitcast32"),
-            Self::Bitcast64 => ("initializeBitcast64", "_jcoInitializeBitcast64"),
+        let (suffix, export, local_name) = match self {
+            Self::Bitcast32 => (
+                "intrinsics/conversion",
+                "initializeBitcast32",
+                "_jcoInitializeBitcast32",
+            ),
+            Self::Bitcast64 => (
+                "intrinsics/conversion",
+                "initializeBitcast64",
+                "_jcoInitializeBitcast64",
+            ),
+            Self::DataViewCache => (
+                "intrinsics/js-helper",
+                "initializeDataViewCache",
+                "_jcoInitializeDataViewCache",
+            ),
             _ => return None,
         };
         Some(RuntimeInitializer {
-            suffix: "intrinsics/conversion",
+            suffix,
             export,
             local_name,
         })
@@ -84,7 +102,7 @@ impl RuntimeContext {
             Self::StrictNumeric => {
                 uwriteln!(output, "const {local} = {{ strict: {strict} }};")
             }
-            Self::Bitcast32 | Self::Bitcast64 => {
+            Self::Bitcast32 | Self::Bitcast64 | Self::DataViewCache => {
                 let initialize = self.initializer().unwrap().local_name;
                 uwriteln!(output, "const {local} = {initialize}();")
             }
@@ -132,6 +150,7 @@ impl ExternalRuntime {
         match intrinsic {
             Intrinsic::Resource(i) => Self::resource_import(i),
             Intrinsic::Conversion(i) => Some(conversion::import(i)),
+            Intrinsic::JsHelper(i) => js_helper::import(i),
             _ => None,
         }
     }
@@ -229,6 +248,28 @@ impl Provides<ConversionIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<JsHelperIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: JsHelperIntrinsic) -> IntrinsicBinding {
+        match js_helper::import(intrinsic) {
+            Some(_) => IntrinsicBinding::Imported {
+                local_name: intrinsic.name(),
+            },
+            None => InlineRuntime.binding(intrinsic),
+        }
+    }
+
+    fn render(
+        &self,
+        intrinsic: JsHelperIntrinsic,
+        output: &mut Source,
+        args: &RenderIntrinsicsArgs<'_>,
+    ) {
+        if js_helper::import(intrinsic).is_none() {
+            InlineRuntime.render(intrinsic, output, args);
+        }
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -253,7 +294,6 @@ macro_rules! delegate_to_inline {
 
 delegate_to_inline! {
     BaseIntrinsic,
-    JsHelperIntrinsic,
     WebIdlIntrinsic,
     StringIntrinsic,
     ErrCtxIntrinsic,
