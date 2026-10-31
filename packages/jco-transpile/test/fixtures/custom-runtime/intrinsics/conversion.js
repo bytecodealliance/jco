@@ -55,7 +55,7 @@ export function requireValidNumericPrimitive(type, value) {
 }
 
 export function i32ToChar(value) {
-    if (!value || typeof value !== 'number') {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
         throw new Error('invalid i32');
     }
     if (value < 0) {
@@ -64,5 +64,5 @@ export function i32ToChar(value) {
     if (value >= 0x110000 || (0xd800 <= value && value <= 0xdfff)) {
         throw new Error('invalid i32 out of range');
     }
-    return String.fromCharCode(value);
+    return String.fromCodePoint(value);
 }

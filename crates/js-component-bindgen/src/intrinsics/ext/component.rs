@@ -241,6 +241,7 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> RuntimeImport {
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {
     use super::*;
+    use crate::intrinsics::runtime;
     use crate::{
         TranspileOpts,
         intrinsics::{Intrinsic, p3::waitable::WaitableIntrinsic, render_intrinsics},
@@ -358,10 +359,12 @@ mod tests {
             Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext),
         ] {
             let (source, _) = generated_intrinsics([selected]);
+            assert!(source.contains("lookup: _jcoComponentStateLookupContext"));
+            assert!(!source.contains(&format!("function {}(", selected.name())));
             assert!(
-                source.contains(
-                    "getOrCreateAsyncState(_jcoComponentStateLookupContext, componentIdx)"
-                )
+                runtime::select(true)
+                    .callback_reference(selected)
+                    .contains("_jcoLower")
             );
             assert!(!source.contains("getOrCreateAsyncState(componentIdx)"));
             assert!(!source.contains("getOrCreateAsyncState(globalErrCtx.componentIdx)"));
