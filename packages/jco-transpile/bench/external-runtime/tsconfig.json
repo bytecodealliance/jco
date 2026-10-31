@@ -1,0 +1,14 @@
+{
+    "extends": "../../tsconfig.json",
+    "include": ["./**/*.ts", "./**/*.mjs"],
+    "compilerOptions": {
+        "target": "es2022",
+        "rootDir": "../..",
+        "noEmit": true,
+        "declaration": false,
+        "allowJs": true,
+        "checkJs": false,
+        "noImplicitAny": true,
+        "skipLibCheck": true
+    }
+}

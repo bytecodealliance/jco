@@ -668,6 +668,9 @@ importers:
       puppeteer:
         specifier: 'catalog:'
         version: 25.14.0(yauzl@2.10.0)
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
