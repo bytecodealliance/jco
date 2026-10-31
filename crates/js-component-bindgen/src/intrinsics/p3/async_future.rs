@@ -469,7 +469,7 @@ impl AsyncFutureIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_future_table_map =
                     render_args.require_intrinsic(Self::GlobalFutureTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -483,7 +483,7 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         const {{ table, componentIdx }} = {global_future_table_map}[tableIdx];
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         let futureEnd;
                         if (futureEndWaitableIdx !== undefined) {{
@@ -514,7 +514,7 @@ impl AsyncFutureIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_future_table_map =
                     render_args.require_intrinsic(Self::GlobalFutureTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -534,7 +534,7 @@ impl AsyncFutureIntrinsic {
                         futureEnd.setHandle(handle);
                         futureEnd.setFutureTableIdx(tableIdx);
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         const waitableIdx = cstate.handles.insert(futureEnd);
                         futureEnd.setWaitableIdx(waitableIdx);
 
@@ -561,7 +561,7 @@ impl AsyncFutureIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let global_future_table_map =
                     render_args.require_intrinsic(Self::GlobalFutureTableMap);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -578,7 +578,7 @@ impl AsyncFutureIntrinsic {
                         const {{ table, componentIdx }} = {global_future_table_map}[tableIdx];
                         if (!table) {{ throw new Error(`missing/invalid table [${{tableIdx}}] while removing future end`); }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         const futureEnd = cstate.handles.get(futureWaitableIdx);
                         if (!(futureEnd instanceof {future_end_class}) || futureEnd.futureTableIdx() !== tableIdx) {{
@@ -617,7 +617,7 @@ impl AsyncFutureIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let host_future_class_name = self.name();
                 let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let runtime_error_class =
@@ -661,7 +661,7 @@ impl AsyncFutureIntrinsic {
                            if (this.#userFuture) {{ return this.#userFuture; }}
                            if (this.#rep === null) {{ throw new Error("unexpectedly missing rep for host future"); }}
 
-                           const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                           const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                            if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
 
                            const futureEnd = {get_future_end_fn}({{
@@ -865,7 +865,7 @@ impl AsyncFutureIntrinsic {
                     render_args.require_intrinsic(Intrinsic::GlobalBufferManager);
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -1189,7 +1189,7 @@ impl AsyncFutureIntrinsic {
                                   // (e.g. if it's a resource)
                                   const componentIdx = this.getWaitable().componentIdx();
                                   if (componentIdx !== -1) {{
-                                      await {get_or_create_async_state_fn}(componentIdx).waitForExclusiveRelease();
+                                      await {get_or_create_async_state_fn}componentIdx).waitForExclusiveRelease();
                                   }}
 
                                   return {{ value: vs[0] }};
@@ -1438,7 +1438,7 @@ impl AsyncFutureIntrinsic {
                 let create_future_fn = render_args.require_intrinsic(Self::CreateFuture);
                 let current_task_get_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
 
@@ -1454,7 +1454,7 @@ impl AsyncFutureIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const {{ readEnd, writeEnd }} = {create_future_fn}(cstate, {{
@@ -1514,7 +1514,7 @@ impl AsyncFutureIntrinsic {
             Self::FutureWrite | Self::FutureRead => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let current_task_get_fn = render_args
@@ -1580,7 +1580,7 @@ impl AsyncFutureIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('missing task in metadata during future operation'); }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         if (!task.mayBlock() && !isAsync) {{
@@ -1671,7 +1671,7 @@ impl AsyncFutureIntrinsic {
                     render_args.require_intrinsic(Self::FutureReadableEndClass)
                 };
                 let future_cancel_fn = self.name();
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let current_task_get_fn = render_args
@@ -1698,7 +1698,7 @@ impl AsyncFutureIntrinsic {
                         }});
                         const {{ componentIdx, futureTableIdx, isAsync }} = ctx;
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
@@ -1752,7 +1752,7 @@ impl AsyncFutureIntrinsic {
                 } else {
                     render_args.require_intrinsic(Self::FutureReadableEndClass)
                 };
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 output.push_str(&format!(r#"
@@ -1760,7 +1760,7 @@ impl AsyncFutureIntrinsic {
                         {debug_log_fn}('[{future_drop_fn}()] args', {{ ctx }});
                         const {{ componentIdx, futureTableIdx }} = ctx;
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const futureEnd = {remove_future_end_from_table_fn}({{
@@ -1784,7 +1784,7 @@ impl AsyncFutureIntrinsic {
                     render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
                 let add_future_end_to_table_fn =
                     render_args.require_intrinsic(Self::AddFutureEndToTable);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let global_future_table_map =
@@ -1815,7 +1815,7 @@ impl AsyncFutureIntrinsic {
                         // return-position transfer of a fused *sync* call runs after
                         // the callee task's teardown (same as stream.transfer).
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
 
                         const futureEnd = {get_future_end_fn}({{ tableIdx: srcTableIdx, futureEndWaitableIdx: srcFutureWaitableIdx }});
@@ -1862,8 +1862,9 @@ impl AsyncFutureIntrinsic {
                 let nested_future_symbol = render_args.require_intrinsic(Self::NestedFutureSymbol);
                 let get_error_payload =
                     render_args.intrinsic_call_prefix(Intrinsic::GetErrorPayload);
-                let track_host_operation =
-                    render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
+                let track_host_operation = render_args.intrinsic_call_prefix(Intrinsic::Component(
+                    ComponentIntrinsic::TrackHostOperation,
+                ));
                 let dispose_host_value =
                     render_args.intrinsic_call_prefix(Intrinsic::DisposeHostValue);
 
@@ -1894,7 +1895,7 @@ impl AsyncFutureIntrinsic {
 
                               let value;
                               try {{
-                                  value = await {track_host_operation}(() => promise);
+                                  value = await {track_host_operation}() => promise);
                               }} catch (err) {{
                                   // The reader was dropped (and the promise disposed) while it was pending,
                                   // so a rejection (e.g. from handling disposal) has nowhere to go

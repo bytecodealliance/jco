@@ -1,4 +1,17 @@
-import type { ResourceModule, ConversionModule, StringModule, WebIdlModule, CoreModule } from './contract.js';
+import type {
+    ResourceModule,
+    ConversionModule,
+    StringModule,
+    WebIdlModule,
+    CoreModule,
+    ComponentModule,
+} from './contract.js';
+export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({ error: null });
+export const checkMayLeave: ComponentModule['checkMayLeave'] = (context, componentIdx) => {
+    if (context.instanceFlags.get(componentIdx)?.value !== 1) {
+        throw new context.RuntimeError('cannot leave component instance');
+    }
+};
 export const initializeTaskRegisters: CoreModule['initializeTaskRegisters'] = () => ({});
 export const clampGuest: CoreModule['clampGuest'] = (value, min, max) => {
     if (value < min || value > max) {

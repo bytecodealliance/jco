@@ -759,7 +759,7 @@ impl FunctionBindgen<'_> {
         let fn_name = self.callee;
         let err_handling = self.err.to_js_string();
         let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-        let get_component_state = self.intrinsic(Intrinsic::Component(
+        let get_component_state = self.intrinsic_call_prefix(Intrinsic::Component(
             ComponentIntrinsic::GetOrCreateAsyncState,
         ));
         let start_current_task_fn = self.intrinsic(Intrinsic::AsyncTask(
@@ -786,7 +786,7 @@ impl FunctionBindgen<'_> {
             self.src,
             r#"
               const hostProvided = false;
-              {get_component_state}({component_idx_expr}).throwIfTrapped();
+              {get_component_state}{component_idx_expr}).throwIfTrapped();
 
               const {{ task, threadID }} = {start_current_task_fn}({{
                   componentIdx: {component_idx_expr},
@@ -827,7 +827,7 @@ impl FunctionBindgen<'_> {
                   // The store may have trapped while this task waited to enter: nothing
                   // runs after a trap (Canonical ABI), so this call fails too.
                   try {{
-                      {get_component_state}({component_idx_expr}).throwIfInterrupted();
+                      {get_component_state}{component_idx_expr}).throwIfInterrupted();
                   }} catch (err) {{
                       task.setErrored(err);
                       task.reject(err);
@@ -2159,7 +2159,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallWasm { name, sig } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let get_component_state = self.task_intrinsic(Intrinsic::Component(
+                let get_component_state = self.task_intrinsic_call_prefix(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
                 let component_idx_expr = self
@@ -2203,7 +2203,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   taskID: task.id(),
                                   err,
                               }});
-                              {get_component_state}({component_idx_expr}).markTrapped(err);
+                              {get_component_state}{component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -2220,7 +2220,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   taskID: task.id(),
                                   err,
                               }});
-                              {get_component_state}({component_idx_expr}).markTrapped(err);
+                              {get_component_state}{component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -2333,11 +2333,12 @@ impl Bindgen for FunctionBindgen<'_> {
             // Call to an imported interface (normally provided by the host)
             Instruction::CallInterface { func, async_ } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let get_component_state = self.task_intrinsic(Intrinsic::Component(
+                let get_component_state = self.task_intrinsic_call_prefix(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
-                let track_host_operation = self
-                    .task_intrinsic(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
+                let track_host_operation = self.task_intrinsic_call_prefix(Intrinsic::Component(
+                    ComponentIntrinsic::TrackHostOperation,
+                ));
                 let start_current_task_fn = self.task_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
                 ));
@@ -2504,7 +2505,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   subtaskID: task.getParentSubtask()?.id(),
                                   err,
                               }});
-                              {get_component_state}({component_idx_expr}).markTrapped(err);
+                              {get_component_state}{component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -2523,7 +2524,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   subtaskID: task.getParentSubtask()?.id(),
                                   err,
                               }});
-                              {get_component_state}({component_idx_expr}).markTrapped(err);
+                              {get_component_state}{component_idx_expr}).markTrapped(err);
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -2541,7 +2542,7 @@ impl Bindgen for FunctionBindgen<'_> {
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
                               threadID,
-                              fn: () => {track_host_operation}(() => {{
+                              fn: () => {track_host_operation}() => {{
                                   const hostRet = {callee_fn_js}({callee_args_js});
                                   subtask?.setHostPendingResult(hostRet);
                                   return hostRet;
@@ -2555,7 +2556,7 @@ impl Bindgen for FunctionBindgen<'_> {
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
                               threadID,
-                              fn: () => {track_host_operation}(() => {callee_fn_js}({callee_args_js})),
+                              fn: () => {track_host_operation}() => {callee_fn_js}({callee_args_js})),
                           }})
                         "#,
                     )
@@ -2634,7 +2635,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             self.intrinsic_call_prefix(Intrinsic::GetErrorPayload)
                         };
                         let trap_check = task_managed.then(|| format!(
-                            "if ({get_component_state}({component_idx_expr}).markTrapped(e)) {{ throw e; }}"
+                            "if ({get_component_state}{component_idx_expr}).markTrapped(e)) {{ throw e; }}"
                         ));
                         uwriteln!(
                             self.src,
@@ -2734,11 +2735,13 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Build the post return functionality
                 // to clean up tasks and possibly return values
-                let get_or_create_async_state_fn = self.task_intrinsic(Intrinsic::Component(
-                    ComponentIntrinsic::GetOrCreateAsyncState,
-                ));
+                let get_or_create_async_state_fn = self.task_intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 let post_return_trap_fn = self.post_return.filter(|_| task_managed).map(|_| {
-                    self.task_intrinsic(Intrinsic::Component(ComponentIntrinsic::PostReturnTrap))
+                    self.task_intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::PostReturnTrap,
+                    ))
                 });
                 let gen_post_return_js =
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
@@ -2747,12 +2750,12 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                         format!(
                             r#"
-                        let cstate = {get_or_create_async_state_fn}({component_idx_expr});
+                        let cstate = {get_or_create_async_state_fn}{component_idx_expr});
                         cstate.mayLeave = false;
                         try {{
                             {post_return_call}
                         }} catch (err) {{
-                            err = {post_return_trap_fn}({component_idx_expr}, err);
+                            err = {post_return_trap_fn}{component_idx_expr}, err);
                             // Cleanup can fail after the result was recorded.
                             task.reject(err);
                             throw err;
@@ -3397,9 +3400,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
-                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
-                    ComponentIntrinsic::GetOrCreateAsyncState,
-                ));
+                let get_or_create_async_state_fn = self.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 let gen_future_host_inject_fn = self.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::GenFutureHostInjectFn,
                 ));
@@ -3526,7 +3529,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             throw new Error('unrecognized future object (not Promise/Thenable)');
                         }}
 
-                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx_expr});
+                        const cstate{tmp} = {get_or_create_async_state_fn}{component_idx_expr});
                         if (!cstate{tmp}) {{
                             throw new Error(`missing component state for component [{component_idx_expr}]`);
                         }}
@@ -3768,9 +3771,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let iterator_symbol = self.intrinsic(Intrinsic::SymbolIterator);
                 let external_readable_stream_class =
                     self.intrinsic(Intrinsic::PlatformReadableStreamClass);
-                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
-                    ComponentIntrinsic::GetOrCreateAsyncState,
-                ));
+                let get_or_create_async_state_fn = self.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
                 let gen_stream_host_inject_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::GenStreamHostInjectFn,
                 ));
@@ -3898,7 +3901,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             throw new Error('unrecognized stream object (no supported stream protocol)');
                         }}
 
-                        const cstate{tmp} = {get_or_create_async_state_fn}({component_idx_expr});
+                        const cstate{tmp} = {get_or_create_async_state_fn}{component_idx_expr});
                         if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx_expr}]`); }}
 
                         const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = {create_stream_fn}(cstate{tmp}, {{
@@ -4094,9 +4097,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let is_async_js = self.requires_async_porcelain | self.is_async;
                 let async_driver_loop_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
-                let get_or_create_async_state_fn = self.intrinsic(Intrinsic::Component(
-                    ComponentIntrinsic::GetOrCreateAsyncState,
-                ));
+                let get_or_create_async_state_fn = self.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 // Set task memory index and memory object
                 let component_idx_expr = if let Some(state) = &self.component_state {
@@ -4205,7 +4208,7 @@ impl Bindgen for FunctionBindgen<'_> {
                           return {return_task_res};
                       }}
 
-                      const componentState = {get_or_create_async_state_fn}({component_idx_expr});
+                      const componentState = {get_or_create_async_state_fn}{component_idx_expr});
                       if (!componentState) {{ throw new Error('failed to lookup current component state'); }}
 
                       queueMicrotask(async (resolve, reject) => {{

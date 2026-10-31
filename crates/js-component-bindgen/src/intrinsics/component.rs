@@ -597,7 +597,10 @@ impl ComponentIntrinsic {
 
                         setBackpressure(v) {{
                             this.#backpressure = v;
-                            return this.#backpressure
+                            for (const handler of [...(this.#handlerMap.get('backpressure-change') ?? [])]) {{
+                                handler.fn(v);
+                            }}
+                            return this.#backpressure;
                         }}
                         getBackpressure() {{ return this.#backpressure; }}
 
@@ -629,25 +632,20 @@ impl ComponentIntrinsic {
                         hasBackpressure() {{ return this.#backpressure > 0; }}
 
                         waitForBackpressure() {{
-                            let backpressureCleared = false;
-                            const cstate = this;
-                            cstate.addBackpressureWaiter();
-                            const handlerID = this.registerHandler({{
-                                event: 'backpressure-change',
-                                fn: (bp) => {{
-                                    if (bp === 0) {{
-                                        cstate.removeHandler(handlerID);
-                                        backpressureCleared = true;
-                                    }}
-                                }}
-                            }});
+                            if (!this.hasBackpressure()) {{ return Promise.resolve(null); }}
+                            this.addBackpressureWaiter();
                             return new Promise((resolve) => {{
-                                const interval = setInterval(() => {{
-                                    if (backpressureCleared) {{ return; }}
-                                    clearInterval(interval);
-                                    cstate.removeBackpressureWaiter();
-                                    resolve(null);
-                                }}, 0);
+                                let pending = true;
+                                const handlerID = this.registerHandler({{
+                                    event: 'backpressure-change',
+                                    fn: (bp) => {{
+                                        if (bp !== 0 || !pending) {{ return; }}
+                                        pending = false;
+                                        this.removeHandler({{ event: 'backpressure-change', handlerID }});
+                                        this.removeBackpressureWaiter();
+                                        resolve(null);
+                                    }},
+                                }});
                             }});
                         }}
 

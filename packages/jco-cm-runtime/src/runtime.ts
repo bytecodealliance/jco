@@ -7,7 +7,7 @@ export type ResourceRep = number;
 export type ResourceScope = number;
 
 export interface RuntimeErrorConstructor {
-    new (message?: string): Error;
+    new (message?: string, options?: ErrorOptions): Error;
     readonly prototype: Error;
 }
 
@@ -170,6 +170,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/string': StringModule;
     readonly 'intrinsics/webidl': WebIdlModule;
     readonly 'intrinsics/core': CoreModule;
+    readonly 'intrinsics/component': ComponentModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -328,18 +329,18 @@ export interface MemoryMeta {
     memoryIdx?: number;
     memory?: RuntimeMemory;
 }
-/** Lazy access to component/task operations that are still generated inline. */
+/** Shared component contexts plus lazy access to task operations still inline. */
 export interface SuspendingImportContext extends TrapContext {
     readonly registers: TaskRegisters;
-    readonly checkMayLeave: (componentIdx: number) => void;
+    readonly mayLeave: ComponentMayLeaveContext;
+    readonly traps: ComponentRecordTrapContext;
+    readonly states: ComponentStateLookupContext;
     readonly getCurrentThread: (
         componentIdx: number,
         threadID: number,
         taskID: bigint,
     ) => { task: { mayBlock(): boolean | undefined } } | undefined;
     readonly currentTaskMayBlock: () => number;
-    readonly recordTrap: (componentIdx: number, error: unknown, convertsRangeErrors: boolean) => unknown;
-    readonly throwIfInterrupted: (componentIdx: number) => void;
 }
 export interface ComponentError extends Error {
     readonly payload: unknown;
@@ -611,4 +612,263 @@ export interface CoreModule {
         fast: ConditionalTrampoline,
         slow: ConditionalSlowFn,
     ) => ConditionalTrampoline;
+}
+
+/** The task operations used by component scheduling; tasks may still be generated inline. */
+export interface ComponentTask {
+    readonly id: () => bigint;
+    readonly defaultThread: () => ComponentThread;
+    readonly componentIdx: () => number;
+    readonly taskState: () => unknown;
+    readonly entryFnName: () => string | undefined;
+    readonly getParentSubtask: () => unknown;
+    readonly getRootTask: () => ComponentTask;
+    readonly isResolvedState: () => boolean;
+    readonly isRejected: () => boolean;
+    readonly isCancelled: () => boolean;
+    readonly needsExclusiveLock: () => boolean;
+    readonly endFirstSlice: () => void;
+    readonly notifyProgress: () => void;
+    readonly setErrored: (error: unknown) => void;
+    readonly reject: (error: unknown) => void;
+}
+export interface SuspendTaskOptions {
+    task: ComponentTask;
+    readonly readyFn: () => boolean;
+    cancellable: boolean;
+    readonly onResume?: (keepGoing: boolean) => void;
+}
+/** Structural thread contract used by the component scheduler. */
+export interface ComponentThread {
+    readonly id: () => number;
+    readonly taskID: () => bigint;
+    readonly componentIdx: () => number;
+    readonly task: () => ComponentTask;
+    readonly isCancelled: () => boolean;
+    readonly isRejected: () => boolean;
+    readonly notifyProgress: () => void;
+}
+export interface SuspendThreadOptions {
+    thread: ComponentThread;
+    readyFn: () => boolean;
+    cancellable: boolean;
+    onResume?: (keepGoing: boolean) => void;
+    suspended?: boolean;
+}
+export interface SuspendedThread {
+    thread: ComponentThread;
+    readyFn: () => boolean;
+    cancellable: boolean;
+    resume: () => void;
+    suspended: boolean;
+}
+export interface SuspendedTask extends SuspendedThread {
+    task: ComponentTask;
+}
+export interface AdmissionTicket {
+    taskID: bigint;
+    promise: Promise<void>;
+    readonly resolve: () => void;
+    readonly reject: (reason?: unknown) => void;
+}
+export interface WaitableEvent {
+    code: number;
+    payload0: number;
+    payload1: number;
+}
+/** Structural contract for the waitables produced by the transitional factory. */
+export interface ComponentWaitable {
+    target: unknown;
+    readonly componentIdx: () => number | undefined;
+    readonly isInSet: () => boolean;
+    readonly idx: () => number | null;
+    readonly setIdx: (idx: number) => void;
+    readonly setTarget: (target: unknown) => void;
+    readonly resolve: () => void;
+    readonly reject: (error: unknown) => void;
+    readonly promise: () => Promise<void>;
+    readonly hasPendingEvent: () => boolean;
+    readonly setPendingEvent: (fn: () => WaitableEvent) => void;
+    readonly getPendingEvent: () => WaitableEvent | null;
+    readonly join: (set: ComponentWaitableSet | null) => void;
+    readonly drop: () => void;
+}
+export interface ComponentWaitableSet {
+    readonly addWaitable: (waitable: ComponentWaitable) => void;
+    readonly removeWaitable: (waitable: ComponentWaitable) => void;
+}
+export type ComponentTickResult = 'done' | 'resumed' | 'idle';
+export interface ComponentAsyncState {
+    readonly handles: RepTable;
+    readonly subtasks: RepTable;
+    readonly threads: RepTable;
+    mayLeave: boolean;
+    readonly componentIdx: () => number;
+    readonly errored: () => boolean;
+    readonly setErrored: (error?: unknown) => void;
+    readonly markTrapped: (error: unknown) => boolean;
+    readonly isTrapped: () => boolean;
+    readonly throwIfInterrupted: () => void;
+    readonly throwIfTrapped: () => void;
+    readonly callingSyncImport: {
+        (): boolean;
+        (value: boolean): void;
+    };
+    readonly waitForSyncImportCallEnd: () => Promise<void>;
+    readonly setBackpressure: (value: number) => number;
+    readonly getBackpressure: () => number;
+    readonly incrementBackpressure: () => number;
+    readonly decrementBackpressure: () => number;
+    readonly hasBackpressure: () => boolean;
+    readonly waitForBackpressure: () => Promise<null>;
+    readonly registerHandler: (args: { event: string; readonly fn: (value: number) => void }) => bigint;
+    readonly removeHandler: (args: { event: string; handlerID: bigint }) => void;
+    readonly getBackpressureWaiters: () => bigint;
+    readonly addBackpressureWaiter: () => void;
+    readonly removeBackpressureWaiter: () => void;
+    readonly isExclusivelyLocked: () => boolean;
+    readonly exclusivelyLockedBy: (taskID: bigint) => boolean;
+    readonly exclusiveLock: (taskID: bigint) => void;
+    readonly acquireExclusiveLock: (taskID: bigint) => Promise<void> | undefined;
+    readonly takeAdmissionTicket: (taskID: bigint) => AdmissionTicket;
+    readonly hasPendingAdmissions: () => boolean;
+    readonly waitForAdmissionTurn: (ticket: AdmissionTicket) => Promise<void> | undefined;
+    readonly releaseAdmissionTicket: (ticket: AdmissionTicket) => void;
+    readonly abandonAdmissionWaiters: () => void;
+    readonly abandonLockWaiters: () => void;
+    readonly cancelExclusiveLockWaiter: (taskID: bigint) => boolean;
+    readonly exclusiveRelease: (taskID: bigint) => boolean;
+    readonly onNextExclusiveRelease: (fn: () => void) => void;
+    readonly waitForExclusiveRelease: () => Promise<void>;
+    readonly suspendThread: (args: SuspendThreadOptions) => Promise<boolean> | undefined;
+    readonly resumeThread: (thread: ComponentThread) => boolean;
+    readonly markThreadReady: (thread: ComponentThread) => boolean;
+    readonly isThreadSuspended: (thread: ComponentThread) => boolean;
+    readonly isThreadReady: (thread: ComponentThread) => boolean;
+    readonly suspendedThreadReady: (thread: ComponentThread) => boolean;
+    readonly suspendTask: (args: SuspendTaskOptions) => Promise<boolean> | undefined;
+    readonly resumeTaskByID: (taskID: bigint) => boolean;
+    readonly suspendedTaskReady: (taskID: bigint) => boolean;
+    readonly suspendedTaskCancellable: (taskID: bigint) => boolean;
+    readonly isTaskSuspended: (taskID: bigint) => boolean;
+    readonly suspendedTaskMetas: () => IterableIterator<SuspendedTask>;
+    readonly addPendingTaskStart: () => void;
+    readonly removePendingTaskStart: () => void;
+    readonly hasPendingSchedulerWork: () => boolean;
+    readonly runTickLoop: () => Promise<void>;
+    readonly tick: () => ComponentTickResult;
+    readonly createWaitable: (args?: { target?: unknown }) => ComponentWaitable;
+}
+export interface ComponentAsyncStateConstructor {
+    new (args: { componentIdx: number }): ComponentAsyncState;
+    readonly EVENT_HANDLER_EVENTS: string[];
+    readonly TickResult: {
+        DONE: 'done';
+        RESUMED: 'resumed';
+        IDLE: 'idle';
+    };
+}
+export interface ComponentStoreAsyncState {
+    // Opaque host timer handle, kept portable between Node and browsers.
+    deadlockCheck: unknown | null;
+    pendingHostOperations: number;
+}
+export interface ComponentDeadlockDetail {
+    pendingHostOperations: number;
+    suspendedTasks: {
+        taskID: bigint;
+        componentIdx: number;
+        state: unknown;
+        rootTaskID: bigint;
+    }[];
+    unresolvedRootTaskIDs: bigint[];
+}
+
+/** Actual owners shared with generated component and task code. */
+export type ComponentInstanceFlags = Map<number, { value: number }>;
+export interface ComponentStoreTrap {
+    error: Error | null;
+}
+export type ComponentAsyncStates = Map<number, ComponentAsyncState>;
+export interface ComponentNormalizeTrapContext extends TrapContext {
+    readonly messages: Pick<ReadonlyMap<string, string>, 'get'>;
+}
+export interface ComponentDeadlockContext extends TrapContext {
+    readonly storeTrap: ComponentStoreTrap;
+    readonly storeAsyncState: ComponentStoreAsyncState;
+    readonly asyncState: Pick<ComponentAsyncStates, 'values'>;
+}
+export interface ComponentHostOperationContext extends ComponentDeadlockContext {
+    readonly symbolDispose: symbol;
+}
+export interface ComponentMayLeaveContext extends TrapContext {
+    readonly instanceFlags: Pick<ComponentInstanceFlags, 'get'>;
+}
+export interface ComponentStateLookupContext {
+    readonly asyncState: Pick<ComponentAsyncStates, 'has' | 'get' | 'set'>;
+    readonly ComponentAsyncState: ComponentAsyncStateConstructor;
+}
+export interface ComponentPostReturnTrapContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly stackOverflow: string;
+    readonly uncaughtException: string;
+}
+export interface ComponentRecordTrapContext extends TrapContext {
+    readonly registers: TaskRegisters;
+    readonly lookup: ComponentStateLookupContext;
+}
+export interface ComponentAsyncStateContext extends TrapContext {
+    readonly RepTable: RepTableConstructor;
+    readonly indexSpaces: ResourceHandleIndexSpaces;
+    readonly instanceFlags: Pick<ComponentInstanceFlags, 'get'>;
+    readonly storeTrap: ComponentStoreTrap;
+    readonly normalization: ComponentNormalizeTrapContext;
+    readonly cannotEnter: string;
+    readonly deadlock: ComponentDeadlockContext;
+    /** Lazy until the waitable family migrates; never invoked during class initialization. */
+    readonly createWaitable?: (args: { target?: unknown }) => ComponentWaitable;
+}
+export interface ComponentModule {
+    readonly initializeInstanceFlags: () => ComponentInstanceFlags;
+    readonly initializeStoreTrap: () => ComponentStoreTrap;
+    readonly initializeStoreAsyncState: () => ComponentStoreAsyncState;
+    readonly initializeComponentAsyncStates: () => ComponentAsyncStates;
+    readonly initializeCoreTrapMessages: (messages: Readonly<Record<string, string>>) => Map<string, string>;
+    readonly initializeComponentAsyncStateClass: (
+        context: ComponentAsyncStateContext,
+    ) => ComponentAsyncStateConstructor;
+    readonly checkForDeadlock: (context: ComponentDeadlockContext) => void;
+    readonly trackHostOperation: <T>(
+        context: ComponentHostOperationContext,
+        operation: () => T,
+    ) => T | Promise<Awaited<T>>;
+    readonly normalizeCoreTrap: <T>(context: ComponentNormalizeTrapContext, error: T) => T;
+    readonly checkMayLeave: (context: ComponentMayLeaveContext, componentIdx: number) => void;
+    readonly guardMayLeave: <A extends unknown[], T, R>(
+        context: ComponentMayLeaveContext,
+        componentIdx: number,
+        fn: (this: R, ...args: A) => T,
+    ) => (this: R, ...args: A) => T;
+    readonly postReturnTrap: (context: ComponentPostReturnTrapContext, componentIdx: number, error: unknown) => Error;
+    readonly guardPostReturn: <A extends unknown[], T>(
+        context: ComponentPostReturnTrapContext,
+        componentIdx: number,
+        fn: (...args: A) => T,
+    ) => (...args: A) => T;
+    readonly recordTrap: (
+        context: ComponentRecordTrapContext,
+        componentIdx: number | null | undefined,
+        error: unknown,
+        convertsRangeErrors?: boolean,
+    ) => unknown;
+    readonly guardTrap: <A extends unknown[], T, R>(
+        context: ComponentRecordTrapContext,
+        componentIdx: number | null | undefined,
+        fn: (this: R, ...args: A) => T,
+        convertsRangeErrors?: boolean,
+    ) => (this: R, ...args: A) => T;
+    readonly getOrCreateAsyncState: (context: ComponentStateLookupContext, componentIdx: number) => ComponentAsyncState;
+    readonly backpressureInc: (context: ComponentStateLookupContext, componentIdx: number) => void;
+    readonly backpressureDec: (context: ComponentStateLookupContext, componentIdx: number) => void;
+    readonly setAllError: (states: Pick<ComponentAsyncStates, 'values'>) => void;
 }

@@ -116,6 +116,23 @@ import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
 import type { CoreModule } from '@bytecodealliance/jco-cm-runtime/runtime';
 export const defaultCore: CoreModule = core;
 export const coreContractEntry: RuntimeModuleContracts['intrinsics/core'] = core;
+import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
+export const componentContractEntry: RuntimeModuleContracts['intrinsics/component'] = component;
+// @ts-expect-error component providers must expose selected owners and operations
+export const missingComponent: RuntimeModuleContracts['intrinsics/component'] = {};
+// @ts-expect-error guards need the actual instance flag owner and selected trap constructor
+component.checkMayLeave({ RuntimeError: Error }, 0);
+component.checkForDeadlock({
+    RuntimeError: Error,
+    // @ts-expect-error store trap state is a live owner rather than an error snapshot
+    storeTrap: null,
+    storeAsyncState: component.initializeStoreAsyncState(),
+    asyncState: component.initializeComponentAsyncStates(),
+});
+// @ts-expect-error lookup requires the selected per-store constructor
+component.getOrCreateAsyncState({ asyncState: component.initializeComponentAsyncStates() }, 0);
+// @ts-expect-error component namespace operations are readonly function properties
+componentContractEntry.backpressureInc = () => {};
 // @ts-expect-error a core provider must supply its selected operations and initializers
 export const missingCore: CoreModule = {};
 // @ts-expect-error initializer must return the actual register owner, not a snapshot

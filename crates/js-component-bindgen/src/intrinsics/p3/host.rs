@@ -300,7 +300,7 @@ impl HostIntrinsic {
             Self::AsyncStartCall => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let async_start_call_fn = render_args.require_intrinsic(Self::AsyncStartCall);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let async_event_code_enum =
@@ -394,9 +394,9 @@ impl HostIntrinsic {
                         //
                         const params = preparedTask.getCalleeParams();
 
-                        const callerComponentState = {get_or_create_async_state_fn}(subtask.componentIdx());
+                        const callerComponentState = {get_or_create_async_state_fn}subtask.componentIdx());
 
-                        const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
+                        const calleeComponentState = {get_or_create_async_state_fn}preparedTask.componentIdx());
                         const calleeBackpressure = calleeComponentState.hasBackpressure();
 
                         // Set up a handler on subtask completion to lower results from the call into the caller's memory region.
@@ -789,7 +789,7 @@ impl HostIntrinsic {
             Self::SyncStartCall => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let sync_start_call_fn = render_args.require_intrinsic(Self::SyncStartCall);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let async_driver_loop_fn = render_args
@@ -876,7 +876,7 @@ impl HostIntrinsic {
                         // core signature (`paramCount`).
                         const params = preparedTask.getCalleeParams();
 
-                        const calleeComponentState = {get_or_create_async_state_fn}(preparedTask.componentIdx());
+                        const calleeComponentState = {get_or_create_async_state_fn}preparedTask.componentIdx());
 
                         const {{
                             promise: taskReturnPromise,

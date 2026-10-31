@@ -25,8 +25,10 @@ use crate::{names::js_string_literal, source::Source, uwriteln};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+mod component;
 pub(crate) mod conversion;
 mod core;
+use component::ComponentContext;
 use core::CoreContext;
 pub(crate) mod js_helper;
 pub(crate) mod resource;
@@ -40,6 +42,7 @@ pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RuntimeContext {
     Core(CoreContext),
+    Component(ComponentContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -102,11 +105,13 @@ impl RuntimeContext {
         ]
         .into_iter()
         .chain(CoreContext::get_global_names())
+        .chain(ComponentContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::Core(context) => context.local_name(),
+            Self::Component(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -135,6 +140,7 @@ impl RuntimeContext {
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (suffix, export, local_name) = match self {
             Self::Core(context) => return context.initializer(),
+            Self::Component(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -222,6 +228,7 @@ impl RuntimeContext {
     pub(crate) fn dependencies(self) -> &'static [Self] {
         match self {
             Self::Core(context) => context.dependencies(),
+            Self::Component(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -255,6 +262,7 @@ impl RuntimeContext {
         let local = self.local_name();
         match self {
             Self::Core(context) => context.render(output, args),
+            Self::Component(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -343,6 +351,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::Component(i) => Some(component::import(i)),
             Intrinsic::Resource(i) => Some(resource::resource_import(i)),
             Intrinsic::HandleTables | Intrinsic::ScopeId => {
                 Some(resource::resource_owner_import(intrinsic))
@@ -455,6 +464,7 @@ impl Provides<BaseIntrinsic> for ExternalRuntime {
             InlineRuntime.render(intrinsic, output, args);
         } else {
             core::discover(i, args);
+            component::discover(i, args);
             if i.conditional_suspending_wasm().is_some() {
                 output.push_str(&i.register_conditional_suspending_js(args));
             }
@@ -535,6 +545,23 @@ impl Provides<WebIdlIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<ComponentIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: ComponentIntrinsic) -> IntrinsicBinding {
+        let _ = component::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        intrinsic: ComponentIntrinsic,
+        _output: &mut Source,
+        args: &RenderIntrinsicsArgs<'_>,
+    ) {
+        component::discover(intrinsic.into(), args);
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -565,7 +592,6 @@ delegate_to_inline! {
     LowerIntrinsic,
     AsyncStreamIntrinsic,
     AsyncFutureIntrinsic,
-    ComponentIntrinsic,
     HostIntrinsic,
 }
 

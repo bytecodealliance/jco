@@ -8,6 +8,7 @@
         "./intrinsics/js-helper": "./intrinsics/js-helper.js",
         "./intrinsics/string": "./intrinsics/string.js",
         "./intrinsics/webidl": "./intrinsics/webidl.js",
-        "./intrinsics/core": "./intrinsics/core.js"
+        "./intrinsics/core": "./intrinsics/core.js",
+        "./intrinsics/component": "./intrinsics/component.js"
     }
 }

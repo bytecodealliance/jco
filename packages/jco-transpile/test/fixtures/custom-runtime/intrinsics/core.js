@@ -1,4 +1,4 @@
-// Independent API-v2 implementation; type-only contract imports are erased.
+import { checkMayLeave, recordTrap, getOrCreateAsyncState } from './component.js';
 export { debugLog } from './core-debug.js';
 export { initializeRepTableClass } from './rep-table.js';
 export { initializeManagedBufferClass, initializeBufferManagerClass } from './buffers.js';
@@ -142,18 +142,7 @@ export const throwInvalidBool = () => {
 export const throwUninitialized = () => {
     throw new TypeError('Wasm uninitialized use `await $init` first');
 };
-export function promiseWithResolvers() {
-    if (Promise.withResolvers) {
-        return Promise.withResolvers();
-    }
-    let resolve;
-    let reject;
-    const promise = new Promise((res, rej) => {
-        resolve = res;
-        reject = rej;
-    });
-    return { promise, resolve, reject };
-}
+export { promiseWithResolvers } from './core-promises.js';
 export const registerMemory = (map, args) => {
     const { componentIdx, memory, memoryIdx } = args ?? {};
     if (componentIdx === undefined) {
@@ -191,7 +180,7 @@ export const suspendingImport = (
 ) => {
     const { registers: currentTaskMeta, RuntimeError } = context;
     return function (...args) {
-        context.checkMayLeave(componentIdx);
+        checkMayLeave(context.mayLeave, componentIdx);
         const saved = currentTaskMeta[componentIdx] ?? null;
         const savedTask = saved
             ? context.getCurrentThread(saved.componentIdx, saved.threadID, saved.taskID)?.task
@@ -209,7 +198,7 @@ export const suspendingImport = (
                 if (!switchesTask) {
                     currentTaskMeta.current = saved;
                 }
-                throw context.recordTrap(componentIdx, error, convertsRangeErrors);
+                throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
             }
             currentTaskMeta[componentIdx] = saved;
             if (!switchesTask) {
@@ -229,10 +218,10 @@ export const suspendingImport = (
         return (async () => {
             try {
                 const result = await fn.apply(null, args);
-                context.throwIfInterrupted(componentIdx);
+                getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
                 return result;
             } catch (error) {
-                throw context.recordTrap(componentIdx, error, convertsRangeErrors);
+                throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
             } finally {
                 currentTaskMeta[componentIdx] = saved;
                 if (!switchesTask) {
