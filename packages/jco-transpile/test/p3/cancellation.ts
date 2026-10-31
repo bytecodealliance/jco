@@ -158,8 +158,8 @@ suite('subtask cancellation', () => {
         }
     });
 
-    // Guest->guest flavor where the call is dropped before the (deferred)
-    // callee start has run: the subtask is cancelled while still STARTING,
+    // Guest->guest flavor with explicit backpressure holding the callee
+    // before entry: the subtask is cancelled while still STARTING,
     // the callee must never run, and the subtask resolves as
     // CANCELLED_BEFORE_STARTED.
     test('dropping a still-starting guest import future cancels before the callee runs', async () => {

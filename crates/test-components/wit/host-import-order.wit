@@ -1,0 +1,21 @@
+package jco:test-components;
+
+interface host-import-order-source {
+  return-then-import: async func() -> u32;
+}
+
+world host-import-order {
+  import progress: func(value: u32);
+  import consume: async func(value: stream<u8>);
+  import work: async func(value: u32) -> u32;
+  export host-import-order-source;
+  export invalid-handle: func();
+  export start-two: func() -> tuple<u32, u32>;
+  export results: func() -> tuple<u32, u32>;
+}
+
+world host-import-order-caller {
+  import host-import-order-source;
+  import progress: func(value: u32);
+  export run: async func() -> u32;
+}

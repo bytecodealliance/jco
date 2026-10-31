@@ -458,6 +458,8 @@ world subtask-cancel-drop {
 }
 
 interface subtask-cancel-g2g {
+  /// Hold subsequent calls before entry so cancellation can test STARTING.
+  hold-entry: func();
   /// Blocks until cancelled (the callee awaits a host import that never resolves)
   blocked-call: async func() -> u32;
 }
