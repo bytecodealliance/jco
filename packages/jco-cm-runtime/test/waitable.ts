@@ -256,27 +256,22 @@ test.concurrent('component factory, handle tables, and waitable operations share
     expect(waitable.waitableSetNew(0)).toBe(setRep);
 });
 
-test.concurrent('wait/poll use live task owners and a lazy memory bridge and preserve synchronous paths', async () => {
+test.concurrent('wait/poll use live task owners and the static memory writer and preserve synchronous paths', async () => {
     const t = task();
-    const memory = { buffer: new ArrayBuffer(32) };
+    const buffer = new ArrayBuffer(32);
     let reads = 0;
     let writes = 0;
+    const memory = {
+        get buffer() {
+            writes++;
+            return buffer;
+        },
+    };
     const { waitable, component, core } = create({
         waitableContext: {
             taskLookup: lookupTask(t.value, 0, () => {
                 reads++;
             }),
-            storeEventInComponentMemory(args) {
-                expect(args.task).toBe(t.value);
-                expect(args.memory).toBe(memory);
-                expect(args.memoryIdx).toBe(2);
-                expect(args.componentIdx).toBe(0);
-                const view = new DataView(args.memory.buffer);
-                view.setUint32(args.ptr, args.event!.payload0, true);
-                view.setUint32(args.ptr + 4, args.event!.payload1, true);
-                writes++;
-                return args.event!.code;
-            },
         },
     });
     expect(reads + writes).toBe(0);
@@ -295,7 +290,7 @@ test.concurrent('wait/poll use live task owners and a lazy memory bridge and pre
     w.setPendingEvent(() => event);
     t.pending.resolve(true);
     expect(await pending).toBe(event.code);
-    const view = new DataView(memory.buffer);
+    const view = new DataView(buffer);
     expect([view.getUint32(8, true), view.getUint32(12, true)]).toEqual([17, 23]);
     w.setPendingEvent(() => event);
     expect(waitable.waitableSetPoll(ctx, rep, 8)).toBe(event.code);
@@ -367,28 +362,33 @@ test.concurrent('suspended waits write through the live memory buffer after grow
     const t = task();
     const memory = new WebAssembly.Memory({ initial: 1 });
     const oldBuffer = memory.buffer;
+    let bufferReads = 0;
+    const selectedMemory = {
+        get buffer() {
+            bufferReads++;
+            expect(memory.buffer).not.toBe(oldBuffer);
+            return memory.buffer;
+        },
+    };
     const { waitable, component } = create({
         waitableContext: {
             taskLookup: lookupTask(t.value),
-            storeEventInComponentMemory({ memory: selected, event, ptr }) {
-                expect(selected).toBe(memory);
-                expect(selected.buffer).not.toBe(oldBuffer);
-                const view = new DataView(selected.buffer);
-                view.setUint32(ptr, event!.payload0, true);
-                view.setUint32(ptr + 4, event!.payload1, true);
-                return event!.code;
-            },
         },
     });
     const rep = waitable.waitableSetNew(0);
     const set = component.getOrCreateAsyncState(0).handles.get(rep) as WaitableSet;
     const w = new waitable.Waitable({});
     w.join(set);
-    const pending = waitable.waitableSetWait({ componentIdx: 0, isAsync: true, getMemoryFn: () => memory }, rep, 65536);
+    const pending = waitable.waitableSetWait(
+        { componentIdx: 0, isAsync: true, getMemoryFn: () => selectedMemory },
+        rep,
+        65536,
+    );
     memory.grow(1);
     w.setPendingEvent(() => event);
     t.pending.resolve(true);
     expect(await pending).toBe(event.code);
+    expect(bufferReads).toBe(1);
     expect(new DataView(memory.buffer).getUint32(65536, true)).toBe(event.payload0);
     expect(set.numWaiting()).toBe(0);
 });

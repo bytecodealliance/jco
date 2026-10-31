@@ -31,7 +31,9 @@ mod component;
 pub(crate) mod conversion;
 mod core;
 mod error_context;
+mod host;
 use error_context::ErrCtxContextIntrinsic;
+use host::HostContextIntrinsic;
 mod waitable;
 use component::ComponentContextIntrinsic;
 use core::CoreContextIntrinsic;
@@ -59,6 +61,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     ErrCtx(ErrCtxContextIntrinsic),
     /// Context intrinsics for task, subtask, and thread operations.
     Task(TaskContextIntrinsic),
+    /// Context intrinsics for host operations.
+    Host(HostContextIntrinsic),
     /// Capabilities for the `tableGet` resource-table helper.
     ResourceTableGet,
     /// The per-component resource handle index spaces returned by `initializeHandleIndexSpaces`.
@@ -146,6 +150,7 @@ impl RuntimeContextIntrinsic {
         .chain(WaitableContextIntrinsic::get_global_names())
         .chain(ErrCtxContextIntrinsic::get_global_names())
         .chain(TaskContextIntrinsic::get_global_names())
+        .chain(HostContextIntrinsic::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -155,6 +160,7 @@ impl RuntimeContextIntrinsic {
             Self::Waitable(context) => context.local_name(),
             Self::ErrCtx(context) => context.local_name(),
             Self::Task(context) => context.local_name(),
+            Self::Host(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::InitializeHandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::InitializeHandleTables => "HANDLE_TABLES",
@@ -187,6 +193,7 @@ impl RuntimeContextIntrinsic {
             Self::Waitable(context) => return context.initializer(),
             Self::ErrCtx(context) => return context.initializer(),
             Self::Task(context) => return context.initializer(),
+            Self::Host(context) => return context.initializer(),
             Self::InitializeHandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -278,6 +285,7 @@ impl RuntimeContextIntrinsic {
             Self::Waitable(context) => context.dependencies(),
             Self::ErrCtx(context) => context.dependencies(),
             Self::Task(context) => context.dependencies(),
+            Self::Host(context) => context.dependencies(),
             Self::ResourceTableRemove => &[
                 Self::InitializeHandleIndexSpaces,
                 Self::InitializeResourceScopeTasks,
@@ -322,6 +330,7 @@ impl RuntimeContextIntrinsic {
             Self::Waitable(context) => context.render(output, args),
             Self::ErrCtx(context) => context.render(output, args),
             Self::Task(context) => context.render(output, args),
+            Self::Host(context) => context.render(output, args),
             Self::ResourceTableRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -410,6 +419,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::Host(i) => Some(host::import(i)),
             Intrinsic::AsyncTask(i) => async_task::import(i),
             Intrinsic::ErrCtx(i) => Some(error_context::import(i)),
             Intrinsic::Waitable(i) => Some(waitable::import(i)),
@@ -642,11 +652,10 @@ impl Provides<WaitableIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        intrinsic: WaitableIntrinsic,
+        _intrinsic: WaitableIntrinsic,
         _output: &mut Source,
-        args: &RenderIntrinsicsArgs<'_>,
+        _args: &RenderIntrinsicsArgs<'_>,
     ) {
-        waitable::discover_dependencies(intrinsic.into(), args);
     }
 }
 
@@ -690,6 +699,22 @@ impl Provides<AsyncTaskIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<HostIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: HostIntrinsic) -> IntrinsicBinding {
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        intrinsic: HostIntrinsic,
+        _output: &mut Source,
+        args: &RenderIntrinsicsArgs<'_>,
+    ) {
+        async_task::discover_dependencies(intrinsic.into(), args);
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -717,7 +742,6 @@ delegate_to_inline! {
     LowerIntrinsic,
     AsyncStreamIntrinsic,
     AsyncFutureIntrinsic,
-    HostIntrinsic,
 }
 
 impl IntrinsicRuntime for ExternalRuntime {

@@ -237,3 +237,47 @@ asyncTask.getCurrentTask({ registers: {}, getCurrentTask: () => undefined }, 0);
 defaultAsyncTask.createNewCurrentTask = () => {
     throw new Error('override');
 };
+
+import * as host from '@bytecodealliance/jco-cm-runtime/intrinsics/host';
+import type {
+    HostModule,
+    HostPrepareContext,
+    HostPromisingPlatform,
+    StoreEventOptions,
+} from '@bytecodealliance/jco-cm-runtime/runtime';
+const hostModule: HostModule = host;
+const hostContract: RuntimeModuleContracts['intrinsics/host'] = host;
+const independentWriter: Pick<HostModule, 'storeEventInComponentMemory'> = {
+    storeEventInComponentMemory: ({ memory, ptr, event }) => {
+        new DataView(memory.buffer).setUint32(ptr, event!.payload0, true);
+        return event!.code;
+    },
+};
+const minimalPromising: HostPromisingPlatform = {
+    promising:
+        (callee) =>
+        async (...params) =>
+            callee(...params),
+};
+hostModule.storeEventInComponentMemory({
+    memory: { buffer: new ArrayBuffer(8) },
+    ptr: 0,
+    event: { code: 1, payload0: 17, payload1: 23 },
+});
+// @ts-expect-error context-free event writing receives only its actual operands
+hostModule.storeEventInComponentMemory({}, { memory: { buffer: new ArrayBuffer(8) }, ptr: 0, event: null });
+const privateHost: Pick<HostModule, 'prepareCall'> = {
+    // @ts-expect-error a provider cannot require additional private capabilities
+    prepareCall: (_context: HostPrepareContext & { privateHost: number }) => {},
+};
+const wrongEventWriter: Pick<HostModule, 'storeEventInComponentMemory'> = {
+    // @ts-expect-error providers must accept the structural public memory/event operands
+    storeEventInComponentMemory: (_args: StoreEventOptions & { privateState: string }) => 0,
+};
+// @ts-expect-error exported function properties are readonly
+hostModule.prepareCall = () => {};
+// @ts-expect-error a host context does not accept a namespace factory
+const factoryHost: HostPrepareContext = { createIntrinsics: () => host };
+// @ts-expect-error host start functions need a capability context before their operands
+hostModule.asyncStartCall({ getCallbackFn: () => null, getPostReturnFn: () => null }, () => 0, 0, 0, 0);
+void [hostContract, independentWriter, minimalPromising, privateHost, wrongEventWriter, factoryHost];
