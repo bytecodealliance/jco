@@ -76,6 +76,7 @@ suite('runtime package', () => {
             expect(Object.keys(manifest.exports).sort()).toEqual([
                 '.',
                 './intrinsics/conversion',
+                './intrinsics/core',
                 './intrinsics/js-helper',
                 './intrinsics/resource',
                 './intrinsics/string',

@@ -1070,7 +1070,15 @@ impl Intrinsic {
                         size() {{ return this.#size; }}
 
                         clear() {{
-                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
+                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ target: this.target }});
+                            if (this.#space) {{
+                                for (let rep = 1; rep < this.#data.length / 2; rep++) {{
+                                    if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== {rep_table_class}.FREE) {{
+                                        this.#space.release(rep);
+                                    }}
+                                }}
+                            }}
+                            this.#size = 0;
                             this.#data = [0, null];
                         }}
                     }}
@@ -1502,6 +1510,17 @@ impl Intrinsic {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rep_table_clear_resets_size_and_releases_only_live_shared_indices() {
+        let source = render_intrinsic_body(Intrinsic::RepTableClass);
+        let clear = source.split("clear() {").nth(1).unwrap();
+        assert!(!clear.contains("{ rep, target:"));
+        assert!(clear.contains("this.#size = 0;"));
+        assert!(clear.contains("this.#data[(rep << 1) + 1] === null"));
+        assert!(clear.contains("this.#data[rep << 1] !== RepTable.FREE"));
+        assert!(clear.contains("this.#space.release(rep)"));
+    }
 
     fn render(initial: impl IntoIterator<Item = Intrinsic>) -> (Source, BTreeSet<Intrinsic>) {
         let mut intrinsics = initial.into_iter().collect();
@@ -2803,6 +2822,12 @@ impl RenderIntrinsicsArgs<'_> {
     /// The runtime generating intrinsics for these arguments.
     pub(crate) fn runtime(&self) -> &'static dyn IntrinsicRuntime {
         runtime::select(self.external_runtime_enabled())
+    }
+
+    pub(crate) fn intrinsic_call_prefix(&self, intrinsic: impl Into<Intrinsic>) -> String {
+        let intrinsic = intrinsic.into();
+        self.require_intrinsic(intrinsic);
+        self.runtime().call_prefix(intrinsic, true)
     }
 
     pub(crate) fn intrinsic_call(&self, intrinsic: impl Into<Intrinsic>, operands: &str) -> String {

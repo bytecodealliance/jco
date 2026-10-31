@@ -67,6 +67,17 @@ set now includes all resources plus the shared handle-table and scope owners
 (50 variants). Real component graphs record the selected owner initializers and
 remaining inline task dependencies separately.
 
+N07 expands the mapped set to 102 variants and adds eight used/unused core
+controls: scalars, native error-payload capability, task registers, representation
+and error constructors, memory lookup, buffer-manager ownership and empty
+conditional-JSPI module storage. Pure/task/error controls allocate no traced
+constructors; two representation classes create two private symbols. Memory
+lookup creates one Map; the buffer manager plus its explicitly supplied resource
+owners create four Maps. Empty conditional storage reads no optional JSPI API.
+These are isolated import controls, separate from real component graphs.
+The checkpoint records hashes of both the central descriptor source and its
+nested core descriptor module, in addition to the actual compiler artifacts.
+
 All bundles and correctness checks finish before timing starts. Defaults are five
 fresh processes per matrix entry, each with 15 alternating paired samples after
 common warmup/calibration. Scenario order rotates deterministically (seed 20261021).
