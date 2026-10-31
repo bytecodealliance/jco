@@ -27,11 +27,138 @@ export interface ResourceTableEntry {
 
 /** Exports required at the public intrinsics/resource subpath. */
 export interface ResourceModule {
+    readonly tableFlag: number;
+    readonly tableOwn: number;
+    readonly initializeHandleIndexSpaces: () => ResourceHandleIndexSpaces;
+    readonly initializeHandleTables: () => ResourceHandleTables;
+    readonly initializeCallBorrows: () => ResourceCallBorrowList;
+    readonly initializeCurrentBorrows: () => ResourceCurrentBorrowList;
+    readonly initializeResourceScopeCounter: () => ResourceScopeCell;
+    readonly initializeResourceScopeTasks: () => ResourceScopeTasks;
+    readonly initializeScopeId: () => ResourceScopeCell;
+    readonly getHandleIndexSpace: (spaces: ResourceHandleIndexSpaces, key: number | ResourceTable) => HandleIndexSpace;
+    readonly tableCreateBorrow: (
+        spaces: ResourceHandleIndexSpaces,
+        table: ResourceTable,
+        rep: ResourceRep,
+        scopeId: ResourceScope,
+    ) => ResourceHandle;
+    readonly tableCreateOwn: (
+        spaces: ResourceHandleIndexSpaces,
+        table: ResourceTable,
+        rep: ResourceRep,
+    ) => ResourceHandle;
     readonly tableGet: (
         context: ResourceTableGetContext,
         table: ArrayLike<number>,
         handle: ResourceHandle,
     ) => ResourceTableEntry;
+    readonly tableEnsureBorrowDrop: (table: ArrayLike<number>, handle: ResourceHandle, scope: ResourceScope) => void;
+    readonly tableRemove: (
+        context: ResourceTableRemoveContext,
+        table: ResourceTable,
+        handle: ResourceHandle,
+    ) => ResourceTableEntry;
+    readonly transferBorrow: (
+        context: ResourceTransferBorrowContext,
+        handle: ResourceHandle,
+        fromTid: number,
+        toTid: number,
+    ) => number;
+    readonly transferBorrowValidLifting: ResourceModule['transferBorrow'];
+    readonly transferOwn: (
+        context: ResourceTransferOwnContext,
+        handle: ResourceHandle,
+        fromTid: number,
+        toTid: number,
+    ) => ResourceHandle;
+    readonly callDestructor: <T>(context: ResourceDestructorContext, args: ResourceDestructorArgs<T>) => T;
+}
+
+/** Resizable pair slots and the metadata actually owned by this table. */
+export interface ResourceTable extends Array<number> {
+    _componentIdx?: number;
+    _createdReps: Set<ResourceRep>;
+}
+export interface HandleIndexSpace {
+    next: number;
+    free: number[];
+    readonly alloc: () => number;
+    readonly release: (index: number) => void;
+}
+export interface ResourceHandleIndexSpaces {
+    readonly get: (key: number | ResourceTable) => HandleIndexSpace | undefined;
+    readonly set: (key: number | ResourceTable, space: HandleIndexSpace) => unknown;
+}
+export interface ResourceHandleTables {
+    [tableId: number]: ResourceTable;
+}
+export interface ResourceScopeCell {
+    value: ResourceScope;
+}
+export interface ResourceBorrowRecord {
+    rid: number;
+    handle: ResourceHandle;
+}
+export interface ResourceCallBorrowList {
+    borrows: ResourceBorrowRecord[];
+}
+/** Host resource objects or generated { rsc, drop } cleanup entries. */
+export interface ResourceCurrentBorrowList {
+    borrows: object[];
+}
+export interface ResourceBorrowTask {
+    readonly resourceScopeId: () => ResourceScope;
+    readonly addResourceLender: (table: ResourceTable, handle: ResourceHandle) => void;
+    readonly addBorrowedHandle: () => void;
+    readonly removeBorrowedHandle: () => void;
+}
+export interface ResourceScopeTasks {
+    readonly get: (scope: ResourceScope) => ResourceBorrowTask | undefined;
+    readonly set: (scope: ResourceScope, task: ResourceBorrowTask) => unknown;
+    readonly delete: (scope: ResourceScope) => boolean;
+    readonly keys: () => IterableIterator<ResourceScope>;
+}
+export interface ResourceTableRemoveContext extends TrapContext {
+    readonly indexSpaces: ResourceHandleIndexSpaces;
+    readonly scopeTasks: Pick<ResourceScopeTasks, 'get'>;
+}
+export interface ResourceTransferOwnContext extends ResourceTableRemoveContext {
+    readonly tables: ResourceHandleTables;
+}
+export interface ResourceTransferBorrowContext extends TrapContext {
+    readonly indexSpaces: ResourceHandleIndexSpaces;
+    readonly tables: ResourceHandleTables;
+    readonly scope: ResourceScopeCell;
+    readonly callBorrows: ResourceCallBorrowList;
+    /** Lazy lookup while tasks remain inline; no operation namespace is supplied. */
+    readonly getCurrentTask?: (componentIdx: number) => ResourceBorrowTask | undefined;
+}
+export interface ResourceDestructorTask {
+    readonly id: () => bigint;
+    readonly enterSync: () => void;
+    readonly resolve: (results: unknown[]) => void;
+    readonly exit: (options?: { skipExclusiveLockCheck: boolean }) => void;
+    readonly isResolvedState: () => boolean;
+    readonly setErrored: (error: unknown) => void;
+    readonly reject: (error: unknown) => void;
+    readonly isExited: () => boolean;
+}
+export interface ResourceDestructorCreateArgs {
+    readonly componentIdx: number;
+    readonly isAsync: false;
+    readonly callingWasmExport: true;
+    readonly entryFnName: '<resource-drop>';
+}
+export interface ResourceDestructorArgs<T> {
+    readonly componentIdx: number;
+    readonly dtor: (rep: ResourceRep) => T;
+    readonly rep: ResourceRep;
+}
+export interface ResourceDestructorContext {
+    /** Lazy task capabilities, removed from generated inline bridges at N11. */
+    readonly createTask: (args: ResourceDestructorCreateArgs) => { task: ResourceDestructorTask; threadID: number };
+    readonly withTask: <T>(args: { taskID: bigint; threadID: number; componentIdx: number; fn: () => T }) => T;
 }
 
 /** Type-only conformance map. No runtime registry or factory is required. */

@@ -34,8 +34,25 @@
         "String(Utf8EncodeAsync)",
         "String(ValidateGuestChar)",
         "String(ValidateHostChar)",
+        "WebIdl(GlobalThisIdlProxy)",
+        "Resource(ResourceTableFlag)",
+        "Resource(HandleIndexSpaces)",
+        "Resource(GetHandleIndexSpace)",
+        "Resource(ResourceTableCreateBorrow)",
+        "Resource(ResourceTableCreateOwn)",
+        "Resource(ResourceTableEnsureBorrowDrop)",
+        "Resource(ResourceTableRemove)",
+        "Resource(ResourceCallBorrows)",
+        "Resource(ResourceScopeCounter)",
+        "Resource(ResourceScopeTasks)",
+        "Resource(ResourceTransferBorrow)",
+        "Resource(ResourceTransferBorrowValidLifting)",
+        "Resource(ResourceTransferOwn)",
+        "Resource(CurResourceBorrows)",
+        "Resource(ResourceDestructorCall)",
+        "HandleTables",
+        "ScopeId",
         "String(CompactUtf16Decode)",
-        "String(CompactUtf16Encode)",
-        "WebIdl(GlobalThisIdlProxy)"
+        "String(CompactUtf16Encode)"
     ]
 }

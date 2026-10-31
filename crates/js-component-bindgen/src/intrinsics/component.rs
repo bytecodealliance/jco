@@ -453,8 +453,10 @@ impl ComponentIntrinsic {
                 let component_async_state_class = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let rep_table_class = render_args.require_intrinsic(Intrinsic::RepTableClass);
-                let get_handle_index_space_fn = render_args
-                    .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::GetHandleIndexSpace));
+                let get_handle_index_space_fn = render_args.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::GetHandleIndexSpace),
+                    "this.#componentIdx",
+                );
                 let waitable_class =
                     render_args.require_intrinsic(WaitableIntrinsic::WaitableClass);
                 let promise_with_resolvers_fn =
@@ -517,7 +519,7 @@ impl ComponentIntrinsic {
                             this.#componentIdx = args.componentIdx;
                             this.handles = new {rep_table_class}({{
                                 target: `component [${{this.#componentIdx}}] handles (waitable objects)`,
-                                space: {get_handle_index_space_fn}(this.#componentIdx),
+                                space: {get_handle_index_space_fn},
                             }});
                             this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
                             this.threads = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] threads` }});

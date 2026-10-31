@@ -4,7 +4,7 @@
 
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
-`tableGet` from `intrinsics/resource` and selected conversions from
+resource operations and storage initializers from `intrinsics/resource`, selected conversions from
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`.
@@ -30,9 +30,9 @@ map each public subpath to its `.js` file. HTTP servers must serve the whole
 runtime directory tree with JavaScript MIME types.
 
 Bindings check version 1 before use. Missing subpaths or named exports fail
-through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
-operations, both JavaScript helpers, all ten string variants and the WebIDL proxy
-(33/274 logical intrinsic variants);
+through the native ES module loader. The current externalized set is all 17 resource variants, the shared handle-table
+and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
+string variants and the WebIDL proxy (51/275 logical intrinsic variants);
 other families remain inline during migration.
 
 ## Implementing an alternative runtime

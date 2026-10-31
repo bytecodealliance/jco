@@ -12,6 +12,41 @@ import type {
     RuntimeModuleContracts,
 } from '@bytecodealliance/jco-cm-runtime/runtime';
 const defaultModule: ResourceModule = resource;
+const indexSpaces = defaultModule.initializeHandleIndexSpaces();
+const scopeTasks = defaultModule.initializeResourceScopeTasks();
+const removal = { RuntimeError: Error, indexSpaces, scopeTasks };
+const table = Object.assign([defaultModule.tableFlag, 0], { _componentIdx: 0, _createdReps: new Set<number>() });
+const handle = defaultModule.tableCreateOwn(indexSpaces, table, 42);
+if (
+    handle !== 1 ||
+    defaultModule.tableRemove(removal, table, handle).rep !== 42 ||
+    defaultModule.getHandleIndexSpace(indexSpaces, 0).alloc() !== handle
+) {
+    throw new Error('allocator consumer failed');
+}
+const cells = [defaultModule.initializeScopeId(), defaultModule.initializeResourceScopeCounter()];
+if (
+    cells[0] === cells[1] ||
+    cells.some((cell) => cell.value !== 0) ||
+    defaultModule.initializeCallBorrows().borrows.length ||
+    defaultModule.initializeCurrentBorrows().borrows.length ||
+    Object.keys(defaultModule.initializeHandleTables()).length
+) {
+    throw new Error('resource storage consumer failed');
+}
+const transferOwn: ResourceModule['transferOwn'] = resource.transferOwn;
+const transferBorrow: ResourceModule['transferBorrow'] = resource.transferBorrow;
+const transferBorrowValidLifting: ResourceModule['transferBorrowValidLifting'] = resource.transferBorrowValidLifting;
+const ensureBorrowDrop: ResourceModule['tableEnsureBorrowDrop'] = resource.tableEnsureBorrowDrop;
+const createBorrow: ResourceModule['tableCreateBorrow'] = resource.tableCreateBorrow;
+const destructor: ResourceModule['callDestructor'] = resource.callDestructor;
+if (
+    [transferOwn, transferBorrow, transferBorrowValidLifting, ensureBorrowDrop, createBorrow, destructor].some(
+        (op) => typeof op !== 'function',
+    )
+) {
+    throw new Error('resource exports missing');
+}
 const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
 const helpers: RuntimeModuleContracts['intrinsics/js-helper'] = jsHelper;
 const webIdlModule: RuntimeModuleContracts['intrinsics/webidl'] = webidl;
@@ -50,7 +85,7 @@ if (
 ) {
     throw new Error('bitcast consumer failed');
 }
-const customModule: RuntimeModuleContracts['intrinsics/resource'] = custom;
+const customModule: Pick<ResourceModule, 'tableGet'> = custom;
 const version: 1 = rootVersion;
 const entry = defaultModule.tableGet({ RuntimeError: WebAssembly.RuntimeError }, [1 << 30, 0, 7, 42], 1);
 if (
