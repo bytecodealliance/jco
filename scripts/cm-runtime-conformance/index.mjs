@@ -1,3 +1,4 @@
+import { testWaitableIntrinsics } from './waitable.mjs';
 import { testCoreIntrinsics } from './core.mjs';
 import { testWebidlIntrinsics } from './webidl.mjs';
 import { testStringIntrinsics } from './string.mjs';
@@ -13,6 +14,7 @@ export const DEFAULT_RUNTIME_BASE = '@bytecodealliance/jco-cm-runtime';
 const TEST_GROUPS = new Map([
     ['runtime', testRuntimeExports],
     ['resource', testResourceIntrinsics],
+    ['waitable', testWaitableIntrinsics],
     ['core', testCoreIntrinsics],
     ['webidl', testWebidlIntrinsics],
     ['string', testStringIntrinsics],

@@ -8,7 +8,8 @@ resource operations and storage initializers from `intrinsics/resource`, selecte
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
-from `intrinsics/core`, and component state/scheduling from `intrinsics/component`.
+from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
+and waitable constructors/operations from `intrinsics/waitable`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 

@@ -81,6 +81,7 @@ suite('runtime package', () => {
                     'WebIdlModule',
                     'CoreModule',
                     'ComponentModule',
+                    'WaitableModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -98,6 +99,7 @@ suite('runtime package', () => {
                 './intrinsics/js-helper',
                 './intrinsics/resource',
                 './intrinsics/string',
+                './intrinsics/waitable',
                 './intrinsics/webidl',
                 './runtime',
             ]);
