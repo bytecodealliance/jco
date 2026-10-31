@@ -28,6 +28,7 @@ use std::fmt::Write;
 pub(crate) mod conversion;
 pub(crate) mod js_helper;
 pub(crate) mod string;
+pub(crate) mod webidl;
 
 pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
@@ -44,6 +45,7 @@ pub(crate) enum RuntimeContext {
     Utf16Decoder,
     Utf8Encoder,
     Utf16Encoding,
+    WebIdlProxyCache,
 }
 
 impl RuntimeContext {
@@ -62,6 +64,8 @@ impl RuntimeContext {
             "_jcoInitializeUtf8Encoder",
             "_jcoInitializeUtf16Encoding",
             "_jcoUtf16EncodingContext",
+            "_jcoWebIdlProxyCacheContext",
+            "_jcoInitializeWebIdlProxyCache",
         ]
     }
 
@@ -76,6 +80,7 @@ impl RuntimeContext {
             Self::Utf16Decoder => "utf16Decoder",
             Self::Utf8Encoder => "TEXT_ENCODER_UTF8",
             Self::Utf16Encoding => "_jcoUtf16EncodingContext",
+            Self::WebIdlProxyCache => "_jcoWebIdlProxyCacheContext",
         }
     }
 
@@ -117,6 +122,11 @@ impl RuntimeContext {
                 "initializeUtf16Encoding",
                 "_jcoInitializeUtf16Encoding",
             ),
+            Self::WebIdlProxyCache => (
+                "intrinsics/webidl",
+                "initializeWebIdlProxyCache",
+                "_jcoInitializeWebIdlProxyCache",
+            ),
             _ => return None,
         };
         Some(RuntimeInitializer {
@@ -142,7 +152,8 @@ impl RuntimeContext {
             | Self::Utf8Decoder
             | Self::Utf16Decoder
             | Self::Utf8Encoder
-            | Self::Utf16Encoding => {
+            | Self::Utf16Encoding
+            | Self::WebIdlProxyCache => {
                 let initialize = self.initializer().unwrap().local_name;
                 uwriteln!(output, "const {local} = {initialize}();")
             }
@@ -200,6 +211,7 @@ impl ExternalRuntime {
             Intrinsic::Conversion(i) => Some(conversion::import(i)),
             Intrinsic::JsHelper(i) => js_helper::import(i),
             Intrinsic::String(i) => Some(string::import(i)),
+            Intrinsic::WebIdl(i) => Some(webidl::import(i)),
             _ => None,
         }
     }
@@ -337,6 +349,22 @@ impl Provides<StringIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<WebIdlIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: WebIdlIntrinsic) -> IntrinsicBinding {
+        let _ = webidl::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        _intrinsic: WebIdlIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -361,7 +389,6 @@ macro_rules! delegate_to_inline {
 
 delegate_to_inline! {
     BaseIntrinsic,
-    WebIdlIntrinsic,
     ErrCtxIntrinsic,
     AsyncTaskIntrinsic,
     WaitableIntrinsic,

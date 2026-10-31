@@ -1,4 +1,5 @@
-import type { ResourceModule, ConversionModule, StringModule } from './contract.js';
+import type { ResourceModule, ConversionModule, StringModule, WebIdlModule } from './contract.js';
+export const initializeWebIdlProxyCache: WebIdlModule['initializeWebIdlProxyCache'] = () => ({ proxy: undefined });
 export const validateHostChar: StringModule['validateHostChar'] = (value) => {
     if (typeof value !== 'string') {
         throw new TypeError('must be a string');
