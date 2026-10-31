@@ -1,0 +1,643 @@
+{
+    "schema": 1,
+    "complete": true,
+    "at": "2026-10-22T15:04:18.333Z",
+    "protocol": {
+        "processes": 5,
+        "samples": 15,
+        "transactionsPerSample": 8,
+        "warmupTransactions": 16
+    },
+    "component": "crates/test-components/src/bin/stream_lower.rs",
+    "fixture": "packages/jco-transpile/test/fixtures/generated/rust-test-components/stream-lower.wasm",
+    "workload": "Eight sequential async guest calls: 16 u32 payloads, Unicode records, option-bearing variants, byte lists, owned resource method calls, nested string streams, streams of pending string futures, and ok/err results. Full outputs checked outside timing.",
+    "timing": "Nanoseconds; warm transaction includes input construction, host ReadableStream/Promise handling, guest ABI and guest execution. Startup excludes core Wasm compilation and host-import setup. Cold native import plus first instantiation is recorded per process. No isolated intrinsic or constant-memory claim.",
+    "scope": "Original stack only; not evidence or accepted measurement protocol for the trait-based rewrite",
+    "source": {
+        "manifest": "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/manifest.json",
+        "manifestSha256": "2681e0c8d659a399fc15e0b69aaa6fa2d50756cb544b338cba4a6035a8634032",
+        "checkpoint": "aed17c12df8028ecfb9fe88d9b85d19f23b13b05b5dfb75fff605f457e50c246",
+        "scriptSha256": "5465dc4a172e0cabb7bc68c71dcacc65fa0c48b8219e8edc08764296e46c87d5",
+        "environment": {
+            "compilerArtifacts": {
+                "js-component-bindgen-component.core.wasm": "7c0d8b88e57d72854656b45ec0c615d508969cd202a66b63cc11b0e45a18868b",
+                "js-component-bindgen-component.core2.wasm": "ebae15314fd9c91874ef7f6ed9d32a84da100787c0ac28355062edfb9179cc3f",
+                "js-component-bindgen-component.js": "dc569f583443706b6d2f915794b56e0dadf16701a863a0b528f554c0fb7e1bd3"
+            },
+            "runtimeArtifacts": {
+                "package": "58db28902fc3bb6acab60fe2cf18f1086d0d6e024afeebc9005422782425b015",
+                "runtime.js": "c9a5052f01ce4209e22d94fbcbc4870543df7e8fa2bc97006d1dc7a9f3d32d7e",
+                "index.js": "4a060fc3c19867ed266a24537f3402e63bc148a686cd57baf3dce10afa7639b2",
+                "intrinsics/async-task.js": "189a2bcd31dfdaf9be838dc1d42cad679d7e643ca161db9003c82bb093ac390a",
+                "intrinsics/buffers.js": "9be6cb961a2bc69bcaa0e8fbb51216dcc83db5f927be716472d3bac54d7696c9",
+                "intrinsics/component.js": "d7f8dabbc2afbfc930adbf677a8225429df210925df6a8b1dc0f561096994337",
+                "intrinsics/conversion.js": "ea338cee77e48e8a9112513ae342532317bf3f075c42ea8fe77ab3f78169b42d",
+                "intrinsics/core-debug.js": "b648c336eebf05db22f7327d007a5fe6df1fc0bb107a098c184c5cd25a980ba6",
+                "intrinsics/core-promises.js": "25e9ed99c9d658f47be5bc7037d25c0ce9074b8600595913c8ceff25a6344a1d",
+                "intrinsics/core.js": "ef85b0a7763fd978aa9152463806702819d7a91820be83bae47c6a4290d34915",
+                "intrinsics/error-context.js": "804b41151f9ad315ac95d81af870e5b22dd386ec337b18eadea8ece453914cbb",
+                "intrinsics/future-end.js": "c1d2c785de73edda5ae16551c351eeed72f7a1cecffcc13aea01ada75afdbdea",
+                "intrinsics/future-host.js": "5a8ba59fec748e53cdabe46bb043482bc03c0829c8effbe3cafc687a4a030aaf",
+                "intrinsics/future-inheritance.js": "d51676911640b9e9d90df40998cf28de77766e62db17e4ef0c6279ed91f4ef41",
+                "intrinsics/future-internal.js": "74ddd1a8e9b75e5bdd8abfe3f4f8cf083f30cded442260ae7ada9bc6aae4cc96",
+                "intrinsics/future-operations.js": "d6792dec61d8b79cdf4d87f08e0e317cb2e5b103d1bea272de9ceedd126e834c",
+                "intrinsics/future-readable.js": "d5cde272f1f8e9a0f800321dd6eabf604600013ef639b21e026bbd4f8772f1e6",
+                "intrinsics/future-state.js": "01311ecfb8b0e88ca618084b9fea40b0fe7044f1ffb723eeee3137cc324a2e44",
+                "intrinsics/future-value.js": "04fd5e33cc304154ce03f5a6014e7674c4fbf9d623c1be8102a0515ffdaad7e9",
+                "intrinsics/future-writable.js": "e975ab8081dc17a6d99ca0ff507d6d6a1166d3cd04c3e7183e861ac0b2551742",
+                "intrinsics/future.js": "183caddb12b1906e7f5321a50e32d128b5c2028da1be253d5be157a587a87a74",
+                "intrinsics/host.js": "2b17e94b5081b8b1c2025c7866f271365b520e4be675a0274ace238eedba44ea",
+                "intrinsics/js-helper.js": "1fa55e7a5cc4254266aaa5c0b48e656671e83e3885b0d88d0489dd83682abd13",
+                "intrinsics/lift.js": "50f21685af0943c4d1a19496a19270b49805bd31ac403bd3a2ba7202cfe00627",
+                "intrinsics/lower.js": "03725aa70af79aa1160c13a23ff1d55099d8939c19d18314c21e1a5fa1fbaaf6",
+                "intrinsics/rep-table.js": "15b602329895a528d2912ac395cec09c94c6e5c9dfecced83ebaa7d53b086f32",
+                "intrinsics/resource.js": "0d5cd27ca8611dc5944fa339920dae9f9a20f37ab732dd7f89bca2cea0ca6c16",
+                "intrinsics/stream-end.js": "c4e095e27a46f791b9411fd8cbfc5449dc256b012d331d98544e020fa888f031",
+                "intrinsics/stream-external.js": "200180e040775ebd98979a4ce2bba7b1922ce7cb2d3ed9393b218fcc85ee1871",
+                "intrinsics/stream-host.js": "1fbd2fbc1ad66a0b4997f7a0ec30cf7f361126d0a794d8c825eb41b288f01ff0",
+                "intrinsics/stream-inheritance.js": "6dcf2adbab5dd679d16a0d4e7b415066b8f5af5088bd980fe3521814a0ed4d02",
+                "intrinsics/stream-injection.js": "0d3474e729840c2ff8b180246ba12b3aa7b769c075dd920178aa22acb4ff4405",
+                "intrinsics/stream-internal.js": "9a6c40f8fbb6325e44f4d267249d2677e72a2bbfef9a2245b8b212955799f6ff",
+                "intrinsics/stream-operations.js": "8407b82456684ed7c123089ba7b6b0aae534db970af45cf6a6f8e806125e04d4",
+                "intrinsics/stream-queue.js": "1d3a1a609a892bf84d2a35ba1b316e113630bef5c3fdfef45fd7effb2330534a",
+                "intrinsics/stream-readable.js": "b440c6de8515d094f9113a78d865618bf63cc96f5d788e2a8cb6db864611a0bd",
+                "intrinsics/stream-source.js": "55aa33cf099a71671ea7a54bf6f1025c59be1310ef7f449ef84b61b00124721c",
+                "intrinsics/stream-state.js": "46cc51706ea64e376bc4c7980851418278d03ca0aec1434da2a56586b3dada5e",
+                "intrinsics/stream-writable.js": "2e3d5eab7b16bf583cb39e32a7a359c77e3c5c3396701d867afea5df714b9797",
+                "intrinsics/stream.js": "84b36266780be78b3f5bb7d5d79654ad46f686e3b21721b1c224238389571726",
+                "intrinsics/string.js": "efd57983b085083f18b1564c290e9472dbfee77072bdadc2e4a1b65ae114177d",
+                "intrinsics/task-context.js": "dd4d6448c09637b55e99ca5e3b3f7bab57e8a3b77aa1177cb8e65b5a17f66e44",
+                "intrinsics/task-driver.js": "0b862649c68dac7fc214ce4443b5ce64dc02cafa66b337b64b2782e75b2d6924",
+                "intrinsics/task-operations.js": "6778e6d3ad2055c3e7aa17fd00ff868d2870db82529202dcc9c74016ab5e85a1",
+                "intrinsics/waitable.js": "b91ed43493511ee816c6cbc368b757dd0eb6255c6c733e99577d603237a662c9",
+                "intrinsics/webidl.js": "cb355a273e297c388c4a73465768d0f06180f054206c14dd618b755793507532"
+            },
+            "shimArtifacts": {
+                "browser/cli.js": "d4e864490e19bfdefa3913baa429cde7dec7bf9b3f3f31295ff36cbde5168710",
+                "browser/clocks.js": "bcccb3a0ba361da0731294cd7bfe05d0c081bcc28e9bd4d45cdba9518541acf5",
+                "browser/common.js": "13f126e02c3d50f82a49b132837aa588600fc907321141d535e7c4a7e7ee0290",
+                "browser/config.js": "40c60a11b1841f461436b11a2ff3318feac4a496bb18a0688a3980e15cff181d",
+                "browser/environment.js": "4b9daf18432ded5e09367ead23abcb5e85bb49ae6fa3b25bc24b8d6ddc7bf1e1",
+                "browser/filesystem.js": "40b57ec8c13c4d7966e29741cf01ddfa3e66aa94c6179d5aadaa4a0b0233ca67",
+                "browser/helpers/cli.js": "5555345bddd0a83a5d5e575320ec71877637c680b89cf180d6ed189df9b371e7",
+                "browser/helpers/filesystem.js": "08e1e07c9cafc810eceb505000cb0419ea1f421e296fcbf76e6a9472aa6e02a2",
+                "browser/http.js": "4583efa457046a19c7ef4bf5d04295386d30bb3d2ff62f3148d8338135cf7560",
+                "browser/in-memory-filesystem.js": "0872da9d62b2a9d3653a30bc56d0065ce2730752411c9a7b39facbbaf8315441",
+                "browser/in-memory-http.js": "1d42ab129d9a5026da2070e4d11abe10af89da6706746c7e43bd12fae66f06c2",
+                "browser/in-memory-sockets.js": "8dd750fa60b55befe6c52ec2ec6c32d8edbb886c80f9446b5b920f3dd2dea1be",
+                "browser/index.js": "5a678d2657d51266936e22759cd88335ccc625a9f91ac5a4af244ef975005799",
+                "browser/io.js": "fd078daff36bf8fa68c03c8de3c06e54b74a62207838f076d8e48c603879606e",
+                "browser/opfs-filesystem.js": "fe98f84947ec9ae9f0a7e1ad6fa88148c44b4801ac7e48d4d17d0ee3814a48d8",
+                "browser/random.js": "0f70a30c6e57f3b253e3a8c13c6b8b01947e40596266df8406d31bd7989f27cd",
+                "browser/sockets.js": "b3f196e0f8e413b90098539c88760a0a27083d817a57e511fc5c92eff002fe8c",
+                "common/helpers/filesystem.js": "864bb5e91cc1ad968ea662408d39aaa07b59979f359fbd216c79c8c8bc40aabc",
+                "common/instantiation.js": "4e66885b9509e5a02bda8550858fc7b61691d960c5640b34456483fbbce70c8e",
+                "io/calls.js": "6599efde6e26b019da47897a928f0b4b99799e2a692050acc63f641b0d79a283",
+                "io/extension.js": "8e609bb71c20b858c77f0e9f90bb1319db8477b13f9f965f1a1e18524bf50881",
+                "io/worker-filesystem.js": "0cfb36337fb62b7bd65add6405d59b0f83f635f8bec77ea7f8a9fcaa5c4df032",
+                "io/worker-http.js": "224b68330427821c6030c9747b47de9f78b1ecaaef84214cf8de1f82d8d2fff4",
+                "io/worker-io.js": "79114f8a644a11a5f3abb83051e4b912634d200fbcde0631fbe584b1f25fc75d",
+                "io/worker-socket-tcp.js": "75332e7f28670dd7ac4f5b890138c37495e5d16da922d41ecbc293905d03352c",
+                "io/worker-socket-udp.js": "107e37c62a612437f8ffdbe32dde456c4b51584f4e4d670199a94e61819d9fa1",
+                "io/worker-sockets.js": "46115b12c426842076decd4aa30f1abfa91bde0e066d6e90bcc6a725df99d129",
+                "io/worker-thread.bundle.js": "9e7f29ab0d26b43772ccad96fd0bd62d7e28d765941cdc4d59efad61d56d2301",
+                "io/worker-thread.js": "8d29e5303c89ee3acd6568953e06bd80590563638e271455d1e4b53b9b2e38c7",
+                "nodejs/cli.js": "8c73ece6aa407cf3480f6bb54fd4b214fa95203784db1b7b265456379614996a",
+                "nodejs/clocks.js": "2b5cb6cc3f29f82b7b6d11895103dd10d8d41669ebfa927c86bcf5b366fc2575",
+                "nodejs/filesystem.js": "72da6aeaa6b85578ef3fa799123e2d27c9cb3307e2cae3b934d4485abb4c5fc3",
+                "nodejs/helpers/filesystem.js": "08e1e07c9cafc810eceb505000cb0419ea1f421e296fcbf76e6a9472aa6e02a2",
+                "nodejs/http.js": "600504c681092b8688a20ea4698826a5a72a4470628fed63b8f1aa4d04d8844c",
+                "nodejs/index.js": "5a678d2657d51266936e22759cd88335ccc625a9f91ac5a4af244ef975005799",
+                "nodejs/io-worker.js": "5d5d08e8617dafcc71377316b9698501ad0a4c26b915c48a9b1ada7810b250b7",
+                "nodejs/io.js": "263fd02aba01f3277c990f140d6d7af3ce577568c7b14864680d0bfa0584280e",
+                "nodejs/random.js": "881b77579d433791be1f096436abdf17f8a496825681dacd108d57ac9723763d",
+                "nodejs/sockets.js": "6a69152bf75a1a2f43dc50e97138bba99f25bc48d5cb5a088c82e77d7b856967",
+                "synckit/index.js": "3a3c4ef66df51245068e297210c8987ba68689c9393b35d0471968b012dcd842"
+            },
+            "node": "v24.21.0",
+            "rust": "rustc 1.99.0 (b940084d7 2026-09-28)",
+            "versions": {
+                "rolldown": "1.2.13",
+                "rollup": "4.64.1",
+                "oxc-minify": "0.151.0",
+                "typescript": "7.0.2",
+                "@bytecodealliance/preview2-shim": "0.30.0"
+            },
+            "platform": "linux",
+            "arch": "x64",
+            "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+            "controllerFlags": [
+                "--experimental-import-meta-resolve",
+                "--require",
+                "/home/agent/workspace/jco/node_modules/.pnpm/vitest@4.1.11_@types+node@24.13.3_vite@7.3.6_@types+node@24.13.3_jiti@2.6.1_lightningcss@1.33.0_/node_modules/vitest/suppress-warnings.cjs",
+                "--conditions",
+                "node",
+                "--conditions",
+                "development"
+            ],
+            "debug": null,
+            "lockHash": "3bd1bcd87c36882b1a6be3bcaaf06aa997350a8504df6f54b847225841ee9b30",
+            "mappingSources": {
+                "runtime.rs": "88565d3b53ba839de652802d179b20fea3c010936248ab0b56b31f7c378ecdd7",
+                "runtime/core.rs": "7327d1e6072e4063669955ff38384415b9364edd4cde5b308b9f4d73b42f3183",
+                "runtime/component.rs": "e4abd8b2bb8dd672c89238debb80a4c17c0ed600a504ee42130ef0549ea0ce5d",
+                "runtime/waitable.rs": "55285794b91d10d8c1a192fb294530f9feb018c79aafac0d2d4897c8a53516f2",
+                "runtime/error_context.rs": "370630e3c77bc8bf5d24b71710f0b761d8fd5120735e1874491ec40a18fdd246",
+                "runtime/async_task.rs": "f039114e082c76437b7cd572656e49ad9d0d79b47e99f1681ed7a8e7263fb42a",
+                "runtime/host.rs": "d4b262486d0d63302a210bdb38d1f14e46d2cc9ce0138e34dbc7ec405ba08997",
+                "runtime/lift.rs": "77a2f9eff74687376c770d0e5393fb2d3606dddd02851cf20c78c92577f1c711",
+                "runtime/lower.rs": "69c82b4c84766dee4e951370e98b75c525fcb7535dd1e02e81d5d570f8187684",
+                "runtime/future.rs": "9b4a9bc6cda1dd1c65f3f5471374673880fa4c17ead9caf768066334d7a9fa68",
+                "runtime/stream.rs": "8f2e2ab5a802e132629b3c6d6c2c0ea1ef5d6f2278403caeb4b328a43050805d"
+            },
+            "mappingSourceHash": "baef5b6a8fba4fed113a48f154e544988855cea8964253a400b8bba6f304815c"
+        },
+        "measuredScript": "// A single complex P3 component, with no bundler/resolution matrix or runtime changes.\nimport assert from 'node:assert/strict';\nimport fs from 'node:fs/promises';\nimport { createHash } from 'node:crypto';\nimport { execFile } from 'node:child_process';\nimport { promisify } from 'node:util';\nimport { join, resolve } from 'node:path';\nimport { fileURLToPath, pathToFileURL } from 'node:url';\nimport { performance } from 'node:perf_hooks';\nimport vm from 'node:vm';\nimport { gzipSync, brotliCompressSync, constants } from 'node:zlib';\nimport { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';\nimport { median, processInterval } from './report.ts';\n\nconst modes = ['inline', 'external'];\nconst protocol = { processes: 5, samples: 15, transactionsPerSample: 8, warmupTransactions: 16 };\nconst digest = (bytes) => createHash('sha256').update(bytes).digest('hex');\nconst sourcePath = fileURLToPath(import.meta.url);\nconst write = (path, value) => fs.writeFile(path, JSON.stringify(value, null, 2) + '\\n', { flag: 'wx' });\n\nfunction source(values) {\n    return new ReadableStream({\n        start(controller) {\n            for (const value of values) {\n                controller.enqueue(value);\n            }\n            controller.close();\n        },\n    });\n}\n\nclass ExampleResource {\n    #id;\n    constructor(id) {\n        this.#id = id;\n    }\n    getId() {\n        return this.#id;\n    }\n}\n\nfunction expected(seed) {\n    return [\n        Uint32Array.from({ length: 16 }, (_, i) => seed + i),\n        [\n            { id: seed, idStr: `caf\u00e9 \ud83d\ude80 ${seed}` },\n            { id: seed + 1, idStr: '\u4e2d\u6587' },\n        ],\n        [\n            { tag: 'maybe-u32', val: seed },\n            { tag: 'maybe-u32', val: undefined },\n            { tag: 'str', val: `variant ${seed}` },\n        ],\n        [Uint8Array.from({ length: 16 }, (_, i) => (seed + i) & 255), new Uint8Array([0, 255])],\n        Uint32Array.from([seed, seed + 1, seed + 2]),\n        [\n            [`nested ${seed}`, '\u2603'],\n            ['second', '\ud83d\ude00'],\n        ],\n        [`future ${seed}`, 'pending \u4e2d\u6587', '\ud83d\ude80'],\n        [\n            { tag: 'ok', val: `ok ${seed}` },\n            { tag: 'err', val: 'expected error' },\n        ],\n    ];\n}\n\nasync function transaction(instance, seed) {\n    const api = instance['jco:test-components/stream-lower-async'];\n    return [\n        await api.readStreamValuesU32(source(Array.from({ length: 16 }, (_, i) => seed + i))),\n        await api.readStreamValuesRecord(\n            source([\n                { id: seed, idStr: `caf\u00e9 \ud83d\ude80 ${seed}` },\n                { id: seed + 1, idStr: '\u4e2d\u6587' },\n            ]),\n        ),\n        await api.readStreamValuesVariant(\n            source([\n                { tag: 'maybe-u32', val: seed },\n                { tag: 'maybe-u32', val: null },\n                { tag: 'str', val: `variant ${seed}` },\n            ]),\n        ),\n        await api.readStreamValuesListU8(\n            source([Uint8Array.from({ length: 16 }, (_, i) => (seed + i) & 255), new Uint8Array([0, 255])]),\n        ),\n        await api.readStreamValuesExampleResourceOwnAttr(\n            source([new ExampleResource(seed), new ExampleResource(seed + 1), new ExampleResource(seed + 2)]),\n        ),\n        await api.readStreamValuesStreamString(source([source([`nested ${seed}`, '\u2603']), source(['second', '\ud83d\ude00'])])),\n        await api.readStreamValuesFutureString(\n            source(\n                [`future ${seed}`, 'pending \u4e2d\u6587', '\ud83d\ude80'].map(\n                    (value) => new Promise((resolve) => queueMicrotask(() => resolve(value))),\n                ),\n            ),\n        ),\n        await api.readStreamValuesResultString(\n            source([\n                { tag: 'ok', val: `ok ${seed}` },\n                { tag: 'err', val: 'expected error' },\n            ]),\n        ),\n    ];\n}\n\nasync function worker(configPath) {\n    const config = JSON.parse(await fs.readFile(configPath, 'utf8'));\n    assert.equal(typeof WebAssembly.Suspending, 'function', 'P3 requires JSPI');\n    const order = config.processIndex % 2 ? modes.toReversed() : modes;\n    const prepared = {},\n        coldNative = {};\n    for (const mode of order) {\n        const artifact = config.pair[mode];\n        const code = await fs.readFile(artifact.bundle, 'utf8');\n        const modules = new Map();\n        for (const name of Object.keys(artifact.wasm.files)) {\n            modules.set(name, new WebAssembly.Module(await fs.readFile(join(artifact.dir, name))));\n        }\n        const imports = { ...new WASIShim().getImportObject(), 'jco:test-components/resources': { ExampleResource } };\n        const start = performance.now();\n        const binding = await import(pathToFileURL(artifact.bundle).href);\n        const instantiate = () =>\n            binding.create0((name) => {\n                assert(modules.has(name));\n                return modules.get(name);\n            }, imports);\n        const instance = instantiate();\n        coldNative[mode] = (performance.now() - start) * 1e6;\n        const second = instantiate();\n        for (const store of [instance, second]) {\n            for (const seed of [0, 17, 255]) {\n                assert.deepEqual(await transaction(store, seed), expected(seed));\n            }\n        }\n        prepared[mode] = { code, instantiate, instance, second };\n    }\n    if (config.verifyOnly) {\n        await write(config.output, {\n            verified: true,\n            storesPerMode: 2,\n            seeds: [0, 17, 255],\n            operationsPerTransaction: 8,\n        });\n        return;\n    }\n    for (let i = 0; i < protocol.warmupTransactions; i++) {\n        for (const mode of i % 2 ? order.toReversed() : order) {\n            assert.deepEqual(await transaction(prepared[mode].instance, i), expected(i));\n        }\n    }\n    const raw = Object.fromEntries(\n        modes.map((mode) => [mode, { parse: [], evaluate: [], instantiate: [], transaction: [] }]),\n    );\n    for (let sample = 0; sample < protocol.samples; sample++) {\n        for (const mode of sample % 2 ? order.toReversed() : order) {\n            const state = prepared[mode];\n            globalThis.gc();\n            let start = performance.now();\n            const parsed = new vm.SourceTextModule(`${state.code}\\n// focused:${config.processIndex}:${sample}:${mode}`);\n            raw[mode].parse.push((performance.now() - start) * 1e6);\n            start = performance.now();\n            await parsed.link((specifier) => {\n                throw new Error('Unexpected dependency: ' + specifier);\n            });\n            await parsed.evaluate();\n            raw[mode].evaluate.push((performance.now() - start) * 1e6);\n            start = performance.now();\n            const fresh = state.instantiate();\n            raw[mode].instantiate.push((performance.now() - start) * 1e6);\n            assert.deepEqual(await transaction(fresh, sample), expected(sample));\n            const outputs = [];\n            start = performance.now();\n            for (let i = 0; i < protocol.transactionsPerSample; i++) {\n                outputs.push(await transaction(state.instance, (sample * protocol.transactionsPerSample + i) & 255));\n            }\n            raw[mode].transaction.push(((performance.now() - start) * 1e6) / protocol.transactionsPerSample);\n            // Validate every output, outside the measured interval.\n            for (const [i, output] of outputs.entries()) {\n                assert.deepEqual(output, expected((sample * protocol.transactionsPerSample + i) & 255));\n            }\n        }\n    }\n    for (const mode of modes) {\n        for (const values of Object.values(raw[mode])) {\n            assert.equal(values.length, protocol.samples);\n            assert(values.every((value) => Number.isFinite(value) && value > 0));\n        }\n    }\n    await write(config.output, {\n        processIndex: config.processIndex,\n        order,\n        raw,\n        coldNative,\n        medians: Object.fromEntries(\n            modes.map((mode) => [\n                mode,\n                Object.fromEntries(Object.entries(raw[mode]).map(([axis, values]) => [axis, median(values)])),\n            ]),\n        ),\n        pairedRatios: Object.fromEntries(\n            Object.keys(raw.inline).map((axis) => [\n                axis,\n                median(raw.inline[axis].map((value, i) => raw.external[axis][i] / value)),\n            ]),\n        ),\n        environment: {\n            node: process.version,\n            flags: process.execArgv,\n            jspi: true,\n            debug: process.env.JCO_DEBUG ?? null,\n        },\n    });\n}\n\nasync function main(manifestPath, outputPath) {\n    assert(manifestPath && outputPath, 'Usage: node focused-p3.mjs MANIFEST_JSON NEW_OUTPUT_DIRECTORY');\n    const output = resolve(outputPath);\n    await fs.mkdir(output, { recursive: false });\n    const manifestBytes = await fs.readFile(manifestPath);\n    const manifest = JSON.parse(manifestBytes);\n    const graph = manifest.graphs.find((graph) => graph.id === 'rolldown--package--stream-host-payload');\n    assert(graph, 'The full Rust stream-lower component bundle pair is required');\n    assert.deepEqual(graph.pair.inline.wasm, graph.pair.external.wasm, 'Core Wasm must be identical');\n    const inputs = {};\n    async function verifyInputs() {\n        for (const mode of modes) {\n            const artifact = graph.pair[mode];\n            assert.deepEqual(artifact.parts, ['stream-host-payload']);\n            assert.deepEqual(artifact.builtins, []);\n            const bytes = await fs.readFile(artifact.bundle);\n            const actual = {\n                raw: bytes.length,\n                gzip: gzipSync(bytes, { level: 9 }).length,\n                brotli: brotliCompressSync(bytes, { params: { [constants.BROTLI_PARAM_QUALITY]: 11 } }).length,\n            };\n            assert.deepEqual(actual, artifact.js);\n            if (inputs[artifact.bundle]) {\n                assert.equal(digest(bytes), inputs[artifact.bundle]);\n            }\n            inputs[artifact.bundle] = digest(bytes);\n            for (const [name, hash] of Object.entries(artifact.wasm.files)) {\n                const path = join(artifact.dir, name);\n                assert.equal(digest(await fs.readFile(path)), hash);\n                inputs[path] = hash;\n            }\n        }\n    }\n    await verifyInputs();\n    const exec = promisify(execFile);\n    const run = async (index, verifyOnly = false) => {\n        const config = join(output, verifyOnly ? 'preflight-config.json' : `config-${index}.json`);\n        const resultPath = join(output, verifyOnly ? 'preflight.json' : `raw-${index}.json`);\n        await write(config, { pair: graph.pair, processIndex: index, verifyOnly, output: resultPath });\n        console.log(\n            `${new Date().toISOString()} ${verifyOnly ? 'correctness preflight' : `paired process ${index + 1}/${protocol.processes}`}`,\n        );\n        try {\n            const result = await exec(\n                process.execPath,\n                [\n                    '--expose-gc',\n                    '--experimental-vm-modules',\n                    ...(!('Suspending' in WebAssembly) ? ['--experimental-wasm-jspi'] : []),\n                    sourcePath,\n                    '--worker',\n                    config,\n                ],\n                { timeout: 120_000, maxBuffer: 4 * 1024 * 1024 },\n            );\n            await write(join(output, verifyOnly ? 'preflight-child.json' : `child-${index}.json`), result);\n        } catch (error) {\n            await write(join(output, 'failure.json'), {\n                message: error.message,\n                stdout: error.stdout,\n                stderr: error.stderr,\n            });\n            throw error;\n        }\n        return JSON.parse(await fs.readFile(resultPath, 'utf8'));\n    };\n    await run(0, true);\n    const processes = [];\n    for (let i = 0; i < protocol.processes; i++) {\n        processes.push(await run(i));\n    }\n    await verifyInputs();\n    const axes = Object.keys(processes[0].pairedRatios);\n    const summary = Object.fromEntries(\n        axes.map((axis) => [\n            axis,\n            {\n                inlineNs: median(processes.map((process) => process.medians.inline[axis])),\n                externalNs: median(processes.map((process) => process.medians.external[axis])),\n                externalOverInline: processInterval(processes.map((process) => process.pairedRatios[axis])),\n            },\n        ]),\n    );\n    const result = {\n        schema: 1,\n        complete: true,\n        at: new Date().toISOString(),\n        protocol,\n        component: 'crates/test-components/src/bin/stream_lower.rs',\n        fixture: 'packages/jco-transpile/test/fixtures/generated/rust-test-components/stream-lower.wasm',\n        workload:\n            'Eight sequential async guest calls: 16 u32 payloads, Unicode records, option-bearing variants, byte lists, owned resource method calls, nested string streams, streams of pending string futures, and ok/err results. Full outputs checked outside timing.',\n        timing: 'Nanoseconds; warm transaction includes input construction, host ReadableStream/Promise handling, guest ABI and guest execution. Startup excludes core Wasm compilation and host-import setup. Cold native import plus first instantiation is recorded per process. No isolated intrinsic or constant-memory claim.',\n        scope: 'One Rolldown minified package-resolution bundle pair; no optimization or runtime changes. Source/component bytes are reused from the completed full-stack build.',\n        source: {\n            manifest: resolve(manifestPath),\n            manifestSha256: digest(manifestBytes),\n            checkpoint: manifest.checkpointKey,\n            scriptSha256: digest(await fs.readFile(sourcePath)),\n            environment: manifest.environment,\n        },\n        inputs,\n        sizes: Object.fromEntries(modes.map((mode) => [mode, graph.pair[mode].js])),\n        wasmBytes: graph.pair.inline.wasm.bytes,\n        summary,\n        processes,\n    };\n    await write(join(output, 'result.json'), result);\n    console.log(JSON.stringify({ complete: true, sizes: result.sizes, summary }, null, 2));\n}\n\nif (process.argv[2] === '--worker') {\n    await worker(process.argv[3]);\n} else {\n    await main(process.argv[2], process.argv[3]);\n}\n",
+        "note": "The exact measured script is embedded here and matches scriptSha256. The committed runner was formatted after collection; its logic and protocol are unchanged."
+    },
+    "inputs": {
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/inline/bundle.mjs": "60cf3dfb1995b0c9487ec65a3b1340b190fecfb3842c15bf4e3089ebeb735b9d",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/inline/parts/0/component0.core.wasm": "14422429640b9667815eb436fb5d4fd9ab204df9f912bcccffbd3f025afc42f5",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/inline/parts/0/component0.core2.wasm": "c31961b3cfbaaac36ede0fbef854f890191f78a66054591ed3d79f69f77610d7",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/inline/parts/0/component0.core3.wasm": "f0d03948937c1e4762add01965408c4b75406804f33c5666fdaa109cd9ae024d",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/inline/parts/0/component0.core4.wasm": "a723c6270ecc86d5e7cb56b70a88aabdae967c911e46988e7b97aa1723e55dd9",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/external/bundle.mjs": "45483d9017f76d2c649a36f19d30b7c304c666e406695ba7ae9f3139a0e0b35d",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/external/parts/0/component0.core.wasm": "14422429640b9667815eb436fb5d4fd9ab204df9f912bcccffbd3f025afc42f5",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/external/parts/0/component0.core2.wasm": "c31961b3cfbaaac36ede0fbef854f890191f78a66054591ed3d79f69f77610d7",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/external/parts/0/component0.core3.wasm": "f0d03948937c1e4762add01965408c4b75406804f33c5666fdaa109cd9ae024d",
+        "/home/agent/workspace/jco/packages/jco-transpile/bench/output/external-runtime-named/run-oPViEG/jco-external-runtime-bench-nT0wAC/external/parts/0/component0.core4.wasm": "a723c6270ecc86d5e7cb56b70a88aabdae967c911e46988e7b97aa1723e55dd9"
+    },
+    "sizes": {
+        "inline": {
+            "raw": 453243,
+            "gzip": 53777,
+            "brotli": 42281
+        },
+        "external": {
+            "raw": 475357,
+            "gzip": 58592,
+            "brotli": 45287
+        }
+    },
+    "wasmBytes": 455898,
+    "summary": {
+        "parse": {
+            "inlineNs": 16656358.000000183,
+            "externalNs": 17179654.99999991,
+            "externalOverInline": {
+                "median": 1.0511558004784731,
+                "range": [0.9899869173830234, 1.1801293528442443],
+                "ci95": [0.9899869173830234, 1.1801293528442443]
+            }
+        },
+        "evaluate": {
+            "inlineNs": 98406.9999994972,
+            "externalNs": 151460.00000095228,
+            "externalOverInline": {
+                "median": 1.4012705134950578,
+                "range": [1.380536135867173, 1.8000504862147748],
+                "ci95": [1.380536135867173, 1.8000504862147748]
+            }
+        },
+        "instantiate": {
+            "inlineNs": 4546566.999999413,
+            "externalNs": 4841602.99999985,
+            "externalOverInline": {
+                "median": 1.0653267046850838,
+                "range": [0.966120100460381, 1.1174066541275927],
+                "ci95": [0.966120100460381, 1.1174066541275927]
+            }
+        },
+        "transaction": {
+            "inlineNs": 62113486.12500001,
+            "externalNs": 62336330.49999981,
+            "externalOverInline": {
+                "median": 1.0034464744532976,
+                "range": [0.9941605557757538, 1.020996332419442],
+                "ci95": [0.9941605557757538, 1.020996332419442]
+            }
+        }
+    },
+    "processes": [
+        {
+            "processIndex": 0,
+            "order": ["inline", "external"],
+            "raw": {
+                "inline": {
+                    "parse": [
+                        11591366.99999999, 17463070.000000697, 13494016.999999985, 16219078.000000082, 14157567.0000002,
+                        16595778.000000792, 16864424.000001237, 15732471.999999689, 24816638.00000024,
+                        14904592.000000775, 18813447.00000045, 21397593.000001505, 17799107.99999925,
+                        20440348.000000086, 17821005.000001606
+                    ],
+                    "evaluate": [
+                        434549.0000000609, 103108.00000024756, 100885.00000074418, 83191.00000062463, 87331.00000063132,
+                        94090.00000050582, 80476.99999951874, 83607.00000048382, 103470.00000001572, 72124.0000002581,
+                        98889.99999930093, 86142.00000010896, 86789.00000086287, 94566.00000339677, 89459.99999923515
+                    ],
+                    "instantiate": [
+                        4355667.000000267, 9437867.99999998, 3930725.000000166, 5913738.999999623, 6561395.99999915,
+                        5976465.000001553, 5112946.999999622, 8833840.000001146, 5095997.999998872, 2714340.0000004475,
+                        3184133.0000006566, 3565260.9999997364, 2858820.0000012876, 3297781.9999978235,
+                        3458185.9999998417
+                    ],
+                    "transaction": [
+                        61089993.750000075, 62910627.37499999, 62999592.12499993, 61903898.62500001, 64840056.3749999,
+                        61731498.000000104, 61863751.37499999, 61979839.374999985, 61842977.625, 62625923.00000006,
+                        61660584.49999991, 60868070.50000016, 60856999.25000017, 60670822.500000216, 63212261.3749998
+                    ]
+                },
+                "external": {
+                    "parse": [
+                        22268328.00000011, 17689465.000000384, 14361631.99999919, 23309212.000000115,
+                        18008687.999999892, 21191007.000001263, 19940435.000000436, 18566351.999999825,
+                        20979777.999998987, 17651551.000000834, 16164811.000002373, 20053162.000000156,
+                        26306877.999999415, 23932910.999999877, 19756567.000000358
+                    ],
+                    "evaluate": [
+                        104553.00000012357, 148426.99999917386, 113664.00000042631, 149747.9999998177,
+                        163698.99999881454, 176817.999999912, 142412.99999957846, 119145.99999909115,
+                        156968.00000114308, 184934.99999931373, 123996.99999878067, 197223.99999955087,
+                        200189.99999956577, 189370.00000005355, 190490.99999756436
+                    ],
+                    "instantiate": [
+                        4442809.000000125, 5839334.999999665, 4404927.999999927, 4784213.999999338, 7632681.000000957,
+                        8901143.000000957, 5713241.00000129, 7410199.99999844, 6098871.9999986645, 3136531.0000001043,
+                        2586357.0000001346, 4624052.999999549, 5122353.000002476, 3448368.9999979106, 3163098.0000009006
+                    ],
+                    "transaction": [
+                        60726338.74999997, 61460187.87499998, 64411907.12500008, 63899556.749999985, 63039273.62499985,
+                        61670567.625000104, 61684583.625000186, 62336330.49999981, 62493987.75000009, 63157564.00000009,
+                        61032355.49999999, 61077850.749999925, 62465712.49999988, 62810327.874999985, 61620415.75000012
+                    ]
+                }
+            },
+            "coldNative": {
+                "inline": 43610923.000000015,
+                "external": 29959176.999999955
+            },
+            "medians": {
+                "inline": {
+                    "parse": 16864424.000001237,
+                    "evaluate": 89459.99999923515,
+                    "instantiate": 4355667.000000267,
+                    "transaction": 61863751.37499999
+                },
+                "external": {
+                    "parse": 19940435.000000436,
+                    "evaluate": 156968.00000114308,
+                    "instantiate": 4784213.999999338,
+                    "transaction": 62336330.49999981
+                }
+            },
+            "pairedRatios": {
+                "parse": 1.1801293528442443,
+                "evaluate": 1.8000504862147748,
+                "instantiate": 1.1174066541275927,
+                "transaction": 1.0034464744532976
+            },
+            "environment": {
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-vm-modules"],
+                "jspi": true,
+                "debug": null
+            }
+        },
+        {
+            "processIndex": 1,
+            "order": ["external", "inline"],
+            "raw": {
+                "inline": {
+                    "parse": [
+                        13267789.999999877, 11984038.999999939, 15062281.999999868, 18015252.000000145,
+                        12526363.000000857, 15858118.999998624, 16969995.99999981, 14493443.999999726,
+                        21434574.000000793, 18317435.999999363, 16656358.000000183, 26572980.999997526,
+                        14290098.000001308, 20432323.99999761, 23740901.000001032
+                    ],
+                    "evaluate": [
+                        73147.99999949173, 68526.00000001985, 89232.99999969458, 100400.00000026339, 88475.99999899103,
+                        117154.99999991152, 86504.99999930616, 121505.99999949918, 161410.00000061467,
+                        96338.99999971618, 91207.00000130455, 263503.9999986475, 73369.00000154856, 102248.99999957415,
+                        101340.00000107335
+                    ],
+                    "instantiate": [
+                        4485192.000000097, 3939038.000000437, 5006703.000000016, 7648041.999999804, 4503925.9999994105,
+                        6315038.99999916, 5437394.999999015, 7078327.000001081, 6897578.000000067, 2721368.0000004387,
+                        3147224.0000002785, 4981900.000002497, 3084667.00000281, 4359055.000000808, 3004922.0000000787
+                    ],
+                    "transaction": [
+                        61825755.37500008, 61967975.87499998, 60029312.125000045, 63326492.874999985, 62231001.37500001,
+                        61408952.75000002, 63040476.249999985, 64367444.00000021, 62208450.124999896, 62113486.12500001,
+                        63208695.24999989, 61615040.624999896, 61473656.2500002, 61133600.00000011, 63202189.00000009
+                    ]
+                },
+                "external": {
+                    "parse": [
+                        16379010.000000108, 18407545.000000026, 13741144.99999996, 16908819.00000022,
+                        14952486.000000136, 14898121.000000173, 21184003.999998823, 18240916.000000652,
+                        18029209.000000264, 18134022.000000186, 28032801.0000012, 21296166.000000086,
+                        22027696.000001013, 19589453.000000503, 18686515.000001237
+                    ],
+                    "evaluate": [
+                        813559.0000001685, 125507.00000065262, 215650.99999952508, 109734.00000057154,
+                        162397.0000000554, 158097.99999988172, 214487.9999996192, 129711.99999992677,
+                        133847.00000096927, 134996.99999920267, 286087.99999892653, 236727.99999985727,
+                        154547.00000191224, 139062.00000201352, 126307.0000022708
+                    ],
+                    "instantiate": [
+                        6569687.000000158, 6583655.999999791, 5179299.999999785, 4841602.99999985, 5834166.99999907,
+                        6163633.000000118, 7277835.000000778, 8683327.000000644, 4655439.000000115, 2724360.0000001607,
+                        4432638.000000224, 3214829.000000464, 3378470.9999999907, 3130193.999997573, 3250843.9999983236
+                    ],
+                    "transaction": [
+                        62909139.25000001, 63336927.8749999, 62469533.7500001, 62772082.7500001, 61448157.249999896,
+                        61347845.49999995, 64427332.00000021, 62213708.75000002, 62236798.12499995, 63819648.25,
+                        66847091.99999998, 62908730.49999982, 62949115.24999998, 63351613.499999985, 63085930.12499978
+                    ]
+                }
+            },
+            "coldNative": {
+                "external": 47045456,
+                "inline": 35502270.00000007
+            },
+            "medians": {
+                "inline": {
+                    "parse": 16656358.000000183,
+                    "evaluate": 96338.99999971618,
+                    "instantiate": 4503925.9999994105,
+                    "transaction": 62113486.12500001
+                },
+                "external": {
+                    "parse": 18240916.000000652,
+                    "evaluate": 154547.00000191224,
+                    "instantiate": 4841602.99999985,
+                    "transaction": 62909139.25000001
+                }
+            },
+            "pairedRatios": {
+                "parse": 0.9899869173830234,
+                "evaluate": 1.4012705134950578,
+                "instantiate": 1.0818397282852061,
+                "transaction": 1.020996332419442
+            },
+            "environment": {
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-vm-modules"],
+                "jspi": true,
+                "debug": null
+            }
+        },
+        {
+            "processIndex": 2,
+            "order": ["inline", "external"],
+            "raw": {
+                "inline": {
+                    "parse": [
+                        13436502.000000019, 14808330.00000075, 10488669.99999973, 13124761.000000035,
+                        14720484.999999827, 18038053.00000022, 15581925.00000041, 18381307.00000147, 15729868.000000352,
+                        18082220.000000235, 27031697.000002168, 19203192.000000853, 37797727.999997735,
+                        19396649.99999877, 17068768.9999977
+                    ],
+                    "evaluate": [
+                        468070.9999997816, 92646.00000005885, 98406.9999994972, 108092.00000039709, 83102.00000050827,
+                        90421.0000007879, 112691.0000002681, 97302.00000012701, 75767.99999878858, 132976.0000007809,
+                        105353.00000265124, 76823.99999976042, 110605.0000016694, 125289.99999994994, 76088.00000161864
+                    ],
+                    "instantiate": [
+                        4491309.000000001, 6365644.999999858, 4291553.000000021, 4776845.000000321, 5536581.999998816,
+                        6371387.99999957, 7418231.999999989, 9588494.999999966, 5769553.000000088, 3710310.9999989104,
+                        4738878.000000114, 3301430.999999866, 4639071.999998122, 3779575.0000004773, 3110812.0000026245
+                    ],
+                    "transaction": [
+                        64592298.374999985, 64276034.37499999, 63531986.62500006, 63816475.62500007, 61339964.2500001,
+                        61199784.624999896, 63515160.499999866, 62157299.49999991, 97930651.00000012, 68098032.75000013,
+                        63551742.75000036, 62406307.124999784, 62279636.25000029, 60863494.12499976, 61465157.37499976
+                    ]
+                },
+                "external": {
+                    "parse": [
+                        12887445.000000298, 15642966.000000343, 12630017.000000408, 14103918.000000704,
+                        13964754.00000054, 11977717.999998277, 25212344.999999914, 14523492.00000026, 18304780.00000039,
+                        21520233.99999962, 23454539.999998815, 27283715.000001393, 22486796.00000105,
+                        22295814.999997675, 15591206.999997666
+                    ],
+                    "evaluate": [
+                        117070.00000023982, 132319.99999970867, 110523.99999971385, 124051.00000069069,
+                        129757.99999912851, 118839.9999991816, 154440.0000002497, 112246.00000059581, 368850.9999992675,
+                        216173.99999922782, 147081.00000279956, 269441.00000036997, 148101.9999991986,
+                        182314.00000149733, 112709.00000090478
+                    ],
+                    "instantiate": [
+                        5076538.999999684, 5867119.999999886, 4240698.000000521, 5663964.999999735, 5274182.999999539,
+                        4460594.0000001285, 8811100.999999326, 6485333.999999057, 6400074.000001041, 4075370.0000004754,
+                        3987206.999998307, 5466640.999999072, 3165178.9999996256, 3790428.0000002473, 2518202.00000293
+                    ],
+                    "transaction": [
+                        63113377.249999985, 64974893.62499993, 63097110.000000045, 63443822.87499991, 63290499.87500002,
+                        64520457.24999993, 60631026.49999996, 62406633.74999986, 61357494.374999985, 61906640.25000001,
+                        62519182.7499998, 62196366.625000335, 61533609.999999955, 62424973.000000134, 61754158.250000276
+                    ]
+                }
+            },
+            "coldNative": {
+                "inline": 37157394.00000001,
+                "external": 44008802.00000006
+            },
+            "medians": {
+                "inline": {
+                    "parse": 17068768.9999977,
+                    "evaluate": 98406.9999994972,
+                    "instantiate": 4738878.000000114,
+                    "transaction": 63515160.499999866
+                },
+                "external": {
+                    "parse": 15642966.000000343,
+                    "evaluate": 132319.99999970867,
+                    "instantiate": 5076538.999999684,
+                    "transaction": 62424973.000000134
+                }
+            },
+            "pairedRatios": {
+                "parse": 1.0563626013196323,
+                "evaluate": 1.3960779474632732,
+                "instantiate": 0.9881499774092268,
+                "transaction": 0.9941605557757538
+            },
+            "environment": {
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-vm-modules"],
+                "jspi": true,
+                "debug": null
+            }
+        },
+        {
+            "processIndex": 3,
+            "order": ["external", "inline"],
+            "raw": {
+                "inline": {
+                    "parse": [
+                        17140609.00000004, 15838365.999999952, 12871928.00000048, 13351967.000000514,
+                        15412559.000000328, 13030135.999999402, 15697344.000000156, 17077788.999999028,
+                        16886784.99999878, 14772265.999999944, 14427568.000002794, 15150020.00000095,
+                        14914064.000000509, 15734292.000001006, 18646698.99999717
+                    ],
+                    "evaluate": [
+                        77742.00000039855, 101112.00000028475, 110665.00000015367, 73878.99999957881,
+                        120624.99999956344, 88916.00000060862, 130377.00000131736, 105236.99999976088,
+                        101724.99999862339, 73010.00000006752, 141308.9999987278, 100405.99999774713, 74076.99999748729,
+                        77215.00000116066, 89823.99999877089
+                    ],
+                    "instantiate": [
+                        5215028.999999959, 5489582.999999584, 5799191.999999493, 5073897.000000215, 5501901.999999973,
+                        4865111.999999499, 6467355.00000068, 12377350.99999918, 4393240.000001242, 2742287.0000009425,
+                        2750400.0000008093, 2529425.0000006286, 2580923.999998049, 3177752.9999999385, 3023328.999999649
+                    ],
+                    "transaction": [
+                        61567611.875000015, 61777464.00000001, 61857205.37500004, 60627929.24999996, 63495897.37499991,
+                        62415621.12499992, 62614437.12499999, 61924029.87500009, 61401502.74999996, 61518784.12499991,
+                        60980591.37499968, 61439710.500000276, 60990572.12499975, 60564248.37500026, 59901550.6249998
+                    ]
+                },
+                "external": {
+                    "parse": [
+                        14218085.999999857, 12304714.999999305, 38531254.00000045, 21001848.99999931, 12496740.0000005,
+                        19228794.99999908, 19911071.000000447, 16453622.000000905, 16280633.000000307,
+                        15011572.99999977, 15992661.999998745, 17713054.999996528, 14271686.000000045,
+                        15969316.999999138, 22868363.00000141
+                    ],
+                    "evaluate": [
+                        497312.9999998491, 91366.9999999911, 379831.00000019476, 240217.99999991345, 148047.99999910756,
+                        249900.00000070722, 178389.9999991263, 134201.99999927718, 129006.99999954668,
+                        108299.0000013524, 113868.00000036601, 120661.99999753735, 166675.0000003958,
+                        108971.00000147475, 159211.99999866076
+                    ],
+                    "instantiate": [
+                        5380814.000000101, 4234293.999999863, 14805465.999999797, 8035596.000000623, 4149582.0000000093,
+                        7430877.000000692, 6980502.000000343, 8400910.000000294, 5314265.999999407, 2525074.000001041,
+                        2905822.000000626, 2694663.999998738, 2848139.999998239, 2990982.999999687, 5680451.000000175
+                    ],
+                    "transaction": [
+                        62195784.25000003, 61768426.24999995, 62489793.62500006, 60686996.624999896, 60094124.49999991,
+                        63591704.49999988, 61371411.12500012, 62241982.75000004, 62143235.125000045, 60107571.62499999,
+                        61435901.12499987, 60610388.74999986, 62203184.87499981, 60567870.87500016, 60298243.37500031
+                    ]
+                }
+            },
+            "coldNative": {
+                "external": 66126112.99999998,
+                "inline": 24152852.999999937
+            },
+            "medians": {
+                "inline": {
+                    "parse": 15412559.000000328,
+                    "evaluate": 100405.99999774713,
+                    "instantiate": 4865111.999999499,
+                    "transaction": 61518784.12499991
+                },
+                "external": {
+                    "parse": 16280633.000000307,
+                    "evaluate": 148047.99999910756,
+                    "instantiate": 5314265.999999407,
+                    "transaction": 61435901.12499987
+                }
+            },
+            "pairedRatios": {
+                "parse": 1.0161997489078405,
+                "evaluate": 1.4112672408189697,
+                "instantiate": 1.0653267046850838,
+                "transaction": 1.005134563684595
+            },
+            "environment": {
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-vm-modules"],
+                "jspi": true,
+                "debug": null
+            }
+        },
+        {
+            "processIndex": 4,
+            "order": ["inline", "external"],
+            "raw": {
+                "inline": {
+                    "parse": [
+                        18639333.00000008, 15050516.000000244, 12610409.99999932, 13190692.999999555,
+                        11950896.000000285, 20669259.00000024, 14954263.999999966, 15280489.00000067,
+                        18187205.000000175, 16649946.999999885, 20080216.99999881, 16183987.000000343,
+                        21678566.00000232, 14558376.000000862, 22697278.99999998
+                    ],
+                    "evaluate": [
+                        574098.0000000491, 74776.99999981269, 103014.00000025751, 89192.00000036653, 109710.99999915168,
+                        132080.99999974365, 68440.0000009191, 81846.00000095088, 88942.0000003156, 107528.00000045681,
+                        100485.99999936414, 121196.00000005448, 106973.99999844492, 83467.9999970831, 119894.9999998149
+                    ],
+                    "instantiate": [
+                        5990894.000000026, 4546566.999999413, 4545422.999999573, 7392761.000000064, 4814129.000000321,
+                        6341056.999999637, 4644679.999999425, 6916541.999999026, 5984854.000000268, 2755054.0000011097,
+                        3873711.000000185, 3780800.999997155, 3985279.9999971464, 2461745.000000519, 3657603.999999992
+                    ],
+                    "transaction": [
+                        62736872.375000015, 63435481.62499996, 61638253.750000104, 61680985.87499992,
+                        63554371.124999985, 64539973.25, 60398893.37499994, 62438577.12499994, 63544405.62500008,
+                        62947743.375000075, 61468444.37499976, 61092157.6249998, 63743439.124999896, 61618739.375000134,
+                        58428234.125000015
+                    ]
+                },
+                "external": {
+                    "parse": [
+                        19592842.999999903, 12638621.999999486, 15146061.000000373, 16774486.000000251,
+                        17354675.999999017, 24256735.000000846, 15305712.999999741, 17448548.0000003,
+                        16114454.000000479, 15242163.99999932, 17179654.99999991, 18708666.00000227, 14242670.999999974,
+                        17543970.000002448, 22858000.999996874
+                    ],
+                    "evaluate": [
+                        169826.0000002847, 101259.99999945634, 117298.99999954796, 120155.99999995175,
+                        151460.00000095228, 185709.99999974447, 112140.00000109081, 180248.0000005744,
+                        178918.0000014312, 156379.00000001537, 122340.99999841419, 159425.00000164728,
+                        109423.99999839836, 124483.99999993853, 210288.00000203773
+                    ],
+                    "instantiate": [
+                        7710037.999999713, 3891844.000000674, 4678539.9999998845, 7142294.999999649, 6940897.999998924,
+                        8442046.00000012, 5627152.999999452, 7610654.000000068, 4129918.0000005434, 2590878.999999404,
+                        2523028.000003251, 2931182.0000002626, 2888457.000000926, 2601677.999999083, 3352070.000000822
+                    ],
+                    "transaction": [
+                        62465526.37500008, 62264833.25000004, 63047216.12499998, 62536677.124999985, 62039984.624999985,
+                        64228392.87500005, 61052878.12500001, 59043588, 61452750.74999995, 59757248.62499987,
+                        62885842.49999985, 63324646.12499962, 60079627.000000075, 60944238.37499972, 61792792.4999999
+                    ]
+                }
+            },
+            "coldNative": {
+                "inline": 34569149.99999998,
+                "external": 26534117.99999992
+            },
+            "medians": {
+                "inline": {
+                    "parse": 16183987.000000343,
+                    "evaluate": 103014.00000025751,
+                    "instantiate": 4546566.999999413,
+                    "transaction": 62438577.12499994
+                },
+                "external": {
+                    "parse": 17179654.99999991,
+                    "evaluate": 151460.00000095228,
+                    "instantiate": 4129918.0000005434,
+                    "transaction": 62039984.624999985
+                }
+            },
+            "pairedRatios": {
+                "parse": 1.0511558004784731,
+                "evaluate": 1.380536135867173,
+                "instantiate": 0.966120100460381,
+                "transaction": 0.9951722884390884
+            },
+            "environment": {
+                "node": "v24.21.0",
+                "flags": ["--expose-gc", "--experimental-vm-modules"],
+                "jspi": true,
+                "debug": null
+            }
+        }
+    ],
+    "historical": true
+}

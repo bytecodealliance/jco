@@ -15,9 +15,9 @@ const exec = promisify(execFile);
 test.concurrent('full and smoke portfolios require their complete distinct matrices', () => {
     assert.equal(portfolioFromArgs([]), 'full');
     assert.equal(portfolioFromArgs(['--smoke', '--record']), 'smoke');
-    assert.equal(expectedReportIds('full').length, 68);
+    assert.equal(expectedReportIds('full').length, 92);
     assert.equal(expectedReportIds('smoke').length, 32);
-    assert.equal(new Set(expectedReportIds('full')).size, 68);
+    assert.equal(new Set(expectedReportIds('full')).size, 92);
     assert.includeMembers(
         [...scenarioIdsForPortfolio('full')],
         ['lists', 'records', 'flavorful', 'resources', 'events', 'async', 'streams', 'futures', 'portfolio'],
@@ -228,4 +228,15 @@ test.concurrent('requires every declared matrix report and rejects extras', asyn
     assert.throws(() => assertCompleteReports(['a'], { a: {}, b: {} }));
     assert.throws(() => assertCompleteReports([], {}));
     assertCompleteReports(['a'], { a: {} });
+});
+
+import browserCheck from './browser-check.mjs';
+test.concurrent('browser known-answer checks reject scalar, nested and typed payload mismatches', () => {
+    browserCheck.deepEqual(
+        { values: [1n, undefined, new Uint8Array([17, 23])] },
+        { values: [1n, undefined, new Uint8Array([17, 23])] },
+    );
+    assert.throws(() => browserCheck.equal(17, 23));
+    assert.throws(() => browserCheck.deepEqual({ values: [1, 2] }, { values: [1, 3] }));
+    assert.throws(() => browserCheck.deepEqual(new Uint8Array([1, 2]), new Uint8Array([1, 3])));
 });

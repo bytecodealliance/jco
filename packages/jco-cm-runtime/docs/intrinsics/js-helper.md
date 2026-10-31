@@ -14,3 +14,5 @@ wrap `dataView` while re-exporting the other defaults; each default uses its own
 static implementation dependencies.
 
 [All intrinsic contracts](README.md) · [Runtime API](../runtime.md)
+
+The generator wrapper keeps synchronous results, thrown errors, and the receiver until a thenable is yielded. Conditional host imports use the live executing thread and selected WebAssembly constructors to choose whether their caller may block.

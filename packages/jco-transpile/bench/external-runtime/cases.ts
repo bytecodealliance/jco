@@ -15,6 +15,12 @@ export const components = [
     { id: 'resources', path: '../../test/fixtures/components/p3/context-resource-drop.wat' },
     { id: 'events', path: '../../test/fixtures/components/p3/waitable-set-poll-non-set.wat' },
     { id: 'async', path: '../../test/fixtures/components/p3/sync-lowered-async-callee.wat' },
+    { id: 'stream-host-payload', path: '../../test/fixtures/generated/rust-test-components/stream-lower.wasm' },
+    { id: 'stream-payload', path: 'stream-payload.wat' },
+    { id: 'stream-cancel', path: 'stream-payload.wat' },
+    { id: 'future-pending', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
+    { id: 'future-nested', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
+    { id: 'future-rejected', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
     { id: 'streams', path: '../../test/fixtures/components/p3/zero-length-same-component-stream.wat' },
     { id: 'futures', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
 ] as const;
@@ -70,6 +76,7 @@ const taskClassImports = [
     },
     { suffix: 'intrinsics/waitable', names: ['initializeWaitableClass'] },
 ];
+taskClassImports.push({ suffix: 'intrinsics/future', names: ['initializeFutureValueClass'] });
 const taskClassBase = `
  const RuntimeError = Error, RepTable = initializeRepTableClass({ RuntimeError });
  const indexSpaces = initializeHandleIndexSpaces(), instanceFlags = initializeInstanceFlags();
@@ -84,6 +91,14 @@ const taskClassBase = `
 
 /** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
+    {
+        id: 'synchronous-generator',
+        suffix: 'intrinsics/js-helper',
+        names: ['maybeSyncGenerator'],
+        setup: 'const run = maybeSyncGenerator(function* (value) { return yield value; });',
+        answer: 'run(42)',
+        allocations: {},
+    },
     {
         id: 'stream-tables',
         suffix: 'intrinsics/stream',
@@ -124,6 +139,31 @@ export const importControls = [
         answer: '(context.scratch.setInt32(0, 42, true), context.scratch.getInt32(0, true))',
         allocations: { DataView: 1, ArrayBuffer: 1 },
     },
+    {
+        id: 'lift-pure-bool',
+        suffix: 'intrinsics/lift',
+        names: ['liftFlatBool'],
+        setup: 'const context = {componentIdx: 0, params: [1], useDirectParams: true};',
+        answer: 'liftFlatBool(context)[0] === true && context.params.length === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
+        id: 'stream-table-owner-only',
+        suffix: 'intrinsics/stream',
+        names: ['initializeStreamTables'],
+        setup: 'const first = initializeStreamTables(), second = initializeStreamTables();',
+        answer: 'first !== second && Object.keys(first).length === 0 && Object.keys(second).length === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
+        id: 'future-selected-value-brand',
+        suffix: 'intrinsics/future',
+        names: ['initializeFutureValueClass'],
+        setup: 'const First = initializeFutureValueClass(), Second = initializeFutureValueClass(); let starts = 0; const value = new First(() => { starts++; return {value: 42}; });',
+        answer: 'First !== Second && value instanceof First && !(value instanceof Second) && starts === 0 ? 42 : 0',
+        allocations: {},
+    },
+
     {
         suffix: 'intrinsics/host',
         id: 'host-event-memory',
@@ -222,7 +262,7 @@ export const importControls = [
             'createNewCurrentTask',
             'clearCurrentTask',
         ],
-        imports: [...taskClassImports, { suffix: 'intrinsics/future', names: ['initializeFutureValueClass'] }],
+        imports: taskClassImports,
         setup:
             taskClassBase +
             `
