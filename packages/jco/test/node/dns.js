@@ -2,6 +2,7 @@ import { assert, expect, suite, test } from "vitest";
 
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { env } from "node:process";
 import { fileURLToPath } from "node:url";
 
 import { DNS_WIT_REQUIREMENT, injectNodeWitImports } from "../../src/node-wit.js";
@@ -28,6 +29,7 @@ suite("node:dns in a component", () => {
 
     test.skipIf(!hasJspi)(
         "componentizes and resolves example.com through the opt-in Node host",
+        { timeout: 600_000, retry: env.CI ? 3 : 0 },
         async () => {
             const { componentPath, stderr } = await componentizeFixture({
                 fixture: "node-dns",
@@ -67,6 +69,5 @@ suite("node:dns in a component", () => {
                 await cleanup();
             }
         },
-        600_000,
     );
 });
