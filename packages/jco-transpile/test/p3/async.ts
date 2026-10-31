@@ -4,7 +4,7 @@ import { suite, test, assert, expect } from 'vitest';
 
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { transpile } from '../../src/index.js';
+import { transpile } from '../transpilation.js';
 import { setupAsyncTest } from '../helpers.js';
 import { AsyncFunction, LOCAL_TEST_COMPONENTS_DIR, createReadableStreamFromValues, timeoutMs } from '../common.js';
 

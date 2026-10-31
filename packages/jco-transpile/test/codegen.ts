@@ -6,7 +6,7 @@ import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { assert, describe, expect, suite, test } from 'vitest';
 
-import { transpile, transpileBytes, writeFiles } from '../src/index.js';
+import { transpile, transpileBytes, writeFiles } from './transpilation.js';
 import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 
 import { COMPONENT_FIXTURES_DIR, LOCAL_TEST_COMPONENTS_DIR, getDefaultComponentFixtures } from './common.js';

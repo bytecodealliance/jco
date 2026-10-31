@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { assert, expect, suite, test } from 'vitest';
 
-import { transpile, writeFiles } from '../../src/index.js';
+import { transpile, writeFiles } from '../transpilation.js';
 import { getTmpDir, nodeExec } from '../helpers.js';
 
 const resourceFixture = fileURLToPath(
@@ -179,7 +179,7 @@ suite('external runtime codegen', () => {
     test.concurrent('keeps inline output self-contained and transpilation independent of runtime installation', async () => {
         const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
         assert.notProperty(manifest.dependencies, '@bytecodealliance/jco-cm-runtime');
-        const { files } = await transpile(resourceFixture, { name: 'component' });
+        const { files } = await transpile(resourceFixture, { name: 'component', cmRuntimeEsModule: undefined });
         const source = new TextDecoder().decode(files['component.js']);
         assert.include(source, 'function rscTableGet(table, handle)');
         assert.notInclude(source, '_jcoRuntime');

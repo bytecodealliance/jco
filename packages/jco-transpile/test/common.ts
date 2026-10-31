@@ -31,7 +31,10 @@ export const LOCAL_TEST_COMPONENTS_DIR = fileURLToPath(
 
 /** Path to built custom JS components */
 export const LOCAL_TEST_COMPONENTS_JS_DIR = fileURLToPath(
-    new URL('./fixtures/generated/js-test-components', import.meta.url),
+    new URL(
+        `./fixtures/generated/${env.JCO_TEST_RUNTIME === 'external' ? 'external/' : ''}js-test-components`,
+        import.meta.url,
+    ),
 );
 
 /** Path to built extended test components (i.e. output of `just build` run in `jco/test/components`) */

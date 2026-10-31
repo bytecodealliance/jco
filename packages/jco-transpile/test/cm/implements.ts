@@ -9,7 +9,7 @@ import { WIT_FIXTURE_DIR, getTmpDir, setupAsyncTest } from '../helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
-import { transpileBytes } from '../../src/index.js';
+import { transpileBytes } from '../transpilation.js';
 import { componentEmbed, componentNew, componentWit, print } from '../../src/wasm-tools.js';
 
 const IMPLEMENTS_WIT_DIR = join(WIT_FIXTURE_DIR, 'implements');
