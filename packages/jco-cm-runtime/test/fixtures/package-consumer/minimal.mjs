@@ -27,6 +27,11 @@ const { clampGuest, typeCheckValidI32, initializeTaskRegisters } =
 const { initializeStoreTrap, checkMayLeave } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/component');
 const { initializeWaitableClass, initializeWaitableSetClass } =
     await import('@bytecodealliance/jco-cm-runtime/intrinsics/waitable');
+const { initializeLocalErrorContextTables, initializeErrorContextTableRegistrations } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/error-context');
+if (initializeLocalErrorContextTables().size || Object.keys(initializeErrorContextTableRegistrations()).length) {
+    throw new Error('error-context capability leak');
+}
 const Waitable = initializeWaitableClass(),
     WaitableSet = initializeWaitableSetClass({ TASK_CANCELLED: 3 });
 const w = new Waitable({}),

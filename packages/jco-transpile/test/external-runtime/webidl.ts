@@ -37,6 +37,12 @@ for (const external of [false, true]) {
                             ';',
                     );
                     await writeFile(
+                        join(dir, 'provider/intrinsics/error-context.js'),
+                        'export * from ' +
+                            JSON.stringify(new URL('intrinsics/error-context.js', defaultRuntimeUrl).href) +
+                            ';',
+                    );
+                    await writeFile(
                         join(dir, 'provider/intrinsics/waitable.js'),
                         'export * from ' +
                             JSON.stringify(new URL('intrinsics/waitable.js', defaultRuntimeUrl).href) +

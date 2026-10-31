@@ -11,3 +11,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - [`intrinsics/core`](core.md): core.
 - [`intrinsics/component`](component.md): component.
 - [`intrinsics/waitable`](waitable.md): waitable.
+- [`intrinsics/error-context`](error-context.md): error-context.

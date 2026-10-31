@@ -1516,9 +1516,9 @@ impl LiftIntrinsic {
             Self::LiftFlatErrorContext => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_err_ctx_local_table_fn =
-                    render_args.require_intrinsic(ErrCtxIntrinsic::GetLocalTable);
+                    render_args.intrinsic_call_prefix(ErrCtxIntrinsic::GetLocalTable);
                 let err_ctx_ref_count_add_fn =
-                    render_args.require_intrinsic(ErrCtxIntrinsic::GlobalRefCountAdd);
+                    render_args.intrinsic_call_prefix(ErrCtxIntrinsic::GlobalRefCountAdd);
                 let lift_flat_error_fn = self.name();
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -1534,7 +1534,7 @@ impl LiftIntrinsic {
                             if (ctx.params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
                             val = ctx.params[0];
                             ctx.params = ctx.params.slice(1);
-                            table = {get_err_ctx_local_table_fn}(ctx.componentIdx, errCtxTableIdx);
+                            table = {get_err_ctx_local_table_fn}ctx.componentIdx, errCtxTableIdx);
                         }} else {{
                             throw new Error('indirect flat lift for error-contexts not yet implemented!');
                         }}
@@ -1553,7 +1553,7 @@ impl LiftIntrinsic {
                         errCtx.refCount -= 1;
                         // NOTE: we aovoid doing clean up eagerly here
 
-                        {err_ctx_ref_count_add_fn}(errCtx.globalRep);
+                        {err_ctx_ref_count_add_fn}errCtx.globalRep);
 
                         return [errCtx.globalRep, ctx];
                     }}

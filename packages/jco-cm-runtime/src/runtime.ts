@@ -172,6 +172,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/core': CoreModule;
     readonly 'intrinsics/component': ComponentModule;
     readonly 'intrinsics/waitable': WaitableModule;
+    readonly 'intrinsics/error-context': ErrorContextModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -985,4 +986,107 @@ export interface WaitableModule {
         waitableRep: number,
         setRep: number,
     ) => void;
+}
+
+/** Store-wide metadata; origin fields are populated by errCtxNew. */
+export interface GlobalErrorContext {
+    refCount: number;
+    debugMessage: string;
+    localIdx?: number;
+    waitableIdx?: number;
+    componentIdx?: number;
+    localTableIdx?: number;
+}
+/** Metadata in the component's shared handle table. */
+export interface LocalErrorContext {
+    globalRep: number;
+    refCount: number;
+    localIdx: number;
+}
+export interface GlobalErrorContextTableConstructor {
+    new (): object;
+    data: RepTable<GlobalErrorContext> | null;
+    readonly get: () => RepTable<GlobalErrorContext>;
+}
+export type ErrorContextGlobalTable = Pick<GlobalErrorContextTableConstructor, 'get'>;
+export type LocalErrorContextTables = Map<number, Map<number, RepTable<number>>>;
+export interface ErrorContextTableRegistration {
+    componentIdx: number;
+    table: RepTable;
+}
+export type ErrorContextTableRegistrations = Record<number, ErrorContextTableRegistration>;
+export interface ErrorContextLocation {
+    readonly componentIdx: number;
+    readonly localTableIdx: number;
+}
+export interface ErrorContextNewOptions extends ErrorContextLocation {
+    readonly readStrFn: (ptr: number, len: number) => string;
+}
+export interface ErrorContextDebugOptions {
+    readonly componentIdx: number;
+    readonly writeStrFn: (message: string, outputPtr: number) => unknown;
+}
+export interface ErrorContextLocalTableContext {
+    readonly localTables: Pick<LocalErrorContextTables, 'get' | 'set'>;
+    readonly RepTable: RepTableConstructor;
+}
+export interface ErrorContextHandleContext {
+    readonly globalTable: ErrorContextGlobalTable;
+    readonly lookup: ComponentStateLookupContext;
+}
+export interface ErrorContextNewContext extends ErrorContextHandleContext {
+    readonly local: ErrorContextLocalTableContext;
+}
+export type ErrorContextDropContext = ErrorContextNewContext & TrapContext;
+export type ErrorContextDebugContext = ErrorContextHandleContext & TrapContext;
+export interface ErrorContextTransferContext extends ErrorContextNewContext {
+    readonly tables: Readonly<Record<number, Pick<ErrorContextTableRegistration, 'componentIdx'>>>;
+}
+export interface ErrorContextModule {
+    readonly initializeGlobalErrorContextTableClass: (
+        RepTable: RepTableConstructor,
+    ) => GlobalErrorContextTableConstructor;
+    readonly initializeErrorContextTableRegistrations: () => ErrorContextTableRegistrations;
+    readonly initializeLocalErrorContextTables: () => LocalErrorContextTables;
+    readonly errCtxNew: (
+        context: ErrorContextNewContext,
+        options: ErrorContextNewOptions,
+        msgPtr: number,
+        msgLen: number,
+    ) => number;
+    readonly errCtxDrop: (context: ErrorContextDropContext, location: ErrorContextLocation, handle: number) => void;
+    readonly errCtxTransfer: (
+        context: ErrorContextTransferContext,
+        handle: number,
+        srcTableIdx: number,
+        destTableIdx: number,
+    ) => number;
+    readonly errCtxDebugMessage: (
+        context: ErrorContextDebugContext,
+        options: ErrorContextDebugOptions,
+        handle: number,
+        outputPtr: number,
+    ) => void;
+    readonly errCtxGetLocalTable: (
+        context: ErrorContextLocalTableContext,
+        componentIdx: number,
+        tableIdx: number,
+        options?: { upsert?: boolean },
+    ) => RepTable<number>;
+    readonly errCtxGlobalRefCountAdd: (
+        globalTable: ErrorContextGlobalTable,
+        globalRep: number,
+        amount?: number | null,
+    ) => number;
+    readonly errCtxCreateLocalHandle: (
+        context: ErrorContextHandleContext,
+        componentIdx: number,
+        localTable: RepTable<number>,
+        globalRep: number,
+    ) => { waitableIdx: number; localIdx: number };
+    readonly errCtxReserveGlobalRep: (
+        globalTable: ErrorContextGlobalTable,
+        debugMessage: string,
+        refCount: number,
+    ) => { globalRep: number; errCtx: GlobalErrorContext };
 }
