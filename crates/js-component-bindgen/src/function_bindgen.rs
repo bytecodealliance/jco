@@ -1762,7 +1762,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "var ptr{tmp} = {realloc_call}(0, 0, {align}, len{tmp} * {size});",
-                    realloc_call = if self.is_async {
+                    realloc_call = if self.is_async && !self.host_import_generator {
                         format!("await {realloc}")
                     } else {
                         realloc.to_string()
@@ -1827,23 +1827,24 @@ impl Bindgen for FunctionBindgen<'_> {
                     StringEncoding::UTF8 | StringEncoding::UTF16
                 ));
 
-                let (call_prefix, encode_intrinsic) = match (self.encoding, self.is_async) {
-                    (StringEncoding::UTF16, true) => (
-                        "await ",
-                        Intrinsic::String(StringIntrinsic::Utf16EncodeAsync),
-                    ),
-                    (StringEncoding::UTF16, false) => {
-                        ("", Intrinsic::String(StringIntrinsic::Utf16Encode))
-                    }
-                    (StringEncoding::UTF8, true) => (
-                        "await ",
-                        Intrinsic::String(StringIntrinsic::Utf8EncodeAsync),
-                    ),
-                    (StringEncoding::UTF8, false) => {
-                        ("", Intrinsic::String(StringIntrinsic::Utf8Encode))
-                    }
-                    _ => unreachable!("unsupported encoding {}", self.encoding),
-                };
+                let (call_prefix, encode_intrinsic) =
+                    match (self.encoding, self.is_async && !self.host_import_generator) {
+                        (StringEncoding::UTF16, true) => (
+                            "await ",
+                            Intrinsic::String(StringIntrinsic::Utf16EncodeAsync),
+                        ),
+                        (StringEncoding::UTF16, false) => {
+                            ("", Intrinsic::String(StringIntrinsic::Utf16Encode))
+                        }
+                        (StringEncoding::UTF8, true) => (
+                            "await ",
+                            Intrinsic::String(StringIntrinsic::Utf8EncodeAsync),
+                        ),
+                        (StringEncoding::UTF8, false) => {
+                            ("", Intrinsic::String(StringIntrinsic::Utf8Encode))
+                        }
+                        _ => unreachable!("unsupported encoding {}", self.encoding),
+                    };
                 let encode = self.intrinsic(encode_intrinsic);
 
                 let tmp = self.tmp();
@@ -1924,7 +1925,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "var {result} = {realloc_call}(0, 0, {align}, {len} * {size});",
-                    realloc_call = if self.is_async {
+                    realloc_call = if self.is_async && !self.host_import_generator {
                         format!("await {realloc}")
                     } else {
                         realloc.to_string()
@@ -1996,7 +1997,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     "const {result} = {realloc_call}(0, 0, {align}, {len} * {size});",
-                    realloc_call = if self.is_async {
+                    realloc_call = if self.is_async && !self.host_import_generator {
                         format!("await {realloc}")
                     } else {
                         realloc.to_string()
@@ -2434,7 +2435,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // A task that is only async for JSPI never publishes its completion
                 // promise, so the error must be thrown to reject the suspended guest.
-                let async_err_exit = if *async_ {
+                let async_err_exit = if *async_ && !self.host_import_generator {
                     "return task.completionPromise();"
                 } else {
                     "throw err;"
@@ -2891,7 +2892,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.src,
                     "var {ptr} = {realloc_call}(0, 0, {align}, {size});",
                     align = align.align_wasm32(),
-                    realloc_call = if self.is_async {
+                    realloc_call = if self.is_async && !self.host_import_generator {
                         format!("await {realloc}")
                     } else {
                         realloc.to_string()
@@ -4023,6 +4024,14 @@ impl Bindgen for FunctionBindgen<'_> {
             // - `hostProvided`: whether the original function was a host-provided (i.e. host provided import)
             //
             Instruction::AsyncTaskReturn { name, params } => {
+                // A generated host-import coroutine already has the lifted result.
+                // It has no guest callback loop, and must complete synchronously
+                // when the host did so (without an implicit Promise/await boundary).
+                if self.host_import_generator {
+                    debug_assert!(self.for_import.unwrap_or_default());
+                    uwriteln!(self.src, "task.resolve([ret]); task.exit(); return ret;");
+                    return;
+                }
                 let (direct_result_lift, direct_result) = self
                     .lift_callbackless_async_result()
                     .unwrap_or_else(|| (String::new(), "ret".into()));

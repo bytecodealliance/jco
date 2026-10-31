@@ -3495,6 +3495,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
                 let with_global_current_thread_meta_async_fn =
                     render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
+                let with_global_current_thread_meta_fn =
+                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let check_may_leave_fn = render_args
@@ -3502,7 +3504,7 @@ impl AsyncTaskIntrinsic {
 
                 output.push_str(&format!(
                     r#"
-                    async function {lower_import_fn}(args) {{
+                    function {lower_import_fn}(args) {{
                         const params = [...arguments].slice(1);
                         {debug_log_fn}('[{lower_import_fn}()] args', {{ args, params }});
                         const {{
@@ -3648,6 +3650,74 @@ impl AsyncTaskIntrinsic {
                             manualAsyncResult = {promise_with_resolvers_fn}();
                         }}
 
+                        const finishAsyncLower = () => {{
+                            const subtaskState = subtask.getStateNumber();
+                            if (subtaskState < 0 || subtaskState >= 2**4) {{
+                                throw new Error('invalid subtask state, out of valid range');
+                            }}
+                            let res;
+                            // An async-lowered import whose callee resolved synchronously returns
+                            // [Subtask.State.RETURNED] only and no subtask handle is exposed.
+                            if (subtask.isReturned()) {{
+                                // The on-progress handler parked a pending SUBTASK event on the
+                                // waitable when the import settled. The guest never learns this
+                                // waitable's rep (we return a bare RETURNED state), so consume the
+                                // event now -- otherwise a stale event is left parked forever (and
+                                // the waitable can never be dropped).
+                                if (subtask.hasPendingEvent()) {{
+                                    subtask.getPendingEvent();
+                                }}
+                                if (!subtask.resolveDelivered()) {{
+                                    subtask.deliverResolve();
+                                }}
+                                if (subtask.waitableRep() !== null) {{
+                                    const removed = cstate.handles.remove(subtask.waitableRep());
+                                    if (removed !== subtask) {{
+                                        throw new Error('subtask handle cleanup removed unexpected entry');
+                                    }}
+                                }}
+                                subtask.drop();
+                                res = subtaskState;
+                            }} else {{
+                                res = Number(subtask.ensureHandle()) << 4 | subtaskState;
+                            }}
+                            {debug_log_fn}('[{lower_import_fn}()] async-lowered import return', {{
+                                fnName: importFn.fnName,
+                                componentIdx,
+                                subtaskID: subtask.id(),
+                                waitableRep: subtask.waitableRep(),
+                                subtaskState,
+                                eagerReturn: subtask.isReturned(),
+                                packedResult: res,
+                            }});
+                            return res;
+                        }};
+
+                        // Canonical async lowering returns a status in the current guest
+                        // slice. Start the trampoline now so it captures this subtask
+                        // before another import is issued; only its host result is async.
+                        if (isAsync) {{
+                            try {{
+                                if (!subtask.cancellationRequested() && task.taskState() !== {task_class}.State.CANCEL_PENDING) {{
+                                    const pending = {with_global_current_thread_meta_fn}({{
+                                        taskID: task.id(),
+                                        threadID,
+                                        componentIdx: task.componentIdx(),
+                                        fn: () => importFn(...params),
+                                    }});
+                                    Promise.resolve(pending).catch((err) => {{
+                                        task.setErrored(err);
+                                        task.reject(err);
+                                    }});
+                                }}
+                                return finishAsyncLower();
+                            }} catch (err) {{
+                                task.setErrored(err);
+                                task.reject(err);
+                                throw err;
+                            }}
+                        }}
+
                         // Build a response that *may* resolve quickly
 
                         queueMicrotask(async () => {{
@@ -3692,48 +3762,7 @@ impl AsyncTaskIntrinsic {
                                 // promise must *always* settle (an unhandled throw here would leave a
                                 // JSPI-suspended guest suspended forever).
                                 try {{
-                                    const subtaskState = subtask.getStateNumber();
-                                    if (subtaskState < 0 || subtaskState >= 2**4) {{
-                                        reject(new Error('invalid subtask state, out of valid range'));
-                                        return;
-                                    }}
-                                    let res;
-                                    // An async-lowered import whose callee resolved synchronously returns
-                                    // [Subtask.State.RETURNED] only and no subtask handle is exposed.
-                                    if (subtask.isReturned()) {{
-                                        // The on-progress handler parked a pending SUBTASK event on the
-                                        // waitable when the import settled. The guest never learns this
-                                        // waitable's rep (we return a bare RETURNED state), so consume the
-                                        // event now -- otherwise a stale event is left parked forever (and
-                                        // the waitable can never be dropped).
-                                        if (subtask.hasPendingEvent()) {{
-                                            subtask.getPendingEvent();
-                                        }}
-                                        if (!subtask.resolveDelivered()) {{
-                                            subtask.deliverResolve();
-                                        }}
-                                        if (subtask.waitableRep() !== null) {{
-                                            const removed = cstate.handles.remove(subtask.waitableRep());
-                                            if (removed !== subtask) {{
-                                                reject(new Error('subtask handle cleanup removed unexpected entry'));
-                                                return;
-                                            }}
-                                        }}
-                                        subtask.drop();
-                                        res = subtaskState;
-                                    }} else {{
-                                        res = Number(subtask.ensureHandle()) << 4 | subtaskState;
-                                    }}
-                                    {debug_log_fn}('[{lower_import_fn}()] async-lowered import return', {{
-                                        fnName: importFn.fnName,
-                                        componentIdx,
-                                        subtaskID: subtask.id(),
-                                        waitableRep: subtask.waitableRep(),
-                                        subtaskState,
-                                        eagerReturn: subtask.isReturned(),
-                                        packedResult: res,
-                                    }});
-                                    resolve(res);
+                                    resolve(finishAsyncLower());
                                 }} catch (err) {{
                                     reject(err);
                                 }}

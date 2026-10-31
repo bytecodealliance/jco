@@ -3125,7 +3125,12 @@ impl<'a> Instantiator<'a, '_> {
                 // but we *redefine* it to call the lower import function first.
                 let suspending_wrap_fn =
                     self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
-                if is_async || func_ty_async {
+                if is_async {
+                    uwriteln!(
+                        self.src.js,
+                        "let trampoline{i} = {suspending_wrap_fn}({component_idx}, {call}, true, false, false);"
+                    );
+                } else if func_ty_async {
                     uwriteln!(
                         self.src.js,
                         "let trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false));"
@@ -4401,8 +4406,9 @@ impl<'a> Instantiator<'a, '_> {
             import_name,
             &self.async_imports,
         );
-        let host_import_generator = requires_async_porcelain && !is_async;
-        if is_async || self.types[func_ty].async_ || requires_async_porcelain {
+        let host_import_generator = options.async_ || (requires_async_porcelain && !is_async);
+        // A canonical async lower returns status without suspending its caller.
+        if !options.async_ && (is_async || self.types[func_ty].async_ || requires_async_porcelain) {
             self.async_analysis
                 .suspending_trampolines
                 .insert(trampoline);
@@ -4551,8 +4557,8 @@ impl<'a> Instantiator<'a, '_> {
         let trampoline_idx = trampoline.as_u32();
         match self.bindgen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                // A JSPI import of a sync function returns synchronously when the host does,
-                // as a task that cannot block (e.g. a resource destructor) may be calling it.
+                // Preserve synchronous argument validation and host completion for canonical
+                // async lowers, and for JSPI imports used by tasks that cannot block.
                 //
                 // TODO(breaking): remove as we do not not need to manually specify async imports anymore in P3 w/ native coloring
                 if host_import_generator {
@@ -5415,7 +5421,7 @@ impl<'a> Instantiator<'a, '_> {
                         format!(
                             "realloc{}{}",
                             idx.as_u32(),
-                            if is_async {
+                            if is_async && !host_import_generator {
                                 "Async"
                             } else {
                                 Default::default()
