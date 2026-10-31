@@ -1,6 +1,6 @@
 ;; A zero-length copy on a stream of non-numeric elements within one component
-;; completes without trapping: the Canonical ABI only applies the same-instance
-;; restriction when both buffers have elements left (`End.copy`).
+;; traps once both ends provide buffers, regardless of their lengths.
+;; See https://github.com/WebAssembly/component-model/pull/755.
 (component
   (type $thing (resource (rep i32)))
   (type $stream-own (stream (own $thing)))

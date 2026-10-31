@@ -932,13 +932,11 @@ impl AsyncStreamIntrinsic {
                                 }}
 
                                 // If the buffer came from the same component that is currently doing the operation
-                                // we're doing a inter-component write, and only unit or numeric types are allowed
+                                // we're doing an intra-component write, and only unit or numeric types are allowed.
+                                // End.copy checks this even when either buffer is empty.
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                // (Canonical ABI `End.copy`: only when both sides have elements to
-                                // copy; zero-length reads and writes complete without copying.)
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric
-                                    && buffer.remaining() > 0 && this.#pendingBufferMeta.buffer.remaining() > 0) {{
-                                    throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}], send)`);
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                    throw new {runtime_error_class}('cannot read from and write to intra-component future/stream with non-numeric payload');
                                 }}
 
                                 // If original capacities were zero, we're dealing with a unit stream,
@@ -1041,13 +1039,11 @@ impl AsyncStreamIntrinsic {
                                 }}
 
                                 // If the buffer came from the same component that is currently doing the operation
-                                // we're doing a inter-component read, and only unit or numeric types are allowed
+                                // we're doing an intra-component read, and only unit or numeric types are allowed.
+                                // End.copy checks this even when either buffer is empty.
                                 const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-                                // (Canonical ABI `End.copy`: only when both sides have elements to
-                                // copy; zero-length reads and writes complete without copying.)
-                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric
-                                    && buffer.remaining() > 0 && this.#pendingBufferMeta.buffer.remaining() > 0) {{
-                                    throw new {runtime_error_class}(`cannot stream non-numeric types within the same component (component [${{buffer.componentIdx()}}] read)`);
+                                if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() && buffer.componentIdx() !== -1 && !pendingElemIsNoneOrNumeric) {{
+                                    throw new {runtime_error_class}('cannot read from and write to intra-component future/stream with non-numeric payload');
                                 }}
 
                                 const pendingRemaining = this.#pendingBufferMeta.buffer.remaining();
@@ -2351,6 +2347,10 @@ impl AsyncStreamIntrinsic {
                             throw new {runtime_error_class}(message);
                         }}
 
+                        // Validate before copy's early return for a dropped peer, too.
+                        const memory = getMemoryFn?.();
+                        {managed_buffer_class}.validateGuestBuffer(memory, ptr, count, elemMeta ?? streamEnd.getElemMeta());
+
                         // A synchronous canonical operation is exposed through a
                         // plain Wasm fast path so an already-queued event can be
                         // consumed without entering JSPI. If it would block, the
@@ -2367,7 +2367,7 @@ impl AsyncStreamIntrinsic {
 
                         return streamEnd.copy({{
                             isAsync,
-                            memory: getMemoryFn?.(),
+                            memory,
                             ptr,
                             count,
                             eventCode: {event_code},

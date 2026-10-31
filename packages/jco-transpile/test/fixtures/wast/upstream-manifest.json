@@ -109,7 +109,7 @@
         },
         {
             "name": "same-component-stream-future.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "revision": "3e016227fbe8992dd1d54ca5efdfca543ad53b01"
         },
         {
             "name": "self-switch-traps.wast",
@@ -149,7 +149,7 @@
         },
         {
             "name": "zero-length.wast",
-            "revision": "e6832646ee9c1e59444294a5f9f22af3d2c7f76d"
+            "revision": "3e016227fbe8992dd1d54ca5efdfca543ad53b01"
         }
     ]
 }

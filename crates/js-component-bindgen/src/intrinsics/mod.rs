@@ -690,6 +690,8 @@ impl Intrinsic {
 
             Intrinsic::ManagedBufferClass => {
                 let debug_log_fn = args.require_intrinsic(Intrinsic::DebugLog);
+                let runtime_error_class =
+                    args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let managed_buffer_class = args.require_intrinsic(Intrinsic::ManagedBufferClass);
                 let handle_tables = args.require_intrinsic(Intrinsic::HandleTables);
                 let table_flag = args
@@ -717,6 +719,17 @@ impl Intrinsic {
 
                         target;
 
+                        static validateGuestBuffer(memory, start, count, elemMeta) {{
+                            // Unit payloads ignore the pointer, and host buffers have no memory.
+                            if (!memory || elemMeta.isNone) {{ return; }}
+                            if (start % elemMeta.align32 !== 0) {{
+                                throw new {runtime_error_class}('buffer pointer not aligned');
+                            }}
+                            if (start + count * elemMeta.size32 > memory.buffer.byteLength) {{
+                                throw new {runtime_error_class}('buffer pointer out of bounds of memory');
+                            }}
+                        }}
+
                         constructor(args) {{
                             if (args.capacity > {managed_buffer_class}.MAX_LENGTH) {{
                                  throw new Error(`buffer size [${{args.capacity}}] greater than max length`);
@@ -735,12 +748,8 @@ impl Intrinsic {
                                 throw new TypeError('missing/invalid start ptr, depsite memory being present');
                             }}
 
-                            if (!args.elemMeta.isNone && args.capacity > 0) {{
-                                if (args.start && args.start % args.elemMeta.align32 !== 0) {{
-                                    throw new Error(`invalid alignment: type with 32bit alignment [${{args.elemMeta.align32}}] at starting pointer [${{args.start}}]`);
-                                }}
-                                // TODO: memory lenght bounds check
-                            }}
+                            // Guest buffers must be aligned and in bounds even when empty.
+                            {managed_buffer_class}.validateGuestBuffer(args.memory, args.start, args.capacity, args.elemMeta);
 
                             this.#componentIdx = args.componentIdx;
                             this.#memory = args.memory;

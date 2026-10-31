@@ -614,7 +614,50 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
-    test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
+    for (const write of [false, true]) {
+        for (const dropPeer of [false, true]) {
+            test.concurrent.each([
+                { ptr: 2, count: 0, error: /buffer pointer not aligned/ },
+                { ptr: 2, count: 1, error: /buffer pointer not aligned/ },
+                { ptr: 65540, count: 0, error: /buffer pointer out of bounds/ },
+                { ptr: 65536, count: 1, error: /buffer pointer out of bounds/ },
+                { ptr: 65532, count: 2, error: /buffer pointer out of bounds/ },
+                { ptr: 0xfffffffc, count: 0, error: /buffer pointer out of bounds/ },
+                { ptr: 65536, count: 0, error: null },
+                { ptr: 65532, count: 1, error: null },
+            ])(
+                `stream.${write ? 'write' : 'read'} validates ptr=$ptr count=$count (peer dropped=${dropPeer})`,
+                async ({ ptr, count, error }) => {
+                    const { instance, cleanup } = await setupAsyncTest({
+                        asyncMode: 'jspi',
+                        component: {
+                            name: 'stream-buffer-validation',
+                            path: join(P3_COMPONENT_FIXTURES_DIR, 'stream-buffer-validation.wat'),
+                        },
+                    });
+                    try {
+                        if (error) {
+                            const err = await rejection(
+                                Promise.resolve().then(() => instance.run(write, dropPeer, ptr, count)),
+                            );
+                            assert.instanceOf(err, WebAssembly.RuntimeError);
+                            assert.match((err as Error).message, error);
+                        } else {
+                            // DROPPED or BLOCKED: there is no peer buffer to copy.
+                            assert.strictEqual(
+                                await instance.run(write, dropPeer, ptr, count),
+                                dropPeer ? 1 : 0xffffffff,
+                            );
+                        }
+                    } finally {
+                        await cleanup();
+                    }
+                },
+            );
+        }
+    }
+
+    test.concurrent('a zero-length same-component copy of non-numeric elements traps', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
@@ -623,10 +666,9 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
             },
         });
         try {
-            // The read blocks (0xffffffff); the zero-length write completes with 0 elements.
-            const packed = await instance.zeroLengthWrite();
-            assert.strictEqual(packed >>> 16, 0xffff, 'the read is BLOCKED');
-            assert.strictEqual(packed & 0xffff, 0, 'the write completed with 0 elements');
+            const err = await rejection(instance.zeroLengthWrite());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /intra-component future\/stream with non-numeric payload/);
         } finally {
             await cleanup();
         }

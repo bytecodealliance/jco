@@ -110,6 +110,13 @@ async function* byteStream(source) {
 A component can read zero elements to wait until data or end-of-stream is
 observable without consuming an element.
 
+For streams with a payload type, the guest buffer pointer must be aligned and
+in bounds even for a zero-length read or write. An empty buffer may point exactly
+at the end of memory. Streams without a payload type ignore the pointer.
+The same-instance restriction on non-numeric payloads also applies whenever both
+ends supply buffers, even when either buffer is empty. These checks follow
+[component-model PR #755](https://github.com/WebAssembly/component-model/pull/755).
+
 Jco may pull one host chunk to answer that readiness query, but the values
 must remain available for a later non-empty read.
 
