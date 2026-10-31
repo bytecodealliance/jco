@@ -171,6 +171,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/webidl': WebIdlModule;
     readonly 'intrinsics/core': CoreModule;
     readonly 'intrinsics/component': ComponentModule;
+    readonly 'intrinsics/waitable': WaitableModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -676,7 +677,7 @@ export interface WaitableEvent {
     payload0: number;
     payload1: number;
 }
-/** Structural contract for the waitables produced by the transitional factory. */
+/** Structural contract shared by component, task and waitable operations. */
 export interface ComponentWaitable {
     target: unknown;
     readonly componentIdx: () => number | undefined;
@@ -825,8 +826,7 @@ export interface ComponentAsyncStateContext extends TrapContext {
     readonly normalization: ComponentNormalizeTrapContext;
     readonly cannotEnter: string;
     readonly deadlock: ComponentDeadlockContext;
-    /** Lazy until the waitable family migrates; never invoked during class initialization. */
-    readonly createWaitable?: (args: { target?: unknown }) => ComponentWaitable;
+    readonly Waitable: new (args: { target?: unknown }) => ComponentWaitable;
 }
 export interface ComponentModule {
     readonly initializeInstanceFlags: () => ComponentInstanceFlags;
@@ -871,4 +871,118 @@ export interface ComponentModule {
     readonly backpressureInc: (context: ComponentStateLookupContext, componentIdx: number) => void;
     readonly backpressureDec: (context: ComponentStateLookupContext, componentIdx: number) => void;
     readonly setAllError: (states: Pick<ComponentAsyncStates, 'values'>) => void;
+}
+
+export interface WaitableSuspendOptions {
+    readonly readyFn: () => boolean;
+    readonly cancellable: boolean;
+}
+/** Task capabilities used by waitables while task implementation remains inline. */
+export interface WaitableTask {
+    readonly componentIdx: () => number;
+    readonly deliverPendingCancel: (options: { cancellable: boolean }) => boolean;
+    readonly isErrored: () => unknown;
+    readonly suspendUntil: (options: WaitableSuspendOptions) => Promise<boolean>;
+    readonly suspendUntilCallback: (options: WaitableSuspendOptions, onResume: (keepGoing: boolean) => void) => void;
+}
+export interface WaitableWaitOptions extends WaitableSuspendOptions {
+    readonly task: WaitableTask;
+}
+export interface Waitable extends ComponentWaitable {
+    /** Standalone hook: the supplied scheduler must implement waitUntil. */
+    readonly waitForPendingEvent: (args: {
+        cstate: { readonly waitUntil: (options: WaitableSuspendOptions) => unknown };
+    }) => Promise<void>;
+}
+export interface WaitableConstructor {
+    new (args: { componentIdx?: number; target?: unknown }): Waitable;
+}
+export interface WaitableSet extends ComponentWaitableSet {
+    target: unknown;
+    readonly componentIdx: () => number;
+    readonly numWaitables: () => number;
+    readonly numWaiting: () => number;
+    readonly incrementNumWaiting: (n?: number) => void;
+    readonly decrementNumWaiting: (n?: number) => void;
+    readonly targets: () => unknown[];
+    readonly setTarget: (target: unknown) => void;
+    readonly shuffleWaitables: () => void;
+    readonly removeWaitable: (waitable: ComponentWaitable) => ComponentWaitable | undefined;
+    readonly hasPendingEvent: () => boolean;
+    readonly getPendingEvent: () => WaitableEvent | null;
+    readonly tryWait: (options: WaitableWaitOptions) => WaitableEvent | null;
+    readonly waitUntil: (options: WaitableWaitOptions) => WaitableEvent | null | Promise<WaitableEvent | null>;
+    readonly waitUntilCallback: (options: WaitableWaitOptions, onEvent: (event: WaitableEvent | null) => void) => void;
+}
+export interface WaitableSetConstructor {
+    new (componentIdx: number): WaitableSet;
+}
+/** Memory and canonical options vary per trampoline and remain call operands. */
+export interface WaitableMemoryContext {
+    readonly componentIdx: number;
+    readonly isAsync: boolean;
+    readonly memoryIdx?: number;
+    readonly getMemoryFn: () => RuntimeMemory;
+}
+export interface WaitableStoreEventOptions {
+    readonly memory: RuntimeMemory;
+    readonly ptr: number;
+    readonly event: WaitableEvent | null;
+    readonly componentIdx: number;
+    readonly task: WaitableTask;
+    readonly memoryIdx?: number;
+}
+export interface WaitableTaskLookup {
+    /** Lazy inline task lookup until N11; preserves current-task fallback semantics. */
+    readonly getCurrentTask: (componentIdx: number) => { componentIdx: number; task?: WaitableTask } | undefined;
+}
+export interface WaitableSetNewContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly WaitableSet: WaitableSetConstructor;
+}
+export interface WaitableSetWaitContext extends TrapContext, WaitableSetNewContext, WaitableTaskLookup {
+    /** Lazy inline host capability until N12. */
+    readonly storeEventInComponentMemory: (args: WaitableStoreEventOptions) => number;
+}
+export interface WaitableSetPollContext extends WaitableSetWaitContext {
+    readonly events: Pick<AsyncEventCodes, 'NONE'>;
+}
+export interface WaitableSetRemoveContext extends TrapContext {
+    readonly WaitableSet: WaitableSetConstructor;
+}
+export interface WaitableSetDropContext extends WaitableSetRemoveContext, WaitableTaskLookup {
+    readonly lookup: ComponentStateLookupContext;
+}
+export interface WaitableJoinContext extends WaitableSetRemoveContext {
+    readonly Waitable: WaitableConstructor;
+    readonly lookup: ComponentStateLookupContext;
+}
+export interface WaitableModule {
+    readonly initializeWaitableClass: () => WaitableConstructor;
+    readonly initializeWaitableSetClass: (events: Pick<AsyncEventCodes, 'TASK_CANCELLED'>) => WaitableSetConstructor;
+    readonly waitableSetNew: (context: WaitableSetNewContext, componentIdx: number) => number;
+    readonly waitableSetWait: (
+        context: WaitableSetWaitContext,
+        memory: WaitableMemoryContext,
+        setRep: number,
+        resultPtr: number,
+        syncOnly?: boolean,
+    ) => number | Promise<number>;
+    readonly waitableSetPoll: (
+        context: WaitableSetPollContext,
+        memory: WaitableMemoryContext,
+        setRep: number,
+        resultPtr: number,
+    ) => number;
+    readonly waitableSetDrop: (context: WaitableSetDropContext, componentIdx: number, setRep: number) => void;
+    readonly removeWaitableSet: (
+        context: WaitableSetRemoveContext,
+        args: { state: Pick<ComponentAsyncState, 'handles'>; waitableSetRep: number },
+    ) => void;
+    readonly waitableJoin: (
+        context: WaitableJoinContext,
+        componentIdx: number,
+        waitableRep: number,
+        setRep: number,
+    ) => void;
 }

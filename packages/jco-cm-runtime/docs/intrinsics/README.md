@@ -11,3 +11,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - `intrinsics/webidl`: webidl.
 - `intrinsics/core`: core.
 - `intrinsics/component`: component.
+- `intrinsics/waitable`: waitable.

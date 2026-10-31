@@ -2147,14 +2147,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::WaitableSetNew { instance } => {
-                let waitable_set_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {waitable_set_new_fn}.bind(null, {});\n",
-                    instance.as_u32(),
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew),
+                    &instance.as_u32().to_string(),
                 );
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};\n",);
             }
 
             Trampoline::WaitableSetWait { instance, options } => {
@@ -2185,9 +2182,10 @@ impl<'a> Instantiator<'a, '_> {
                 let memory_idx = memory
                     .expect("missing memory idx for waitable-set.wait")
                     .as_u32();
-                let waitable_set_wait_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
+                let wait_callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait),
+                    &format!("{{ componentIdx: {instance_idx}, isAsync: {async_}, isCancellable: {cancellable}, memoryIdx: {memory_idx}, getMemoryFn: () => memory{memory_idx} }}"),
+                );
                 let suspending_wrap_fn = self
                     .bindgen
                     .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
@@ -2198,13 +2196,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     r#"
-                    const trampoline{i}Wait = {waitable_set_wait_fn}.bind(null, {{
-                        componentIdx: {instance_idx},
-                        isAsync: {async_},
-                        isCancellable: {cancellable},
-                        memoryIdx: {memory_idx},
-                        getMemoryFn: () => memory{memory_idx},
-                    }});
+                    const trampoline{i}Wait = {wait_callback};
                     const trampoline{i} = {conditional_suspending_fn}
                         {suspending_wrap_fn}{instance_idx}, (waitableSetRep, resultPtr) => trampoline{i}Wait(waitableSetRep, resultPtr, true), true),
                         {suspending_wrap_fn}{instance_idx}, trampoline{i}Wait),
@@ -2234,47 +2226,33 @@ impl<'a> Instantiator<'a, '_> {
                 let memory_idx = memory
                     .expect("missing memory idx for waitable-set.poll")
                     .as_u32();
-                let waitable_set_poll_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll));
+                let poll_callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll),
+                    &format!("{{ componentIdx: {instance_idx}, isAsync: {async_}, isCancellable: {cancellable}, memoryIdx: {memory_idx}, getMemoryFn: () => memory{memory_idx} }}"),
+                );
 
                 uwriteln!(
                     self.src.js,
                     r#"
-                    const trampoline{i} = {waitable_set_poll_fn}.bind(
-                        null,
-                        {{
-                            componentIdx: {instance_idx},
-                            isAsync: {async_},
-                            isCancellable: {cancellable},
-                            memoryIdx: {memory_idx},
-                            getMemoryFn: () => memory{memory_idx},
-                        }}
-                    );
+                    const trampoline{i} = {poll_callback};
                     "#,
                 );
             }
 
             Trampoline::WaitableSetDrop { instance } => {
-                let waitable_set_drop_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {waitable_set_drop_fn}.bind(null, {instance_idx});\n",
-                    instance_idx = instance.as_u32(),
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop),
+                    &instance.as_u32().to_string(),
                 );
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};\n",);
             }
 
             Trampoline::WaitableJoin { instance } => {
-                let waitable_join_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableJoin));
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {waitable_join_fn}.bind(null, {instance_idx});\n",
-                    instance_idx = instance.as_u32(),
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Waitable(WaitableIntrinsic::WaitableJoin),
+                    &instance.as_u32().to_string(),
                 );
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};\n",);
             }
 
             Trampoline::StreamNew { ty, instance } => {

@@ -28,8 +28,10 @@ use std::fmt::Write;
 mod component;
 pub(crate) mod conversion;
 mod core;
+mod waitable;
 use component::ComponentContext;
 use core::CoreContext;
+use waitable::WaitableContext;
 pub(crate) mod js_helper;
 pub(crate) mod resource;
 pub(crate) mod string;
@@ -43,6 +45,7 @@ pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 pub(crate) enum RuntimeContext {
     Core(CoreContext),
     Component(ComponentContext),
+    Waitable(WaitableContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -106,12 +109,14 @@ impl RuntimeContext {
         .into_iter()
         .chain(CoreContext::get_global_names())
         .chain(ComponentContext::get_global_names())
+        .chain(WaitableContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::Core(context) => context.local_name(),
             Self::Component(context) => context.local_name(),
+            Self::Waitable(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -141,6 +146,7 @@ impl RuntimeContext {
         let (suffix, export, local_name) = match self {
             Self::Core(context) => return context.initializer(),
             Self::Component(context) => return context.initializer(),
+            Self::Waitable(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -229,6 +235,7 @@ impl RuntimeContext {
         match self {
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
+            Self::Waitable(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -263,6 +270,7 @@ impl RuntimeContext {
         match self {
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
+            Self::Waitable(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -351,6 +359,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::Waitable(i) => Some(waitable::import(i)),
             Intrinsic::Component(i) => Some(component::import(i)),
             Intrinsic::Resource(i) => Some(resource::resource_import(i)),
             Intrinsic::HandleTables | Intrinsic::ScopeId => {
@@ -464,7 +473,6 @@ impl Provides<BaseIntrinsic> for ExternalRuntime {
             InlineRuntime.render(intrinsic, output, args);
         } else {
             core::discover(i, args);
-            component::discover(i, args);
             if i.conditional_suspending_wasm().is_some() {
                 output.push_str(&i.register_conditional_suspending_js(args));
             }
@@ -554,11 +562,27 @@ impl Provides<ComponentIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        intrinsic: ComponentIntrinsic,
+        _intrinsic: ComponentIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
+}
+
+impl Provides<WaitableIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: WaitableIntrinsic) -> IntrinsicBinding {
+        let _ = waitable::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        intrinsic: WaitableIntrinsic,
         _output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
-        component::discover(intrinsic.into(), args);
+        waitable::discover(intrinsic.into(), args);
     }
 }
 
@@ -587,7 +611,6 @@ macro_rules! delegate_to_inline {
 delegate_to_inline! {
     ErrCtxIntrinsic,
     AsyncTaskIntrinsic,
-    WaitableIntrinsic,
     LiftIntrinsic,
     LowerIntrinsic,
     AsyncStreamIntrinsic,
