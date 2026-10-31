@@ -16,9 +16,23 @@ mod bindings {
 use bindings::exports::jco::test_components::subtask_cancel_g2g;
 use bindings::jco::test_components::subtask_cancel_drop_host;
 
+#[cfg(target_arch = "wasm32")]
+#[link(wasm_import_module = "$root")]
+unsafe extern "C" {
+    #[link_name = "[backpressure-inc]"]
+    fn backpressure_inc();
+}
+
 struct Component;
 
 impl subtask_cancel_g2g::Guest for Component {
+    fn hold_entry() {
+        #[cfg(target_arch = "wasm32")]
+        unsafe {
+            backpressure_inc();
+        }
+    }
+
     async fn blocked_call() -> u32 {
         // The host never resolves this; we stay blocked until cancelled
         subtask_cancel_drop_host::pending_call().await

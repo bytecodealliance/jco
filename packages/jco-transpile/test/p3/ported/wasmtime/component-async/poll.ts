@@ -25,13 +25,15 @@ suite('poll scenario', () => {
             }
         }
 
-        async whenReady() {
+        // Return synchronously when ready: even a resolved Promise completes
+        // in a later microtask and must report a pending canonical subtask.
+        whenReady() {
             if (!this.#wakers) {
                 return;
             }
             const { promise, resolve } = Promise.withResolvers();
             this.#wakers.push(resolve);
-            await promise;
+            return promise;
         }
     }
 
