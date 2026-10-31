@@ -18,7 +18,7 @@ export function initializeResourceScopeCounter() { const state = defaults.initia
 export function initializeResourceScopeTasks() { const state = defaults.initializeResourceScopeTasks(); scopeMaps.push(state); return state; }
 export function initializeHandleTables() { const state = defaults.initializeHandleTables(); tables.push(state); return state; }
 export function callDestructor(context, args) {
-  if (Object.keys(context).sort().join() !== 'createTask,withTask') throw new Error('broad destructor context');
+  if (Object.keys(context).sort().join() !== 'createTask,registers') throw new Error('broad destructor context');
   calls.push('callDestructor'); return defaults.callDestructor(context, args);
 }
 export function tableRemove(context, table, handle) {
@@ -36,6 +36,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
                 await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
                 await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
+                await writeFile(
+                    join(dir, 'provider/intrinsics/core.js'),
+                    'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
+                );
                 for (const suffix of ['conversion', 'js-helper', 'string', 'webidl']) {
                     await writeFile(
                         join(dir, 'provider/intrinsics/' + suffix + '.js'),
