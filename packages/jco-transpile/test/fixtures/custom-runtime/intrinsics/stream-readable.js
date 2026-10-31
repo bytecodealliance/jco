@@ -129,15 +129,13 @@ export function initializeStreamReadableEndClass(_context) {
                     const p = this.#result.promise;
                     this.#result = newResult;
                     await p;
-                }
-                catch (err) {
+                } catch (err) {
                     debugLog('[StreamReadableEnd#read()] error waiting for previous read', err);
                     // If the previous write we were waiting on errors for any reason,
                     // we can ignore it and attempt to continue with this read
                     // which may also fail for a similar reason
                 }
-            }
-            else {
+            } else {
                 this.#result = newResult;
             }
             const { promise, resolve, reject } = newResult;
@@ -216,17 +214,16 @@ export function initializeStreamReadableEndClass(_context) {
                 if (transferred > 0) {
                     const values = buffer.read(transferred);
                     const { typedArray } = this.#elemMeta;
-                    const value = typedArray === undefined ? (count === 1 ? values[0] : values) : new typedArray(values);
+                    const value =
+                        typedArray === undefined ? (count === 1 ? values[0] : values) : new typedArray(values);
                     this.#result = null;
                     // An option's none value is undefined, but still an item.
                     resolve({ value, done: false });
-                }
-                else {
+                } else {
                     this.#result = null;
                     resolve({ value: undefined, done: true });
                 }
-            }
-            catch (err) {
+            } catch (err) {
                 debugLog('[StreamReadableEnd#read()] error', err);
                 reject(err);
             }
@@ -239,11 +236,12 @@ export function initializeStreamReadableEndClass(_context) {
             return result;
         }
         #readOpts(opts) {
-            const count = opts === undefined
-                ? 1
-                : typeof opts === 'number'
-                    ? opts
-                    : opts && typeof opts === 'object'
+            const count =
+                opts === undefined
+                    ? 1
+                    : typeof opts === 'number'
+                      ? opts
+                      : opts && typeof opts === 'object'
                         ? (opts.count ?? 1)
                         : undefined;
             const rejectLength = opts && typeof opts === 'object' ? opts.rejectLength : undefined;
@@ -293,10 +291,14 @@ export function initializeStreamReadableEndClass(_context) {
             // we're doing a inter-component read, and only unit or numeric types are allowed
             const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
             // End.copy checks the payload type even when either buffer is empty.
-            if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() &&
+            if (
+                this.#pendingBufferMeta.componentIdx === buffer.componentIdx() &&
                 buffer.componentIdx() !== -1 &&
-                !pendingElemIsNoneOrNumeric) {
-                throw new _context.RuntimeError('cannot read from and write to intra-component future/stream with non-numeric payload');
+                !pendingElemIsNoneOrNumeric
+            ) {
+                throw new _context.RuntimeError(
+                    'cannot read from and write to intra-component future/stream with non-numeric payload',
+                );
             }
             const pendingRemaining = this.#pendingBufferMeta.buffer.remaining();
             const shouldDropAfterCopy = dropAfterCopy || this.#pendingBufferMeta.dropAfterCopy;
@@ -312,11 +314,15 @@ export function initializeStreamReadableEndClass(_context) {
                 }
                 if (bufferRemaining > 0) {
                     const count = Math.min(pendingRemaining, bufferRemaining);
-                    const transferResources = buffer.componentIdx() !== -1 && this.#pendingBufferMeta.buffer.componentIdx() !== -1;
+                    const transferResources =
+                        buffer.componentIdx() !== -1 && this.#pendingBufferMeta.buffer.componentIdx() !== -1;
                     buffer.write(this.#pendingBufferMeta.buffer.read(count, { transferResources }), {
                         transferResources,
                     });
-                    this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta(), shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
+                    this.#pendingBufferMeta.onCopyFn(
+                        () => this.resetPendingBufferMeta(),
+                        shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,
+                    );
                     transferred = true;
                 }
                 onCopyDoneFn(shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
@@ -364,7 +370,9 @@ export function initializeStreamReadableEndClass(_context) {
                 });
                 bufferID = newBufferMeta.id;
                 buffer = newBufferMeta.buffer;
-                buffer.setTarget(`component [${componentIdx}] StreamReadableEnd buffer (id [${bufferID}], count [${count}], eventCode [${eventCode}])`);
+                buffer.setTarget(
+                    `component [${componentIdx}] StreamReadableEnd buffer (id [${bufferID}], count [${count}], eventCode [${eventCode}])`,
+                );
             }
             const streamEnd = this;
             const processFn = (result, reclaimBufferFn, rejectedLength) => {
@@ -374,15 +382,16 @@ export function initializeStreamReadableEndClass(_context) {
                 // Copy events are materialized lazily. Cancellation may begin
                 // after progress queued a COMPLETED event but before the guest
                 // consumed it; preserve the count and report the cancellation.
-                if (result === StreamEnd.CopyResult.COMPLETED &&
+                if (
+                    result === StreamEnd.CopyResult.COMPLETED &&
                     streamEnd.getCopyState() === StreamEnd.CopyState.CANCELLING_COPY &&
-                    !streamEnd.hasHostInject()) {
+                    !streamEnd.hasHostInject()
+                ) {
                     result = StreamEnd.CopyResult.CANCELLED;
                 }
                 if (result === StreamEnd.CopyResult.DROPPED) {
                     streamEnd.setCopyState(StreamEnd.CopyState.DONE);
-                }
-                else {
+                } else {
                     streamEnd.setCopyState(StreamEnd.CopyState.IDLE);
                 }
                 if (result < 0 || result >= 16) {
@@ -418,7 +427,22 @@ export function initializeStreamReadableEndClass(_context) {
             return { bufferID, buffer, onCopyFn, onCopyDoneFn };
         }
         copy(args) {
-            const { isAsync, memory, componentIdx, ptr, count, eventCode, initial, skipStateCheck, stringEncoding, reallocFn, rejectLength, elemMeta, dropAfterCopy, deferSyncFinish, } = args;
+            const {
+                isAsync,
+                memory,
+                componentIdx,
+                ptr,
+                count,
+                eventCode,
+                initial,
+                skipStateCheck,
+                stringEncoding,
+                reallocFn,
+                rejectLength,
+                elemMeta,
+                dropAfterCopy,
+                deferSyncFinish,
+            } = args;
             void reallocFn;
             if (eventCode === undefined) {
                 throw new TypeError('missing/invalid event code');
@@ -433,7 +457,9 @@ export function initializeStreamReadableEndClass(_context) {
                 copyElemMeta.stringEncoding = stringEncoding;
             }
             if (copyElemMeta.stringEncoding && stringEncoding && copyElemMeta.stringEncoding !== stringEncoding) {
-                throw new Error(`inconsistent string encoding (previously [${copyElemMeta.stringEncoding}], now [${stringEncoding}])`);
+                throw new Error(
+                    `inconsistent string encoding (previously [${copyElemMeta.stringEncoding}], now [${stringEncoding}])`,
+                );
             }
             if (args.getReallocFn && copyElemMeta.getReallocFn === undefined) {
                 copyElemMeta.getReallocFn = args.getReallocFn;
@@ -528,13 +554,16 @@ export function initializeStreamReadableEndClass(_context) {
                     if (injectedWritePromise) {
                         // Do not await here: the injected write may depend on sibling
                         // guest work running, so the canonical read must return BLOCKED.
-                        injectedWritePromise.then((cleanupFn) => cleanupFn(), (err) => this.setPendingEvent(() => {
-                            throw err;
-                        }));
+                        injectedWritePromise.then(
+                            (cleanupFn) => cleanupFn(),
+                            (err) =>
+                                this.setPendingEvent(() => {
+                                    throw err;
+                                }),
+                        );
                     }
                     return asyncBlockedCode;
-                }
-                else {
+                } else {
                     this.setCopyState(StreamEnd.CopyState.SYNC_COPYING);
                     const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
                     if (!taskMeta) {
@@ -547,29 +576,33 @@ export function initializeStreamReadableEndClass(_context) {
                     const streamEnd = this;
                     return task
                         .suspendUntil({
-                        readyFn: () => streamEnd.hasPendingEvent(),
-                    })
+                            readyFn: () => streamEnd.hasPendingEvent(),
+                        })
                         .then(async () => {
-                        if (deferSyncFinish) {
-                            await Promise.resolve();
-                        }
-                        if (!injectedWritePromise) {
-                            return finishCopy();
-                        }
-                        return injectedWritePromise.then((cleanupFn) => {
-                            cleanupFn();
-                            return finishCopy();
+                            if (deferSyncFinish) {
+                                await Promise.resolve();
+                            }
+                            if (!injectedWritePromise) {
+                                return finishCopy();
+                            }
+                            return injectedWritePromise.then((cleanupFn) => {
+                                cleanupFn();
+                                return finishCopy();
+                            });
                         });
-                    });
                 }
             }
             if (!injectedWritePromise) {
                 return finishCopy();
             }
             if (isAsync) {
-                injectedWritePromise.then((cleanupFn) => cleanupFn(), (err) => this.setPendingEvent(() => {
-                    throw err;
-                }));
+                injectedWritePromise.then(
+                    (cleanupFn) => cleanupFn(),
+                    (err) =>
+                        this.setPendingEvent(() => {
+                            throw err;
+                        }),
+                );
                 return finishCopy();
             }
             return injectedWritePromise.then((cleanupFn) => {
@@ -631,18 +664,20 @@ export function initializeStreamReadableEndClass(_context) {
                 // suspended in a synchronous cancel resumes only when it runs.
                 // Count it like a host operation so a deadlock check scheduled
                 // before this timer does not report the wait as a deadlock.
-                trackHostOperation(_context.tracking, () => new Promise((resolve) => {
-                    setTimeout(() => {
-                        try {
-                            completeCancel();
-                        }
-                        finally {
-                            resolve();
-                        }
-                    }, 0);
-                }));
-            }
-            else {
+                trackHostOperation(
+                    _context.tracking,
+                    () =>
+                        new Promise((resolve) => {
+                            setTimeout(() => {
+                                try {
+                                    completeCancel();
+                                } finally {
+                                    resolve();
+                                }
+                            }, 0);
+                        }),
+                );
+            } else {
                 completeCancel();
             }
         }
@@ -666,4 +701,3 @@ export function initializeStreamReadableEndClass(_context) {
     }
     return StreamReadableEnd;
 }
-//# sourceMappingURL=stream-readable.js.map

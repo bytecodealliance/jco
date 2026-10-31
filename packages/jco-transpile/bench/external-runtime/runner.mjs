@@ -52,9 +52,9 @@ export async function main(config) {
         coldNative[mode] = (performance.now() - start) * 1e6;
         const workloads = [];
         for (const [i, instance] of instances.entries()) {
-            workloads.push(await workload(artifact.parts[i], instance));
+            workloads.push(await workload(artifact.parts[i], instance, binding[`util${i}`]));
         }
-        prepared[mode] = { code, instantiate, workloads, artifact };
+        prepared[mode] = { code, instantiate, workloads, artifact, binding };
     }
 
     // Correctness-only runs return before calibration or timing.
@@ -80,7 +80,7 @@ export async function main(config) {
         const after = process.memoryUsage();
         for (const stores of globalThis.__retainedBenchmarkStores) {
             for (const [i, instance] of stores.entries()) {
-                await workload(prepared[mode].artifact.parts[i], instance);
+                await workload(prepared[mode].artifact.parts[i], instance, prepared[mode].binding[`util${i}`]);
             }
         }
         assert.equal(globalThis.__retainedBenchmarkStores.length, 64);
@@ -174,7 +174,7 @@ export async function main(config) {
             const fresh = state.instantiate();
             samples[mode].instantiate.push((performance.now() - start) * 1e6);
             for (const [i, instance] of fresh.entries()) {
-                await workload(state.artifact.parts[i], instance);
+                await workload(state.artifact.parts[i], instance, state.binding[`util${i}`]);
             }
             if (callable) {
                 samples[mode].call.push(await runCalls(mode, calls));

@@ -218,7 +218,8 @@ export async function buildArtifact(
             }
         }
         exports.push(`import { instantiate as instantiate${i} } from './${prefix}/${name}.js';
-export function create${i}(load, imports) { return instantiate${i}(name => load('${prefix}/' + name), imports); }`);
+export function create${i}(load, imports) { return instantiate${i}(name => load('${prefix}/' + name), imports); }
+${id === 'future-nested' ? `export { _util as util${i} } from './${prefix}/${name}.js';` : ''}`);
     }
 
     // Bundle the combined entry point, then measure compressed JavaScript sizes.

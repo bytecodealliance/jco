@@ -23,6 +23,7 @@ export default defineConfig({
             'test/vitest.ts',
             'test/vitest.extended.ts',
             'test/vitest.lts.ts',
+            'test/performance/**',
             'test/p3/ported/wasmtime/component-async/common.ts',
             'test/p3/helpers/**',
         ],

@@ -1,0 +1,57 @@
+;; A persistent stream pair transfers sixteen u32 values per call. Keeping the
+;; pair between calls bounds handles and global stream records during timing.
+(component
+  (type $stream-u32 (stream u32))
+  (core module $memory (memory (export "mem") 1))
+  (core instance $memory (instantiate $memory))
+  (core func $new (canon stream.new $stream-u32))
+  (core func $read (canon stream.read $stream-u32 async (memory (core memory $memory "mem"))))
+  (core func $write (canon stream.write $stream-u32 async (memory (core memory $memory "mem"))))
+  (core func $cancel (canon stream.cancel-read $stream-u32 async))
+  (core func $return (canon task.return (result u32)))
+  (core module $module
+    (import "" "mem" (memory 1))
+    (import "" "new" (func $new (result i64)))
+    (import "" "read" (func $read (param i32 i32 i32) (result i32)))
+    (import "" "write" (func $write (param i32 i32 i32) (result i32)))
+    (import "" "cancel" (func $cancel (param i32) (result i32)))
+    (import "" "return" (func $return (param i32)))
+    (global $reader (mut i32) (i32.const 0))
+    (global $writer (mut i32) (i32.const 0))
+    (func $ensure
+      (local $ends i64)
+      (if (i32.eqz (global.get $reader)) (then
+        (local.set $ends (call $new))
+        (global.set $reader (i32.wrap_i64 (local.get $ends)))
+        (global.set $writer (i32.wrap_i64 (i64.shr_u (local.get $ends) (i64.const 32)))))))
+    (func (export "copy-payload") (param $seed i32) (result i32)
+      (local $i i32) (local $sum i32)
+      (call $ensure)
+      (loop $fill
+        (i32.store (i32.add (i32.const 2048) (i32.mul (local.get $i) (i32.const 4))) (i32.add (local.get $seed) (local.get $i)))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br_if $fill (i32.lt_u (local.get $i) (i32.const 16))))
+      (if (i32.ne (call $read (global.get $reader) (i32.const 1024) (i32.const 16)) (i32.const -1)) (then unreachable))
+      (if (i32.ne (call $write (global.get $writer) (i32.const 2048) (i32.const 16)) (i32.const 256)) (then unreachable))
+      ;; Consume the queued read completion; both ends return to idle.
+      (if (i32.ne (call $read (global.get $reader) (i32.const 1024) (i32.const 16)) (i32.const 256)) (then unreachable))
+      (local.set $i (i32.const 0))
+      (loop $checksum
+        (local.set $sum (i32.add (local.get $sum) (i32.load (i32.add (i32.const 1024) (i32.mul (local.get $i) (i32.const 4))))))
+        (local.set $i (i32.add (local.get $i) (i32.const 1)))
+        (br_if $checksum (i32.lt_u (local.get $i) (i32.const 16))))
+      (call $return (local.get $sum)) (i32.const 0))
+    (func (export "cancel-read") (param $seed i32) (result i32)
+      (call $ensure)
+      (if (i32.ne (call $read (global.get $reader) (i32.const 1024) (i32.const 16)) (i32.const -1)) (then unreachable))
+      (if (i32.ne (call $cancel (global.get $reader)) (i32.const 2)) (then unreachable))
+      (call $return (i32.add (local.get $seed) (i32.const 2))) (i32.const 0))
+    (func (export "callback") (param i32 i32 i32) (result i32) (i32.const 0)))
+  (core instance $instance (instantiate $module (with "" (instance
+    (export "mem" (memory $memory "mem")) (export "new" (func $new))
+    (export "read" (func $read)) (export "write" (func $write))
+    (export "cancel" (func $cancel)) (export "return" (func $return))))))
+  (func (export "copy-payload") async (param "seed" u32) (result u32)
+    (canon lift (core func $instance "copy-payload") async (callback (core func $instance "callback")) (memory (core memory $memory "mem"))))
+  (func (export "cancel-read") async (param "seed" u32) (result u32)
+    (canon lift (core func $instance "cancel-read") async (callback (core func $instance "callback")) (memory (core memory $memory "mem")))))

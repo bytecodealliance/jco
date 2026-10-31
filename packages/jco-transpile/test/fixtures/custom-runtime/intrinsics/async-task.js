@@ -2,10 +2,22 @@ import { driverLoop, unpackCallbackResult } from './task-driver.js';
 export { driverLoop, unpackCallbackResult };
 import { debugLog } from './core-debug.js';
 import { promiseWithResolvers } from './core-promises.js';
-import { getCurrentTaskMeta, setCurrentTaskMeta, clearCurrentTaskMeta, withCurrentTaskMeta, withCurrentTaskMetaAsync, } from './task-context.js';
+import {
+    getCurrentTaskMeta,
+    setCurrentTaskMeta,
+    clearCurrentTaskMeta,
+    withCurrentTaskMeta,
+    withCurrentTaskMetaAsync,
+} from './task-context.js';
 import { coinFlip as _coinFlip, typeCheckValidI32 as checkI32, disposeHostValue, lookupMemories } from './core.js';
 import { getOrCreateAsyncState, checkMayLeave, postReturnTrap, recordTrap } from './component.js';
-import { getCurrentTask, createNewCurrentImplicitThread, createNewCurrentTask, clearCurrentThread, clearCurrentTask, } from './task-operations.js';
+import {
+    getCurrentTask,
+    createNewCurrentImplicitThread,
+    createNewCurrentTask,
+    clearCurrentThread,
+    clearCurrentTask,
+} from './task-operations.js';
 export { getCurrentTask, createNewCurrentImplicitThread, createNewCurrentTask, clearCurrentThread, clearCurrentTask };
 import { getCurrentThread, currentThreadOrThrow } from './thread-operations.js';
 export { getCurrentThread, currentThreadOrThrow };
@@ -37,7 +49,19 @@ export const initializeAsyncBlockingCallDepth = (platform) => {
     return new Global({ value: 'i32', mutable: true }, 0);
 };
 export function initializeAsyncTaskClass(context) {
-    const { lookup: _lookup, registers: _registers, clearing: _clearing, RuntimeError: _RuntimeError, AsyncSubtask: _Subtask, Waitable: _Waitable, events: _events, determinism: _determinism, FutureValue, scopeCounter: _scopeCounter, scopeTasks: _scopeTasks, } = context;
+    const {
+        lookup: _lookup,
+        registers: _registers,
+        clearing: _clearing,
+        RuntimeError: _RuntimeError,
+        AsyncSubtask: _Subtask,
+        Waitable: _Waitable,
+        events: _events,
+        determinism: _determinism,
+        FutureValue,
+        scopeCounter: _scopeCounter,
+        scopeTasks: _scopeTasks,
+    } = context;
     class AsyncTask {
         static _ID = 0n;
         static _HOST_THREAD_ID = 0;
@@ -124,13 +148,17 @@ export function initializeAsyncTaskClass(context) {
             // explicitly (they run host code nested inside the caller's
             // already-locked slice).
             this.#fields.callingWasmExport = opts?.callingWasmExport !== false;
-            const { promise: completionPromise, resolve: resolveCompletionPromise, reject: rejectCompletionPromise, } = promiseWithResolvers();
+            const {
+                promise: completionPromise,
+                resolve: resolveCompletionPromise,
+                reject: rejectCompletionPromise,
+            } = promiseWithResolvers();
             this.#fields.completionPromise = completionPromise;
             // A nested rejection can reach the root task while its Wasm
             // entrypoint is still suspended, before the export wrapper awaits
             // this promise. Mark it handled immediately while preserving the
             // original rejected promise for the eventual caller.
-            completionPromise.catch(() => { });
+            completionPromise.catch(() => {});
             let completionSettled = false;
             const settleCompletionPromise = () => {
                 if (completionSettled || !this.#fields.completionReady) {
@@ -139,14 +167,11 @@ export function initializeAsyncTaskClass(context) {
                 completionSettled = true;
                 if (this.#fields.errored !== null) {
                     rejectCompletionPromise(this.#fields.errored);
-                }
-                else if (this.#fields.rejected) {
+                } else if (this.#fields.rejected) {
                     rejectCompletionPromise(this.#fields.completionValue);
-                }
-                else if (this.#fields.preserveFutureResult && this.#fields.completionValue instanceof FutureValue) {
+                } else if (this.#fields.preserveFutureResult && this.#fields.completionValue instanceof FutureValue) {
                     this.#fields.completionValue.resolveAsValue(resolveCompletionPromise);
-                }
-                else {
+                } else {
                     resolveCompletionPromise(this.#fields.completionValue);
                 }
             };
@@ -427,8 +452,7 @@ export function initializeAsyncTaskClass(context) {
                 const cstate = getOrCreateAsyncState(_lookup, this.#fields.componentIdx);
                 if (!cstate.isExclusivelyLocked()) {
                     cstate.exclusiveLock(this.#fields.id);
-                }
-                else {
+                } else {
                     // A host-called sync export arriving while another
                     // task's slice holds the lock: synchronous entry
                     // cannot wait, and historically this entry silently
@@ -530,8 +554,7 @@ export function initializeAsyncTaskClass(context) {
             try {
                 entered = await this.#enterQueued(cstate, ticket);
                 return entered;
-            }
-            finally {
+            } finally {
                 // An entered task keeps the slot until its first slice ends
                 // (`endFirstSlice`): the next call is admitted once this one
                 // returned, blocked or trapped, as `Store.invoke` runs a call.
@@ -597,8 +620,7 @@ export function initializeAsyncTaskClass(context) {
             // with that trap.
             try {
                 cstate.throwIfInterrupted();
-            }
-            catch (err) {
+            } catch (err) {
                 cstate.exclusiveRelease(this.#fields.id);
                 this.setErrored(err);
                 return false;
@@ -836,8 +858,7 @@ export function initializeAsyncTaskClass(context) {
             for (const f of handlers) {
                 try {
                     f(taskValue);
-                }
-                catch (err) {
+                } catch (err) {
                     debugLog('[AsyncTask#onResolve] error during task resolve handler', err);
                     throw err;
                 }
@@ -887,8 +908,7 @@ export function initializeAsyncTaskClass(context) {
                         componentIdx: this.#fields.componentIdx,
                         fn: () => this.#fields.postReturnFn(taskValue),
                     });
-                }
-                catch (err) {
+                } catch (err) {
                     err = postReturnTrap(context.postReturn, this.#fields.componentIdx, err);
                     this.reject(err);
                     throw err;
@@ -959,7 +979,9 @@ export function initializeAsyncTaskClass(context) {
                 if (this.#fields.errored !== null) {
                     throw this.#fields.errored;
                 }
-                throw new Error(`(component [${this.#fields.componentIdx}]) task [${this.#fields.id}]  is already resolved (did you forget to wait for an import?)`);
+                throw new Error(
+                    `(component [${this.#fields.componentIdx}]) task [${this.#fields.id}]  is already resolved (did you forget to wait for an import?)`,
+                );
             }
             this.validateResourceBorrowScope();
             this.#fields.state = AsyncTask.State.RESOLVED;
@@ -998,13 +1020,16 @@ export function initializeAsyncTaskClass(context) {
             this.validateResourceBorrowScope();
             // Host (-1) tasks have no component instance (and so no async
             // state or exclusive lock); do not materialise one for them.
-            const state = this.#fields.componentIdx === -1 ? null : getOrCreateAsyncState(_lookup, this.#fields.componentIdx);
+            const state =
+                this.#fields.componentIdx === -1 ? null : getOrCreateAsyncState(_lookup, this.#fields.componentIdx);
             if (!state && this.#fields.componentIdx !== -1) {
                 throw new Error('missing async state for component [' + this.#fields.componentIdx + ']');
             }
             if (state && !args?.skipExclusiveLockCheck && !this.#fields.lockFreeEntry) {
                 if (this.needsExclusiveLock() && !state.exclusivelyLockedBy(this.#fields.id)) {
-                    throw new Error(`task [${this.#fields.id}] exit: component [${this.#fields.componentIdx}] should have been exclusively locked by it`);
+                    throw new Error(
+                        `task [${this.#fields.id}] exit: component [${this.#fields.componentIdx}] should have been exclusively locked by it`,
+                    );
                 }
             }
             // Ownership-checked: releases only this task's own hold (a
@@ -1017,8 +1042,7 @@ export function initializeAsyncTaskClass(context) {
             for (const f of this.#fields.onExitHandlers) {
                 try {
                     f();
-                }
-                catch (err) {
+                } catch (err) {
                     console.error('error during task exit handler', err);
                     throw err;
                 }
@@ -1075,7 +1099,9 @@ export function initializeAsyncTaskClass(context) {
                 waitable,
             });
             this.#fields.subtasks.push(newSubtask);
-            newSubtask.setTarget(`subtask (internal ID [${newSubtask.id()}], waitable [${waitable.idx()}], component [${componentIdx}])`);
+            newSubtask.setTarget(
+                `subtask (internal ID [${newSubtask.id()}], waitable [${waitable.idx()}], component [${componentIdx}])`,
+            );
             // The subtask gets a handle index in this task's table only once the
             // guest is given it (see `AsyncSubtask#ensureHandle`).
             return newSubtask;
@@ -1123,8 +1149,10 @@ export function initializeAsyncTaskClass(context) {
             // cancellation driver can yield BLOCKED while the host
             // operation is outstanding.
             const parentTask = this.#fields.parentSubtask?.getParentTask();
-            if (parentTask?.taskState() === AsyncTask.State.CANCEL_DELIVERED ||
-                (parentTask && !parentTask.hasCallback())) {
+            if (
+                parentTask?.taskState() === AsyncTask.State.CANCEL_DELIVERED ||
+                (parentTask && !parentTask.hasCallback())
+            ) {
                 parentTask.notifyProgress();
             }
             return this.#fields.entered;
@@ -1146,7 +1174,9 @@ export function initializeAsyncTaskClass(context) {
         }
         #checkThreadExit() {
             if (this.#fields.threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {
-                const err = new _RuntimeError(`(component [${this.#fields.componentIdx}]) task [${this.#fields.id}] exited without resolution`);
+                const err = new _RuntimeError(
+                    `(component [${this.#fields.componentIdx}]) task [${this.#fields.id}] exited without resolution`,
+                );
                 throw this.#fields.componentIdx === -1
                     ? err
                     : recordTrap(context.traps, this.#fields.componentIdx, err);
@@ -1465,11 +1495,9 @@ export function initializeAsyncSubtaskClass(context) {
             }
             if (this.#state === _a.State.STARTING) {
                 this.#state = _a.State.CANCELLED_BEFORE_STARTED;
-            }
-            else if (this.#state === _a.State.STARTED) {
+            } else if (this.#state === _a.State.STARTED) {
                 this.#state = _a.State.CANCELLED_BEFORE_RETURNED;
-            }
-            else {
+            } else {
                 throw new Error('cannot reject a completed subtask');
             }
             this.#resolved = true;
@@ -1496,15 +1524,13 @@ export function initializeAsyncSubtaskClass(context) {
             if (subtaskValue === null && this.#cancelRequested) {
                 if (this.#state === _a.State.STARTING) {
                     this.#state = _a.State.CANCELLED_BEFORE_STARTED;
-                }
-                else {
+                } else {
                     if (this.#state !== _a.State.STARTED) {
                         throw new Error('resolved subtask must have been started before cancellation');
                     }
                     this.#state = _a.State.CANCELLED_BEFORE_RETURNED;
                 }
-            }
-            else {
+            } else {
                 if (this.#state !== _a.State.STARTED) {
                     throw new Error('resolved subtask must have been started before completion');
                 }
@@ -1516,8 +1542,7 @@ export function initializeAsyncSubtaskClass(context) {
             for (const f of this.#onResolveHandlers) {
                 try {
                     f(subtaskValue);
-                }
-                catch (err) {
+                } catch (err) {
                     console.error('error during subtask resolve handler', err);
                     throw err;
                 }
@@ -1525,17 +1550,20 @@ export function initializeAsyncSubtaskClass(context) {
             const callMetadata = this.getCallMetadata();
             // TODO(fix): we should be able to easily have the caller's meomry
             // to lower into here, but it's not present in PrepareCall
-            const memory = callMetadata.memory ??
+            const memory =
+                callMetadata.memory ??
                 this.#parentTask?.getReturnMemory() ??
                 lookupMemories(_memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
             // NOTE: cancelled resolutions carry no value, so nothing is lowered
             const returned = this.#state === _a.State.RETURNED;
-            if (returned &&
+            if (
+                returned &&
                 callMetadata &&
                 !callMetadata.returnFn &&
                 (this.isAsync || callMetadata.funcTypeIsAsync) &&
                 callMetadata.resultPtr &&
-                memory) {
+                memory
+            ) {
                 const { resultPtr, realloc } = callMetadata;
                 const lowers = callMetadata.lowers; // may have been updated in task.return of the child
                 if (lowers && lowers.length > 0) {
@@ -1561,9 +1589,11 @@ export function initializeAsyncSubtaskClass(context) {
                             throw new Error('unexpectedly received non-self Subtask from handle removal');
                         }
                         this.drop();
-                    }
-                    catch (err) {
-                        debugLog('[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion', err);
+                    } catch (err) {
+                        debugLog(
+                            '[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion',
+                            err,
+                        );
                     }
                 }
             }
@@ -1581,9 +1611,11 @@ export function initializeAsyncSubtaskClass(context) {
             if (this.#state === _a.State.STARTING || this.#state === _a.State.STARTED) {
                 return false;
             }
-            if (this.#state === _a.State.RETURNED ||
+            if (
+                this.#state === _a.State.RETURNED ||
                 this.#state === _a.State.CANCELLED_BEFORE_STARTED ||
-                this.#state === _a.State.CANCELLED_BEFORE_RETURNED) {
+                this.#state === _a.State.CANCELLED_BEFORE_RETURNED
+            ) {
                 return true;
             }
             throw new Error('unrecognized internal Subtask state [' + this.#state + ']');
@@ -1677,7 +1709,12 @@ export function contextSet(_context, ctx, value) {
     // task, whose context FACT temporarily saves and restores.
     let currentThreadMeta = getCurrentTaskMeta(_context.registers, ctx.componentIdx);
     let threadMeta = currentThreadMeta
-        ? getCurrentThread(_context, currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
+        ? getCurrentThread(
+              _context,
+              currentThreadMeta.componentIdx,
+              currentThreadMeta.threadID,
+              currentThreadMeta.taskID,
+          )
         : undefined;
     // A post-return may run after the callee has exited. Its
     // per-component register can therefore name a task which is
@@ -1685,11 +1722,18 @@ export function contextSet(_context, ctx, value) {
     if (!threadMeta) {
         currentThreadMeta = getCurrentTaskMeta(_context.registers);
         threadMeta = currentThreadMeta
-            ? getCurrentThread(_context, currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
+            ? getCurrentThread(
+                  _context,
+                  currentThreadMeta.componentIdx,
+                  currentThreadMeta.threadID,
+                  currentThreadMeta.taskID,
+              )
             : undefined;
     }
     if (!currentThreadMeta) {
-        throw new Error(`missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context set`);
+        throw new Error(
+            `missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context set`,
+        );
     }
     if (!threadMeta) {
         throw new Error('failed to retrieve current thread');
@@ -1722,7 +1766,12 @@ export function contextGet(_context, ctx) {
     // task, whose context FACT temporarily saves and restores.
     let currentThreadMeta = getCurrentTaskMeta(_context.registers, ctx.componentIdx);
     let threadMeta = currentThreadMeta
-        ? getCurrentThread(_context, currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
+        ? getCurrentThread(
+              _context,
+              currentThreadMeta.componentIdx,
+              currentThreadMeta.threadID,
+              currentThreadMeta.taskID,
+          )
         : undefined;
     // A post-return may run after the callee has exited. Its
     // per-component register can therefore name a task which is
@@ -1730,11 +1779,18 @@ export function contextGet(_context, ctx) {
     if (!threadMeta) {
         currentThreadMeta = getCurrentTaskMeta(_context.registers);
         threadMeta = currentThreadMeta
-            ? getCurrentThread(_context, currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)
+            ? getCurrentThread(
+                  _context,
+                  currentThreadMeta.componentIdx,
+                  currentThreadMeta.threadID,
+                  currentThreadMeta.taskID,
+              )
             : undefined;
     }
     if (!currentThreadMeta) {
-        throw new Error(`missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context get`);
+        throw new Error(
+            `missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context get`,
+        );
     }
     if (!threadMeta) {
         throw new Error('failed to retrieve current thread');
@@ -1870,7 +1926,9 @@ export function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowO
     }
     const subtask = state.handles.get(subtaskRep);
     if (!(subtask instanceof _context.AsyncSubtask)) {
-        throw new _context.RuntimeError('missing/invalid subtask [' + subtaskRep + '] specified for cancel in component instance');
+        throw new _context.RuntimeError(
+            'missing/invalid subtask [' + subtaskRep + '] specified for cancel in component instance',
+        );
     }
     if (subtask.resolveDelivered()) {
         throw new _context.RuntimeError('`subtask.cancel` called after terminal status delivered');
@@ -1914,9 +1972,9 @@ export function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowO
                 }
                 return taskMeta.task
                     .waitUntil({
-                    cancellable: false,
-                    readyFn: () => subtask.isResolved(),
-                })
+                        cancellable: false,
+                        readyFn: () => subtask.isResolved(),
+                    })
                     .then(finishCancel);
             });
         }
@@ -1927,9 +1985,9 @@ export function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowO
         }
         return taskMeta.task
             .waitUntil({
-            cancellable: false,
-            readyFn: () => subtask.isResolved(),
-        })
+                cancellable: false,
+                readyFn: () => subtask.isResolved(),
+            })
             .then(finishCancel);
     }
     let cancellationWillCompleteAsync = false;
@@ -1943,8 +2001,10 @@ export function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowO
             // thread in the component instance may run here.
             if (childTask?.hasCallback()) {
                 const childState = getOrCreateAsyncState(_context.lookup, childTask.componentIdx());
-                if (childState.suspendedTaskCancellable(childTask.id()) &&
-                    childState.suspendedTaskReady(childTask.id())) {
+                if (
+                    childState.suspendedTaskCancellable(childTask.id()) &&
+                    childState.suspendedTaskReady(childTask.id())
+                ) {
                     const progress = childTask.waitForProgress();
                     if (!childState.resumeTaskByID(childTask.id())) {
                         throw new Error('failed to resume cancelled callback task');
@@ -1979,9 +2039,9 @@ export function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowO
             }
             return taskMeta.task
                 .waitUntil({
-                cancellable: false,
-                readyFn: () => subtask.isResolved(),
-            })
+                    cancellable: false,
+                    readyFn: () => subtask.isResolved(),
+                })
                 .then(finishCancel);
         }
     }
@@ -2013,7 +2073,19 @@ export function taskCancel(_context, componentIdx) {
 // LowerImport
 export function lowerImport(_context, args, ...params) {
     debugLog('[lowerImport()] args', { args, params });
-    const { componentIdx, isAsync, isManualAsync, resultLowerFns, hasResultPointer, funcTypeIsAsync, memoryIdx, getMemoryFn, getReallocFn, stringEncoding, importFn, } = args;
+    const {
+        componentIdx,
+        isAsync,
+        isManualAsync,
+        resultLowerFns,
+        hasResultPointer,
+        funcTypeIsAsync,
+        memoryIdx,
+        getMemoryFn,
+        getReallocFn,
+        stringEncoding,
+        importFn,
+    } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
     const { taskID, threadID } = getCurrentTaskMeta(_context.registers, componentIdx);
     const taskMeta = getCurrentTask(_context, componentIdx, taskID);
@@ -2087,8 +2159,7 @@ export function lowerImport(_context, args, ...params) {
                     await task.suspendUntil({ readyFn: () => subtask.isResolved() });
                 }
                 resolve(subtask.getResult());
-            }
-            catch (err) {
+            } catch (err) {
                 reject(err);
             }
         });
@@ -2162,8 +2233,7 @@ export function lowerImport(_context, args, ...params) {
             }
             subtask.drop();
             res = subtaskState;
-        }
-        else {
+        } else {
             res = (Number(subtask.ensureHandle()) << 4) | subtaskState;
         }
         debugLog('[lowerImport()] async-lowered import return', {
@@ -2194,8 +2264,7 @@ export function lowerImport(_context, args, ...params) {
                 });
             }
             return finishAsyncLower();
-        }
-        catch (err) {
+        } catch (err) {
             task.setErrored(err);
             task.reject(err);
             throw err;
@@ -2223,8 +2292,7 @@ export function lowerImport(_context, args, ...params) {
             if (requiresManualAsyncResult) {
                 manualAsyncResult.resolve(subtask.getResult());
             }
-        }
-        catch (err) {
+        } catch (err) {
             debugLog('[lowerImport()] import fn error:', err);
             if (requiresManualAsyncResult) {
                 manualAsyncResult.reject(err);
@@ -2248,8 +2316,7 @@ export function lowerImport(_context, args, ...params) {
             // JSPI-suspended guest suspended forever).
             try {
                 resolve(finishAsyncLower());
-            }
-            catch (err) {
+            } catch (err) {
                 reject(err);
             }
         }, 0);
@@ -2258,7 +2325,19 @@ export function lowerImport(_context, args, ...params) {
 // LowerImportBackwardsCompat
 export function lowerImportBackwardsCompat(_context, args, ...params) {
     debugLog('[lowerImportBackwardsCompat()] args', { args, params });
-    const { componentIdx, isAsync, isManualAsync, resultLowerFns, hasResultPointer, funcTypeIsAsync, memoryIdx, getMemoryFn, getReallocFn, importFn, stringEncoding, } = args;
+    const {
+        componentIdx,
+        isAsync,
+        isManualAsync,
+        resultLowerFns,
+        hasResultPointer,
+        funcTypeIsAsync,
+        memoryIdx,
+        getMemoryFn,
+        getReallocFn,
+        importFn,
+        stringEncoding,
+    } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
     const meta = getCurrentTaskMeta(_context.registers, componentIdx);
     let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
@@ -2277,7 +2356,11 @@ export function lowerImportBackwardsCompat(_context, args, ...params) {
         if (funcTypeIsAsync || (isAsync && !isManualAsync)) {
             throw new Error('p3 async wasm exports cannot use backwards compat auto-task init');
         }
-        const { task: newTask, taskID: newTaskID, threadID: newThreadID, } = createNewCurrentImplicitThread(_context.creation, {
+        const {
+            task: newTask,
+            taskID: newTaskID,
+            threadID: newThreadID,
+        } = createNewCurrentImplicitThread(_context.creation, {
             componentIdx,
             isAsync,
             isManualAsync,
@@ -2372,8 +2455,7 @@ export function lowerImportBackwardsCompat(_context, args, ...params) {
                     await task.suspendUntil({ readyFn: () => subtask.isResolved() });
                 }
                 resolve(subtask.getResult());
-            }
-            catch (err) {
+            } catch (err) {
                 reject(err);
             }
         });
@@ -2418,10 +2500,35 @@ export function lowerImportBackwardsCompat(_context, args, ...params) {
     // lifting/lowering (async ABI did not exist when JSPI integratiton was
     // initially merged to enable asynchronously returning values from the host)
     //
-    const requiresManualAsyncResult = !isAsync && !funcTypeIsAsync && isManualAsync;
-    let manualAsyncResult;
-    if (requiresManualAsyncResult) {
-        manualAsyncResult = promiseWithResolvers();
+    // Call immediately: synchronous host results must remain usable by callers
+    // that cannot block, including initialization and resource destructors.
+    if (!isAsync && !funcTypeIsAsync && isManualAsync) {
+        if (createdTask) {
+            createdTask.enterSync();
+        }
+        try {
+            const result = importFn(...params);
+            const isPromise =
+                result !== null &&
+                (typeof result === 'object' || typeof result === 'function') &&
+                typeof result.then === 'function';
+            if (createdTask) {
+                createdTask.resolve([isPromise ? undefined : result]);
+            }
+            if (!isPromise) {
+                return subtask.getResult();
+            }
+            return Promise.resolve(result).then(() => subtask.getResult());
+        } catch (error) {
+            if (createdTask) {
+                createdTask.reject(error);
+            }
+            throw error;
+        } finally {
+            if (createdTask) {
+                createdTask.exit();
+            }
+        }
     }
     queueMicrotask(async () => {
         try {
@@ -2430,26 +2537,15 @@ export function lowerImportBackwardsCompat(_context, args, ...params) {
                 await createdTask.enter();
             }
             const asyncRes = await importFn(...params);
-            if (requiresManualAsyncResult) {
-                manualAsyncResult.resolve(subtask.getResult());
-            }
             if (createdTask) {
                 createdTask.resolve([asyncRes]);
             }
-        }
-        catch (err) {
+        } catch (err) {
             debugLog('[lowerImportBackwardsCompat()] import fn error:', err);
-            if (requiresManualAsyncResult) {
-                manualAsyncResult.reject(err);
-                return;
-            }
             task.setErrored(err);
             task.reject(err);
         }
     });
-    if (requiresManualAsyncResult) {
-        return manualAsyncResult.promise;
-    }
     debugLog('[lowerImportBackwardsCompat()] async-lowered import return', {
         fnName: importFn.fnName,
         componentIdx,
@@ -2461,7 +2557,13 @@ export function lowerImportBackwardsCompat(_context, args, ...params) {
     return (Number(subtask.ensureHandle()) << 4) | subtaskState;
 }
 // EnterSymmetricSyncGuestCall
-export function symmetricSyncGuestCallEnter(_context, callerComponentIdx, calleeIsAsync, calleeComponentIdx, syncOnly = false) {
+export function symmetricSyncGuestCallEnter(
+    _context,
+    callerComponentIdx,
+    calleeIsAsync,
+    calleeComponentIdx,
+    syncOnly = false,
+) {
     debugLog('[symmetricSyncGuestCallEnter()] args', {
         callerComponentIdx,
         calleeIsAsync,
@@ -2627,8 +2729,7 @@ export function initializeAsyncThreadClass(context) {
             if (opts.startFn) {
                 this.#startFn = opts.startFn;
                 this.#state = AsyncThread.State.NOT_STARTED;
-            }
-            else {
+            } else {
                 this.#state = AsyncThread.State.RUNNING;
             }
         }
@@ -2696,8 +2797,7 @@ export function initializeAsyncThreadClass(context) {
                     return false;
                 }
                 return !!keepGoing;
-            }
-            finally {
+            } finally {
                 if (reacquireLock && !cstate.exclusivelyLockedBy(task.id())) {
                     await cstate.acquireExclusiveLock(task.id());
                 }
@@ -2724,22 +2824,22 @@ export function initializeAsyncThreadClass(context) {
                 },
             })
                 .then(() => {
-                this.#state = AsyncThread.State.COMPLETED;
-                this.#task.removeThread(this);
-            })
+                    this.#state = AsyncThread.State.COMPLETED;
+                    this.#task.removeThread(this);
+                })
                 .catch((err) => {
-                err = recordTrap(context.traps, this.#componentIdx, err);
-                this.#state = AsyncThread.State.COMPLETED;
-                debugLog('[AsyncThread#start()] spawned thread errored', {
-                    threadID: this.#id,
-                    taskID: this.#task.id(),
-                    componentIdx: this.#componentIdx,
-                    err,
+                    err = recordTrap(context.traps, this.#componentIdx, err);
+                    this.#state = AsyncThread.State.COMPLETED;
+                    debugLog('[AsyncThread#start()] spawned thread errored', {
+                        threadID: this.#id,
+                        taskID: this.#task.id(),
+                        componentIdx: this.#componentIdx,
+                        err,
+                    });
+                    this.#task.setErrored(err);
+                    this.#task.reject(err);
+                    this.#task.removeThread(this);
                 });
-                this.#task.setErrored(err);
-                this.#task.reject(err);
-                this.#task.removeThread(this);
-            });
         }
     }
     return AsyncThread;
@@ -2761,11 +2861,11 @@ export function asyncYield(_context, ctx) {
     // shortcut.
     return thread
         .suspend({
-        // Cancellation is delivered only while an implicit
-        // callback thread is parked in its event loop.
-        cancellable: false,
-        readyFn: () => true,
-    })
+            // Cancellation is delivered only while an implicit
+            // callback thread is parked in its event loop.
+            cancellable: false,
+            readyFn: () => true,
+        })
         .then((keepGoing) => (keepGoing ? 0 : 1));
 }
 export function threadIndex(_context, componentIdx) {
@@ -2805,8 +2905,7 @@ export function threadNewIndirect(_context, ctx, startFuncIdx, context) {
     if (!_context.start.checked.has(startFuncRef)) {
         try {
             new _context.start.platform.Instance(_context.start.typeCheck, { '': { f: startFuncRef } });
-        }
-        catch (err) {
+        } catch (err) {
             if (!(err instanceof _context.start.platform.LinkError)) {
                 throw err;
             }
@@ -2816,11 +2915,13 @@ export function threadNewIndirect(_context, ctx, startFuncIdx, context) {
     }
     const promisingStartFuncRef = _context.start.platform.promising(startFuncRef);
     const { task } = currentThreadOrThrow(_context, componentIdx);
-    const newThread = task.addThread(new _context.AsyncThread({
-        componentIdx,
-        task,
-        startFn: () => promisingStartFuncRef(context),
-    }));
+    const newThread = task.addThread(
+        new _context.AsyncThread({
+            componentIdx,
+            task,
+            startFn: () => promisingStartFuncRef(context),
+        }),
+    );
     // Suspended, not ready: only an explicit `thread.resume-later`
     // (never the tick loop's own readiness polling) may wake it.
     getOrCreateAsyncState(_context.lookup, componentIdx).suspendThread({
@@ -2935,10 +3036,11 @@ export function initializeThreadStartChecks(platform) {
     return {
         platform,
         checked: new WeakSet(),
-        typeCheck: new platform.Module(new Uint8Array([
-            0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60, 0x01, 0x7f, 0x00, 0x02, 0x06,
-            0x01, 0x00, 0x01, 0x66, 0x00, 0x00,
-        ])),
+        typeCheck: new platform.Module(
+            new Uint8Array([
+                0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60, 0x01, 0x7f, 0x00, 0x02, 0x06,
+                0x01, 0x00, 0x01, 0x66, 0x00, 0x00,
+            ]),
+        ),
     };
 }
-//# sourceMappingURL=async-task.js.map

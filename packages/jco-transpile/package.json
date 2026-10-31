@@ -68,6 +68,7 @@
         "test:build:components": "pnpm run -w build:test:components",
         "test": "vitest run -c test/vitest.ts",
         "test:extended": "vitest run -c test/vitest.extended.ts",
+        "test:perf:external-runtime": "tsc -p bench/external-runtime/tsconfig.json && vitest run -c bench/external-runtime/vitest.config.ts test/performance/external-runtime.ts",
         "test:lts": "vitest run -c test/vitest.lts.ts",
         "prepack": "pnpm run build:release",
         "test:external-runtime": "node scripts/test-external-runtime.mjs -c test/vitest.ts",

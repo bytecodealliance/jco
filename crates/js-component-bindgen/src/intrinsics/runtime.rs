@@ -222,7 +222,7 @@ mod tests {
     }
 
     #[test]
-    fn external_runtime_imports_only_its_exports() {
+    fn external_runtime_imports_selected_families() {
         assert_eq!(
             binding(&ExternalRuntime, TABLE_GET),
             IntrinsicBinding::Imported {
@@ -233,9 +233,11 @@ mod tests {
         for intrinsic in SAMPLES {
             assert_eq!(
                 binding(&ExternalRuntime, intrinsic),
-                binding(&InlineRuntime, intrinsic)
+                IntrinsicBinding::Imported {
+                    local_name: intrinsic.name()
+                }
             );
-            assert!(!render_with(&ExternalRuntime, intrinsic).is_empty());
+            assert!(render_with(&ExternalRuntime, intrinsic).is_empty());
         }
     }
 
@@ -273,7 +275,7 @@ mod tests {
             String::from(output)
         };
         assert!(prelude(&InlineRuntime, BTreeSet::from([TABLE_GET])).is_empty());
-        assert!(prelude(&ExternalRuntime, BTreeSet::from(SAMPLES)).is_empty());
+        assert!(prelude(&ExternalRuntime, BTreeSet::new()).is_empty());
         let prelude = prelude(&ExternalRuntime, BTreeSet::from([TABLE_GET, SAMPLES[0]]));
         assert_eq!(prelude.matches("_jcoRuntimeApiVersion !== 1").count(), 1);
         assert_eq!(

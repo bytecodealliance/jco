@@ -121,8 +121,7 @@ export function initializeStreamWritableEndClass(_context) {
                     Array.isArray(v) || (ArrayBuffer.isView(v) && 'length' in v && typeof v.length === 'number')
                         ? Array.from(v)
                         : [v];
-            }
-            else {
+            } else {
                 data = [v];
             }
             return this.writeMany(data);
@@ -145,15 +144,13 @@ export function initializeStreamWritableEndClass(_context) {
                     const p = this.#result.promise;
                     this.#result = newResult;
                     await p;
-                }
-                catch (err) {
+                } catch (err) {
                     debugLog('[StreamWritableEnd#writeMany()] error waiting for previous write', err);
                     // If the previous write we were waiting on errors for any reason,
                     // we can ignore it and attempt to continue with this write
                     // which may also fail for a similar reason
                 }
-            }
-            else {
+            } else {
                 this.#result = newResult;
             }
             const { promise, resolve, reject } = newResult;
@@ -171,7 +168,9 @@ export function initializeStreamWritableEndClass(_context) {
                     elemMeta: this.#elemMeta,
                     data,
                 });
-                buffer.setTarget(`host stream write buffer (id [${bufferID}], count [${count}], data len [${data.length}])`);
+                buffer.setTarget(
+                    `host stream write buffer (id [${bufferID}], count [${count}], data len [${data.length}])`,
+                );
                 let packedResult;
                 const copyPromise = this.copy({
                     isAsync: true,
@@ -251,8 +250,7 @@ export function initializeStreamWritableEndClass(_context) {
                 // If the write was not blocked, we can resolve right away
                 this.#result = null;
                 resolve();
-            }
-            catch (err) {
+            } catch (err) {
                 debugLog('[StreamWritableEnd#write()] error', err);
                 reject(err);
             }
@@ -299,10 +297,14 @@ export function initializeStreamWritableEndClass(_context) {
             // we're doing a inter-component write, and only unit or numeric types are allowed
             const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
             // End.copy checks the payload type even when either buffer is empty.
-            if (this.#pendingBufferMeta.componentIdx === buffer.componentIdx() &&
+            if (
+                this.#pendingBufferMeta.componentIdx === buffer.componentIdx() &&
                 buffer.componentIdx() !== -1 &&
-                !pendingElemIsNoneOrNumeric) {
-                throw new _context.RuntimeError('cannot read from and write to intra-component future/stream with non-numeric payload');
+                !pendingElemIsNoneOrNumeric
+            ) {
+                throw new _context.RuntimeError(
+                    'cannot read from and write to intra-component future/stream with non-numeric payload',
+                );
             }
             // If original capacities were zero, we're dealing with a unit stream,
             // a write to the unit stream is instantly copied without any work.
@@ -335,11 +337,15 @@ export function initializeStreamWritableEndClass(_context) {
                     return;
                 }
                 const numElements = Math.min(buffer.remaining(), this.#pendingBufferMeta.buffer.remaining());
-                const transferResources = buffer.componentIdx() !== -1 && this.#pendingBufferMeta.buffer.componentIdx() !== -1;
+                const transferResources =
+                    buffer.componentIdx() !== -1 && this.#pendingBufferMeta.buffer.componentIdx() !== -1;
                 this.#pendingBufferMeta.buffer.write(buffer.read(numElements, { transferResources }), {
                     transferResources,
                 });
-                this.#pendingBufferMeta.onCopyFn(() => this.resetPendingBufferMeta(), shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
+                this.#pendingBufferMeta.onCopyFn(
+                    () => this.resetPendingBufferMeta(),
+                    shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,
+                );
                 transferred = true;
             }
             onCopyDoneFn(shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
@@ -383,7 +389,9 @@ export function initializeStreamWritableEndClass(_context) {
                 });
                 bufferID = newBufferMeta.id;
                 buffer = newBufferMeta.buffer;
-                buffer.setTarget(`component [${componentIdx}] StreamWritableEnd buffer (id [${bufferID}], count [${count}], eventCode [${eventCode}])`);
+                buffer.setTarget(
+                    `component [${componentIdx}] StreamWritableEnd buffer (id [${bufferID}], count [${count}], eventCode [${eventCode}])`,
+                );
             }
             const streamEnd = this;
             const processFn = (result, reclaimBufferFn, rejectedLength) => {
@@ -393,15 +401,16 @@ export function initializeStreamWritableEndClass(_context) {
                 // Copy events are materialized lazily. Cancellation may begin
                 // after progress queued a COMPLETED event but before the guest
                 // consumed it; preserve the count and report the cancellation.
-                if (result === StreamEnd.CopyResult.COMPLETED &&
+                if (
+                    result === StreamEnd.CopyResult.COMPLETED &&
                     streamEnd.getCopyState() === StreamEnd.CopyState.CANCELLING_COPY &&
-                    !streamEnd.hasHostInject()) {
+                    !streamEnd.hasHostInject()
+                ) {
                     result = StreamEnd.CopyResult.CANCELLED;
                 }
                 if (result === StreamEnd.CopyResult.DROPPED) {
                     streamEnd.setCopyState(StreamEnd.CopyState.DONE);
-                }
-                else {
+                } else {
                     streamEnd.setCopyState(StreamEnd.CopyState.IDLE);
                 }
                 if (result < 0 || result >= 16) {
@@ -437,7 +446,22 @@ export function initializeStreamWritableEndClass(_context) {
             return { bufferID, buffer, onCopyFn, onCopyDoneFn };
         }
         copy(args) {
-            const { isAsync, memory, componentIdx, ptr, count, eventCode, initial, skipStateCheck, stringEncoding, reallocFn, rejectLength, elemMeta, dropAfterCopy, deferSyncFinish, } = args;
+            const {
+                isAsync,
+                memory,
+                componentIdx,
+                ptr,
+                count,
+                eventCode,
+                initial,
+                skipStateCheck,
+                stringEncoding,
+                reallocFn,
+                rejectLength,
+                elemMeta,
+                dropAfterCopy,
+                deferSyncFinish,
+            } = args;
             void reallocFn;
             if (eventCode === undefined) {
                 throw new TypeError('missing/invalid event code');
@@ -452,7 +476,9 @@ export function initializeStreamWritableEndClass(_context) {
                 copyElemMeta.stringEncoding = stringEncoding;
             }
             if (copyElemMeta.stringEncoding && stringEncoding && copyElemMeta.stringEncoding !== stringEncoding) {
-                throw new Error(`inconsistent string encoding (previously [${copyElemMeta.stringEncoding}], now [${stringEncoding}])`);
+                throw new Error(
+                    `inconsistent string encoding (previously [${copyElemMeta.stringEncoding}], now [${stringEncoding}])`,
+                );
             }
             if (args.getReallocFn && copyElemMeta.getReallocFn === undefined) {
                 copyElemMeta.getReallocFn = args.getReallocFn;
@@ -547,13 +573,16 @@ export function initializeStreamWritableEndClass(_context) {
                     if (injectedWritePromise) {
                         // Do not await here: the injected write may depend on sibling
                         // guest work running, so the canonical read must return BLOCKED.
-                        injectedWritePromise.then((cleanupFn) => cleanupFn(), (err) => this.setPendingEvent(() => {
-                            throw err;
-                        }));
+                        injectedWritePromise.then(
+                            (cleanupFn) => cleanupFn(),
+                            (err) =>
+                                this.setPendingEvent(() => {
+                                    throw err;
+                                }),
+                        );
                     }
                     return asyncBlockedCode;
-                }
-                else {
+                } else {
                     this.setCopyState(StreamEnd.CopyState.SYNC_COPYING);
                     const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
                     if (!taskMeta) {
@@ -566,29 +595,33 @@ export function initializeStreamWritableEndClass(_context) {
                     const streamEnd = this;
                     return task
                         .suspendUntil({
-                        readyFn: () => streamEnd.hasPendingEvent(),
-                    })
+                            readyFn: () => streamEnd.hasPendingEvent(),
+                        })
                         .then(async () => {
-                        if (deferSyncFinish) {
-                            await Promise.resolve();
-                        }
-                        if (!injectedWritePromise) {
-                            return finishCopy();
-                        }
-                        return injectedWritePromise.then((cleanupFn) => {
-                            cleanupFn();
-                            return finishCopy();
+                            if (deferSyncFinish) {
+                                await Promise.resolve();
+                            }
+                            if (!injectedWritePromise) {
+                                return finishCopy();
+                            }
+                            return injectedWritePromise.then((cleanupFn) => {
+                                cleanupFn();
+                                return finishCopy();
+                            });
                         });
-                    });
                 }
             }
             if (!injectedWritePromise) {
                 return finishCopy();
             }
             if (isAsync) {
-                injectedWritePromise.then((cleanupFn) => cleanupFn(), (err) => this.setPendingEvent(() => {
-                    throw err;
-                }));
+                injectedWritePromise.then(
+                    (cleanupFn) => cleanupFn(),
+                    (err) =>
+                        this.setPendingEvent(() => {
+                            throw err;
+                        }),
+                );
                 return finishCopy();
             }
             return injectedWritePromise.then((cleanupFn) => {
@@ -650,18 +683,20 @@ export function initializeStreamWritableEndClass(_context) {
                 // suspended in a synchronous cancel resumes only when it runs.
                 // Count it like a host operation so a deadlock check scheduled
                 // before this timer does not report the wait as a deadlock.
-                trackHostOperation(_context.tracking, () => new Promise((resolve) => {
-                    setTimeout(() => {
-                        try {
-                            completeCancel();
-                        }
-                        finally {
-                            resolve();
-                        }
-                    }, 0);
-                }));
-            }
-            else {
+                trackHostOperation(
+                    _context.tracking,
+                    () =>
+                        new Promise((resolve) => {
+                            setTimeout(() => {
+                                try {
+                                    completeCancel();
+                                } finally {
+                                    resolve();
+                                }
+                            }, 0);
+                        }),
+                );
+            } else {
                 completeCancel();
             }
         }
@@ -685,4 +720,3 @@ export function initializeStreamWritableEndClass(_context) {
     }
     return StreamWritableEnd;
 }
-//# sourceMappingURL=stream-writable.js.map
