@@ -86,6 +86,10 @@
         "./intrinsics/future": {
             "types": "./dist/intrinsics/future.d.ts",
             "default": "./dist/intrinsics/future.js"
+        },
+        "./intrinsics/stream": {
+            "types": "./dist/intrinsics/stream.d.ts",
+            "default": "./dist/intrinsics/stream.js"
         }
     },
     "scripts": {

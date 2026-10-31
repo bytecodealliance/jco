@@ -3766,14 +3766,15 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-                let gen_stream_host_inject_fn = self.intrinsic(Intrinsic::AsyncStream(
+                let gen_stream_host_inject_fn = self.intrinsic_call_prefix(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::GenStreamHostInjectFn,
                 ));
-                let gen_read_fn_from_lowerable_stream_fn = self.intrinsic(Intrinsic::AsyncStream(
-                    AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
+                let gen_read_fn_from_lowerable_stream_fn = self.intrinsic_call_prefix(
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream),
+                );
+                let create_stream_fn = self.intrinsic_call_prefix(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::CreateStream,
                 ));
-                let create_stream_fn =
-                    self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream));
 
                 // TODO(???): A component could end up receiving a stream that it outputted,
                 // and the below would fail (imported: false)?
@@ -3896,7 +3897,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         const cstate{tmp} = {get_or_create_async_state_fn}{component_idx_expr});
                         if (!cstate{tmp}) {{ throw new Error(`missing component state for component [{component_idx_expr}]`); }}
 
-                        const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = {create_stream_fn}(cstate{tmp}, {{
+                        const {{ writeEnd: hostWriteEnd{tmp}, readEnd: readEnd{tmp} }} = {create_stream_fn}cstate{tmp}, {{
                             tableIdx: {stream_table_idx},
                             elemMeta: {{
                                 liftFn: {lift_fn_js},
@@ -3915,9 +3916,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             }},
                         }});
 
-                        const readFn{tmp} = {gen_read_fn_from_lowerable_stream_fn}({stream_arg});
+                        const readFn{tmp} = {gen_read_fn_from_lowerable_stream_fn}{stream_arg});
 
-                        const hostInjectFn{tmp} = {gen_stream_host_inject_fn}({{
+                        const hostInjectFn{tmp} = {gen_stream_host_inject_fn}{{
                             readFn: readFn{tmp},
                             hostWriteEnd: hostWriteEnd{tmp},
                             readEnd: readEnd{tmp},
@@ -3933,7 +3934,7 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::StreamLift { payload, ty } => {
-                let stream_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncStream(
+                let stream_new_from_lift_fn = self.intrinsic_call_prefix(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamNewFromLift,
                 ));
 
@@ -4027,7 +4028,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         uwriteln!(
                             self.src,
                             r#"
-                              const {result_var} = {stream_new_from_lift_fn}({{
+                              const {result_var} = {stream_new_from_lift_fn}{{
                                   componentIdx: {component_idx_expr},
                                   streamTableIdx: {stream_table_idx},
                                   streamEndWaitableIdx: {arg_stream_end_idx},

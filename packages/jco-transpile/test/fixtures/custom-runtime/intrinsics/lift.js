@@ -1,3 +1,4 @@
+import { getStreamEnd } from './stream-state.js';
 import { getFutureEnd } from './future-state.js';
 import { debugLog } from './core-debug.js';
 import { compactUtf16Decode } from './string.js';
@@ -1013,7 +1014,7 @@ export function liftFlatStream(_context, meta) {
     return function liftFlatStreamInner(ctx) {
         debugLog('[liftFlatStream()] args', { ctx });
 
-        const streamMeta = _context.getTables()[streamTableIdx];
+        const streamMeta = _context.tables[streamTableIdx];
         if (streamMeta.componentIdx !== componentIdx) {
             throw new Error('unexpectedly mismatched component idx');
         }
@@ -1041,7 +1042,7 @@ export function liftFlatStream(_context, meta) {
             throw new Error(`missing async state for component [${componentIdx}]`);
         }
 
-        const streamEnd = _context.getEnd({
+        const streamEnd = getStreamEnd(_context, {
             tableIdx: streamTableIdx,
             streamEndWaitableIdx: streamEndWaitableIdx,
         });
@@ -1067,7 +1068,7 @@ export function liftFlatStream(_context, meta) {
             throw new _context.RuntimeError("cannot lift stream while it's in a waitable set");
         }
 
-        const stream = new (_context.getExternalStream())({
+        const stream = new _context.Stream({
             globalRep: streamEnd.globalStreamMapRep(),
             isReadable: streamEnd.isReadable(),
             isWritable: streamEnd.isWritable(),
