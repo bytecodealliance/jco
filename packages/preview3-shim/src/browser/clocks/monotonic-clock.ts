@@ -9,12 +9,18 @@ function getResolution(): Duration {
   return monotonicClock.resolution();
 }
 
-async function waitUntil(when: Mark): Promise<void> {
-  await monotonicClock.subscribeInstant(when).block();
+function waitUntil(when: Mark): void | Promise<void> {
+  const pollable = monotonicClock.subscribeInstant(when);
+  if (!pollable.ready()) {
+    return pollable.block();
+  }
 }
 
-async function waitFor(howLong: Duration): Promise<void> {
-  await monotonicClock.subscribeDuration(howLong).block();
+function waitFor(howLong: Duration): void | Promise<void> {
+  const pollable = monotonicClock.subscribeDuration(howLong);
+  if (!pollable.ready()) {
+    return pollable.block();
+  }
 }
 
 export default {

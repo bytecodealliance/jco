@@ -19,11 +19,11 @@ export function getResolution(): Duration;
 /**
  * Wait until the specified mark has occurred.
  */
-export function waitUntil(when: Mark): Promise<void>;
+export function waitUntil(when: Mark): void | Promise<void>;
 /**
  * Wait for the specified duration to elapse.
  */
-export function waitFor(howLong: Duration): Promise<void>;
+export function waitFor(howLong: Duration): void | Promise<void>;
 export type Duration = import('./wasi-clocks-types.js').Duration;
 /**
  * A mark on a monotonic clock is a number of nanoseconds since an
