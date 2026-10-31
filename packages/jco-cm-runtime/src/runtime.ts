@@ -132,7 +132,8 @@ export interface ResourceTransferBorrowContext extends TrapContext {
     readonly scope: ResourceScopeCell;
     readonly callBorrows: ResourceCallBorrowList;
     /** Lazy lookup while tasks remain inline; no operation namespace is supplied. */
-    readonly getCurrentTask?: (componentIdx: number) => ResourceBorrowTask | undefined;
+    readonly registers: TaskRegisters;
+    readonly getTask?: (componentIdx: number, taskID: bigint) => ResourceBorrowTask | undefined;
 }
 export interface ResourceDestructorTask {
     readonly id: () => bigint;
@@ -158,7 +159,7 @@ export interface ResourceDestructorArgs<T> {
 export interface ResourceDestructorContext {
     /** Lazy task capabilities, removed from generated inline bridges at N11. */
     readonly createTask: (args: ResourceDestructorCreateArgs) => { task: ResourceDestructorTask; threadID: number };
-    readonly withTask: <T>(args: { taskID: bigint; threadID: number; componentIdx: number; fn: () => T }) => T;
+    readonly registers: TaskRegisters;
 }
 
 /** Type-only conformance map. No runtime registry or factory is required. */
@@ -168,6 +169,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/js-helper': JsHelperModule;
     readonly 'intrinsics/string': StringModule;
     readonly 'intrinsics/webidl': WebIdlModule;
+    readonly 'intrinsics/core': CoreModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -305,4 +307,308 @@ export interface WebIdlProxyCacheContext {
 export interface WebIdlModule {
     readonly initializeWebIdlProxyCache: () => WebIdlProxyCacheContext;
     readonly globalThisIdlProxy: (context: WebIdlProxyCacheContext) => object;
+}
+
+/** Task and compiler capabilities; no operation namespace is assembled. */
+export type AsyncDeterminism = 'random' | 'deterministic';
+export type RuntimeMemory = {
+    readonly buffer: ArrayBufferLike;
+};
+export interface TaskMeta {
+    threadID: number;
+    taskID: bigint;
+    componentIdx: number;
+}
+export interface TaskRegisters {
+    [componentIdx: number]: TaskMeta | null | undefined;
+    current?: TaskMeta | null;
+}
+export interface MemoryMeta {
+    componentIdx: number;
+    memoryIdx?: number;
+    memory?: RuntimeMemory;
+}
+/** Lazy access to component/task operations that are still generated inline. */
+export interface SuspendingImportContext extends TrapContext {
+    readonly registers: TaskRegisters;
+    readonly checkMayLeave: (componentIdx: number) => void;
+    readonly getCurrentThread: (
+        componentIdx: number,
+        threadID: number,
+        taskID: bigint,
+    ) => { task: { mayBlock(): boolean | undefined } } | undefined;
+    readonly currentTaskMayBlock: () => number;
+    readonly recordTrap: (componentIdx: number, error: unknown, convertsRangeErrors: boolean) => unknown;
+    readonly throwIfInterrupted: (componentIdx: number) => void;
+}
+export interface ComponentError extends Error {
+    readonly payload: unknown;
+}
+export interface ComponentErrorConstructor {
+    new (value: unknown): ComponentError;
+}
+export interface RepTable<T = unknown> {
+    target: unknown;
+    readonly data: () => (T | number | symbol | null)[];
+    readonly insert: (value: T) => number;
+    readonly get: (rep: number) => T | undefined;
+    readonly contains: (rep: number) => boolean;
+    readonly remove: (rep: number) => T;
+    readonly size: () => number;
+    readonly clear: () => void;
+}
+export interface RepTableConstructor {
+    new <T = unknown>(args?: { target?: unknown; space?: Pick<HandleIndexSpace, 'alloc' | 'release'> }): RepTable<T>;
+    readonly FREE: symbol;
+}
+/** Context passed to the generated element lift/lower functions. */
+export interface BufferElementContext {
+    storagePtr: number;
+    memory: RuntimeMemory;
+    componentIdx: number;
+    stringEncoding: string;
+    realloc?: StringRealloc;
+    getReallocFn?: () => StringRealloc;
+    vals?: unknown[];
+    readonly liftResource?: (
+        handle: number,
+        tableIdx: number,
+    ) => {
+        rep: number;
+    };
+    readonly lowerResource?: (
+        resource: {
+            rep: number;
+        },
+        tableIdx: number,
+    ) => number;
+}
+export interface BufferElementMetadata {
+    size32?: number;
+    align32: number;
+    isNone?: boolean;
+    payloadTypeName?: string;
+    stringEncoding?: string;
+    readonly liftFn?: (ctx: BufferElementContext) => [unknown, unknown];
+    readonly lowerFn?: (ctx: BufferElementContext) => unknown;
+    getReallocFn?: () => StringRealloc;
+}
+export interface ManagedBufferOptions {
+    componentIdx: number;
+    capacity: number;
+    elemMeta: BufferElementMetadata;
+    memory?: RuntimeMemory;
+    start?: number;
+    data?: unknown[];
+    target?: unknown;
+}
+export interface ManagedBuffer {
+    capacity: number;
+    processed: number;
+    target: unknown;
+    readonly setTarget: (target: unknown) => void;
+    readonly remaining: () => number;
+    readonly componentIdx: () => number;
+    readonly getElemMeta: () => BufferElementMetadata;
+    readonly isHostOwned: () => boolean;
+    readonly read: (
+        count: number,
+        options?: {
+            transferResources?: boolean;
+        },
+    ) => unknown[];
+    readonly write: (
+        values: unknown[],
+        options?: {
+            transferResources?: boolean;
+        },
+    ) => void;
+}
+export interface ManagedBufferConstructor {
+    new (args: ManagedBufferOptions): ManagedBuffer;
+    readonly validateGuestBuffer: (
+        memory: RuntimeMemory | undefined,
+        start: number | undefined,
+        count: number,
+        elemMeta: BufferElementMetadata,
+    ) => void;
+    readonly MAX_LENGTH: number;
+}
+export type CreateBufferOptions = Omit<ManagedBufferOptions, 'capacity'> & {
+    count: number;
+    stringEncoding?: string;
+};
+export interface BufferManager {
+    readonly getNextBufferID: (componentIdx: number) => bigint;
+    readonly getBuffer: (componentIdx: number, bufferID: bigint) => ManagedBuffer | undefined;
+    readonly createBuffer: (args: CreateBufferOptions) => {
+        id: bigint;
+        buffer: ManagedBuffer;
+    };
+    readonly deleteBuffer: (componentIdx: number, bufferID: bigint) => boolean | undefined;
+}
+export interface BufferManagerConstructor {
+    new (): BufferManager;
+}
+export interface RuntimeFinalizationRegistry<T> {
+    readonly unregister: (token: object) => boolean | void;
+    /** Absent on the inline implementation's fallback when the host has no registry. */
+    readonly register?: (target: object, heldValue: T, unregisterToken?: object) => void;
+}
+export type ConditionalTrampoline = (...args: number[]) => number | void;
+
+export type HasOwnPropertyCapability = (this: unknown, key: PropertyKey) => boolean;
+export interface ComponentMemoryMap {
+    readonly get: (componentIdx: number) => Record<string, MemoryMeta> | undefined;
+    readonly set: (componentIdx: number, memories: Record<string, MemoryMeta>) => unknown;
+}
+export type MemoryLookupCapability = Pick<ComponentMemoryMap, 'get'>;
+export interface MemoryLookup {
+    (map: MemoryLookupCapability, args: { componentIdx: number }): MemoryMeta[];
+    (map: MemoryLookupCapability, args: { componentIdx: number; memoryIdx: number }): RuntimeMemory | undefined | [];
+}
+export interface CoreCompilePlatform {
+    readonly compile: (bytes: BufferSource) => Promise<WebAssembly.Module>;
+}
+export interface CoreStreamingCompilePlatform extends CoreCompilePlatform {
+    readonly compileStreaming: (source: Response | PromiseLike<Response>) => Promise<WebAssembly.Module>;
+}
+export interface CoreInstantiatePlatform {
+    readonly instantiate: (module: WebAssembly.Module, imports?: WebAssembly.Imports) => Promise<WebAssembly.Instance>;
+}
+export interface Base64CompileContext {
+    readonly WebAssembly: CoreCompilePlatform;
+    readonly nodejsCompat: boolean;
+}
+export interface FileCompileReader {
+    readonly readFile: (url: URL) => Promise<Uint8Array<ArrayBuffer>>;
+}
+export interface FileCompileCache {
+    readonly node: boolean;
+    fs: FileCompileReader | undefined;
+}
+export interface FetchCompileContext {
+    readonly WebAssembly: CoreStreamingCompilePlatform;
+    readonly nodejsCompat: boolean;
+    readonly fileCache: FileCompileCache;
+}
+export interface ResourceBufferContext extends ResourceTableRemoveContext {
+    readonly tables: ResourceHandleTables;
+}
+export interface AsyncEventCodes {
+    NONE: 0;
+    SUBTASK: 1;
+    STREAM_READ: 2;
+    STREAM_WRITE: 3;
+    FUTURE_READ: 4;
+    FUTURE_WRITE: 5;
+    TASK_CANCELLED: 6;
+}
+export interface ConditionalSuspendingWasmModules {
+    _conditionalSuspending1I32ToI32?: WebAssembly.Module;
+    _conditionalSuspending2I32ToI32?: WebAssembly.Module;
+    _conditionalSuspending3I32ToI32?: WebAssembly.Module;
+    _conditionalSuspending3I32ToVoid?: WebAssembly.Module;
+}
+export type ConditionalSlowFn = (...args: number[]) => number | void | PromiseLike<number | void>;
+export interface ConditionalSuspendingPlatform {
+    readonly Instance: typeof WebAssembly.Instance;
+    /** Accessed only when a selected trampoline is called, not during setup. */
+    readonly Suspending: new (fn: ConditionalSlowFn) => unknown;
+}
+export interface ConditionalSuspendingContext<K extends keyof ConditionalSuspendingWasmModules> {
+    readonly WebAssembly: ConditionalSuspendingPlatform;
+    readonly modules: Pick<ConditionalSuspendingWasmModules, K>;
+}
+export interface CoreModule {
+    readonly i32Min: number;
+    readonly i32Max: number;
+    readonly initializeAsyncDeterminism: (mode: AsyncDeterminism) => AsyncDeterminism;
+    readonly initializeAsyncFunctionConstructor: () => Function;
+    readonly initializeComponentErrorClass: () => ComponentErrorConstructor;
+    readonly initializeRuntimeErrorConstructor: (platform: {
+        readonly RuntimeError: RuntimeErrorConstructor;
+    }) => RuntimeErrorConstructor;
+    readonly initializeReadableStream: (chosen: typeof ReadableStream | undefined) => typeof ReadableStream;
+    readonly initializeRepTableClass: (context: TrapContext) => RepTableConstructor;
+    readonly initializeManagedBufferClass: (context: ResourceBufferContext) => ManagedBufferConstructor;
+    readonly initializeBufferManagerClass: (ManagedBuffer: ManagedBufferConstructor) => BufferManagerConstructor;
+    readonly initializeBufferManager: (BufferManager: BufferManagerConstructor) => BufferManager;
+    readonly initializeFactTrapMessages: (messages: Record<number, string>) => Record<number, string>;
+    readonly initializeSymbolCabiDispose: () => symbol;
+    readonly initializeSymbolCabiLower: () => symbol;
+    readonly initializeSymbolResourceHandle: () => symbol;
+    readonly initializeSymbolResourceRep: () => symbol;
+    readonly initializeSymbolDispose: () => symbol;
+    readonly initializeSymbolAsyncIterator: () => symbol;
+    readonly initializeSymbolIterator: () => symbol;
+    readonly initializeEndianness: () => boolean;
+    readonly initializeHasOwnProperty: () => HasOwnPropertyCapability;
+    readonly initializeAsyncEventCodes: () => AsyncEventCodes;
+    readonly initializeComponentMemoryMap: () => ComponentMemoryMap;
+    readonly initializeTaskRegisters: () => TaskRegisters;
+    readonly initializeConditionalSuspendingWasm: () => ConditionalSuspendingWasmModules;
+    readonly initializeFileCompileCache: (nodejsCompat: boolean) => FileCompileCache;
+    readonly debugLog: (...args: unknown[]) => void;
+    readonly coinFlip: () => boolean;
+    readonly typeCheckValidI32: (value: unknown) => boolean;
+    readonly typeCheckAsyncFn: (constructor: Function, value: unknown) => boolean;
+    readonly base64Compile: (context: Base64CompileContext, encoded: string) => Promise<WebAssembly.Module>;
+    readonly fetchCompile: (context: FetchCompileContext, url: URL) => Promise<WebAssembly.Module>;
+    readonly instantiateCore: (
+        platform: CoreInstantiatePlatform,
+        module: WebAssembly.Module,
+        imports?: WebAssembly.Imports,
+    ) => Promise<WebAssembly.Instance>;
+    readonly clampGuest: (value: number, min: number, max: number) => number;
+    readonly getErrorPayload: (hasOwnProperty: HasOwnPropertyCapability, error: unknown) => unknown;
+    readonly getErrorPayloadString: (hasOwnProperty: HasOwnPropertyCapability, error: unknown) => unknown;
+    readonly finalizationRegistryCreate: <T>(cleanup: (value: T) => void) => RuntimeFinalizationRegistry<T>;
+    readonly disposeHostValue: (disposeSymbol: symbol, value: unknown, disposeFn?: (this: unknown) => unknown) => void;
+    readonly throwInvalidBool: () => never;
+    readonly throwUninitialized: () => never;
+    readonly promiseWithResolvers: <T>() => {
+        promise: Promise<T>;
+        resolve(value: T | PromiseLike<T>): void;
+        reject(reason?: unknown): void;
+    };
+    readonly registerMemory: (map: ComponentMemoryMap, args: MemoryMeta) => void;
+    readonly lookupMemories: MemoryLookup;
+    readonly getCurrentTaskMeta: (registers: TaskRegisters, componentIdx?: number | null) => TaskMeta | undefined;
+    readonly setCurrentTaskMeta: (registers: TaskRegisters, args: TaskMeta) => TaskMeta;
+    readonly withCurrentTaskMeta: <T>(registers: TaskRegisters, args: TaskMeta & { fn: () => T }) => T;
+    readonly withCurrentTaskMetaAsync: <T>(
+        registers: TaskRegisters,
+        args: TaskMeta & { fn: () => T },
+    ) => T | Promise<Awaited<T>>;
+    readonly clearCurrentTaskMeta: (registers: TaskRegisters, args: TaskMeta) => Promise<void>;
+    readonly suspendingImport: <A extends unknown[], T>(
+        context: SuspendingImportContext,
+        componentIdx: number,
+        fn: (...args: A) => T,
+        syncOnly?: boolean,
+        switchesTask?: boolean,
+        convertsRangeErrors?: boolean,
+        callsHost?: boolean,
+    ) => (...args: A) => T | Promise<T>;
+    readonly conditionalSuspending1I32ToI32: (
+        context: ConditionalSuspendingContext<'_conditionalSuspending1I32ToI32'>,
+        fast: ConditionalTrampoline,
+        slow: ConditionalSlowFn,
+    ) => ConditionalTrampoline;
+    readonly conditionalSuspending2I32ToI32: (
+        context: ConditionalSuspendingContext<'_conditionalSuspending2I32ToI32'>,
+        fast: ConditionalTrampoline,
+        slow: ConditionalSlowFn,
+    ) => ConditionalTrampoline;
+    readonly conditionalSuspending3I32ToI32: (
+        context: ConditionalSuspendingContext<'_conditionalSuspending3I32ToI32'>,
+        fast: ConditionalTrampoline,
+        slow: ConditionalSlowFn,
+    ) => ConditionalTrampoline;
+    readonly conditionalSuspending3I32ToVoid: (
+        context: ConditionalSuspendingContext<'_conditionalSuspending3I32ToVoid'>,
+        fast: ConditionalTrampoline,
+        slow: ConditionalSlowFn,
+    ) => ConditionalTrampoline;
 }

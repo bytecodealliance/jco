@@ -1860,10 +1860,12 @@ impl AsyncFutureIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let gen_host_inject_fn = self.name();
                 let nested_future_symbol = render_args.require_intrinsic(Self::NestedFutureSymbol);
-                let get_error_payload = render_args.require_intrinsic(Intrinsic::GetErrorPayload);
+                let get_error_payload =
+                    render_args.intrinsic_call_prefix(Intrinsic::GetErrorPayload);
                 let track_host_operation =
                     render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
-                let dispose_host_value = render_args.require_intrinsic(Intrinsic::DisposeHostValue);
+                let dispose_host_value =
+                    render_args.intrinsic_call_prefix(Intrinsic::DisposeHostValue);
 
                 uwriteln!(
                     output,
@@ -1902,7 +1904,7 @@ impl AsyncFutureIntrinsic {
                                       {debug_log_fn}("failed to inject host write", err);
                                       throw new Error("cannot inject write: promise failed");
                                   }}
-                                  value = {{ tag: 'err', val: {get_error_payload}(err) }};
+                                  value = {{ tag: 'err', val: {get_error_payload}err) }};
                               }}
 
                               // A value produced after the reader was dropped is never delivered
@@ -1935,7 +1937,7 @@ impl AsyncFutureIntrinsic {
                           // Called when the guest drops the read end: a value that was never delivered
                           // was discarded, so the host promise is disposed
                           inject.drop = () => {{
-                              if (!delivered) {{ {dispose_host_value}(promise); }}
+                              if (!delivered) {{ {dispose_host_value}promise); }}
                           }};
 
                           return inject;

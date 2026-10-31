@@ -1,4 +1,11 @@
-import type { ResourceModule, ConversionModule, StringModule, WebIdlModule } from './contract.js';
+import type { ResourceModule, ConversionModule, StringModule, WebIdlModule, CoreModule } from './contract.js';
+export const initializeTaskRegisters: CoreModule['initializeTaskRegisters'] = () => ({});
+export const clampGuest: CoreModule['clampGuest'] = (value, min, max) => {
+    if (value < min || value > max) {
+        throw new TypeError('out of range');
+    }
+    return value;
+};
 export const initializeWebIdlProxyCache: WebIdlModule['initializeWebIdlProxyCache'] = () => ({ proxy: undefined });
 export const validateHostChar: StringModule['validateHostChar'] = (value) => {
     if (typeof value !== 'string') {

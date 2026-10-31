@@ -98,15 +98,42 @@ const tables = resource.initializeHandleTables();
 const scopeTasks = resource.initializeResourceScopeTasks();
 const scope = resource.initializeScopeId();
 const callBorrows = resource.initializeCallBorrows();
+const registers = {};
 const removal = { RuntimeError: WebAssembly.RuntimeError, indexSpaces, scopeTasks };
 const table = Object.assign([resource.tableFlag, 0], { _createdReps: new Set<number>() });
 resource.tableRemove(removal, table, resource.tableCreateOwn(indexSpaces, table, 42));
-resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, callBorrows }, 1, 0, 1);
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, registers, callBorrows }, 1, 0, 1);
 // @ts-expect-error removal needs the shared allocator and scope-task lookup
 resource.tableRemove({ RuntimeError: Error }, table, 1);
 // @ts-expect-error transfer requires the live scope cell, not its numeric snapshot
-resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope: 0, callBorrows }, 1, 0, 1);
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope: 0, registers, callBorrows }, 1, 0, 1);
 // @ts-expect-error borrow-list replacement must go through its actual mutable owner
-resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, callBorrows: [] }, 1, 0, 1);
+resource.transferBorrow({ RuntimeError: Error, indexSpaces, tables, scope, registers, callBorrows: [] }, 1, 0, 1);
 // @ts-expect-error task construction is a required explicit capability
-resource.callDestructor({ withTask: ({ fn }) => fn() }, { componentIdx: 0, rep: 42, dtor: () => {} });
+resource.callDestructor({ registers: {} }, { componentIdx: 0, rep: 42, dtor: () => {} });
+
+import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
+import type { CoreModule } from '@bytecodealliance/jco-cm-runtime/runtime';
+export const defaultCore: CoreModule = core;
+export const coreContractEntry: RuntimeModuleContracts['intrinsics/core'] = core;
+// @ts-expect-error a core provider must supply its selected operations and initializers
+export const missingCore: CoreModule = {};
+// @ts-expect-error initializer must return the actual register owner, not a snapshot
+export const invalidRegisters: CoreModule['initializeTaskRegisters'] = () => ({ current: 42 });
+// @ts-expect-error constructor initializer requires the public static sentinel and instance operations
+export const invalidRepConstructor: CoreModule['initializeRepTableClass'] = () => class {};
+// @ts-expect-error providers cannot require private constructor capabilities
+export const privateRepContext: CoreModule['initializeRepTableClass'] = (_ctx: {
+    RuntimeError: ErrorConstructor;
+    privateState: number;
+}) => core.initializeRepTableClass(_ctx);
+// @ts-expect-error task metadata requires its actual mutable owner as the first operand
+core.withCurrentTaskMeta({ taskID: 1n, threadID: 1, componentIdx: 0, fn: () => 42 });
+// @ts-expect-error task IDs retain their canonical bigint representation
+core.setCurrentTaskMeta({}, { taskID: 1, componentIdx: 0 });
+// @ts-expect-error error extraction requires the unbound native function capability
+core.getErrorPayload({ hasOwnProperty: Object.prototype.hasOwnProperty }, new Error());
+// @ts-expect-error compilation must receive its chosen platform and node policy
+core.base64Compile({ nodejsCompat: true }, '');
+// @ts-expect-error core function properties are immutable provider exports
+defaultCore.coinFlip = () => true;
