@@ -42,6 +42,10 @@
         "./intrinsics/js-helper": {
             "types": "./dist/intrinsics/js-helper.d.ts",
             "default": "./dist/intrinsics/js-helper.js"
+        },
+        "./intrinsics/string": {
+            "types": "./dist/intrinsics/string.d.ts",
+            "default": "./dist/intrinsics/string.js"
         }
     },
     "scripts": {
