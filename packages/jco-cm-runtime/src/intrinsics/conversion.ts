@@ -31,7 +31,7 @@ export const f64ToI64: ConversionModule['f64ToI64'] = (context, value) => {
 };
 
 export const i32ToChar: ConversionModule['i32ToChar'] = (value) => {
-    if (!value || typeof value !== 'number') {
+    if (typeof value !== 'number' || !Number.isInteger(value)) {
         throw new Error('invalid i32');
     }
     if (value < 0) {
@@ -43,7 +43,7 @@ export const i32ToChar: ConversionModule['i32ToChar'] = (value) => {
     if (0xd800 <= value && value <= 0xdfff) {
         throw new Error('invalid i32 out of range');
     }
-    return String.fromCharCode(value);
+    return String.fromCodePoint(value);
 };
 
 export const toInt8: ConversionModule['toInt8'] = (context, value) => {

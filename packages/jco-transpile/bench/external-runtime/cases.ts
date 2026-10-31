@@ -85,6 +85,14 @@ const taskClassBase = `
 /** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
     {
+        id: 'lower-u32',
+        suffix: 'intrinsics/lower',
+        names: ['lowerFlatU32'],
+        setup: 'const memory = { buffer: new ArrayBuffer(4) };',
+        answer: '(lowerFlatU32({ strict: true }, { vals: [42], storagePtr: 0, memory }), new DataView(memory.buffer).getUint32(0, true))',
+        allocations: { ArrayBuffer: 1, DataView: 2 },
+    },
+    {
         id: 'lift-u32',
         suffix: 'intrinsics/lift',
         names: ['liftFlatU32'],

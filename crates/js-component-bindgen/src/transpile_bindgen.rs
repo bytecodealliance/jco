@@ -7638,82 +7638,100 @@ pub fn gen_flat_lower_fn_js_expr(
     match ty {
         InterfaceType::Bool => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatBool)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatBool))
         }
 
         InterfaceType::S8 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS8));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatS8).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatS8))
         }
 
         InterfaceType::U8 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU8));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatU8).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatU8))
         }
 
         InterfaceType::S16 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS16));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatS16).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatS16))
         }
 
         InterfaceType::U16 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU16));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatU16).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatU16))
         }
 
         InterfaceType::S32 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS32));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatS32).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatS32))
         }
 
         InterfaceType::U32 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU32));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatU32).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatU32))
         }
 
         InterfaceType::S64 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatS64));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatS64).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatS64))
         }
 
         InterfaceType::U64 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatU64));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatU64).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatU64))
         }
 
         InterfaceType::Float32 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat32))
         }
 
         InterfaceType::Float64 => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatFloat64))
         }
 
         InterfaceType::Char => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatChar));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatChar)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatChar))
         }
 
         InterfaceType::String => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny));
-            Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny))
         }
 
         InterfaceType::Record(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
-            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord).name();
+            let lower_fn = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatRecord));
             let record_ty = &component_types[*ty_idx];
             let size32 = record_ty.abi.size32;
             let align32 = record_ty.abi.align32;
@@ -7735,13 +7753,15 @@ pub fn gen_flat_lower_fn_js_expr(
             }
             keys_and_lowers_expr.push(']');
             format!(
-                "{lower_fn}({{ fieldMetas: {keys_and_lowers_expr}, size32: {size32}, align32: {align32} }})"
+                "{lower_fn}{{ fieldMetas: {keys_and_lowers_expr}, size32: {size32}, align32: {align32} }})"
             )
         }
 
         InterfaceType::Variant(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
-            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant).name();
+            let lower_fn = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
             let variant_ty = &component_types[*ty_idx];
             let variant_flat_count = flat_count_js_expr(&variant_ty.abi.flat_count);
             let size32 = variant_ty.abi.size32;
@@ -7776,7 +7796,7 @@ pub fn gen_flat_lower_fn_js_expr(
             lower_metas_expr.push(']');
 
             format!(
-                "{lower_fn}({{
+                "{lower_fn}{{
                      caseMetas: {lower_metas_expr},
                      variantSize32: {size32},
                      variantAlign32: {align32},
@@ -7788,7 +7808,9 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::List(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
             let list_ty = &component_types[*ty_idx];
             let elem_ty_lower_expr =
                 gen_flat_lower_fn_js_expr(instantiator, &list_ty.element, extra_resource_map);
@@ -7797,7 +7819,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let elem_size32 = elem_cabi.size32;
 
             format!(
-                "{f}({{
+                "{f}{{
                 elemLowerFn: {elem_ty_lower_expr},
                 elemSize32: {elem_size32},
                 elemAlign32: {elem_align32},
@@ -7807,7 +7829,9 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::FixedLengthList(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatList).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatList));
             let list_ty = &component_types[*ty_idx];
             let elem_ty_lower_expr =
                 gen_flat_lower_fn_js_expr(instantiator, &list_ty.element, extra_resource_map);
@@ -7819,7 +7843,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let elem_size32 = elem_cabi.size32;
 
             format!(
-                r#"{f}({{
+                r#"{f}{{
                        elemLowerFn: {elem_ty_lower_expr},
                        elemAlign32: {elem_align32},
                        elemSize32: {elem_size32},
@@ -7832,7 +7856,9 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::Tuple(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatTuple));
             let tuple_ty = &component_types[*ty_idx];
             let size_u32 = tuple_ty.abi.size32;
             let align_u32 = tuple_ty.abi.align32;
@@ -7849,13 +7875,15 @@ pub fn gen_flat_lower_fn_js_expr(
             elem_lowers_expr.push(']');
 
             format!(
-                "{f}({{ elemLowerMetas: {elem_lowers_expr}, size32: {size_u32}, align32: {align_u32} }})"
+                "{f}{{ elemLowerMetas: {elem_lowers_expr}, size32: {size_u32}, align32: {align_u32} }})"
             )
         }
 
         InterfaceType::Flags(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatFlags));
             let flags_ty = &component_types[*ty_idx];
             let size32 = flags_ty.abi.size32;
             let align32 = flags_ty.abi.align32;
@@ -7878,13 +7906,15 @@ pub fn gen_flat_lower_fn_js_expr(
             };
 
             format!(
-                "{f}({{ names: {names_list_js}, size32: {size32}, align32: {align32}, intSizeBytes: {elem_size} }})"
+                "{f}{{ names: {names_list_js}, size32: {size32}, align32: {align32}, intSizeBytes: {elem_size} }})"
             )
         }
 
         InterfaceType::Enum(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatEnum));
             let enum_ty = &component_types[*ty_idx];
             let enum_size32 = enum_ty.abi.size32;
             let enum_align32 = enum_ty.abi.align32;
@@ -7906,7 +7936,7 @@ pub fn gen_flat_lower_fn_js_expr(
 
             format!(
                 r#"
-                  {f}({{
+                  {f}{{
                        caseMetas: {elem_lowers_expr},
                        variantSize32: {enum_size32},
                        variantAlign32: {enum_align32},
@@ -7919,7 +7949,9 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::Option(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOption).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatOption));
             let option_ty = &component_types[*ty_idx];
             let option_size32 = option_ty.abi.size32;
             let option_align32 = option_ty.abi.align32;
@@ -7936,7 +7968,7 @@ pub fn gen_flat_lower_fn_js_expr(
 
             format!(
                 r#"
-                  {f}({{
+                  {f}{{
                        caseMetas: [
                            [ 'none', null, 0, 0, 0 ],
                            [ 'some', {some_ty_lower_fn_js}, {some_ty_size32}, {some_ty_align32}, {some_ty_flat_count}],
@@ -7953,7 +7985,9 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::Result(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
-            let lower_fn = Intrinsic::Lower(LowerIntrinsic::LowerFlatResult).name();
+            let lower_fn = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatResult));
             let result_ty = &component_types[*ty_idx];
             let result_size32 = result_ty.abi.size32;
             let result_align32 = result_ty.abi.align32;
@@ -7971,7 +8005,7 @@ pub fn gen_flat_lower_fn_js_expr(
 
             format!(
                 r#"
-                   {lower_fn}({{
+                   {lower_fn}{{
                        caseMetas: [
                            [ 'ok', {ok_lower_fn_js}, {result_size32}, {result_align32}, {result_payload_offset32} ],
                            [ 'err', {err_lower_fn_js}, {result_size32}, {result_align32}, {result_payload_offset32} ],
@@ -7987,7 +8021,9 @@ pub fn gen_flat_lower_fn_js_expr(
 
         InterfaceType::Own(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatOwn));
             let resource_table_ty = &component_types[*ty_idx];
             let component_idx = resource_table_ty.unwrap_concrete_instance().as_u32();
             let table_idx = ty_idx.as_u32();
@@ -8026,7 +8062,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 // If resource was not found in the index type map at all, we're missing resource metadata.
                 (None, None) => {
                     return format!(
-                        "{f}({{
+                        "{f}{{
                              componentIdx: {component_idx},
                              tableIdx: {table_idx},
                              lowerFn: () => {{ throw new Error('missing/invalid resource metadata'); }}
@@ -8162,7 +8198,7 @@ pub fn gen_flat_lower_fn_js_expr(
             };
 
             format!(
-                "{f}({{
+                "{f}{{
                      componentIdx: {component_idx},
                      tableIdx: {table_idx},
                      lowerFn: {lower_fn_js},
@@ -8173,13 +8209,17 @@ pub fn gen_flat_lower_fn_js_expr(
         InterfaceType::Borrow(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow));
             let table_idx = ty_idx.as_u32();
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow).name();
-            format!("{f}.bind(null, {table_idx})")
+            instantiator.bindgen.intrinsic_bind_callback(
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatBorrow),
+                &table_idx.to_string(),
+            )
         }
 
         InterfaceType::Future(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture));
             let table_idx = ty_idx.as_u32();
             let table_ty = &component_types[*ty_idx];
             let component_idx = table_ty.instance.as_u32();
@@ -8256,7 +8296,7 @@ pub fn gen_flat_lower_fn_js_expr(
             }
 
             format!(
-                r#"{f}({{
+                r#"{f}{{
                        futureTableIdx: {table_idx},
                        futureNestingLevel: {future_nesting_level},
                        componentIdx: {component_idx},
@@ -8280,7 +8320,9 @@ pub fn gen_flat_lower_fn_js_expr(
         InterfaceType::Stream(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
             let table_idx = ty_idx.as_u32();
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatStream).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatStream));
             let table_ty = &component_types[*ty_idx];
             let component_idx = table_ty.instance.as_u32();
             let stream_ty_idx = table_ty.ty;
@@ -8352,7 +8394,7 @@ pub fn gen_flat_lower_fn_js_expr(
             };
 
             format!(
-                r#"{f}({{
+                r#"{f}{{
                        streamTableIdx: {table_idx},
                        componentIdx: {component_idx},
                        elemMeta: {{
@@ -8376,14 +8418,17 @@ pub fn gen_flat_lower_fn_js_expr(
         InterfaceType::ErrorContext(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext));
             let table_idx = ty_idx.as_u32();
-            let lower_flat_err_ctx_fn =
-                Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext).name();
-            format!("{lower_flat_err_ctx_fn}.bind(null, {table_idx})")
+            instantiator.bindgen.intrinsic_bind_callback(
+                Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext),
+                &table_idx.to_string(),
+            )
         }
 
         InterfaceType::Map(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lower(LowerIntrinsic::LowerFlatMap));
-            let f = Intrinsic::Lower(LowerIntrinsic::LowerFlatMap).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lower(LowerIntrinsic::LowerFlatMap));
             let map_ty = &component_types[*ty_idx];
             let key_lower =
                 gen_flat_lower_fn_js_expr(instantiator, &map_ty.key, extra_resource_map);
@@ -8393,7 +8438,7 @@ pub fn gen_flat_lower_fn_js_expr(
             let entry_align32 = map_ty.entry_abi.align32;
             let value_offset32 = map_ty.value_offset32;
             format!(
-                "{f}({{
+                "{f}{{
                      keyLowerFn: {key_lower},
                      valueLowerFn: {value_lower},
                      entrySize32: {entry_size32},
