@@ -86,7 +86,7 @@ test(
             package: hash(await readFile(new URL('../package.json', defaultRuntimeUrl))),
         };
         const shimDirectory = dirname(
-            createRequire(import.meta.url).resolve('@bytecodealliance/preview2-shim/instantiation'),
+            dirname(createRequire(import.meta.url).resolve('@bytecodealliance/preview2-shim/instantiation')),
         );
         const shimArtifacts: Record<string, string> = {};
         for (const name of (await readdir(shimDirectory, { recursive: true }))

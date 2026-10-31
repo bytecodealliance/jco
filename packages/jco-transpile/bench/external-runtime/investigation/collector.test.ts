@@ -106,10 +106,11 @@ function fixture() {
     return { graphs, runs, memory };
 }
 
-test.concurrent('complete synthetic clusters retain uncertainty and reject incomplete evidence', () => {
+// Bootstrap the complete expanded matrix separately from concurrent child-process checks.
+test('complete synthetic clusters retain uncertainty and reject incomplete evidence', { timeout: 60_000 }, () => {
     const data = fixture();
     const reports = summarizeMatched(data.graphs, data.runs, 5, data.memory);
-    assert.equal(Object.keys(reports).length, 68);
+    assert.deepEqual(Object.keys(reports).sort(), data.graphs.map((graph) => graph.id).sort());
     const adder = reports['rolldown--file--adder'];
     assert.deepEqual(adder.uncertainty['named-vs-factory'].parse, { median: 0.9, range: [0.8, 1], ci95: [0.8, 1] });
     assert.match(adder.timingFindings['named-vs-factory'].parse.finding, /inconclusive/);

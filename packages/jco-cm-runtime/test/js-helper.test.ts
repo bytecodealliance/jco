@@ -80,3 +80,88 @@ test.concurrent('buffer getters preserve one read on hit and two on miss', () =>
     expect(dataView(context, memory)).toBe(view);
     expect(reads).toBe(3);
 });
+
+import { maybeSyncGenerator, conditionalSuspendingHostImport } from '../src/intrinsics/js-helper.js';
+import { create as createTasks } from './async-task-helpers.js';
+import type { ConditionalHostImportContext } from '../src/runtime.js';
+
+test.concurrent('generator wrapper preserves synchronous receivers, values and throws', () => {
+    const wrapped = maybeSyncGenerator(function* (
+        this: { base: number },
+        value: number,
+    ): Generator<unknown, number, unknown> {
+        const next = yield value;
+        return this.base + (next as number);
+    });
+    expect(wrapped.call({ base: 2 }, 40)).toBe(42);
+    const failure = new Error('sync');
+    const throwing = maybeSyncGenerator(function* (): Generator<unknown, never, unknown> {
+        throw failure;
+    });
+    expect(() => throwing()).toThrow(failure);
+    const trapping = maybeSyncGenerator(function* () {
+        yield {
+            get then() {
+                throw failure;
+            },
+        };
+    });
+    expect(() => trapping()).toThrow(failure);
+});
+
+test.concurrent('generator wrapper resumes fulfilled and rejected thenables through finally', async () => {
+    const events: string[] = [];
+    const wrapped = maybeSyncGenerator(function* (): Generator<unknown, number, unknown> {
+        try {
+            const value = yield Promise.resolve(40);
+            try {
+                yield Promise.reject(new Error('expected'));
+            } catch (error) {
+                events.push((error as Error).message);
+            }
+            return (value as number) + 2;
+        } finally {
+            events.push('finally');
+        }
+    });
+    const result = wrapped();
+    expect(result).toBeInstanceOf(Promise);
+    expect(await result).toBe(42);
+    expect(events).toEqual(['expected', 'finally']);
+});
+
+test.concurrent('conditional host imports read the executing thread at call time', () => {
+    const selected = createTasks();
+    const { task, taskID, threadID } = selected.asyncTask.createNewCurrentImplicitThread({
+        componentIdx: 0,
+        isAsync: false,
+    });
+    const host = () => 42;
+    let imports: WebAssembly.Imports | undefined;
+    class Instance {
+        exports = { run: host };
+        constructor(_module: WebAssembly.Module, selectedImports: WebAssembly.Imports) {
+            imports = selectedImports;
+        }
+    }
+    class Suspending {
+        constructor(readonly fn: Function) {}
+    }
+    const context = {
+        threads: selected.threadLookup,
+        WebAssembly: { Instance, Suspending },
+    } as unknown as ConditionalHostImportContext;
+    expect(conditionalSuspendingHostImport(context, {} as WebAssembly.Module, 0, host)).toBe(host);
+    const capabilities = imports![''];
+    expect(capabilities.fast).toBe(host);
+    expect((capabilities.slow as unknown as Suspending).fn).toBe(host);
+    const mayBlock = capabilities.mayBlock as () => boolean;
+    expect(mayBlock()).toBe(false);
+    selected.threadLookup.registers[0] = { componentIdx: 0, taskID, threadID };
+    expect(mayBlock()).toBe(false);
+    task.setFuncTypeIsAsync(true);
+    expect(mayBlock()).toBe(true);
+    delete selected.threadLookup.registers[0];
+    expect(mayBlock()).toBe(false);
+    selected.asyncTask.clearCurrentTask(0, taskID);
+});

@@ -1,0 +1,75 @@
+{
+    "declaredAt": "2026-10-22T12:47:44.578Z",
+    "authority": "User: complete conversions and compilation first; benchmark at the end; no optimization yet.",
+    "coverage": 274,
+    "fullScenarios": 23,
+    "reportsPerCohort": 92,
+    "bundlers": ["rolldown", "rollup"],
+    "resolutions": ["file", "package"],
+    "cohorts": [
+        {
+            "processes": 5,
+            "pairedSamples": 15,
+            "purpose": "new complete-274 recording"
+        },
+        {
+            "processes": 10,
+            "pairedSamples": 15,
+            "purpose": "mandatory expanded strict parity, preserving first cohort"
+        }
+    ],
+    "ordering": "Serial fresh processes after all builds and functional workers are terminal; deterministic rotated scenarios and balanced modes.",
+    "minimumMaterialSpeedup": 0.05,
+    "uncertainty": "Process-cluster 95% interval plus noise control; no wins claimed across intervals spanning parity/effect budgets.",
+    "budgets": {
+        "raw": "inline*1.05+256",
+        "compressed": "inline*1.05+128",
+        "parseAndEvaluation": "inline*1.25+25000ns",
+        "instantiate": "inline*1.25+50000ns",
+        "warmCall": "inline*1.25+250ns"
+    },
+    "newWorkloads": {
+        "streamPayload": "16u32 percall over persistent pair; stream-end handles/global streamrecords bounded. Existing buffer-manager allocation and retention behavior is included, not claimed constant or optimized.",
+        "streamCancel": "start and cancel a 16-element capacity pending read; verify subsequent payload copy remains usable",
+        "futurePending": "actual input Promise settled on the next microtask",
+        "futureRejected": "actual rejected result<string> promise; verify exact string/error payload",
+        "futureNested": "actual generated _util.Future wrappers preserve two layers",
+        "streamHostPayload": "16u32 values through actual host source/queue/injection, read and validate all16 with bounded read chunks, dispose final wrapper; normal runtime allocation/lifecycle behavior included"
+    },
+    "controls": "Keep old zero-length streams as a lifecycle control without warm/payload claim; unchanged scalar/noise/empty/import/retention controls.",
+    "debug": "Unmodified dynamic JCO_DEBUG on both modes; no debug-removal or optimization transforms.",
+    "memory": "Diagnostic only: 64 retained stores; overlapping counters and untracked private state excluded; invalid deltas rejected. Measures initialized stores before workload validation; excludes warm payload accumulation. Existing future/stream buffer retention is part of actual bounded-call throughput, not an assertion of leak-free or steady-state behavior.",
+    "browser": {
+        "sessions": 3,
+        "samples": 15,
+        "scenarios": [
+            "noise",
+            "adder",
+            "strings",
+            "resource",
+            "async",
+            "portfolio",
+            "stream-host-payload",
+            "stream-payload",
+            "stream-cancel",
+            "futures",
+            "future-pending",
+            "future-rejected",
+            "future-nested"
+        ],
+        "bundles": "Exact Rolldown package bundles from complete Node manifest; verify source and core Wasm hashes.",
+        "freshContexts": "New context per scenario per independent browser session; alternate modes within each sample.",
+        "axes": [
+            "fresh unique Blob module import including fetch/parse/link/evaluation",
+            "precompiled-core instantiation,calibrated16\u20134096retainedstores/sample",
+            "verified warm call",
+            "native HTTP ESM import plus adapter initialization"
+        ],
+        "limitations": "No isolated browser parse axis; engine-specific and only three session clusters.",
+        "clock": "Isolated same-origin context; instantiation batches calibrate both modes together to at least1ms where possible, bounded16\u20134096 stores. Record actual count and isolation. Retain each measured batch through validation."
+    },
+    "oldFactory": "N14 matched166 evidence remains separate and incomplete10cohort remains rejected. No new optimization/investigation experiments authorized; do not present166factory as274control.",
+    "expectedControls": 384,
+    "historical": true,
+    "scope": "Original stack only; not evidence or accepted measurement protocol for the trait-based rewrite"
+}

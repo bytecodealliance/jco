@@ -2,7 +2,13 @@ import { debugLog } from './core-debug.js';
 import { getOrCreateAsyncState } from './component.js';
 import { getCurrentTask } from './task-operations.js';
 import { asyncBlockedCode } from './async-task.js';
-import { createStream, getStreamEnd, deleteStreamEnd, removeStreamEndFromTable, addStreamEndToTable, } from './stream-state.js';
+import {
+    createStream,
+    getStreamEnd,
+    deleteStreamEnd,
+    removeStreamEndFromTable,
+    addStreamEndToTable,
+} from './stream-state.js';
 export function streamNew(_context, ctx) {
     debugLog('[streamNew()] args', { ctx });
     const { streamTableIdx, callerComponentIdx, elemMeta } = ctx;
@@ -18,16 +24,22 @@ export function streamNew(_context, ctx) {
         throw new Error('invalid/missing async task during stream.new');
     }
     if (task.componentIdx() !== callerComponentIdx) {
-        throw new Error(`task component idx [${task.componentIdx()}] does not match stream new intrinsic component idx [${callerComponentIdx}]`);
+        throw new Error(
+            `task component idx [${task.componentIdx()}] does not match stream new intrinsic component idx [${callerComponentIdx}]`,
+        );
     }
     const cstate = getOrCreateAsyncState(_context.lookup, callerComponentIdx);
     if (!cstate.mayLeave) {
         throw new Error('component instance is not marked as may leave during stream.new');
     }
-    const { writeEndWaitableIdx, readEndWaitableIdx, writeEndHandle, readEndHandle } = createStream(_context.creation, cstate, {
-        tableIdx: streamTableIdx,
-        elemMeta,
-    });
+    const { writeEndWaitableIdx, readEndWaitableIdx, writeEndHandle, readEndHandle } = createStream(
+        _context.creation,
+        cstate,
+        {
+            tableIdx: streamTableIdx,
+            elemMeta,
+        },
+    );
     debugLog('[streamNew()] created stream ends', {
         writeEnd: {
             waitableIdx: writeEndWaitableIdx,
@@ -44,7 +56,8 @@ export function streamNew(_context, ctx) {
 }
 export function streamNewFromLift(_context, ctx) {
     debugLog('[streamNewFromLift()] args', { ctx });
-    const { componentIdx, streamEndWaitableIdx, streamTableIdx, payloadLiftFn, payloadTypeSize32, payloadLowerFn } = ctx;
+    const { componentIdx, streamEndWaitableIdx, streamTableIdx, payloadLiftFn, payloadTypeSize32, payloadLowerFn } =
+        ctx;
     void payloadTypeSize32;
     const stream = new _context.HostStream({
         componentIdx,
@@ -59,7 +72,19 @@ export function streamNewFromLift(_context, ctx) {
 }
 export function streamRead(_context, ctx, streamEndWaitableIdx, ptr, count) {
     debugLog('[streamRead()] args', { ctx, streamEndWaitableIdx, ptr, count });
-    const { componentIdx, memoryIdx, getMemoryFn, reallocIdx, getReallocFn, stringEncoding, isAsync, streamTableIdx, elemMeta, syncFastOnly, deferSyncFinish, } = ctx;
+    const {
+        componentIdx,
+        memoryIdx,
+        getMemoryFn,
+        reallocIdx,
+        getReallocFn,
+        stringEncoding,
+        isAsync,
+        streamTableIdx,
+        elemMeta,
+        syncFastOnly,
+        deferSyncFinish,
+    } = ctx;
     void memoryIdx;
     void reallocIdx;
     if (componentIdx === undefined) {
@@ -84,13 +109,17 @@ export function streamRead(_context, ctx, streamEndWaitableIdx, ptr, count) {
     }
     const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
     if (!streamEnd) {
-        throw new _context.RuntimeError(`missing stream end [${streamEndWaitableIdx}] (table [${streamTableIdx}], component [${componentIdx}])`);
+        throw new _context.RuntimeError(
+            `missing stream end [${streamEndWaitableIdx}] (table [${streamTableIdx}], component [${componentIdx}])`,
+        );
     }
     if (!(streamEnd instanceof _context.StreamEnd)) {
         throw new _context.RuntimeError('invalid stream type, expected _context.StreamEnd');
     }
     if (streamEnd.streamTableIdx() !== streamTableIdx) {
-        throw new Error(`stream end table idx [${streamEnd.streamTableIdx()}] != operation table idx [${streamTableIdx}]`);
+        throw new Error(
+            `stream end table idx [${streamEnd.streamTableIdx()}] != operation table idx [${streamTableIdx}]`,
+        );
     }
     if (streamEnd.isDoneState()) {
         const message = streamEnd.isWritable()
@@ -127,7 +156,19 @@ export function streamRead(_context, ctx, streamEndWaitableIdx, ptr, count) {
 }
 export function streamWrite(_context, ctx, streamEndWaitableIdx, ptr, count) {
     debugLog('[streamWrite()] args', { ctx, streamEndWaitableIdx, ptr, count });
-    const { componentIdx, memoryIdx, getMemoryFn, reallocIdx, getReallocFn, stringEncoding, isAsync, streamTableIdx, elemMeta, syncFastOnly, deferSyncFinish, } = ctx;
+    const {
+        componentIdx,
+        memoryIdx,
+        getMemoryFn,
+        reallocIdx,
+        getReallocFn,
+        stringEncoding,
+        isAsync,
+        streamTableIdx,
+        elemMeta,
+        syncFastOnly,
+        deferSyncFinish,
+    } = ctx;
     void memoryIdx;
     void reallocIdx;
     if (componentIdx === undefined) {
@@ -152,13 +193,17 @@ export function streamWrite(_context, ctx, streamEndWaitableIdx, ptr, count) {
     }
     const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
     if (!streamEnd) {
-        throw new _context.RuntimeError(`missing stream end [${streamEndWaitableIdx}] (table [${streamTableIdx}], component [${componentIdx}])`);
+        throw new _context.RuntimeError(
+            `missing stream end [${streamEndWaitableIdx}] (table [${streamTableIdx}], component [${componentIdx}])`,
+        );
     }
     if (!(streamEnd instanceof _context.StreamEnd)) {
         throw new _context.RuntimeError('invalid stream type, expected _context.StreamEnd');
     }
     if (streamEnd.streamTableIdx() !== streamTableIdx) {
-        throw new Error(`stream end table idx [${streamEnd.streamTableIdx()}] != operation table idx [${streamTableIdx}]`);
+        throw new Error(
+            `stream end table idx [${streamEnd.streamTableIdx()}] != operation table idx [${streamTableIdx}]`,
+        );
     }
     if (streamEnd.isDoneState()) {
         const message = streamEnd.isWritable()
@@ -242,8 +287,8 @@ export function streamCancelRead(_context, ctx, streamEndWaitableIdx) {
             }
             return task
                 .suspendUntil({
-                readyFn: () => streamEnd.hasPendingEvent(),
-            })
+                    readyFn: () => streamEnd.hasPendingEvent(),
+                })
                 .then(finishCancel);
         }
     }
@@ -298,8 +343,8 @@ export function streamCancelWrite(_context, ctx, streamEndWaitableIdx) {
             }
             return task
                 .suspendUntil({
-                readyFn: () => streamEnd.hasPendingEvent(),
-            })
+                    readyFn: () => streamEnd.hasPendingEvent(),
+                })
                 .then(finishCancel);
         }
     }
@@ -318,7 +363,9 @@ export function streamDropReadable(_context, ctx, streamEndWaitableIdx) {
     }
     const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
     if (!streamEnd) {
-        throw new Error(`missing stream (waitable [${streamEndWaitableIdx}], table [${streamTableIdx}], component [${componentIdx}])`);
+        throw new Error(
+            `missing stream (waitable [${streamEndWaitableIdx}], table [${streamTableIdx}], component [${componentIdx}])`,
+        );
     }
     if (!(streamEnd instanceof _context.StreamEnd)) {
         throw new _context.RuntimeError('invalid stream end class, expected [StreamReadableEnd]');
@@ -345,7 +392,9 @@ export function streamDropWritable(_context, ctx, streamEndWaitableIdx) {
     }
     const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
     if (!streamEnd) {
-        throw new Error(`missing stream (waitable [${streamEndWaitableIdx}], table [${streamTableIdx}], component [${componentIdx}])`);
+        throw new Error(
+            `missing stream (waitable [${streamEndWaitableIdx}], table [${streamTableIdx}], component [${componentIdx}])`,
+        );
     }
     if (!(streamEnd instanceof _context.StreamEnd)) {
         throw new _context.RuntimeError('invalid stream end class, expected [StreamWritableEnd]');
@@ -416,4 +465,3 @@ export function streamTransfer(_context, srcStreamWaitableIdx, srcTableIdx, dest
     });
     return waitableIdx;
 }
-//# sourceMappingURL=stream-operations.js.map

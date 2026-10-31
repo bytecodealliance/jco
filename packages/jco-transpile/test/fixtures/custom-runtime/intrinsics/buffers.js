@@ -240,4 +240,3 @@ export function initializeBufferManagerClass(ManagedBuffer) {
     }
     return BufferManager;
 }
-//# sourceMappingURL=buffers.js.map

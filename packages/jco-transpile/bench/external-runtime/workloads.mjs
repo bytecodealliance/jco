@@ -2,7 +2,19 @@ import assert from 'node:assert/strict';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 export function importsFor(id) {
-    const imports = ['numbers', 'variants', 'strings', 'lists', 'records', 'flavorful', 'futures'].includes(id)
+    const imports = [
+        'numbers',
+        'variants',
+        'strings',
+        'lists',
+        'records',
+        'flavorful',
+        'futures',
+        'future-pending',
+        'future-rejected',
+        'future-nested',
+        'stream-host-payload',
+    ].includes(id)
         ? new WASIShim().getImportObject()
         : {};
     if (['numbers', 'variants', 'lists', 'records', 'flavorful'].includes(id)) {
@@ -18,7 +30,7 @@ export function importsFor(id) {
             },
         };
     }
-    if (id === 'futures') {
+    if (['futures', 'future-pending', 'future-rejected', 'future-nested', 'stream-host-payload'].includes(id)) {
         imports['jco:test-components/resources'] = {
             ExampleResource: class {
                 getId() {
@@ -31,7 +43,7 @@ export function importsFor(id) {
 }
 
 /** Independent known answers also validate every timed checksum. */
-export async function workload(id, instance) {
+export async function workload(id, instance, utilities) {
     switch (id) {
         case 'noise':
             assert.equal(instance.scalar(17), 18);
@@ -159,6 +171,70 @@ export async function workload(id, instance) {
             assert.equal(await fn(Promise.resolve(42)), 42);
             return { call: async (i) => fn(Promise.resolve(i & 255)), async: true };
         }
+        case 'stream-host-payload': {
+            const passthrough = instance['jco:test-components/stream-lower-sync'].streamPassthrough;
+            const call = async (i) => {
+                const values = Uint32Array.from({ length: 16 }, (_, index) => (i & 255) + index);
+                const returned = passthrough(values);
+                let checksum = 0,
+                    count = 0;
+                for (;;) {
+                    const { value, done } = await returned.read({ count: 16 });
+                    if (done) {
+                        break;
+                    }
+                    const chunk = typeof value === 'number' ? [value] : value;
+                    for (const item of chunk) {
+                        checksum += Number(item);
+                        count++;
+                    }
+                }
+                returned[Symbol.dispose || Symbol.for('dispose')]();
+                assert.equal(count, 16, 'host stream payload count');
+                return checksum;
+            };
+            assert.equal(await call(17), 16 * 17 + 120);
+            return { call, async: true };
+        }
+        case 'stream-payload': {
+            assert.equal(await instance.copyPayload(17), 16 * 17 + 120);
+            return { call: (i) => instance.copyPayload(i & 255), async: true };
+        }
+        case 'stream-cancel': {
+            assert.equal(await instance.cancelRead(17), 19);
+            // A subsequent payload copy proves cancellation left the shared pair usable.
+            assert.equal(await instance.copyPayload(17), 16 * 17 + 120);
+            return { call: (i) => instance.cancelRead(i & 255), async: true };
+        }
+        case 'future-pending': {
+            const fn = instance['jco:test-components/future-lower-sync'].futurePassthrough;
+            const call = (i) => fn(new Promise((resolve) => queueMicrotask(() => resolve(i & 255))));
+            assert.equal(await call(42), 42);
+            return { call, async: true };
+        }
+        case 'future-nested': {
+            assert.equal(typeof utilities?.Future, 'function');
+            const { Future } = utilities;
+            const fn = instance['jco:test-components/future-lower-async'].readFutureValueFutureString;
+            const call = async (i) => Number(await fn(new Future(new Future(String(i & 255)))));
+            assert.equal(await call(42), 42);
+            return { call, async: true };
+        }
+        case 'future-rejected': {
+            const fn = instance['jco:test-components/future-lower-async'].readFutureValueResultString;
+            const call = async (i) => {
+                const message = 'rejected-' + (i & 255);
+                try {
+                    await fn(Promise.reject(message));
+                } catch (error) {
+                    assert.equal(typeof error === 'string' ? error : error.message, message);
+                    return i & 255;
+                }
+                throw new Error('future rejection was lost');
+            };
+            assert.equal(await call(42), 42);
+            return { call, async: true };
+        }
         case 'streams': {
             await assert.rejects(async () => instance.zeroLengthWrite(), {
                 name: 'RuntimeError',
@@ -175,6 +251,15 @@ export async function workload(id, instance) {
 
 export function expectedResult(id, i) {
     switch (id) {
+        case 'stream-host-payload':
+        case 'stream-payload':
+            return 16 * (i & 255) + 120;
+        case 'stream-cancel':
+            return (i & 255) + 2;
+        case 'future-pending':
+        case 'future-rejected':
+        case 'future-nested':
+            return i & 255;
         case 'numbers':
             return i & 255;
         case 'strings': {

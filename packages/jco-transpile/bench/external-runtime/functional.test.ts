@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -94,6 +94,34 @@ test('coverage names the runtime API actually being measured', async () => {
     const coverage = JSON.parse(await readFile(new URL('./coverage.json', import.meta.url), 'utf8'));
     const runtime = await import(new URL('runtime.js', defaultRuntimeUrl).href);
     assert.equal(coverage.apiVersion, runtime.CM_RUNTIME_API_VERSION);
+    const root = new URL('../../../../crates/js-component-bindgen/src/intrinsics/', import.meta.url);
+    const sources = await Promise.all(
+        (await readdir(root, { recursive: true }))
+            .filter((name) => name.endsWith('.rs'))
+            .map(async (name) => readFile(new URL(name, root), 'utf8')),
+    );
+    const main = await readFile(new URL('mod.rs', root), 'utf8');
+    const body = main.split('pub enum Intrinsic {')[1].split('\n}')[0];
+    const names: string[] = [];
+    for (const match of body.matchAll(/^    (\w+)(?:\((\w+)\))?,/gm)) {
+        const [, variant, family] = match;
+        if (!family) {
+            names.push(variant);
+            continue;
+        }
+        const declaration = `pub enum ${family} {`;
+        const source = sources.find((text) => text.includes(declaration));
+        assert.isDefined(source, `missing intrinsic family ${family}`);
+        const variants = source!.split(declaration)[1].split('\n}')[0];
+        for (const entry of variants.matchAll(/^    (\w+),/gm)) {
+            names.push(`${variant}(${entry[1]})`);
+        }
+    }
+    assert.deepEqual(
+        [...coverage.mapped].sort(),
+        names.sort(),
+        'coverage must name every current intrinsic exactly once',
+    );
     assert.include(coverage.mapped, 'Resource(ResourceTableGet)');
     assert.equal(new Set(coverage.mapped).size, coverage.mapped.length);
 });
