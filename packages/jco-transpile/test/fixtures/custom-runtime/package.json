@@ -13,6 +13,7 @@
         "./intrinsics/waitable": "./intrinsics/waitable.js",
         "./intrinsics/error-context": "./intrinsics/error-context.js",
         "./intrinsics/async-task": "./intrinsics/async-task.js",
-        "./intrinsics/host": "./intrinsics/host.js"
+        "./intrinsics/host": "./intrinsics/host.js",
+        "./intrinsics/lift": "./intrinsics/lift.js"
     }
 }

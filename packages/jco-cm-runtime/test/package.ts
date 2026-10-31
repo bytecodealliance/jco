@@ -85,6 +85,7 @@ suite('runtime package', () => {
                     'ErrorContextModule',
                     'AsyncTaskModule',
                     'HostModule',
+                    'LiftModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -103,6 +104,7 @@ suite('runtime package', () => {
                 './intrinsics/error-context',
                 './intrinsics/host',
                 './intrinsics/js-helper',
+                './intrinsics/lift',
                 './intrinsics/resource',
                 './intrinsics/string',
                 './intrinsics/waitable',
@@ -118,6 +120,10 @@ suite('runtime package', () => {
 
             // The independent provider needs only the published declaration, without private files.
             await writeFile(join(consumer, 'contract.d.ts'), contract);
+            await writeFile(
+                join(consumer, 'contract-exports.ts'),
+                `export default ${JSON.stringify(contractExports)};`,
+            );
             await writeFile(
                 join(consumer, 'contract-exports.ts'),
                 `export default ${JSON.stringify(contractExports)};`,
