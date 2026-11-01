@@ -4,8 +4,11 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
     cooldown:
-      default-days: 7
+      default-days: 14
 
   - package-ecosystem: 'npm'
     directories:
@@ -27,13 +30,16 @@ updates:
       time: '09:00'
       timezone: 'America/New_York'
     cooldown:
-      default-days: 7
+      default-days: 14
 
   - package-ecosystem: "cargo"
     directories:
       - '/crates/*'
       - '/packages/jco-node-fs'
     schedule:
-      interval: "weekly"
+      interval: 'weekly'
+      day: 'monday'
+      time: '09:00'
+      timezone: 'America/New_York'
     cooldown:
-      default-days: 7
+      default-days: 14
