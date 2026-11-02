@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.41.0] - 2026-11-02
+
+### 🧪 Testing
+
+- _(jco)_ restore skipped tests after dependency releases by @vados-cosmonic in #2368
+
+- _(jco)_ retry external DNS lookup in CI by @vados-cosmonic in #2363
+
+- _(jco)_ defer named runtime tests until transpiler release by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update jco-transpile to v0.23.0 by @vados-cosmonic in #2394
+
 ## [1.40.0] - 2026-10-28
 
 ### 🚀 Features
