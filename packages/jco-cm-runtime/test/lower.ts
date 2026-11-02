@@ -8,7 +8,7 @@ import {
     initializeUtf16Decoder,
 } from '../src/intrinsics/string.js';
 import { create as createErrorContext } from './error-context-helpers.js';
-import { create as createComponent } from './component-helpers.js';
+import { create as createFuture } from './future-helpers.js';
 import type {
     TaskLowerContext,
     TaskLowerFn,
@@ -216,31 +216,28 @@ test.concurrent('owned resources honor the explicit caller capability and reject
     expect(() => lower.lowerFlatBorrow(cursor({}))).toThrow(/borrowed resources is not supported/);
 });
 test.concurrent('future and stream lowering look up live state lazily and write handle zero-pointer results', () => {
-    const { lookup } = createComponent(),
-        resourceRep = Symbol(),
-        nested = Symbol();
-    let reads = 0;
+    const selected = createFuture();
+    const { lookup } = selected;
+    const resourceRep = Symbol();
+    const rep = selected.futures.insert({
+        getFutureEndWaitableIdx: () => 17,
+        setRep() {},
+        createUserFuture: () => new selected.FutureValue(() => ({ value: 0 })),
+    });
     const context: LowerFutureContext = {
         numeric: strict,
         lookup,
         resourceRep,
-        getNestedSymbol: () => nested,
-        getGlobal: () => {
-            reads++;
-            return new Map([[7, { getFutureEndWaitableIdx: () => 17 }]]);
-        },
-        isLowerable: () => true,
-        create: () => {
-            throw Error('must reuse host future');
-        },
-        genHostInject: () => {
-            throw Error('must reuse host future');
-        },
+        nestedSymbol: selected.nestedSymbol,
+        futures: selected.futures,
+        creation: selected.creation,
+        injection: selected.injection,
     };
-    const fn = lower.lowerFlatFuture(context, { componentIdx: 0, futureTableIdx: 2, elemMeta: {} });
-    expect(reads).toBe(0);
-    const ctx = cursor({ [resourceRep]: 7 });
+    const fn = lower.lowerFlatFuture(context, { componentIdx: 0, futureTableIdx: 2, elemMeta: { align32: 4 } });
+    expect(selected.futures.size()).toBe(1);
+    const ctx = cursor(Object.assign(Promise.resolve(0), { [resourceRep]: rep }));
     expect(fn(ctx)).toBe(17);
+    expect(selected.futures.size()).toBe(1);
     expect(new DataView(ctx.memory!.buffer).getUint32(0, true)).toBe(17);
     const readEnd: LowerReadEnd = { waitableIdx: () => 23, setHostInjectFn: () => {}, setHostDropFn: () => {} };
     class External {}
@@ -269,7 +266,9 @@ test.concurrent('future and stream lowering look up live state lazily and write 
     };
     const value = Object.assign(new External(), { [resourceRep]: 9 }),
         streamCtx = cursor(value);
-    expect(lower.lowerFlatStream(stream, { componentIdx: 0, streamTableIdx: 3, elemMeta: {} })(streamCtx)).toBe(23);
+    expect(
+        lower.lowerFlatStream(stream, { componentIdx: 0, streamTableIdx: 3, elemMeta: { align32: 4 } })(streamCtx),
+    ).toBe(23);
     expect(new DataView(streamCtx.memory!.buffer).getUint32(0, true)).toBe(23);
 });
 test.concurrent('error-context lift/lower transfers ownership and releases exhausted local/global handles', () => {

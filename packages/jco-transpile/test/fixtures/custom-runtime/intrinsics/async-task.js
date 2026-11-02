@@ -37,7 +37,7 @@ export const initializeAsyncBlockingCallDepth = (platform) => {
     return new Global({ value: 'i32', mutable: true }, 0);
 };
 export function initializeAsyncTaskClass(context) {
-    const { lookup: _lookup, registers: _registers, clearing: _clearing, RuntimeError: _RuntimeError, AsyncSubtask: _Subtask, Waitable: _Waitable, events: _events, determinism: _determinism, isFutureValue: _isFutureValue, scopeCounter: _scopeCounter, scopeTasks: _scopeTasks, } = context;
+    const { lookup: _lookup, registers: _registers, clearing: _clearing, RuntimeError: _RuntimeError, AsyncSubtask: _Subtask, Waitable: _Waitable, events: _events, determinism: _determinism, FutureValue, scopeCounter: _scopeCounter, scopeTasks: _scopeTasks, } = context;
     class AsyncTask {
         static _ID = 0n;
         static _HOST_THREAD_ID = 0;
@@ -143,7 +143,7 @@ export function initializeAsyncTaskClass(context) {
                 else if (this.#fields.rejected) {
                     rejectCompletionPromise(this.#fields.completionValue);
                 }
-                else if (this.#fields.preserveFutureResult && _isFutureValue(this.#fields.completionValue)) {
+                else if (this.#fields.preserveFutureResult && this.#fields.completionValue instanceof FutureValue) {
                     this.#fields.completionValue.resolveAsValue(resolveCompletionPromise);
                 }
                 else {

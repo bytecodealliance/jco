@@ -82,6 +82,10 @@
         "./intrinsics/lower": {
             "types": "./dist/intrinsics/lower.d.ts",
             "default": "./dist/intrinsics/lower.js"
+        },
+        "./intrinsics/future": {
+            "types": "./dist/intrinsics/future.d.ts",
+            "default": "./dist/intrinsics/future.js"
         }
     },
     "scripts": {

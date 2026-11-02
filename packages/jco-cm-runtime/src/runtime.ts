@@ -174,6 +174,7 @@ export interface RuntimeModuleContracts {
     readonly 'intrinsics/host': HostModule;
     readonly 'intrinsics/lift': LiftModule;
     readonly 'intrinsics/lower': LowerModule;
+    readonly 'intrinsics/future': FutureModule;
 }
 
 /** Only the numeric validation policy selected for one instantiation. */
@@ -1527,8 +1528,8 @@ export interface AsyncTaskClassContext extends TrapContext {
     readonly scopeTasks: ResourceScopeTasks;
     readonly clearing: TaskClearContext;
     readonly registers: TaskRegisters;
-    /** Lazy bridge to the still-inline FutureValue constructor until N17. */
-    readonly isFutureValue: (value: unknown) => value is TaskFutureValue;
+    /** The selected constructor supplies the store's future identity. */
+    readonly FutureValue: abstract new (...args: never[]) => TaskFutureValue;
 }
 /** A narrow selected platform, distinct from an absent WebAssembly implementation. */
 export interface TaskGlobalPlatform {
@@ -1820,9 +1821,6 @@ export interface LiftEndpoint {
     readonly isIdleState: () => boolean;
     readonly isInSet: () => boolean;
 }
-export interface LiftFutureEndpoint extends LiftEndpoint {
-    readonly promise: () => Promise<unknown>;
-}
 export interface LiftStreamEndpoint extends LiftEndpoint {
     readonly isReadable: () => boolean;
     readonly globalStreamMapRep: () => number;
@@ -1834,12 +1832,9 @@ export interface LiftEndpointTable {
     readonly componentIdx: number;
     readonly table: unknown;
 }
-/** Temporary lazy inline capabilities, removed by the future/stream conversions. */
-export interface LiftFutureContext extends TrapContext {
-    readonly lookup: ComponentStateLookupContext;
-    readonly getTables: () => Readonly<Record<number, LiftEndpointTable>>;
-    readonly getEnd: (options: { tableIdx: number; futureEndWaitableIdx: number }) => LiftFutureEndpoint | undefined;
-}
+/** Actual owners shared with the named future operations. */
+export type LiftFutureContext = FutureEndLookupContext;
+
 export interface LiftExternalStreamOptions {
     readonly globalRep: number;
     readonly isReadable: boolean;
@@ -1943,7 +1938,7 @@ export interface LowerStringContext {
     readonly utf8: StringEncodeInto;
     readonly utf16: Utf16EncodingContext;
 }
-export interface LowerElementMeta {
+export interface LowerElementMeta extends FutureElementMetadata {
     stringEncoding?: string;
     [key: string]: unknown;
 }
@@ -1963,18 +1958,9 @@ export interface LowerReadEnd {
     readonly setHostInjectFn: (fn: unknown) => void;
     readonly setHostDropFn: (fn: (reason?: unknown) => unknown) => void;
 }
-export interface LowerCreatedFuture {
-    readonly writeEnd: unknown;
-    readonly writeEndWaitableIdx: number;
-    readonly readEnd: LowerReadEnd;
-    readonly readEndWaitableIdx: number;
-}
 export interface LowerCreatedStream {
     readonly writeEnd: unknown;
     readonly readEnd: LowerReadEnd;
-}
-export interface LowerStoredFuture {
-    readonly getFutureEndWaitableIdx: () => number;
 }
 export interface LowerStoredStream {
     readonly readEnd?: () => LowerReadEnd;
@@ -1992,15 +1978,12 @@ export interface LowerFutureContext {
     readonly numeric: StrictNumericContext;
     readonly lookup: ComponentStateLookupContext;
     readonly resourceRep: symbol;
-    readonly getNestedSymbol: () => symbol;
-    readonly getGlobal: () => Pick<RepTable<LowerStoredFuture>, 'get'>;
-    readonly isLowerable: (value: unknown) => boolean;
-    readonly create: (
-        state: ComponentAsyncState,
-        options: { tableIdx: number; elemMeta: LowerElementMeta },
-    ) => LowerCreatedFuture;
-    readonly genHostInject: (options: { promise: unknown; stringEncoding?: string; hostWriteEnd: unknown }) => unknown;
+    readonly nestedSymbol: symbol;
+    readonly futures: FutureGlobalMap;
+    readonly creation: FutureCreateContext;
+    readonly injection: FutureHostInjectContext;
 }
+
 export interface LowerStreamContext {
     readonly numeric: StrictNumericContext;
     readonly lookup: ComponentStateLookupContext;
@@ -2053,4 +2036,395 @@ export interface LowerModule {
     readonly lowerFlatFuture: (context: LowerFutureContext, meta: LowerFutureMeta) => TaskLowerFn;
     readonly lowerFlatStream: (context: LowerStreamContext, meta: LowerStreamMeta) => TaskLowerFn;
     readonly lowerFlatErrorContext: (context: LowerErrorContext, errCtxTableIdx: number, ctx: TaskLowerContext) => void;
+}
+
+/** A one-layer awaitable preserves a future-valued payload without assimilating it. */
+export type FutureValueResolve = (value: unknown) => unknown;
+export type FutureValueReject = (reason: unknown) => unknown;
+export interface FutureValueBox {
+    readonly value: unknown;
+}
+export type FutureValueStart = () => FutureValueBox | PromiseLike<FutureValueBox>;
+export interface FutureValue {
+    readonly then: (resolve: FutureValueResolve, reject?: FutureValueReject) => Promise<unknown>;
+    readonly resolveAsValue: (resolve: FutureValueResolve) => void;
+}
+export interface FutureValueConstructor {
+    new (start: FutureValueStart): FutureValue;
+    readonly prototype: FutureValue;
+}
+
+export interface FutureCopyResults {
+    readonly COMPLETED: number;
+    readonly DROPPED: number;
+    readonly CANCELLED: number;
+}
+export interface FutureCopyStates {
+    readonly IDLE: number;
+    readonly SYNC_COPYING: number;
+    readonly ASYNC_COPYING: number;
+    readonly CANCELLING_COPY: number;
+    readonly DONE: number;
+    readonly CANCELLED?: number;
+}
+export type FutureOnCopyDone = (result: number) => void;
+export interface FuturePendingBufferMeta {
+    componentIdx?: number | null;
+    buffer?: ManagedBuffer | null;
+    isWrite?: boolean | null;
+    onCopyDoneFn?: FutureOnCopyDone | null;
+}
+export interface FutureEndOptions {
+    readonly pendingBufferMeta: FuturePendingBufferMeta;
+    readonly waitable: ComponentWaitable;
+    readonly isPeerDroppedFn?: () => boolean;
+    readonly notifyPeerDroppedFn?: () => void;
+}
+export interface FutureEndBase {
+    readonly getWaitable: () => ComponentWaitable;
+    readonly setWaitable: (waitable: ComponentWaitable) => void;
+    readonly setCopyState: (state: number) => void;
+    readonly getCopyState: () => number;
+    readonly isDoneState: () => boolean;
+    readonly isCancelledState: () => boolean;
+    readonly isIdleState: () => boolean;
+    readonly isCopying: () => boolean;
+    readonly setPendingBufferMeta: (meta: FuturePendingBufferMeta) => void;
+    readonly resetPendingBufferMeta: () => void;
+    readonly getPendingBufferMeta: () => FuturePendingBufferMeta;
+    readonly resetAndNotifyPending: (result: number) => void;
+    readonly setPendingEvent: (fn: () => WaitableEvent) => void;
+    readonly hasPendingEvent: () => boolean;
+    readonly isInSet: () => boolean;
+    readonly getPendingEvent: () => WaitableEvent | null;
+    readonly isDropped: () => boolean;
+    readonly isPeerDropped: () => boolean;
+    readonly notifyDropped: () => void;
+    readonly drop: () => void;
+}
+export interface FutureEndConstructor {
+    new (options: FutureEndOptions): FutureEndBase;
+    readonly prototype: FutureEndBase;
+    readonly CopyResult: FutureCopyResults;
+    readonly CopyState: FutureCopyStates;
+}
+
+export interface FutureElementMetadata extends BufferElementMetadata {
+    size32?: number;
+    isBorrowed?: boolean;
+    isNumeric?: boolean;
+}
+export interface FutureCopyOptions {
+    readonly componentIdx: number;
+    readonly buffer: ManagedBuffer;
+    readonly onCopyDoneFn: FutureOnCopyDone;
+}
+export type FutureCleanup = () => void;
+export interface FutureHostInjectFn {
+    (args: { count: number }): Promise<FutureCleanup>;
+    readonly drop?: () => unknown;
+}
+export interface FutureGuestCopyOptions {
+    readonly elemMeta?: FutureElementMetadata;
+    readonly componentIdx: number;
+    readonly stringEncoding?: string;
+    readonly getReallocFn?: () => StringRealloc;
+    readonly isAsync?: boolean;
+    readonly memory?: RuntimeMemory;
+    readonly realloc?: StringRealloc;
+    readonly ptr?: number;
+    readonly data?: unknown[];
+    readonly buffer?: ManagedBuffer;
+}
+export interface FutureHostReadOptions {
+    readonly stringEncoding?: string;
+}
+export interface FutureHostWriteOptions extends FutureHostReadOptions {
+    readonly value: unknown;
+    readonly getReallocFn?: () => StringRealloc;
+}
+export interface FutureEndpointOptions extends FutureEndOptions {
+    readonly target?: unknown;
+    readonly elemMeta: FutureElementMetadata;
+    readonly tableIdx: number;
+    readonly hostInjectFn?: FutureHostInjectFn;
+    readonly hostOwned?: boolean;
+}
+export interface FuturePayloadEnd extends FutureEndBase {
+    target: unknown;
+    readonly isReadable: () => boolean;
+    readonly isWritable: () => boolean;
+    readonly setTarget: (target: unknown) => void;
+    readonly getElemMeta: () => FutureElementMetadata;
+    readonly futureTableIdx: () => number;
+    readonly setFutureTableIdx: (index: number) => void;
+    readonly globalFutureMapRep: () => number | undefined;
+    readonly setGlobalFutureMapRep: (index: number) => void;
+    readonly waitableIdx: () => number | null;
+    readonly setWaitableIdx: (index: number) => void;
+    readonly handle: () => number | undefined;
+    readonly setHandle: (index: number) => void;
+    readonly setHostInjectFn: (fn: FutureHostInjectFn) => void;
+    readonly promise: () => FutureValue;
+    readonly cancel: () => void;
+}
+export interface FutureReadableEnd extends FuturePayloadEnd {
+    readonly _read: (args: FutureCopyOptions) => void;
+    readonly guestRead: (args: FutureGuestCopyOptions) => { buffer: ManagedBuffer };
+    readonly hostRead: (args: FutureHostReadOptions) => Promise<FutureValueBox>;
+}
+export interface FutureWritableEnd extends FuturePayloadEnd {
+    readonly _write: (args: FutureCopyOptions) => void;
+    readonly guestWrite: (args: FutureGuestCopyOptions) => { buffer: ManagedBuffer };
+    readonly hostWrite: (args: FutureHostWriteOptions) => Promise<boolean>;
+}
+export interface FutureReadableEndConstructor extends Pick<FutureEndConstructor, 'CopyState' | 'CopyResult'> {
+    new (args: FutureEndpointOptions): FutureReadableEnd;
+    readonly prototype: FutureReadableEnd;
+}
+export interface FutureWritableEndConstructor extends Pick<FutureEndConstructor, 'CopyState' | 'CopyResult'> {
+    new (args: FutureEndpointOptions): FutureWritableEnd;
+    readonly prototype: FutureWritableEnd;
+}
+export interface FutureBufferManager {
+    readonly createBuffer: (
+        options: CreateBufferOptions & { realloc?: StringRealloc; isReadable?: boolean; isWritable?: boolean },
+    ) => { id: bigint; buffer: ManagedBuffer };
+}
+export interface FutureEndpointClassContext extends TrapContext {
+    readonly FutureEnd: FutureEndConstructor;
+    readonly FutureValue: FutureValueConstructor;
+    readonly buffers: FutureBufferManager;
+    readonly events: Pick<AsyncEventCodes, 'FUTURE_READ' | 'FUTURE_WRITE'>;
+}
+export interface FutureReadableClassContext extends FutureEndpointClassContext {
+    readonly lookup: ComponentStateLookupContext;
+}
+
+export interface InternalFutureOptions {
+    readonly tableIdx: number;
+    readonly elemMeta: FutureElementMetadata;
+    readonly readWaitable: ComponentWaitable;
+    readonly writeWaitable: ComponentWaitable;
+    readonly hostInjectFn?: FutureHostInjectFn;
+    readonly componentIdx?: number;
+}
+export interface InternalFuture {
+    readonly elemMeta: () => FutureElementMetadata;
+    readonly readEnd: () => FutureReadableEnd;
+    readonly writeEnd: () => FutureWritableEnd;
+    readonly globalFutureMapRep: () => number | undefined;
+    readonly setGlobalFutureMapRep: (index: number) => void;
+}
+export interface InternalFutureConstructor {
+    new (options: InternalFutureOptions): InternalFuture;
+    readonly prototype: InternalFuture;
+}
+export interface InternalFutureClassContext {
+    readonly FutureReadableEnd: FutureReadableEndConstructor;
+    readonly FutureWritableEnd: FutureWritableEndConstructor;
+}
+
+export interface FutureTable {
+    readonly componentIdx: number;
+    readonly table: RepTable<FuturePayloadEnd>;
+}
+export interface FutureTables {
+    [tableIdx: number]: FutureTable;
+}
+export interface HostFutureOptions {
+    readonly componentIdx: number;
+    readonly futureEndWaitableIdx: number;
+    readonly futureTableIdx: number;
+    readonly payloadLiftFn: TaskLiftFn;
+    readonly payloadLowerFn: TaskLowerFn;
+}
+export interface HostFuture {
+    readonly setRep: (rep: number) => void;
+    readonly getFutureEndWaitableIdx: () => number;
+    readonly createUserFuture: () => FutureValue;
+}
+export interface HostFutureConstructor {
+    new (options: HostFutureOptions): HostFuture;
+    readonly prototype: HostFuture;
+}
+export type FutureGlobalMap = RepTable<InternalFuture | HostFuture>;
+export interface FutureCreateContext {
+    readonly InternalFuture: InternalFutureConstructor;
+    readonly futures: FutureGlobalMap;
+    readonly tables: FutureTables;
+}
+export interface FutureCreateOptions {
+    readonly tableIdx: number;
+    readonly elemMeta: FutureElementMetadata;
+    readonly hostInjectFn?: FutureHostInjectFn;
+}
+export interface FutureCreated {
+    readonly writeEnd: FutureWritableEnd;
+    readonly writeEndWaitableIdx: number | null;
+    readonly writeEndHandle: number | undefined;
+    readonly readEndWaitableIdx: number | null;
+    readonly readEndHandle: number | undefined;
+    readonly readEnd: FutureReadableEnd;
+}
+export interface FutureTableContext extends TrapContext {
+    readonly FutureEnd: FutureEndConstructor;
+    readonly tables: FutureTables;
+    readonly lookup: ComponentStateLookupContext;
+}
+export interface FutureEndLookupContext extends TrapContext, FutureTableContext {}
+export interface FutureEndLocation {
+    readonly tableIdx: number;
+    readonly futureEndHandle?: number;
+    readonly futureEndWaitableIdx?: number;
+}
+export interface FutureEndInsertion {
+    readonly tableIdx: number;
+    readonly futureEnd: FuturePayloadEnd;
+}
+export interface FutureEndRemoval {
+    readonly tableIdx: number;
+    readonly futureWaitableIdx: number;
+}
+export interface HostFutureClassContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly ends: FutureEndLookupContext;
+}
+
+export interface FutureTask extends TaskIdentity {
+    readonly mayBlock: () => boolean | undefined;
+    readonly suspendUntil: (options: TaskSuspendOptions) => Promise<boolean>;
+    readonly isErrored: () => unknown;
+}
+export interface FutureNewOptions {
+    readonly componentIdx: number;
+    readonly futureTableIdx: number;
+    readonly elemMeta: FutureElementMetadata;
+}
+export interface FutureNewContext {
+    readonly taskLookup: TaskLookupContext<FutureTask>;
+    readonly lookup: ComponentStateLookupContext;
+    readonly creation: FutureCreateContext;
+}
+export interface FutureNewFromLiftOptions extends HostFutureOptions {
+    readonly payloadTypeSize32?: number;
+}
+export interface FutureNewFromLiftContext {
+    readonly HostFuture: HostFutureConstructor;
+    readonly futures: FutureGlobalMap;
+}
+export interface FutureOperationOptions {
+    readonly elemMeta?: FutureElementMetadata;
+    readonly componentIdx: number;
+    readonly futureTableIdx: number;
+    readonly memoryIdx?: number;
+    readonly getMemoryFn?: () => RuntimeMemory;
+    readonly reallocIdx?: number;
+    readonly getReallocFn?: () => StringRealloc;
+    readonly stringEncoding?: string;
+    readonly isAsync?: boolean;
+}
+export interface FutureOperationContext extends TrapContext {
+    readonly lookup: ComponentStateLookupContext;
+    readonly taskLookup: TaskLookupContext<FutureTask>;
+    readonly ends: FutureEndLookupContext;
+    readonly events: Pick<AsyncEventCodes, 'FUTURE_READ' | 'FUTURE_WRITE'>;
+    readonly Base: Pick<FutureEndConstructor, 'CopyState'>;
+}
+export interface FutureReadContext extends FutureOperationContext {
+    readonly FutureEnd: FutureReadableEndConstructor;
+}
+export interface FutureWriteContext extends FutureOperationContext {
+    readonly FutureEnd: FutureWritableEndConstructor;
+}
+export interface FutureDropContext extends TrapContext {
+    readonly tables: FutureTableContext;
+}
+export interface FutureDropReadableContext extends FutureDropContext {
+    readonly FutureEnd: FutureReadableEndConstructor;
+}
+export interface FutureDropWritableContext extends FutureDropContext {
+    readonly FutureEnd: FutureWritableEndConstructor;
+}
+export interface FutureHostInjectContext {
+    readonly nestedSymbol: symbol;
+    readonly hasOwnProperty: HasOwnPropertyCapability;
+    readonly disposeSymbol: symbol;
+    readonly tracking: ComponentHostOperationContext;
+}
+export interface FutureHostInjectOptions {
+    readonly promise: unknown;
+    readonly hostWriteEnd: FutureWritableEnd;
+    readonly stringEncoding?: string;
+    readonly getReallocFn?: () => StringRealloc;
+}
+
+export interface FutureModule {
+    readonly initializeFutures: (RepTable: RepTableConstructor) => FutureGlobalMap;
+    readonly initializeNestedFutureSymbol: () => symbol;
+    readonly initializeFutureTables: () => FutureTables;
+    readonly initializeFutureValueClass: () => FutureValueConstructor;
+    readonly initializeFutureEndClass: (
+        events: Pick<AsyncEventCodes, 'FUTURE_READ' | 'FUTURE_WRITE'>,
+    ) => FutureEndConstructor;
+    readonly initializeFutureReadableEndClass: (context: FutureReadableClassContext) => FutureReadableEndConstructor;
+    readonly initializeFutureWritableEndClass: (context: FutureEndpointClassContext) => FutureWritableEndConstructor;
+    readonly initializeInternalFutureClass: (context: InternalFutureClassContext) => InternalFutureConstructor;
+    readonly initializeHostFutureClass: (context: HostFutureClassContext) => HostFutureConstructor;
+    readonly createFuture: (
+        context: FutureCreateContext,
+        state: ComponentAsyncState,
+        args: FutureCreateOptions,
+    ) => FutureCreated;
+    readonly getFutureEnd: (context: FutureEndLookupContext, args: FutureEndLocation) => FuturePayloadEnd;
+    readonly addFutureEndToTable: (
+        context: FutureTableContext,
+        args: FutureEndInsertion,
+    ) => { handle: number; waitableIdx: number };
+    readonly removeFutureEndFromTable: (context: FutureTableContext, args: FutureEndRemoval) => FuturePayloadEnd;
+    readonly futureNew: (context: FutureNewContext, options: FutureNewOptions) => bigint;
+    readonly futureNewFromLift: (context: FutureNewFromLiftContext, options: FutureNewFromLiftOptions) => FutureValue;
+    readonly futureRead: (
+        context: FutureReadContext,
+        options: FutureOperationOptions,
+        waitableIdx: number,
+        ptr: number,
+    ) => number | Promise<number>;
+    readonly futureWrite: (
+        context: FutureWriteContext,
+        options: FutureOperationOptions,
+        waitableIdx: number,
+        ptr: number,
+    ) => number | Promise<number>;
+    readonly futureCancelRead: (
+        context: FutureReadContext,
+        options: FutureOperationOptions,
+        waitableIdx: number,
+    ) => number | Promise<number>;
+    readonly futureCancelWrite: (
+        context: FutureWriteContext,
+        options: FutureOperationOptions,
+        waitableIdx: number,
+    ) => number | Promise<number>;
+    readonly futureDropReadable: (
+        context: FutureDropReadableContext,
+        options: FutureOperationOptions,
+        waitableIdx: number,
+    ) => void;
+    readonly futureDropWritable: (
+        context: FutureDropWritableContext,
+        options: FutureOperationOptions,
+        waitableIdx: number,
+    ) => void;
+    readonly futureTransfer: (
+        context: FutureEndLookupContext,
+        waitableIdx: number,
+        source: number,
+        destination: number,
+    ) => number;
+    readonly genFutureHostInjectFn: (
+        context: FutureHostInjectContext,
+        options: FutureHostInjectOptions,
+    ) => FutureHostInjectFn;
+    readonly isFutureLowerableObject: (value: unknown) => boolean;
 }

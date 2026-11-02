@@ -929,6 +929,11 @@ impl JsBindgen<'_> {
         self.runtime().call_prefix(intrinsic, true)
     }
 
+    fn intrinsic_bind_callback_prefix(&mut self, intrinsic: Intrinsic) -> String {
+        self.all_intrinsics.insert(intrinsic);
+        self.runtime().bind_callback_prefix(intrinsic, true)
+    }
+
     fn intrinsic_bind_callback(&mut self, intrinsic: Intrinsic, operands: &str) -> String {
         self.all_intrinsics.insert(intrinsic);
         self.runtime().bind_callback(intrinsic, operands)
@@ -954,9 +959,19 @@ impl JsBindgen<'_> {
         // Future` class that can be used by external consumers (e.g. host code) to build nested future values
         //
         // This class is exposed via module._util, always
-        let maybe_ext_future_class = if self.all_intrinsics.contains(&Intrinsic::AsyncFuture(
-            AsyncFutureIntrinsic::HostFutureClass,
-        )) {
+        let needs_host_future = if self.cm_runtime_es_module.is_some() {
+            crate::intrinsics::ext::uses_context(
+                &self.all_intrinsics,
+                crate::intrinsics::ext::RuntimeContext::Future(
+                    crate::intrinsics::ext::FutureContext::HostClass,
+                ),
+            )
+        } else {
+            self.all_intrinsics.contains(&Intrinsic::AsyncFuture(
+                AsyncFutureIntrinsic::HostFutureClass,
+            ))
+        };
+        let maybe_ext_future_class = if needs_host_future {
             r#"
                   Future: class Future {
                       #value;
@@ -2564,9 +2579,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureNew { instance, ty } => {
-                let future_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
+                let future_new_fn =
+                    self.bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncFuture(
+                            AsyncFutureIntrinsic::FutureNew,
+                        ));
                 let future_table_idx = ty.as_u32();
                 let component_idx = instance.as_u32();
 
@@ -2576,7 +2593,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = {future_new_fn}.bind(null, {{
+                      const trampoline{i} = {future_new_fn}{{
                           componentIdx: {component_idx},
                           futureTableIdx: {future_table_idx},
                           elemMeta: {elem_meta_js},
@@ -2595,15 +2612,20 @@ impl<'a> Instantiator<'a, '_> {
                 ty,
                 options,
             } => {
-                let intrinsic_fn = match trampoline {
-                    Trampoline::FutureRead { .. } => self
-                        .bindgen
-                        .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead)),
-                    Trampoline::FutureWrite { .. } => self
-                        .bindgen
-                        .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite)),
-                    _ => unreachable!("invalid trampoline"),
-                };
+                let intrinsic_fn =
+                    match trampoline {
+                        Trampoline::FutureRead { .. } => self
+                            .bindgen
+                            .intrinsic_bind_callback_prefix(Intrinsic::AsyncFuture(
+                                AsyncFutureIntrinsic::FutureRead,
+                            )),
+                        Trampoline::FutureWrite { .. } => self
+                            .bindgen
+                            .intrinsic_bind_callback_prefix(Intrinsic::AsyncFuture(
+                                AsyncFutureIntrinsic::FutureWrite,
+                            )),
+                        _ => unreachable!("invalid trampoline"),
+                    };
 
                 let options = self
                     .component
@@ -2670,17 +2692,14 @@ impl<'a> Instantiator<'a, '_> {
                     }}"#,
                 );
                 if *async_ {
-                    uwriteln!(
-                        self.src.js,
-                        "const trampoline{i} = {intrinsic_fn}.bind(null, {ctx});",
-                    );
+                    uwriteln!(self.src.js, "const trampoline{i} = {intrinsic_fn}{ctx});",);
                 } else {
                     let suspending_wrap_fn = self
                         .bindgen
                         .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {intrinsic_fn}.bind(null, {ctx})));",
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {intrinsic_fn}{ctx})));",
                     );
                 }
             }
@@ -2696,12 +2715,16 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
             } => {
                 let future_cancel_op_fn = match trampoline {
-                    Trampoline::FutureCancelRead { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelRead),
-                    ),
-                    Trampoline::FutureCancelWrite { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelWrite),
-                    ),
+                    Trampoline::FutureCancelRead { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncFuture(
+                            AsyncFutureIntrinsic::FutureCancelRead,
+                        )),
+                    Trampoline::FutureCancelWrite { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncFuture(
+                            AsyncFutureIntrinsic::FutureCancelWrite,
+                        )),
                     _ => unreachable!(),
                 };
 
@@ -2718,7 +2741,7 @@ impl<'a> Instantiator<'a, '_> {
                 if *async_ {
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = {future_cancel_op_fn}.bind(null, {ctx});",
+                        "const trampoline{i} = {future_cancel_op_fn}{ctx});",
                     );
                 } else {
                     let suspending_wrap_fn = self
@@ -2726,7 +2749,7 @@ impl<'a> Instantiator<'a, '_> {
                         .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {future_cancel_op_fn}.bind(null, {ctx})));",
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {future_cancel_op_fn}{ctx})));",
                     );
                 }
             }
@@ -2734,12 +2757,16 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::FutureDropReadable { instance, ty }
             | Trampoline::FutureDropWritable { instance, ty } => {
                 let future_drop_op_fn = match trampoline {
-                    Trampoline::FutureDropReadable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureDropReadable),
-                    ),
-                    Trampoline::FutureDropWritable { .. } => self.bindgen.intrinsic(
-                        Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureDropWritable),
-                    ),
+                    Trampoline::FutureDropReadable { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncFuture(
+                            AsyncFutureIntrinsic::FutureDropReadable,
+                        )),
+                    Trampoline::FutureDropWritable { .. } => self
+                        .bindgen
+                        .intrinsic_bind_callback_prefix(Intrinsic::AsyncFuture(
+                            AsyncFutureIntrinsic::FutureDropWritable,
+                        )),
                     _ => unreachable!(),
                 };
 
@@ -2749,9 +2776,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = {future_drop_op_fn}.bind(
-                          null,
-                          {{
+                      const trampoline{i} = {future_drop_op_fn}{{
                               futureTableIdx: {future_table_idx},
                               componentIdx: {component_idx},
                           }},
@@ -2761,9 +2786,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureTransfer => {
-                let future_transfer_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureTransfer));
+                let future_transfer_fn =
+                    self.bindgen
+                        .intrinsic_callback_reference(Intrinsic::AsyncFuture(
+                            AsyncFutureIntrinsic::FutureTransfer,
+                        ));
                 uwriteln!(self.src.js, "const trampoline{i} = {future_transfer_fn};");
             }
 
