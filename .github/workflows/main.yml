@@ -1093,6 +1093,8 @@ jobs:
       - name: Install the Rust WASI P2 target
         run: rustup target add wasm32-wasip2
 
+      # TODO(remove): Remove this step and the fixture's toolchain pin once
+      # wasm32-wasip3 is available on stable Rust instead of nightly/beta.
       - name: Install the pinned Rust WASI P3 fixture toolchain
         working-directory: test/components/rust/jco-issue-2393
         run: rustup toolchain install --no-self-update
