@@ -1,0 +1,4 @@
+[toolchain]
+channel = "beta-2026-10-18"
+profile = "minimal"
+targets = ["wasm32-wasip3"]
