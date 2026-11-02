@@ -67,3 +67,14 @@ The [Python cooperative threading fixture](./python/coop-threading/README.md)
 currently needs a pinned source build of componentize-py. Run its `just setup`
 recipe before building the full component tree; the extended CI job caches this
 toolchain automatically.
+
+The Rust fixture for [issue #2393](https://github.com/bytecodealliance/jco/issues/2393)
+uses the native `wasm32-wasip3` target and release-mode fat LTO. Its local
+`rust-toolchain.toml` pins Rust 1.100.0-beta.7 (`beta-2026-10-18`) so that the
+regression keeps exercising the reported compiler output. Rustup installs this
+toolchain and target when building the fixture:
+
+```console
+just -f test/components/justfile build-jco-issue-2393
+pnpm --filter '@bytecodealliance/jco-transpile' test:extended test/extended/jco-issue-2393.ts
+```

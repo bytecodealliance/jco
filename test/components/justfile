@@ -21,6 +21,7 @@ build:
     {{just}} build-jco-issue-1887-list-param
     {{just}} build-jco-issue-1887-resource-drop
     {{just}} build-jco-issue-2178
+    {{just}} build-jco-issue-2393
     {{just}} build-posix-pthread-mutex-lock-1-1
     {{just}} build-posix-pthread-create-join-1-1
     {{just}} build-posix-pthread-cond-wait-1-1
@@ -46,6 +47,15 @@ build:
         --target wasm32-wasip2
     cp rust/jco-issue-577/target/wasm32-wasip2/release/jco-issue-577.wasm \
         output/jco-issue-577/component.wasm
+
+# Build the native Rust P3 command required to test jco issue #2393.
+[group('build')]
+@build-jco-issue-2393:
+    echo "==> building jco-issue-2393 command (rust/wasip3, fat LTO)..."
+    mkdir -p output/jco-issue-2393
+    cd rust/jco-issue-2393 && {{cargo}} build --locked --release --target wasm32-wasip3
+    cp rust/jco-issue-2393/target/wasm32-wasip3/release/jco-issue-2393.wasm \
+        output/jco-issue-2393/component.wasm
 
 # Build the wasi-sdk P3 reactor required to test jco issue #1887
 [group('build')]

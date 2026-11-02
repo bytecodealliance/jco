@@ -1,0 +1,12 @@
+[package]
+name = "jco-issue-2393"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# This fixture uses Rust's native P3 target, rather than the parent workspace's
+# P1-to-P3 adapter. Fat LTO is required to reproduce the stack-context trap.
+[workspace]
+
+[profile.release]
+lto = "fat"

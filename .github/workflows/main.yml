@@ -1093,6 +1093,10 @@ jobs:
       - name: Install the Rust WASI P2 target
         run: rustup target add wasm32-wasip2
 
+      - name: Install the pinned Rust WASI P3 fixture toolchain
+        working-directory: test/components/rust/jco-issue-2393
+        run: rustup toolchain install --no-self-update
+
       - name: Cache MoonBit wit-bindgen
         id: cache-moonbit-wit-bindgen
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
