@@ -1717,6 +1717,14 @@ impl AsyncStreamIntrinsic {
                         setHostCancelFn(f) {{ this.#hostCancelFn = f; }}
                         hasHostInject() {{ return !!this.#hostInjectFn; }}
                         moveHostHooksTo(end) {{
+                            if (end.isDropped()) {{
+                                const hostDropFn = this.#hostDropFn;
+                                this.#hostInjectFn = null;
+                                this.#hostDropFn = null;
+                                this.#hostCancelFn = null;
+                                if (hostDropFn) {{ hostDropFn(); }}
+                                return;
+                            }}
                             if (this.#hostInjectFn) {{ end.setHostInjectFn(this.#hostInjectFn); }}
                             if (this.#hostDropFn) {{ end.setHostDropFn(this.#hostDropFn); }}
                             if (this.#hostCancelFn) {{ end.setHostCancelFn(this.#hostCancelFn); }}

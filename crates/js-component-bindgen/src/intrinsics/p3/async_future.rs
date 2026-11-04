@@ -1344,6 +1344,12 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         moveHostHooksTo(end) {{
+                            if (end.isDropped()) {{
+                                const inject = this.#hostInjectFn;
+                                this.#hostInjectFn = null;
+                                inject?.drop?.();
+                                return;
+                            }}
                             if (this.#hostInjectFn) {{
                                 end.setHostInjectFn(this.#hostInjectFn);
                                 this.#hostInjectFn = null;

@@ -62,4 +62,44 @@ suite('forwarding host sources', () => {
             await cleanup();
         }
     });
+
+    test.concurrent('forwarding into a dropped stream reader cancels the host source', async ({ expect }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: { name: 'forward-dropped-stream', path: `${fixture}.wasm` },
+        });
+        try {
+            let cancels = 0;
+            const source = new ReadableStream({
+                cancel() {
+                    cancels++;
+                },
+            });
+            await instance.dropStream(source);
+            await expect.poll(() => cancels).toBe(1);
+            assert.isFalse(source.locked);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('forwarding into a dropped future reader disposes the host source', async ({ expect }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: { name: 'forward-dropped-future', path: `${fixture}.wasm` },
+        });
+        try {
+            let disposals = 0;
+            const source = new Promise(() => {});
+            Object.defineProperty(source, Symbol.dispose, {
+                value: () => {
+                    disposals++;
+                },
+            });
+            await instance.dropFuture(source);
+            await expect.poll(() => disposals).toBe(1);
+        } finally {
+            await cleanup();
+        }
+    });
 });
