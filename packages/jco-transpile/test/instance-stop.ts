@@ -7,11 +7,12 @@ import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
 import { composeCallerCallee, getTmpDir, nodeExec, setupAsyncTest } from './helpers.js';
-import { withTimeout } from './p3/helpers/disposal.js';
+import { collectUnhandledRejections, disposablePending, withTimeout } from './p3/helpers/disposal.js';
 
 const HOST_INTERFACE = 'jco:test-components/instance-stop-host';
 const RESOURCES = join(LOCAL_TEST_COMPONENTS_DIR, 'instance-stop-resources.wasm');
 const SPIN = join(LOCAL_TEST_COMPONENTS_DIR, 'instance-stop-spin.wasm');
+const VALUES = join(LOCAL_TEST_COMPONENTS_DIR, 'instance-stop-values.wasm');
 
 class Thing {
     dispose = vi.fn();
@@ -333,6 +334,399 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('instance stopping', 
             expect(destroyed).toHaveBeenCalledTimes(1);
         } finally {
             instance._util.stop();
+            await cleanup();
+        }
+    });
+
+    test.concurrent.each([Symbol.dispose, Symbol.asyncDispose])(
+        'disposes a pending host call with %s',
+        async (symbol) => {
+            const started = Promise.withResolvers<void>();
+            const host = disposablePending<void>(symbol, ({ reject }) => reject(new Error('host cancelled')));
+            const { instance, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'instance-stop-host-wait.wasm'),
+                    imports: {
+                        ...new WASIShim().getImportObject(),
+                        wait: {
+                            default: () => {
+                                started.resolve();
+                                return host.promise;
+                            },
+                        },
+                        completed: { default: vi.fn() },
+                    },
+                },
+            });
+            try {
+                const pending = expect(instance.run()).rejects.toThrow(/instance has been stopped/);
+                await withTimeout(started.promise, 'host call');
+                const unhandled = await collectUnhandledRejections(async () => {
+                    instance._util.stop();
+                    instance._util.stop();
+                    await withTimeout(Promise.all([pending, host.disposed]), 'host cancellation');
+                });
+                expect(unhandled).toEqual([]);
+                expect(host.disposeCount()).toBe(1);
+            } finally {
+                instance._util.stop();
+                host.resolve();
+                await cleanup();
+            }
+        },
+    );
+
+    for (const symbol of [Symbol.dispose, Symbol.asyncDispose]) {
+        test.concurrent.each(['unread', 'reading', 'trapped'])(
+            `disposes a %s host future with ${String(symbol)}`,
+            async (state) => {
+                const host = disposablePending<number>(symbol);
+                const { instance, cleanup } = await setupAsyncTest({
+                    asyncMode: 'jspi',
+                    component: { path: VALUES, imports: new WASIShim().getImportObject() },
+                });
+                try {
+                    let pending;
+                    if (state === 'reading') {
+                        pending = expect(instance.readFuture(host.promise)).rejects.toThrow(
+                            /instance has been stopped/,
+                        );
+                        await new Promise((resolve) => setTimeout(resolve, 20));
+                    } else {
+                        instance.holdFuture(host.promise);
+                    }
+                    if (state === 'trapped') {
+                        expect(() => instance.trap()).toThrow(WebAssembly.RuntimeError);
+                    }
+                    instance._util.stop();
+                    instance._util.stop();
+                    await withTimeout(Promise.all([pending, host.disposed]), 'future disposal');
+                    expect(host.disposeCount()).toBe(1);
+                    host.resolve(42); // A late completion must not resume the stopped guest.
+                } finally {
+                    instance._util.stop();
+                    host.resolve(42);
+                    await cleanup();
+                }
+            },
+        );
+    }
+
+    for (const state of ['unread', 'reading', 'trapped']) {
+        test.concurrent.each(['iterator', 'readable-stream'])(`closes a ${state} host %s`, async (kind) => {
+            const started = Promise.withResolvers<void>();
+            const disposed = Promise.withResolvers<void>();
+            const next = Promise.withResolvers<IteratorResult<number>>();
+            const close = vi.fn(() => {
+                disposed.resolve();
+                return { done: true as const, value: undefined };
+            });
+            const source =
+                kind === 'iterator'
+                    ? {
+                          [Symbol.asyncIterator]() {
+                              return this;
+                          },
+                          next() {
+                              started.resolve();
+                              return next.promise;
+                          },
+                          return: close,
+                      }
+                    : new ReadableStream({
+                          pull() {
+                              started.resolve();
+                              return next.promise.then(() => {});
+                          },
+                          cancel: close,
+                      });
+            const { instance, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: { path: VALUES, imports: new WASIShim().getImportObject() },
+            });
+            try {
+                let pending;
+                if (state === 'reading') {
+                    pending = expect(instance.readStream(source)).rejects.toThrow(/instance has been stopped/);
+                    await withTimeout(started.promise, 'stream read');
+                } else {
+                    instance.holdStream(source);
+                }
+                if (state === 'trapped') {
+                    expect(() => instance.trap()).toThrow(WebAssembly.RuntimeError);
+                }
+                instance._util.stop();
+                instance._util.stop();
+                await withTimeout(Promise.all([pending, disposed.promise]), 'stream disposal');
+                expect(close).toHaveBeenCalledTimes(1);
+                next.resolve({ done: false, value: 42 });
+            } finally {
+                instance._util.stop();
+                next.resolve({ done: true, value: undefined });
+                await cleanup();
+            }
+        });
+    }
+
+    test.concurrent('does not dispose a host future whose value was delivered', async () => {
+        const host = disposablePending<number>(Symbol.dispose);
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: { path: VALUES, imports: new WASIShim().getImportObject() },
+        });
+        try {
+            host.resolve(42);
+            expect(await instance.readFuture(host.promise)).toBe(42);
+            instance._util.stop();
+            await new Promise((resolve) => setTimeout(resolve, 20));
+            expect(host.disposeCount()).toBe(0);
+        } finally {
+            instance._util.stop();
+            await cleanup();
+        }
+    });
+
+    test.concurrent.each(['future', 'stream'])(
+        'rejects host reads of an exported %s and allows Node to exit',
+        async (kind) => {
+            const { esModuleOutputDir, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: { path: VALUES, skipInstantiation: true },
+                jco: { transpile: { extraArgs: { minify: false } } },
+            });
+            try {
+                const script = join(esModuleOutputDir, 'check.mjs');
+                await writeFile(
+                    script,
+                    `
+                import assert from 'node:assert/strict';
+                import { WASIShim } from ${JSON.stringify(import.meta.resolve('@bytecodealliance/preview2-shim/instantiation'))};
+                import { instantiate } from './instance-stop-values.js';
+                setTimeout(() => process.exit(1), 5_000).unref();
+                const instance = await instantiate(undefined, new WASIShim().getImportObject());
+                const value = await instance.${kind === 'future' ? 'makeFuture' : 'makeStream'}();
+                const pending = ${kind === 'future' ? 'assert.rejects(Promise.resolve(value), /instance has been stopped/)' : 'Promise.all(Array.from({ length: 3 }, () => assert.rejects(value.read(1), /instance has been stopped/)))'};
+                setTimeout(() => instance._util.stop(), 30);
+                await pending;
+                await assert.rejects(${kind === 'future' ? 'Promise.resolve(value)' : 'value.read(1)'}, /instance has been stopped/);
+            `,
+                );
+                await nodeExec(script);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
+    test.concurrent.each(['completed', 'pending', 'exported'])(
+        'releases core memory with a %s future while the stopped instance remains reachable',
+        async (state) => {
+            const { esModuleOutputDir, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: { path: VALUES, skipInstantiation: true },
+                jco: { transpile: { extraArgs: { minify: false } } },
+            });
+            try {
+                const script = join(esModuleOutputDir, 'memory.mjs');
+                await writeFile(
+                    script,
+                    `
+                import assert from 'node:assert/strict';
+                import { setTimeout as delay } from 'node:timers/promises';
+                import { WASIShim } from ${JSON.stringify(import.meta.resolve('@bytecodealliance/preview2-shim/instantiation'))};
+                import { instantiate } from './instance-stop-values.js';
+                const memories = [];
+                const instance = await instantiate(undefined, new WASIShim().getImportObject(), async (module, imports) => {
+                    const core = await WebAssembly.instantiate(module, imports);
+                    for (const value of Object.values(core.exports)) {
+                        if (value instanceof WebAssembly.Memory) memories.push(new WeakRef(value));
+                    }
+                    return core;
+                });
+                assert.ok(memories.length);
+                // Exercise the handle/buffer machinery before stopping too.
+                let future;
+                let pending;
+                if (${JSON.stringify(state)} === 'pending') {
+                    pending = assert.rejects(instance.readFuture(new Promise(() => {})), /instance has been stopped/);
+                    await delay(20);
+                } else if (${JSON.stringify(state)} === 'exported') {
+                    future = await instance.makeFuture();
+                } else {
+                    await instance.readFuture(Promise.resolve(42));
+                }
+                instance._util.stop();
+                await pending;
+                for (let i = 0; i < 100; i++) {
+                    await delay(10);
+                    globalThis.gc();
+                    if (memories.every(ref => ref.deref() === undefined)) break;
+                }
+                assert.ok(memories.every(ref => ref.deref() === undefined), 'stopped instance retained core memory');
+                assert.throws(() => instance.trap(), /instance has been stopped/);
+                if (future) await assert.rejects(Promise.resolve(future), /instance has been stopped/);
+            `,
+                );
+                // nodeExec inherits Vitest's --expose-gc in the primary test config.
+                await nodeExec('--expose-gc', script);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
+    test.concurrent('reports async cleanup failures and continues disposing other host values', async () => {
+        const { esModuleOutputDir, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: { path: VALUES, skipInstantiation: true },
+            jco: { transpile: { extraArgs: { minify: false } } },
+        });
+        try {
+            const script = join(esModuleOutputDir, 'cleanup-errors.mjs');
+            await writeFile(
+                script,
+                `
+                import assert from 'node:assert/strict';
+                import { setTimeout as delay } from 'node:timers/promises';
+                import { WASIShim } from ${JSON.stringify(import.meta.resolve('@bytecodealliance/preview2-shim/instantiation'))};
+                import { instantiate } from './instance-stop-values.js';
+                const instance = await instantiate(undefined, new WASIShim().getImportObject());
+                const errors = [];
+                console.error = (_, error) => errors.push(error.message);
+                const rejected = Object.assign(new Promise(() => {}), {
+                    async [Symbol.asyncDispose]() { throw new Error('async cleanup failed'); },
+                });
+                const getter = Object.defineProperty(new Promise(() => {}), Symbol.dispose, {
+                    get() { throw new Error('cleanup getter failed'); },
+                });
+                let cleaned = 0;
+                const healthy = Object.assign(new Promise(() => {}), {
+                    [Symbol.dispose]() { cleaned++; instance._util.stop(); },
+                });
+                instance.holdFuture(rejected);
+                instance.holdFuture(getter);
+                instance.holdFuture(healthy);
+                instance.holdStream({
+                    [Symbol.asyncIterator]() { return this; },
+                    next() { return new Promise(() => {}); },
+                    return() { throw new Error('iterator cleanup failed'); },
+                });
+                instance._util.stop();
+                await delay(30);
+                assert.deepEqual(errors.sort(), ['async cleanup failed', 'cleanup getter failed', 'iterator cleanup failed']);
+                assert.equal(cleaned, 1);
+                assert.throws(() => instance.trap(), /instance has been stopped/);
+            `,
+            );
+            await nodeExec(script);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('releases imported host functions after pending calls unwind', async () => {
+        const { esModuleOutputDir, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'instance-stop-host-wait.wasm'),
+                skipInstantiation: true,
+            },
+            jco: { transpile: { extraArgs: { minify: false } } },
+        });
+        try {
+            const script = join(esModuleOutputDir, 'host-memory.mjs');
+            await writeFile(
+                script,
+                `
+                import assert from 'node:assert/strict';
+                import { setTimeout as delay } from 'node:timers/promises';
+                import { WASIShim } from ${JSON.stringify(import.meta.resolve('@bytecodealliance/preview2-shim/instantiation'))};
+                import { instantiate } from './instance-stop-host-wait.js';
+                let wait = () => new Promise(() => {});
+                const reference = new WeakRef(wait);
+                const instance = await instantiate(undefined, {
+                    ...new WASIShim().getImportObject(),
+                    wait: { default: wait },
+                    completed: { default() {} },
+                });
+                wait = null;
+                const pending = assert.rejects(instance.run(), /instance has been stopped/);
+                await delay(20);
+                instance._util.stop();
+                await pending;
+                for (let i = 0; i < 100; i++) {
+                    await delay(10);
+                    globalThis.gc();
+                    if (reference.deref() === undefined) break;
+                }
+                assert.equal(reference.deref(), undefined, 'stopped instance retained a host import');
+                await assert.rejects(instance.run(), /instance has been stopped/);
+            `,
+            );
+            await nodeExec('--expose-gc', script);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('stops direct module initialization before pending core loads complete', async () => {
+        const { esModule, esModuleOutputDir, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: { path: SPIN, skipInstantiation: true },
+            jco: {
+                transpile: {
+                    extraArgs: {
+                        instantiation: undefined,
+                        base64Cutoff: 1_000_000_000,
+                        map: Object.fromEntries(
+                            ['cli', 'clocks', 'filesystem', 'io', 'random', 'sockets'].map((name) => [
+                                `wasi:${name}/*`,
+                                `${import.meta.resolve(`@bytecodealliance/preview2-shim/${name}`)}#*`,
+                            ]),
+                        ),
+                    },
+                },
+            },
+        });
+        try {
+            await esModule.$init;
+            esModule._util.stop();
+            const script = join(esModuleOutputDir, 'initialization.mjs');
+            await writeFile(
+                script,
+                `
+                import assert from 'node:assert/strict';
+                import { setTimeout as delay } from 'node:timers/promises';
+                const compile = WebAssembly.compile;
+                const loads = [];
+                const gate = Promise.withResolvers();
+                WebAssembly.compile = bytes => {
+                    const module = compile(bytes);
+                    loads.push(module);
+                    return gate.promise.then(() => module);
+                };
+                let instantiations = 0;
+                const instantiate = WebAssembly.instantiate;
+                WebAssembly.instantiate = (...args) => {
+                    instantiations++;
+                    return instantiate(...args);
+                };
+                const instance = await import('./instance-stop-spin.js');
+                assert.ok(loads.length);
+                const rejected = assert.rejects(instance.$init, /instance has been stopped/);
+                instance._util.stop();
+                await rejected;
+                gate.resolve();
+                await Promise.all(loads);
+                await delay(30);
+                assert.equal(instantiations, 0, 'late loads resumed stopped initialization');
+                instance._util.stop();
+            `,
+            );
+            await nodeExec(script);
+        } finally {
+            esModule._util.stop();
             await cleanup();
         }
     });

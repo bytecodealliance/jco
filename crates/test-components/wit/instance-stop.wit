@@ -46,3 +46,13 @@ world instance-stop-host-wait {
 }
 
 world instance-stop-empty {}
+
+world instance-stop-values {
+  export hold-future: func(value: future<u32>);
+  export hold-stream: func(value: stream<u8>);
+  export read-future: async func(value: future<u32>) -> u32;
+  export read-stream: async func(value: stream<u8>) -> u8;
+  export make-future: async func() -> future<u32>;
+  export make-stream: async func() -> stream<u8>;
+  export trap: func();
+}

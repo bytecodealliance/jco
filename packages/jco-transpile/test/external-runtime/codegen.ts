@@ -125,7 +125,7 @@ suite('external runtime codegen', () => {
             const outDir = await getTmpDir();
             try {
                 await cp(customBase, join(outDir, 'runtime'), { recursive: true });
-                await writeFile(join(outDir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 2;');
+                await writeFile(join(outDir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 3;');
                 await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
                 const { files } = await transpile(resourceFixture, {
                     name: 'component',
@@ -140,7 +140,7 @@ suite('external runtime codegen', () => {
                             await bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {});
                         }
                     })(),
-                ).rejects.toThrow('runtime API: requested 1, supported 2');
+                ).rejects.toThrow('runtime API: requested 2, supported 3');
             } finally {
                 await rm(outDir, { recursive: true, force: true });
             }

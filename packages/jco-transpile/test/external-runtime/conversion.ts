@@ -23,7 +23,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 try {
                     await mkdir(join(dir, 'runtime/intrinsics'), { recursive: true });
                     await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-                    await writeFile(join(dir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
+                    await writeFile(join(dir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 2;');
                     await writeFile(
                         join(dir, 'runtime/intrinsics/core.js'),
                         'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',

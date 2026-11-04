@@ -109,25 +109,31 @@ export const finalizationRegistryCreate = (cleanup) => {
     }
     return new FinalizationRegistry(cleanup);
 };
-export const disposeHostValue = (disposeSymbol, value, disposeFn) => {
-    if (!disposeFn) {
-        if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
-            return;
-        }
-        const disposable = value;
-        if (typeof Symbol.asyncDispose === 'symbol' && typeof disposable[Symbol.asyncDispose] === 'function') {
-            disposeFn = disposable[Symbol.asyncDispose];
-        } else if (typeof disposable[disposeSymbol] === 'function') {
-            disposeFn = disposable[disposeSymbol];
-        } else {
-            return;
-        }
+export const disposeHostValue = (context, value, disposeFn) => {
+    const isObject = value !== null && (typeof value === 'object' || typeof value === 'function');
+    if (!isObject && !disposeFn) {
+        return;
     }
-    const dispose = disposeFn;
+    if (isObject) {
+        if (context.disposedValues.has(value)) {
+            return;
+        }
+        context.disposedValues.add(value);
+    }
     const report = (error) => console.error('[jco] error while disposing discarded host value', error);
     queueMicrotask(() => {
         try {
-            const result = dispose.call(value);
+            if (!disposeFn) {
+                const disposable = value;
+                const asyncDispose =
+                    typeof Symbol.asyncDispose === 'symbol' ? disposable[Symbol.asyncDispose] : undefined;
+                const dispose = typeof asyncDispose === 'function' ? asyncDispose : disposable[context.symbolDispose];
+                if (typeof dispose !== 'function') {
+                    return;
+                }
+                disposeFn = dispose;
+            }
+            const result = disposeFn.call(value);
             if (result && typeof result.then === 'function') {
                 result.then(undefined, report);
             }
@@ -193,10 +199,8 @@ export const suspendingImport = (
     return function (...args) {
         context.checkMayLeave(componentIdx);
         const saved = currentTaskMeta[componentIdx] ?? null;
-        const savedTask = saved
-            ? context.getCurrentThread(saved.componentIdx, saved.threadID, saved.taskID)?.task
-            : null;
-        const mayBlock = savedTask ? (savedTask.mayBlock() ?? context.currentTaskMayBlock() !== 0) : false;
+        const savedThread = saved ? context.getCurrentThread(saved.componentIdx, saved.threadID, saved.taskID) : null;
+        const mayBlock = savedThread ? (savedThread.task.mayBlock() ?? context.currentTaskMayBlock() !== 0) : false;
         if (!saved && !mayBlock && !callsHost) {
             throw new RuntimeError('cannot block a synchronous task before returning');
         }

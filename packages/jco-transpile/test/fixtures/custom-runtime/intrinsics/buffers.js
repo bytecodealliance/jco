@@ -1,3 +1,4 @@
+// Independent API-v2 implementation; type-only contract imports are erased.
 import { debugLog } from './core-debug.js';
 import { tableFlag, tableRemove, tableCreateOwn } from './resource.js';
 export function initializeManagedBufferClass(context) {
@@ -182,6 +183,10 @@ export function initializeBufferManagerClass(ManagedBuffer) {
     class BufferManager {
         #buffers = new Map();
         #bufferIDs = new Map();
+        clear() {
+            this.#buffers.clear();
+            this.#bufferIDs.clear();
+        }
         // NOTE: componentIdx === -1 indicates the host
         getNextBufferID(componentIdx) {
             const current = this.#bufferIDs.get(componentIdx);
@@ -242,4 +247,3 @@ export function initializeBufferManagerClass(ManagedBuffer) {
     }
     return BufferManager;
 }
-//# sourceMappingURL=buffers.js.map

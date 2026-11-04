@@ -29,7 +29,7 @@ for (const external of [false, true]) {
                 try {
                     await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
                     await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-                    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
+                    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 2;');
                     await writeFile(
                         join(dir, 'provider/intrinsics/core.js'),
                         'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
