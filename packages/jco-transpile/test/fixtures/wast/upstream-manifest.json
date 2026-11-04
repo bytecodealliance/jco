@@ -261,7 +261,14 @@
         },
         {
             "name": "validation/kebab.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03",
+            "sourceCorrections": [
+                {
+                    "from": "\"import name `foob-ar` conflicts with previous name `foo-bar`\"",
+                    "to": "\"import name `FOOB-ar` conflicts with previous name `foo-bar`\"",
+                    "reason": "The pinned upstream assertion lowercases FOOB-ar even though the conflicting import preserves that spelling. Correct the expected identifier while retaining exact diagnostic matching."
+                }
+            ]
         },
         {
             "name": "validation/map.wast",

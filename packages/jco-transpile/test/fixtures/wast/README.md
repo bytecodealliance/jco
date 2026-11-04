@@ -22,6 +22,13 @@ fixture, add its filename and full source commit to the manifest, then run the
 synchronization command. The xtask test suite verifies that every vendored
 `.wast` file has a manifest entry.
 
+An entry may declare an exact-once `sourceCorrections` replacement with its
+reason. Synchronization applies these corrections to the pinned source before
+comparing bytes and fails if a replacement stops matching exactly once. The
+`validation/kebab.wast` entry corrects an expected diagnostic's `foob-ar` spelling
+to the actual `FOOB-ar` import; production diagnostics and strict matching remain
+unchanged. Remove the correction when an upstream revision fixes the assertion.
+
 The manifest covers all 78 WAST paths in upstream `test/` at
 [`c818a1925e1c7e3d3c8bdecf2fba070b4e737b03`](https://github.com/WebAssembly/component-model/tree/c818a1925e1c7e3d3c8bdecf2fba070b4e737b03/test),
 including the async tests added by
