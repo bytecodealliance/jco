@@ -16,10 +16,11 @@ describe("Node.js Preview3 wasi-cli", () => {
     const finished = new Promise((resolve) => {
       process.stdout.write = (chunk, _enc, cb) => {
         output += chunk;
-        cb?.();
+        (typeof _enc === "function" ? _enc : cb)?.();
         if (output === message) {
           resolve();
         }
+        return true;
       };
     });
 
@@ -49,10 +50,11 @@ describe("Node.js Preview3 wasi-cli", () => {
     const finished = new Promise((resolve) => {
       process.stdout.write = (chunk, _enc, cb) => {
         output += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-        cb?.();
+        (typeof _enc === "function" ? _enc : cb)?.();
         if (output === message) {
           resolve();
         }
+        return true;
       };
     });
 
@@ -124,10 +126,11 @@ describe("Node.js Preview3 wasi-cli", () => {
     const finished = new Promise((resolve) => {
       process.stderr.write = (chunk, _enc, cb) => {
         output += chunk;
-        cb?.();
+        (typeof _enc === "function" ? _enc : cb)?.();
         if (output === message) {
           resolve();
         }
+        return true;
       };
     });
 
@@ -156,10 +159,11 @@ describe("Node.js Preview3 wasi-cli", () => {
     const finished = new Promise((resolve) => {
       process.stdout.write = (chunk, _enc, cb) => {
         output += chunk;
-        cb?.();
+        (typeof _enc === "function" ? _enc : cb)?.();
         if (output === message) {
           resolve();
         }
+        return true;
       };
     });
 
@@ -167,10 +171,10 @@ describe("Node.js Preview3 wasi-cli", () => {
 
     // first stream
     const { tx: tx1, rx: rx1 } = stream();
-    cli.stdout.writeViaStream(rx1);
+    const first = cli.stdout.writeViaStream(rx1);
     await tx1.write("Hello ");
     await tx1.close();
-    await new Promise((r) => setTimeout(r, 50));
+    await first;
 
     // override stdout
     const { tx: tx2, rx: rx2 } = stream();

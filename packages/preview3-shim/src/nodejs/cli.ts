@@ -1,8 +1,7 @@
 import process from "node:process";
 import { Readable } from "node:stream";
-import { Worker } from "node:worker_threads";
+import { pipeline } from "node:stream/promises";
 
-import { ResourceWorker } from "./workers/resource-worker.js";
 import { StreamReader, readableByteStreamFromReader } from "./stream.js";
 import { future } from "./future.js";
 
@@ -25,7 +24,6 @@ export const {
   _setTerminalStdin,
   _setTerminalStdout,
   _setTerminalStderr,
-  exit,
   terminalInput,
   terminalOutput,
   terminalStdin,
@@ -42,11 +40,64 @@ export const environment = {
   getInitialCwd: cliV2.environment.initialCwd,
 };
 
-let WORKER = null;
-function worker() {
-  return (WORKER ??= new ResourceWorker(
-    () => new Worker(new URL("./workers/cli-worker.bundle.js", import.meta.url)),
-  ));
+const outputWrites = new Set<{ close: () => void; finished: Promise<unknown> }>();
+
+// A synchronous WASI exit unwinds the component; the command host drains output
+// before terminating the process with the requested status.
+export class _Exit extends Error {
+  constructor(public readonly code: number) {
+    super("WASI exit");
+  }
+}
+
+export const exit = {
+  exit(status: { tag: string }) {
+    throw new _Exit(status.tag === "err" ? 1 : 0);
+  },
+  exitWithCode(code: number) {
+    throw new _Exit(code);
+  },
+};
+
+export async function _flush() {
+  const writes = [...outputWrites];
+  for (const write of writes) {
+    write.close();
+  }
+  await Promise.all(writes.map((write) => write.finished));
+}
+
+function writeViaStream(streamReader, writable, name: string) {
+  let ended = false;
+  const readable = readableByteStreamFromReader(streamReader, { name });
+  async function* chunks() {
+    for await (const chunk of readable) {
+      yield chunk;
+    }
+    ended = true;
+  }
+  const write = {
+    close() {
+      if (!ended) {
+        streamReader[Symbol.dispose]?.();
+      }
+    },
+    finished: null as Promise<unknown>,
+  };
+  outputWrites.add(write);
+  write.finished = pipeline(Readable.from(chunks(), { objectMode: false }), writable, {
+    end: false,
+  })
+    .then(async () => {
+      // Wait for the destination's callbacks without ending shared stdout/stderr.
+      await new Promise<void>((resolve, reject) => {
+        writable.write(new Uint8Array(0), (err) => (err ? reject(err) : resolve()));
+      });
+      return { tag: "ok", val: undefined };
+    })
+    .catch((err) => ({ tag: "err", val: errorCode(err) }))
+    .finally(() => outputWrites.delete(write));
+  return write.finished;
 }
 
 /**
@@ -107,13 +158,7 @@ export const stdout = {
    * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
    */
   async writeViaStream(streamReader) {
-    const readableStream = readableByteStreamFromReader(streamReader, { name: "stdout stream" });
-    try {
-      await worker().run({ op: "stdout", stream: readableStream }, [readableStream]);
-      return { tag: "ok", val: undefined };
-    } catch (err) {
-      return { tag: "err", val: errorCode(err) };
-    }
+    return writeViaStream(streamReader, process.stdout, "stdout stream");
   },
 };
 
@@ -128,12 +173,6 @@ export const stderr = {
    * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
    */
   async writeViaStream(streamReader) {
-    const readableStream = readableByteStreamFromReader(streamReader, { name: "stderr stream" });
-    try {
-      await worker().run({ op: "stderr", stream: readableStream }, [readableStream]);
-      return { tag: "ok", val: undefined };
-    } catch (err) {
-      return { tag: "err", val: errorCode(err) };
-    }
+    return writeViaStream(streamReader, process.stderr, "stderr stream");
   },
 };
