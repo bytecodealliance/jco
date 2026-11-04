@@ -1,0 +1,5 @@
+interface `anon` transitively depends on an interface in incompatible ways
+     --> tests/ui/parse-fail/import-and-export2.wit:11:7
+      |
+   11 | world baz {
+      |       ^--
