@@ -695,8 +695,11 @@ impl WitPackageDecoder<'_> {
                 let id = self.register_type_export(name, item, TypeOwner::World(world))?;
                 (WorldKey::Name(name.to_string()), WorldItem::Type { id, span: Default::default() })
             }
+            // Core modules and component definitions have no WIT world item.
+            // Their instantiation and start functions are still translated.
+            ComponentEntityType::Module(_) | ComponentEntityType::Component(_) => return Ok(()),
             _ => {
-                bail!("component export `{name}` was not a function or instance")
+                bail!("component export `{name}` cannot be represented in a WIT world")
             }
         };
         self.resolve.worlds[world].exports.insert(name, item);

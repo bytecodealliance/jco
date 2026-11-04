@@ -4532,7 +4532,8 @@ impl<'a> Memory<'a> {
         MemArg {
             offset: u64::from(self.offset),
             align,
-            memory_index: self.mem_opts().memory.unwrap().0.as_u32(),
+            target: wasm_encoder::MemArgTarget::Memory(self.mem_opts().memory.unwrap().0.as_u32()),
+            ordering: None,
         }
     }
 
