@@ -1,155 +1,319 @@
 {
     "repository": "WebAssembly/component-model",
-    "sourceDirectory": "test/async",
-    "destinationDirectory": "packages/jco-transpile/test/fixtures/wast/component-model/async",
+    "sourceDirectory": "test",
+    "destinationDirectory": "packages/jco-transpile/test/fixtures/wast/component-model",
     "fixtures": [
         {
-            "name": "async-calls-sync.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/async-calls-sync.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "big-interleaving-test.wast",
+            "name": "async/big-interleaving-test.wast",
             "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
         },
         {
-            "name": "builtin-trap-poisons-instance.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/builtin-trap-poisons-instance.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cancel-delivery.wast",
-            "revision": "c52323b20e0717368a67a7f309c6751675333317"
+            "name": "async/cancel-and-exclusive-lock.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cancel-not-delivered.wast",
-            "revision": "13ec1b34f4ada6d8a22602b3ddaec8e1167c543e"
+            "name": "async/cancel-delivery.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cancel-resumed-callback-switch.wast",
-            "revision": "c52323b20e0717368a67a7f309c6751675333317"
+            "name": "async/cancel-not-delivered.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cancel-stream.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/cancel-resumed-callback-switch.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cancel-subtask.wast",
-            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+            "name": "async/cancel-stream.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cancel-targeted-resume.wast",
-            "revision": "c52323b20e0717368a67a7f309c6751675333317"
+            "name": "async/cancel-subtask.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "closed-stream.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/cancel-targeted-resume.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cross-abi-calls.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/closed-stream.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "cross-task-future.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/cross-abi-calls.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "deadlock.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/cross-task-future.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "dont-block-start.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/deadlock.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "drop-cross-task-borrow.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/dont-block-start.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "drop-stream.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/drop-cross-task-borrow.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "drop-subtask.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/drop-stream.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "drop-waitable-set.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/drop-subtask.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "during-sync-call-may-block-if-other-ready-threads.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/drop-waitable-set.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "empty-wait.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/dtor-context-is-zero.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "futures-must-write.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/during-sync-call-blocking-ops.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "future-completion-order.wast",
-            "revision": "e6832646ee9c1e59444294a5f9f22af3d2c7f76d"
+            "name": "async/during-sync-call-exclusive-resume.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "idle-drop.wast",
-            "revision": "5a98cd0744de401faa16d1321dbfe1c67ef5bd74"
+            "name": "async/during-sync-call-may-block-if-other-ready-threads.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "partial-stream-copies.wast",
-            "revision": "e6832646ee9c1e59444294a5f9f22af3d2c7f76d"
+            "name": "async/during-sync-call-no-sibling-resume.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "passing-resources.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/during-sync-scheduling-candidates.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "reentrance.wast",
-            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+            "name": "async/empty-wait.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "same-component-stream-future.wast",
-            "revision": "3e016227fbe8992dd1d54ca5efdfca543ad53b01"
+            "name": "async/forward.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "self-switch-traps.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/future-completion-order.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "sync-barges-in.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/futures-must-write.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "sync-streams.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/idle-drop.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "trap-if-block-and-sync.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/partial-stream-copies.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "trap-if-done.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/passing-resources.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "trap-if-transfer-in-waitable-set.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/reentrance.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "validate-no-async-abi-for-sync-type.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/same-component-stream-future.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "validate-no-stream-char.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/self-switch-traps.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "wait-during-callback.wast",
-            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+            "name": "async/switch-to-ready-callback.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
-            "name": "zero-length.wast",
-            "revision": "3e016227fbe8992dd1d54ca5efdfca543ad53b01"
+            "name": "async/sync-barges-in.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/sync-streams.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/trap-if-block-and-sync.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/trap-if-done.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/trap-if-sync-and-waitable-set.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/trap-if-transfer-in-waitable-set.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/validate-no-async-abi-for-sync-type.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/validate-no-stream-char.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/validate-task-return.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/wait-during-callback.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "async/zero-length.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "binary/binary.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "linking/link-time-virtualization.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "linking/shared-everything-dynamic-linking.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "linking/tags.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "linking/unit.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "resources/borrows.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "resources/handle-table.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "resources/multiple-resources.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/abi.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/annotated-names.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/attributes.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/core-modules.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/defined-types.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/extern-names.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/external-visibility.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/indicies.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/instantiation.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/kebab.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/map.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/max-value-size.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/outer-alias.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/resources.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "validation/version-suffix.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/alignment.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/concat.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/numerics.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/post-return.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/realloc.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/strings.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/transcode.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+        },
+        {
+            "name": "values/variants.wast",
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         }
     ]
 }

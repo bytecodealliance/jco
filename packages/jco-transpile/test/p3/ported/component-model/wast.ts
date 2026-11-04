@@ -8,11 +8,14 @@ import { suite, test, assert, expect, beforeAll, vi } from 'vitest';
 import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
 import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime/intrinsics/resource.js';
+import upstreamManifest from '../../../fixtures/wast/upstream-manifest.json' with { type: 'json' };
+import type { TranspilationOptions } from '../../../../src/transpile.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
     relPath: string;
-    skip?: boolean;
+    skip?: string;
+    transpile?: TranspilationOptions;
     artifactCases?: readonly {
         index: number;
         exportName: string;
@@ -37,58 +40,73 @@ interface WastTestArtifact {
     kind: 'module' | 'component';
 }
 
-const WAST_TESTS: readonly WastTest[] = [
-    // Running tests
-    { relPath: 'async/wait-during-callback.wast' },
-    { relPath: 'async/cancel-delivery.wast' },
-    { relPath: 'async/cancel-not-delivered.wast' },
-    // Include the first artifact: its implicit thread exits before a worker
-    // resolves the task. Later artifacts still require additional threading support.
-    {
-        relPath: 'async/cancel-targeted-resume.wast',
+// Every vendored upstream fixture gets a test entry, including explicit skips.
+// Keep exceptions here so importing a fixture cannot silently omit its coverage.
+const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
+    'async/cancel-targeted-resume.wast': {
+        // Later artifacts still require additional threading support.
         artifactCases: [0, 1, 2, 3].map((index) => ({ index, exportName: 'run', expected: 42 })),
     },
-    { relPath: 'async/cancel-stream.wast' },
-    { relPath: 'async/partial-stream-copies.wast' },
-    { relPath: 'async/futures-must-write.wast' },
-    { relPath: 'async/future-completion-order.wast' },
-    { relPath: 'async/idle-drop.wast' },
-    { relPath: 'async/empty-wait.wast' },
-    { relPath: 'async/zero-length.wast' },
-    { relPath: 'async/cancel-subtask.wast' },
-    { relPath: 'async/passing-resources.wast' },
-    // Only artifact 8 was added by component-model#723. Later artifacts use
-    // thread.* built-ins, which jco does not support yet.
-    {
-        relPath: 'async/reentrance.wast',
+    'async/reentrance.wast': {
+        // Only artifact 8 was added by component-model#723. The remaining
+        // artifacts need additional reentrance/threading support.
         artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
-    { relPath: 'async/drop-waitable-set.wast' },
-    { relPath: 'async/drop-subtask.wast' },
-    { relPath: 'async/async-calls-sync.wast' },
-    { relPath: 'async/deadlock.wast' },
-    { relPath: 'async/sync-streams.wast' },
-    { relPath: 'async/dont-block-start.wast' },
-    { relPath: 'async/closed-stream.wast' },
-    { relPath: 'async/drop-stream.wast' },
-    { relPath: 'async/same-component-stream-future.wast' },
-    { relPath: 'async/self-switch-traps.wast' },
-    { relPath: 'async/drop-cross-task-borrow.wast' },
-    { relPath: 'async/sync-barges-in.wast' },
-    { relPath: 'async/during-sync-call-may-block-if-other-ready-threads.wast' },
-    { relPath: 'async/trap-if-done.wast' },
-    { relPath: 'async/cross-abi-calls.wast' },
-    { relPath: 'async/cross-task-future.wast' },
-    { relPath: 'async/big-interleaving-test.wast' },
-    { relPath: 'async/validate-no-stream-char.wast' },
-    { relPath: 'async/validate-no-async-abi-for-sync-type.wast' },
-    { relPath: 'async/builtin-trap-poisons-instance.wast' },
-    { relPath: 'async/trap-if-transfer-in-waitable-set.wast' },
-    { relPath: 'async/thread-handle-traps.wast' },
+    'async/during-sync-call-blocking-ops.wast': {
+        skip: 'blocking waitable operations reject synchronous calls even with a ready helper thread',
+    },
+    'async/during-sync-call-exclusive-resume.wast': {
+        skip: 'exiting the last ready thread reports deadlock instead of the synchronous blocking trap',
+    },
+    'async/during-sync-call-no-sibling-resume.wast': {
+        skip: 'synchronous call scheduling incorrectly resumes a sibling task thread',
+    },
+    'async/switch-to-ready-callback.wast': {
+        skip: 'resume built-ins enter ready callback threads instead of rejecting non-suspended targets',
+    },
+    'async/trap-if-sync-and-waitable-set.wast': {
+        skip: 'synchronous waitable operations do not reject handles belonging to a waitable set',
+    },
+    'async/validate-task-return.wast': {
+        skip: 'the pinned validator accepts task.return results containing borrow types',
+    },
+    'binary/binary.wast': { skip: 'the WAST converter does not support assert_malformed' },
+    'validation/attributes.wast': { skip: 'the WAST converter does not support assert_malformed' },
+    'validation/outer-alias.wast': { skip: 'the WAST converter does not support assert_malformed' },
+    'validation/extern-names.wast': {
+        skip: 'the pinned translator panics on malformed namespace names, trapping the bindgen instance',
+    },
+    'validation/version-suffix.wast': { skip: 'the pinned wast parser does not support version-suffix syntax' },
+    'values/post-return.wast': { skip: 'the pinned wast parser does not support stream.forward/future.forward' },
+    'resources/handle-table.wast': {
+        skip: 'invalid handle diagnostics print signed indices instead of the required unsigned indices',
+    },
+    'linking/tags.wast': { transpile: { bindgenEnableWasmExnref: true } },
+    'linking/unit.wast': {
+        skip: 'a nested component start calls a lowered import without current caller thread metadata',
+    },
+    'validation/instantiation.wast': { transpile: { multiMemory: true } },
+    'validation/map.wast': { skip: 'the pinned validator accepts handle types as map keys' },
+    'validation/kebab.wast': { skip: 'duplicate-name diagnostics preserve case while upstream expects lowercase' },
+    'values/concat.wast': { skip: "transpilation does not support the fixture's exported record type" },
+    'values/numerics.wast': { skip: 'integer lifting rejects values that should be truncated to the target width' },
+    'values/realloc.wast': { skip: 'out-of-bounds realloc reports a DataView error instead of the canonical trap' },
+    'values/strings.wast': { skip: 'out-of-bounds strings report typed array errors instead of canonical traps' },
+    'async/forward.wast': {
+        skip: 'the pinned wast parser does not support stream.forward/future.forward',
+    },
+    'async/trap-if-block-and-sync.wast': {
+        skip: 'requires stackful async support',
+    },
+};
 
-    // Skipped tests
-    // TODO: Revisit this fixture once stackful async support is implemented.
-    { relPath: 'async/trap-if-block-and-sync.wast', skip: true },
+const WAST_TESTS: readonly WastTest[] = [
+    ...upstreamManifest.fixtures.map(({ name }) => ({
+        relPath: name,
+        ...WAST_OVERRIDES[name],
+    })),
+    // Jco-specific regression coverage is kept outside the upstream corpus.
+    { relPath: '../jco/thread-handle-traps.wast' },
 ];
 
 // These tests are ported from the component-model repo
@@ -188,7 +206,7 @@ suite('component-model WAST', () => {
         }
     });
 
-    for (const { relPath, skip, artifactCases } of WAST_TESTS) {
+    for (const { relPath, skip, artifactCases, transpile } of WAST_TESTS) {
         const wastPath = join(COMPONENT_MODEL_FIXTURES_WAST_DIR, relPath);
         const wasmPath = wastPath.replace(/\.wast$/, '.wast.wasm');
         const scriptPath = `${wastPath}.js`;
@@ -210,6 +228,7 @@ suite('component-model WAST', () => {
                         const outputDir = await getTmpDir();
                         const setup = await setupAsyncTest({
                             asyncMode: 'jspi',
+                            jco: { transpile: { extraArgs: transpile } },
                             component: {
                                 name: `${componentName}-artifact-${artifactCase.index}`,
                                 path: artifactPath,
@@ -230,6 +249,10 @@ suite('component-model WAST', () => {
                 const cmRuntimeEsModule = instrumentRuntime
                     ? new URL('../../../fixtures/custom-runtime/', import.meta.url).href
                     : undefined;
+                const extraArgs = {
+                    ...transpile,
+                    ...(cmRuntimeEsModule ? { cmRuntimeEsModule } : {}),
+                };
                 const mod = (await import(pathToFileURL(scriptPath).href)) as WastTestModule;
                 const artifacts = mod.wastTestArtifacts ?? [];
                 const requiresInstance = mod.wastTestRequiresInstance ?? true;
@@ -244,13 +267,7 @@ suite('component-model WAST', () => {
                             name: componentName,
                             path: wasmPath,
                         },
-                        jco: cmRuntimeEsModule
-                            ? {
-                                  transpile: {
-                                      extraArgs: { cmRuntimeEsModule },
-                                  },
-                              }
-                            : undefined,
+                        jco: { transpile: { extraArgs } },
                     });
                     cleanups.push(setup.cleanup);
                     instance = setup.instance;
@@ -291,13 +308,7 @@ suite('component-model WAST', () => {
                                         outputDir,
                                         skipInstantiation: true,
                                     },
-                                    jco: cmRuntimeEsModule
-                                        ? {
-                                              transpile: {
-                                                  extraArgs: { cmRuntimeEsModule },
-                                              },
-                                          }
-                                        : undefined,
+                                    jco: { transpile: { extraArgs } },
                                 });
                                 cleanups.push(setup.cleanup);
                                 return async () => setup.esModule.instantiate(undefined, {});
