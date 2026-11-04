@@ -23,7 +23,9 @@ test.concurrent.each([false, true])(
             [Symbol.asyncIterator]() {
                 return {
                     next() {
-                        if (reads++ === 0) return Promise.resolve({ done: false, value: new Uint8Array([42]) });
+                        if (reads++ === 0) {
+                            return Promise.resolve({ done: false, value: new Uint8Array([42]) });
+                        }
                         signalSecondRead();
                         return new Promise<IteratorResult<Uint8Array>>((resolve) => {
                             finishSource = resolve;
@@ -48,7 +50,9 @@ test.concurrent.each([false, true])(
             // The marker runs after the old cancellation timer but before the
             // second copy's own cancellation timer, if one is requested below.
             const marker = new Promise<void>((resolve) => setTimeout(resolve, 0));
-            if (cancelLater) expect(instance.cancel()).toBe(0xffff_ffff);
+            if (cancelLater) {
+                expect(instance.cancel()).toBe(0xffff_ffff);
+            }
             await marker;
             expect(instance.poll()).toBe(0); // the second read is still pending
             if (cancelLater) {
