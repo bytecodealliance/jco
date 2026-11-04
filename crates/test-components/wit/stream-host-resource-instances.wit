@@ -1,0 +1,23 @@
+package jco:test-components;
+
+interface stream-host-resource-source {
+  resource thing;
+  make: func() -> thing;
+}
+
+interface stream-host-resource-writer {
+  use stream-host-resource-source.{thing};
+  run: async func() -> stream<thing>;
+}
+
+world stream-host-resource-callee {
+  import stream-host-resource-source;
+  export stream-host-resource-writer;
+}
+
+world stream-host-resource-caller {
+  import stream-host-resource-source;
+  import stream-host-resource-writer;
+  use stream-host-resource-source.{thing};
+  export run: async func(use-callee: bool) -> stream<thing>;
+}
