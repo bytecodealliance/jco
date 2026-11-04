@@ -28,6 +28,15 @@ struct UpstreamManifest {
 struct Fixture {
     name: String,
     revision: String,
+    #[serde(default, rename = "sourceCorrections")]
+    source_corrections: Vec<SourceCorrection>,
+}
+
+#[derive(Debug, Deserialize)]
+struct SourceCorrection {
+    from: String,
+    to: String,
+    reason: String,
 }
 
 struct PendingUpdate {
@@ -80,6 +89,18 @@ fn validate_manifest(manifest: &UpstreamManifest) -> Result<()> {
 
     let mut names = HashSet::new();
     for fixture in &manifest.fixtures {
+        for correction in &fixture.source_corrections {
+            ensure!(
+                !correction.from.is_empty() && correction.from != correction.to,
+                "source correction for {} must replace a nonempty, different string",
+                fixture.name
+            );
+            ensure!(
+                !correction.reason.trim().is_empty(),
+                "source correction for {} must explain its reason",
+                fixture.name
+            );
+        }
         ensure!(
             fixture.name.ends_with(".wast"),
             "upstream fixture name must end with .wast: {}",
@@ -137,8 +158,25 @@ where
             manifest.source_directory.trim_end_matches('/'),
             fixture.name
         );
-        let contents = fetch(&source)
+        let mut contents = fetch(&source)
             .with_context(|| format!("failed to fetch upstream WAST fixture [{}]", fixture.name))?;
+        for correction in &fixture.source_corrections {
+            let source = String::from_utf8(contents).with_context(|| {
+                format!(
+                    "source correction requires UTF-8 fixture [{}]",
+                    fixture.name
+                )
+            })?;
+            ensure!(
+                source.matches(&correction.from).count() == 1,
+                "source correction for [{}] must match exactly once: {}",
+                fixture.name,
+                correction.reason
+            );
+            contents = source
+                .replacen(&correction.from, &correction.to, 1)
+                .into_bytes();
+        }
         let destination = workspace_dir
             .join(&manifest.destination_directory)
             .join(&fixture.name);
@@ -272,6 +310,7 @@ mod tests {
             fixtures: vec![Fixture {
                 name: "example.wast".into(),
                 revision: "0123456789abcdef0123456789abcdef01234567".into(),
+                source_corrections: Vec::new(),
             }],
         }
     }
@@ -336,6 +375,7 @@ mod tests {
         manifest.fixtures.push(Fixture {
             name: "unavailable.wast".into(),
             revision: "0123456789abcdef0123456789abcdef01234567".into(),
+            source_corrections: Vec::new(),
         });
 
         let error = sync_with(&temp.0, &manifest, false, |url| {
@@ -348,6 +388,33 @@ mod tests {
 
         assert!(error.to_string().contains("unavailable.wast"));
         assert_eq!(fs::read(first).unwrap(), b"local bytes\n");
+    }
+
+    #[test]
+    fn source_corrections_are_exact_and_checked_before_writing() {
+        let temp = TestDir::new();
+        let mut manifest = test_manifest();
+        manifest.fixtures[0]
+            .source_corrections
+            .push(SourceCorrection {
+                from: "wrong identifier".into(),
+                to: "CorrectIdentifier".into(),
+                reason: "upstream expected diagnostic has the wrong identifier".into(),
+            });
+        sync_with(&temp.0, &manifest, false, |_| {
+            Ok(b"wrong identifier\n".to_vec())
+        })
+        .unwrap();
+        let path = temp.0.join("fixtures/example.wast");
+        assert_eq!(fs::read(&path).unwrap(), b"CorrectIdentifier\n");
+        for source in ["already changed", "wrong identifier wrong identifier"] {
+            let error = sync_with(&temp.0, &manifest, false, |_| {
+                Ok(source.as_bytes().to_vec())
+            })
+            .unwrap_err();
+            assert!(error.to_string().contains("exactly once"));
+            assert_eq!(fs::read(&path).unwrap(), b"CorrectIdentifier\n");
+        }
     }
 
     #[test]
