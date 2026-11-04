@@ -3,6 +3,7 @@ import { assert, expect, afterAll, beforeAll, suite, test, vi } from 'vitest';
 const emptyComponent = new TextEncoder().encode('(component)');
 const wit = 'package test:recovery; world recovery { export run: func(); }';
 
+// Keep these tests serial: they share a bindgen instance, trap target, and WebAssembly spies.
 suite('bindgen component recovery', () => {
     let bindgen: typeof import('../src/component.js');
     let transpileBytes: typeof import('../src/transpile.js').transpileBytes;
