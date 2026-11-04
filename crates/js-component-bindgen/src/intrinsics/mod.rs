@@ -984,8 +984,8 @@ impl Intrinsic {
                         insert(val) {{
                             if (this.#space !== null) {{
                                 const rep = this.#space.alloc();
-                                this.#data[rep << 1] = val;
-                                this.#data[(rep << 1) + 1] = null;
+                                this.#data[rep * 2] = val;
+                                this.#data[(rep * 2) + 1] = null;
                                 this.#size += 1;
                                 return rep;
                             }}
@@ -999,7 +999,7 @@ impl Intrinsic {
                                 this.#size += 1;
                                 return rep;
                             }}
-                            const placementIdx = freeIdx << 1;
+                            const placementIdx = freeIdx * 2;
                             if (this.#data[placementIdx] !== {rep_table_class}.FREE) {{
                                 throw new Error('corrupt rep table freelist: head does not point at a freed slot');
                             }}
@@ -1012,29 +1012,32 @@ impl Intrinsic {
                         }}
 
                         get(rep) {{
+                            rep >>>= 0;
                             {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
                             if (rep === 0) {{ throw new {runtime_error_class}('invalid resource rep during get, (cannot be 0)'); }}
 
-                            const baseIdx = rep << 1;
+                            const baseIdx = rep * 2;
                             const val = this.#data[baseIdx];
                             if (val === {rep_table_class}.FREE) {{ return undefined; }}
                             return val;
                         }}
 
                         contains(rep) {{
+                            rep >>>= 0;
                             {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
                             if (rep === 0) {{ throw new Error('invalid resource rep during contains, (cannot be 0)'); }}
 
-                            const baseIdx = rep << 1;
+                            const baseIdx = rep * 2;
                             const val = this.#data[baseIdx];
                             return val !== {rep_table_class}.FREE && !!val;
                         }}
 
                         remove(rep) {{
+                            rep >>>= 0;
                             {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
                             if (rep === 0) {{ throw new Error('invalid resource rep during remove, (cannot be 0)'); }}
                             if (this.#space !== null) {{
-                                const baseIdx = rep << 1;
+                                const baseIdx = rep * 2;
                                 const val = this.#data[baseIdx];
                                 if (val === undefined || val === {rep_table_class}.FREE) {{
                                     throw new {runtime_error_class}(`unknown handle index ${{rep}}`);
@@ -1047,7 +1050,7 @@ impl Intrinsic {
                             }}
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
-                            const baseIdx = rep << 1;
+                            const baseIdx = rep * 2;
                             if (baseIdx >= this.#data.length) {{
                                 throw new Error(`invalid rep [${{rep}}] during remove, out of range`);
                             }}
@@ -2369,7 +2372,7 @@ mod tests {
         assert!(!source.contains("function rscTableRemove(table, handle)"));
         assert!(source.contains("const { rep, own } = rscTableGet(fromTable, handle);"));
         assert!(!source.contains("if (!own) rscTableRemove(fromTable, handle);"));
-        assert!(source.contains("fromTable[handle << 1]++;"));
+        assert!(source.contains("fromTable[handle * 2]++;"));
         assert!(source.contains("borrowTask.addResourceLender(fromTable, handle);"));
         assert!(source.contains("borrowTask?.resourceScopeId() ?? SCOPE_ID"));
         assert!(source.contains("borrowTask.addBorrowedHandle();"));
