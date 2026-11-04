@@ -1962,18 +1962,10 @@ impl AsyncFutureIntrinsic {
                           if (promise instanceof Promise) {{
                               promise.catch(() => {{}});
                           }}
-                          let done;
+                          let injection;
                           let delivered = false;
 
-                          const inject = async function generateFutureHostInject(args) {{
-                              let {{ count }} = args;
-                              if (count !== 1) {{ throw new Error('invalid count'); }}
-
-                              // Futures should only be completed once
-                              if (done) {{
-                                  return () => {{ throw new Error('cannot inject write: future already completed'); }}
-                              }}
-
+                          const injectOnce = async function generateFutureHostInject() {{
                               // The host *must* write something to this channel before closing it
                               if (hostWriteEnd.isDoneState()) {{
                                   return () => {{ throw new Error('cannot inject write: host must write to future before closing'); }}
@@ -2019,6 +2011,14 @@ impl AsyncFutureIntrinsic {
                                   // by the just-in-time write (and the subsequent read), if one was generated
                                   if (hostWriteEnd.hasPendingEvent()) {{ hostWriteEnd.getPendingEvent(); }}
                               }};
+                          }};
+
+                          const inject = (args) => {{
+                              if (args.count !== 1) {{ throw new Error('invalid count'); }}
+                              // Cancelling a read leaves the host's one write available
+                              // for a later read. Share its pending injection instead of
+                              // awaiting the source and writing the future again.
+                              return injection ??= injectOnce();
                           }};
 
                           // Called when the guest drops the read end: a value that was never delivered
