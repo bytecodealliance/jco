@@ -1018,7 +1018,7 @@ impl AsyncTaskIntrinsic {
                         {debug_log_fn}('[{subtask_cancel_fn}()] args', {{ componentIdx, isAsync, subtaskRep }});
 
                         const state = {get_or_create_async_state_fn}(componentIdx);
-                        if (!state.mayLeave) {{ throw new {runtime_error_class}('component instance is not marked as may leave, cannot cancel subtask'); }}
+                        if (!state.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         const subtask = state.handles.get(subtaskRep);
                         if (!(subtask instanceof {subtask_class})) {{

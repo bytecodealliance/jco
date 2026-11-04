@@ -71,7 +71,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'binary/binary.wast': { skip: 'the WAST converter does not support assert_malformed' },
     'validation/attributes.wast': { skip: 'the WAST converter does not support assert_malformed' },
     'validation/outer-alias.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'values/post-return.wast': { skip: 'the pinned wast parser does not support stream.forward/future.forward' },
     'linking/tags.wast': { transpile: { bindgenEnableWasmExnref: true } },
     'linking/unit.wast': {
         skip: 'a nested component start calls a lowered import without current caller thread metadata',
@@ -80,9 +79,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'values/numerics.wast': { skip: 'integer lifting rejects values that should be truncated to the target width' },
     'values/realloc.wast': { skip: 'out-of-bounds realloc reports a DataView error instead of the canonical trap' },
     'values/strings.wast': { skip: 'out-of-bounds strings report typed array errors instead of canonical traps' },
-    'async/forward.wast': {
-        skip: 'the pinned wast parser does not support stream.forward/future.forward',
-    },
     'async/trap-if-block-and-sync.wast': {
         skip: 'requires stackful async support',
     },

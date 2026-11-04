@@ -222,6 +222,9 @@ pub enum AsyncFutureIntrinsic {
     /// See [`Trampoline::FutureTransfer`]
     FutureTransfer,
 
+    /// Consume a readable and writable end, connecting their surviving peers.
+    FutureForward,
+
     /// Function that generates a host injection function for external futures
     ///
     /// This is usually used when lowering external `Promise<T>`s into components, creating
@@ -249,6 +252,7 @@ impl AsyncFutureIntrinsic {
             Self::FutureRead.name(),
             Self::FutureReadableEndClass.name(),
             Self::FutureTransfer.name(),
+            Self::FutureForward.name(),
             Self::FutureWritableEndClass.name(),
             Self::FutureWrite.name(),
             Self::FutureValueClass.name(),
@@ -278,6 +282,7 @@ impl AsyncFutureIntrinsic {
             Self::FutureRead => "futureRead",
             Self::FutureReadableEndClass => "FutureReadableEnd",
             Self::FutureTransfer => "futureTransfer",
+            Self::FutureForward => "futureForward",
             Self::FutureWritableEndClass => "FutureWritableEnd",
             Self::FutureWrite => "futureWrite",
             Self::GlobalFutureMap => "FUTURES",
@@ -495,11 +500,12 @@ impl AsyncFutureIntrinsic {
                             throw new TypeError("must specify either waitable idx or handle to retrieve future");
                         }}
 
-                        if (!(futureEnd instanceof {future_end_class})) {{
-                            throw new {runtime_error_class}(`missing future end (tableIdx [${{tableIdx}}], handle [${{futureEndHandle}}], waitableIdx [${{futureEndWaitableIdx}}])`);
+                        const index = (futureEndWaitableIdx ?? futureEndHandle) >>> 0;
+                        if (!futureEnd) {{
+                            throw new {runtime_error_class}(`unknown handle index ${{index}}`);
                         }}
-                        if (futureEnd.futureTableIdx() !== tableIdx) {{
-                            throw new {runtime_error_class}(`future end table idx [${{futureEnd.futureTableIdx()}}] does not match [${{tableIdx}}]`);
+                        if (!(futureEnd instanceof {future_end_class}) || futureEnd.futureTableIdx() !== tableIdx) {{
+                            throw new {runtime_error_class}(`handle index ${{index}} used with the wrong type`);
                         }}
 
                         return futureEnd;
@@ -714,6 +720,7 @@ impl AsyncFutureIntrinsic {
                         #dropped = false;
                         #isPeerDroppedFn;
                         #notifyPeerDroppedFn;
+                        #peer = null;
 
                         constructor(args) {{
                             {debug_log_fn}('[{future_end_class}#constructor()] args', args);
@@ -772,6 +779,7 @@ impl AsyncFutureIntrinsic {
                             this.setPendingBufferMeta({{ componentIdx: null, buffer: null, isWrite: null, onCopyDoneFn: null }});
                         }}
 
+                        setPendingBufferStore(meta) {{ this.#pendingBufferMeta = meta; }}
                         getPendingBufferMeta() {{ return this.#pendingBufferMeta; }}
 
                         resetAndNotifyPending(result) {{
@@ -812,7 +820,15 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         isDropped() {{ return this.#dropped; }}
-                        isPeerDropped() {{ return this.#isPeerDroppedFn(); }}
+                        peer() {{ return this.#peer; }}
+                        setPeer(peer) {{
+                            this.#peer = peer;
+                            // Constructor callbacks capture the original pair. Once
+                            // peers can move, retain only the live endpoint graph.
+                            this.#isPeerDroppedFn = () => false;
+                            this.#notifyPeerDroppedFn = () => {{}};
+                        }}
+                        isPeerDropped() {{ return this.#peer ? this.#peer.isDropped() : this.#isPeerDroppedFn(); }}
 
                         notifyDropped() {{
                             if (this.isDropped() || this.isDoneState() || this.hasPendingEvent()) {{ return; }}
@@ -840,7 +856,7 @@ impl AsyncFutureIntrinsic {
                             }}
 
                             this.#dropped = true;
-                            this.#notifyPeerDroppedFn();
+                            if (this.#peer) {{ this.#peer.notifyDropped(); }} else {{ this.#notifyPeerDroppedFn(); }}
                             this.#waitable.drop();
                         }}
 
@@ -899,7 +915,7 @@ impl AsyncFutureIntrinsic {
                               }}
 
                               if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) {{
-                                  throw new {runtime_error_class}('cannot read from and write to intra-component future');
+                                  throw new {runtime_error_class}('cannot read from and write to intra-component future/stream with non-numeric payload');
                               }}
 
                               const transferResources = buffer.componentIdx() !== -1
@@ -946,7 +962,7 @@ impl AsyncFutureIntrinsic {
                               }}
 
                               if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) {{
-                                  throw new {runtime_error_class}('cannot read from and write to intra-component future');
+                                  throw new {runtime_error_class}('cannot read from and write to intra-component future/stream with non-numeric payload');
                               }}
 
                               const transferResources = buffer.componentIdx() !== -1
@@ -1327,6 +1343,13 @@ impl AsyncFutureIntrinsic {
                             this.#hostInjectFn = f;
                         }}
 
+                        moveHostHooksTo(end) {{
+                            if (this.#hostInjectFn) {{
+                                end.setHostInjectFn(this.#hostInjectFn);
+                                this.#hostInjectFn = null;
+                            }}
+                        }}
+
                         promise() {{
                             if (this.#promise) {{ return this.#promise; }}
                             // NOTE: we return a "thenable" here to ensure that simply lifting the future does
@@ -1415,6 +1438,8 @@ impl AsyncFutureIntrinsic {
                                 isPeerDroppedFn: () => this.#readEnd.isDropped(),
                                 notifyPeerDroppedFn: () => this.#readEnd.notifyDropped(),
                             }});
+                            this.#readEnd.setPeer(this.#writeEnd);
+                            this.#writeEnd.setPeer(this.#readEnd);
                         }}
 
                         elemMeta() {{ return this.#elemMeta; }}
@@ -1434,6 +1459,8 @@ impl AsyncFutureIntrinsic {
 
             Self::FutureNew => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let future_new_fn = render_args.require_intrinsic(Self::FutureNew);
                 let create_future_fn = render_args.require_intrinsic(Self::CreateFuture);
                 let current_task_get_fn = render_args
@@ -1455,7 +1482,7 @@ impl AsyncFutureIntrinsic {
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        if (!cstate.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         const {{ readEnd, writeEnd }} = {create_future_fn}(cstate, {{
                             tableIdx: futureTableIdx,
@@ -1581,7 +1608,7 @@ impl AsyncFutureIntrinsic {
                         if (!task) {{ throw new Error('missing task in metadata during future operation'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        if (!cstate.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         if (!task.mayBlock() && !isAsync) {{
                             throw new Error('only tasks that may block may call future.{future_op_fn}');
@@ -1611,6 +1638,13 @@ impl AsyncFutureIntrinsic {
                             }}
                             if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
                             return payload;
+                        }}
+
+                        // A synchronous caller can perform an already-ready copy
+                        // without entering JSPI. Probe before registering a blocked
+                        // copy so the suspending path starts the operation once.
+                        if (ctx.syncFastOnly && !futureEnd.isPeerDropped() && !futureEnd.getPendingBufferMeta().buffer) {{
+                            return {async_blocked_const};
                         }}
 
                         futureEnd.{guest_op_fn}({{
@@ -1699,7 +1733,7 @@ impl AsyncFutureIntrinsic {
                         const {{ componentIdx, futureTableIdx, isAsync }} = ctx;
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        if (!cstate.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
                         if (!futureEnd) {{ throw new {runtime_error_class}(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
@@ -1721,10 +1755,12 @@ impl AsyncFutureIntrinsic {
                         }};
 
                         if (!futureEnd.hasPendingEvent()) {{
-                            futureEnd.cancel();
+                            // The conditional JSPI fast path has already started
+                            // this cancellation. Its slow path only waits for it.
+                            if (!ctx.resumeCancel) {{ futureEnd.cancel(); }}
 
                             if (!futureEnd.hasPendingEvent()) {{
-                                if (isAsync) {{ return {async_blocked_const}; }}
+                                if (isAsync) {{ return ctx.syncFastOnly ? -2 : {async_blocked_const}; }}
 
                                 const taskMeta = {current_task_get_fn}(componentIdx);
                                 if (!taskMeta?.task) {{ throw new Error('missing current task while cancelling future'); }}
@@ -1761,7 +1797,7 @@ impl AsyncFutureIntrinsic {
                         const {{ componentIdx, futureTableIdx }} = ctx;
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        if (!cstate.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         const futureEnd = {remove_future_end_from_table_fn}({{
                             tableIdx: futureTableIdx,
@@ -1772,6 +1808,42 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         futureEnd.drop();
+                    }}
+                "#));
+            }
+
+            Self::FutureForward => {
+                let future_forward_fn = self.name();
+                let read_class = render_args.require_intrinsic(Self::FutureReadableEndClass);
+                let write_class = render_args.require_intrinsic(Self::FutureWritableEndClass);
+                let remove_end = render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
+                let splice_ends = render_args
+                    .require_intrinsic(super::async_stream::AsyncStreamIntrinsic::SpliceStreamEnds);
+                let get_state =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(r#"
+                    function {future_forward_fn}(ctx, src, dst) {{
+                        const {{ componentIdx, futureTableIdx }} = ctx;
+                        const state = {get_state}(componentIdx);
+                        const take = (index, readable) => {{
+                            index >>>= 0;
+                            const end = index === 0 ? undefined : state.handles.get(index);
+                            if (!end) {{ throw new {runtime_error}(`unknown handle index ${{index}}`); }}
+                            if (!(end instanceof (readable ? {read_class} : {write_class})) || end.futureTableIdx() !== futureTableIdx) {{
+                                throw new {runtime_error}(`handle index ${{index}} used with the wrong type`);
+                            }}
+                            if (end.isCopying()) {{ throw new {runtime_error}('cannot forward busy future'); }}
+                            if (end.isInSet()) {{ throw new {runtime_error}("cannot forward future while it's in a waitable set"); }}
+                            if (end.isDoneState()) {{ throw new {runtime_error}('cannot forward future after completion'); }}
+                            {remove_end}({{ tableIdx: futureTableIdx, futureWaitableIdx: index }});
+                            end.getWaitable().drop();
+                            return end;
+                        }};
+                        const readEnd = take(src, true);
+                        const writeEnd = take(dst, false);
+                        {splice_ends}(readEnd, writeEnd);
                     }}
                 "#));
             }

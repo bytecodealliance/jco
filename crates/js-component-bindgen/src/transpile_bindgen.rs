@@ -1799,13 +1799,15 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::StreamCancelWrite { instance, .. }
             | Trampoline::StreamDropReadable { instance, .. }
             | Trampoline::StreamDropWritable { instance, .. }
+            | Trampoline::StreamForward { instance, .. }
             | Trampoline::FutureNew { instance, .. }
             | Trampoline::FutureRead { instance, .. }
             | Trampoline::FutureWrite { instance, .. }
             | Trampoline::FutureCancelRead { instance, .. }
             | Trampoline::FutureCancelWrite { instance, .. }
             | Trampoline::FutureDropReadable { instance, .. }
-            | Trampoline::FutureDropWritable { instance, .. } => *instance,
+            | Trampoline::FutureDropWritable { instance, .. }
+            | Trampoline::FutureForward { instance, .. } => *instance,
         };
         Some(instance)
     }
@@ -2000,6 +2002,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::FutureCancelWrite { .. }
                 | Trampoline::FutureDropReadable { .. }
                 | Trampoline::FutureDropWritable { .. }
+                | Trampoline::FutureForward { .. }
                 | Trampoline::FutureNew { .. }
                 | Trampoline::FutureRead { .. }
                 | Trampoline::FutureTransfer
@@ -2015,6 +2018,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::StreamCancelWrite { .. }
                 | Trampoline::StreamDropReadable { .. }
                 | Trampoline::StreamDropWritable { .. }
+                | Trampoline::StreamForward { .. }
                 | Trampoline::StreamNew { .. }
                 | Trampoline::StreamRead { .. }
                 | Trampoline::StreamTransfer
@@ -2050,14 +2054,32 @@ impl<'a> Instantiator<'a, '_> {
     ) {
         let concede_fn = self.bindgen.intrinsic(Intrinsic::AsyncTask(intrinsic));
         let suspending_wrap_fn = self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+        let conditional = self.bindgen.intrinsic(match intrinsic {
+            AsyncTaskIntrinsic::ThreadYield | AsyncTaskIntrinsic::ThreadSuspend => {
+                Intrinsic::ConditionalSuspending0ToI32Fn
+            }
+            _ => Intrinsic::ConditionalSuspending1I32ToI32Fn,
+        });
+        let check_leave = self
+            .bindgen
+            .intrinsic(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
+        let guard = self
+            .bindgen
+            .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
+        // A post-return runs on a plain Wasm activation. Check may_leave
+        // before entering a Suspending import, which would otherwise throw
+        // SuspendError before the canonical built-in gets to enforce it.
         uwriteln!(
             self.src.js,
             r#"
-              const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({instance}, {concede_fn}.bind(null, {{
-                  isCancellable: {cancellable},
-                  componentIdx: {instance},
-              }})));
-            "#
+            const trampoline{i} = {conditional}(
+                {guard}({instance}, () => {{ {check_leave}({instance}); return -2; }}),
+                {suspending_wrap_fn}({instance}, {concede_fn}.bind(null, {{
+                    isCancellable: {cancellable},
+                    componentIdx: {instance},
+                }})),
+            );
+        "#
         );
     }
 
@@ -2531,9 +2553,20 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending1I32ToI32Fn);
+                    let guard = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {stream_cancel_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional}(
+                            {guard}({component_idx}, {stream_cancel_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
+                            {suspending_wrap_fn}({component_idx}, {stream_cancel_fn}.bind(null, {{ ...{ctx}, resumeCancel: true }})),
+                        );
+                    "#
                     );
                 }
             }
@@ -2681,9 +2714,20 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending2I32ToI32Fn);
+                    let guard = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {intrinsic_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional}(
+                            {guard}({component_idx}, {intrinsic_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
+                            {suspending_wrap_fn}({component_idx}, {intrinsic_fn}.bind(null, {ctx})),
+                        );
+                    "#
                     );
                 }
             }
@@ -2726,9 +2770,20 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending1I32ToI32Fn);
+                    let guard = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {future_cancel_op_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional}(
+                            {guard}({component_idx}, {future_cancel_op_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
+                            {suspending_wrap_fn}({component_idx}, {future_cancel_op_fn}.bind(null, {{ ...{ctx}, resumeCancel: true }})),
+                        );
+                    "#
                     );
                 }
             }
@@ -2759,6 +2814,30 @@ impl<'a> Instantiator<'a, '_> {
                           }},
                       );
                 "#,
+                );
+            }
+
+            Trampoline::StreamForward { instance, ty } => {
+                let forward = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamForward));
+                let component_idx = instance.as_u32();
+                let table_idx = ty.as_u32();
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {forward}.bind(null, {{ componentIdx: {component_idx}, streamTableIdx: {table_idx} }});"
+                );
+            }
+
+            Trampoline::FutureForward { instance, ty } => {
+                let forward = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureForward));
+                let component_idx = instance.as_u32();
+                let table_idx = ty.as_u32();
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {forward}.bind(null, {{ componentIdx: {component_idx}, futureTableIdx: {table_idx} }});"
                 );
             }
 

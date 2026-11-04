@@ -260,6 +260,10 @@ enum LocalInitializer<'data> {
         ty: ComponentDefinedTypeId,
         func: ModuleInternedTypeIndex,
     },
+    StreamForward {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
     FutureNew {
         ty: ComponentDefinedTypeId,
         func: ModuleInternedTypeIndex,
@@ -287,6 +291,10 @@ enum LocalInitializer<'data> {
         func: ModuleInternedTypeIndex,
     },
     FutureDropWritable {
+        ty: ComponentDefinedTypeId,
+        func: ModuleInternedTypeIndex,
+    },
+    FutureForward {
         ty: ComponentDefinedTypeId,
         func: ModuleInternedTypeIndex,
     },
@@ -1050,9 +1058,7 @@ impl<'a, 'data> Translator<'a, 'data> {
                             core_func_index += 1;
                             LocalInitializer::WaitableSetNew { func }
                         }
-                        wasmparser::CanonicalFunction::WaitableSetWait {
-                            memory,
-                        } => {
+                        wasmparser::CanonicalFunction::WaitableSetWait { memory } => {
                             let core_type = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
                             LocalInitializer::WaitableSetWait {
@@ -1070,9 +1076,7 @@ impl<'a, 'data> Translator<'a, 'data> {
                                 },
                             }
                         }
-                        wasmparser::CanonicalFunction::WaitableSetPoll {
-                            memory,
-                        } => {
+                        wasmparser::CanonicalFunction::WaitableSetPoll { memory } => {
                             let core_type = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
                             LocalInitializer::WaitableSetPoll {
@@ -1306,35 +1310,71 @@ impl<'a, 'data> Translator<'a, 'data> {
                         wasmparser::CanonicalFunction::ThreadSuspend => {
                             let func = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
-                            LocalInitializer::ThreadSuspend { func, cancellable: false }
+                            LocalInitializer::ThreadSuspend {
+                                func,
+                                cancellable: false,
+                            }
                         }
                         wasmparser::CanonicalFunction::ThreadYield => {
                             let func = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
-                            LocalInitializer::ThreadYield { func, cancellable: false }
+                            LocalInitializer::ThreadYield {
+                                func,
+                                cancellable: false,
+                            }
                         }
                         wasmparser::CanonicalFunction::ThreadSuspendThenResume => {
                             let func = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
-                            LocalInitializer::ThreadSuspendThenResume { func, cancellable: false }
+                            LocalInitializer::ThreadSuspendThenResume {
+                                func,
+                                cancellable: false,
+                            }
                         }
                         wasmparser::CanonicalFunction::ThreadYieldThenResume => {
                             let func = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
-                            LocalInitializer::ThreadYieldThenResume { func, cancellable: false }
+                            LocalInitializer::ThreadYieldThenResume {
+                                func,
+                                cancellable: false,
+                            }
                         }
                         wasmparser::CanonicalFunction::ThreadSuspendThenPromote => {
                             let func = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
-                            LocalInitializer::ThreadSuspendThenPromote { func, cancellable: false }
+                            LocalInitializer::ThreadSuspendThenPromote {
+                                func,
+                                cancellable: false,
+                            }
                         }
                         wasmparser::CanonicalFunction::ThreadYieldThenPromote => {
                             let func = self.core_func_signature(core_func_index)?;
                             core_func_index += 1;
-                            LocalInitializer::ThreadYieldThenPromote { func, cancellable: false }
+                            LocalInitializer::ThreadYieldThenPromote {
+                                func,
+                                cancellable: false,
+                            }
                         }
-                        wasmparser::CanonicalFunction::StreamForward { .. }
-                        | wasmparser::CanonicalFunction::FutureForward { .. } => bail!("forwarding requires the forwarding intrinsic implementation"),
+                        wasmparser::CanonicalFunction::StreamForward { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::StreamForward { ty, func }
+                        }
+                        wasmparser::CanonicalFunction::FutureForward { ty } => {
+                            let ty = self
+                                .validator
+                                .types(0)
+                                .unwrap()
+                                .component_defined_type_at(ty);
+                            let func = self.core_func_signature(core_func_index)?;
+                            core_func_index += 1;
+                            LocalInitializer::FutureForward { ty, func }
+                        }
                     };
                     self.result.initializers.push(init);
                 }

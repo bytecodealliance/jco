@@ -407,6 +407,10 @@ pub enum Trampoline {
         instance: RuntimeComponentInstanceIndex,
         ty: TypeStreamTableIndex,
     },
+    StreamForward {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeStreamTableIndex,
+    },
     FutureNew {
         instance: RuntimeComponentInstanceIndex,
         ty: TypeFutureTableIndex,
@@ -436,6 +440,10 @@ pub enum Trampoline {
         ty: TypeFutureTableIndex,
     },
     FutureDropWritable {
+        instance: RuntimeComponentInstanceIndex,
+        ty: TypeFutureTableIndex,
+    },
+    FutureForward {
         instance: RuntimeComponentInstanceIndex,
         ty: TypeFutureTableIndex,
     },
@@ -1061,6 +1069,10 @@ impl LinearizeDfg<'_> {
                     ty: *ty,
                 }
             }
+            Trampoline::StreamForward { instance, ty } => info::Trampoline::StreamForward {
+                instance: *instance,
+                ty: *ty,
+            },
             Trampoline::FutureNew { instance, ty } => info::Trampoline::FutureNew {
                 instance: *instance,
                 ty: *ty,
@@ -1113,6 +1125,10 @@ impl LinearizeDfg<'_> {
                     ty: *ty,
                 }
             }
+            Trampoline::FutureForward { instance, ty } => info::Trampoline::FutureForward {
+                instance: *instance,
+                ty: *ty,
+            },
             Trampoline::ErrorContextNew {
                 instance,
                 ty,

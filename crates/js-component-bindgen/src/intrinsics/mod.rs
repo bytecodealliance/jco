@@ -204,6 +204,9 @@ pub enum Intrinsic {
     /// path before falling back to a JSPI-suspending slow path.
     ConditionalSuspending3I32ToVoidFn,
 
+    /// Build a `() -> i32` Wasm trampoline with a synchronous fast path.
+    ConditionalSuspending0ToI32Fn,
+
     /// Compiled Wasm of the conditional-suspending trampolines, by trampoline name
     ConditionalSuspendingWasm,
 }
@@ -1456,7 +1459,8 @@ impl Intrinsic {
                 ));
             }
 
-            Self::ConditionalSuspending1I32ToI32Fn
+            Self::ConditionalSuspending0ToI32Fn
+            | Self::ConditionalSuspending1I32ToI32Fn
             | Self::ConditionalSuspending2I32ToI32Fn
             | Self::ConditionalSuspending3I32ToI32Fn
             | Self::ConditionalSuspending3I32ToVoidFn => {
@@ -2945,6 +2949,16 @@ fn emit_intrinsic(
     }
 }
 
+const CONDITIONAL_SUSPENDING_0_TO_I32: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, 0x02,
+    0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f, 0x77,
+    0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02, 0x0a,
+    0x15, 0x01, 0x13, 0x01, 0x01, 0x7f, 0x10, 0x00, 0x22, 0x00, 0x41, 0x7e, 0x47, 0x04, 0x7f, 0x20,
+    0x00, 0x05, 0x10, 0x01, 0x0b, 0x0b, 0x00, 0x20, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x01, 0x0d, 0x02,
+    0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x01, 0x04, 0x73, 0x6c, 0x6f, 0x77, 0x02, 0x0a, 0x01, 0x02,
+    0x01, 0x00, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
+];
+
 const CONDITIONAL_SUSPENDING_1_I32_TO_I32: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06, 0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f,
     0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f,
@@ -3127,6 +3141,7 @@ impl Intrinsic {
             Self::WithGlobalCurrentTaskMetaFnAsync => "_withGlobalCurrentThreadMetaAsync",
             Self::ClearGlobalCurrentTaskMetaFn => "_clearCurrentTask",
             Self::SuspendingImportWrapperFn => "_suspendingImport",
+            Self::ConditionalSuspending0ToI32Fn => "_conditionalSuspending0ToI32",
             Self::ConditionalSuspending1I32ToI32Fn => "_conditionalSuspending1I32ToI32",
             Self::ConditionalSuspending2I32ToI32Fn => "_conditionalSuspending2I32ToI32",
             Self::ConditionalSuspending3I32ToI32Fn => "_conditionalSuspending3I32ToI32",
@@ -3154,6 +3169,10 @@ impl Intrinsic {
     /// File name suffix and Wasm of a conditional-suspending trampoline
     pub(crate) fn conditional_suspending_wasm(&self) -> Option<(&'static str, &'static [u8])> {
         match self {
+            Self::ConditionalSuspending0ToI32Fn => Some((
+                "conditional-suspending-0-to-i32",
+                CONDITIONAL_SUSPENDING_0_TO_I32,
+            )),
             Self::ConditionalSuspending1I32ToI32Fn => Some((
                 "conditional-suspending-1-i32-to-i32",
                 CONDITIONAL_SUSPENDING_1_I32_TO_I32,

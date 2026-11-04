@@ -924,6 +924,13 @@ pub enum Trampoline {
         /// The table index for the specific `stream` type and caller instance.
         ty: TypeStreamTableIndex,
     },
+    /// A `stream.forward` intrinsic consuming a readable and writable end.
+    StreamForward {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `stream` type and caller instance.
+        ty: TypeStreamTableIndex,
+    },
 
     /// A `future.new` intrinsic to create a new `future` handle of the
     /// specified type.
@@ -992,6 +999,13 @@ pub enum Trampoline {
     /// A `future.drop-writable` intrinsic to drop the writable end of a
     /// `future` of the specified type.
     FutureDropWritable {
+        /// The specific component instance which is calling the intrinsic.
+        instance: RuntimeComponentInstanceIndex,
+        /// The table index for the specific `future` type and caller instance.
+        ty: TypeFutureTableIndex,
+    },
+    /// A `future.forward` intrinsic consuming a readable and writable end.
+    FutureForward {
         /// The specific component instance which is calling the intrinsic.
         instance: RuntimeComponentInstanceIndex,
         /// The table index for the specific `future` type and caller instance.
@@ -1225,6 +1239,7 @@ impl Trampoline {
             StreamCancelWrite { .. } => format!("stream-cancel-write"),
             StreamDropReadable { .. } => format!("stream-drop-readable"),
             StreamDropWritable { .. } => format!("stream-drop-writable"),
+            StreamForward { .. } => format!("stream-forward"),
             FutureNew { .. } => format!("future-new"),
             FutureRead { .. } => format!("future-read"),
             FutureWrite { .. } => format!("future-write"),
@@ -1232,6 +1247,7 @@ impl Trampoline {
             FutureCancelWrite { .. } => format!("future-cancel-write"),
             FutureDropReadable { .. } => format!("future-drop-readable"),
             FutureDropWritable { .. } => format!("future-drop-writable"),
+            FutureForward { .. } => format!("future-forward"),
             ErrorContextNew { .. } => format!("error-context-new"),
             ErrorContextDebugMessage { .. } => format!("error-context-debug-message"),
             ErrorContextDrop { .. } => format!("error-context-drop"),
