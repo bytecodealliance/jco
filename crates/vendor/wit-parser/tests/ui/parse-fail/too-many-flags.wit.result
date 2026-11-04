@@ -1,5 +1,0 @@
-cannot have more than 32 flags
-     --> tests/ui/parse-fail/too-many-flags.wit:38:5
-      |
-   38 |     b32,
-      |     ^--

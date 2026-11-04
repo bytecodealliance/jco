@@ -55,18 +55,8 @@ wat = [
 name = "wit_parser"
 path = "src/lib.rs"
 
-[[test]]
-name = "all"
-path = "tests/all.rs"
-harness = false
 
-[[test]]
-name = "downcast"
-path = "tests/downcast.rs"
 
-[[test]]
-name = "spans"
-path = "tests/spans.rs"
 
 [dependencies.anyhow]
 version = "1.0.58"

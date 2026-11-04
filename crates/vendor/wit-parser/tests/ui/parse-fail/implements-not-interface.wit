@@ -1,6 +1,0 @@
-// parse-fail
-package foo:foo;
-
-world test {
-  import primary: test;
-}

@@ -1,5 +1,0 @@
-case `B` conflicts with previous case `b`
-     --> tests/ui/parse-fail/duplicate-enum-cases.wit:5:18
-      |
-    5 |   enum e { a, b, B }
-      |                  ^

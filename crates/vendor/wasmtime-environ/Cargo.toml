@@ -80,18 +80,7 @@ wmemcheck = ["std"]
 name = "wasmtime_environ"
 path = "src/lib.rs"
 
-[[example]]
-name = "btrees"
-path = "examples/btrees.rs"
-required-features = ["std"]
 
-[[example]]
-name = "factc"
-path = "examples/factc.rs"
-required-features = [
-    "component-model",
-    "compile",
-]
 
 [dependencies.anyhow]
 version = "1.0.103"

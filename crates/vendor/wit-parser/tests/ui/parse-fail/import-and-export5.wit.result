@@ -1,5 +1,0 @@
-interface `anon` transitively depends on an interface in incompatible ways
-     --> tests/ui/parse-fail/import-and-export5.wit:13:7
-      |
-   13 | world w {
-      |       ^
