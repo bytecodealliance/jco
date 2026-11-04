@@ -7946,8 +7946,13 @@ pub fn gen_flat_lower_fn_js_expr(
             ) {
                 (Some(import_ty_id), _) => {
                     let ty = crate::dealias(instantiator.resolve, *import_ty_id);
-                    let maybe_resource_table =
-                        instantiator.resource_imports.get(&ty).or(extra_resource_map
+                    // A type-only import may be used exclusively by exports, so its
+                    // table metadata is only populated while processing those exports.
+                    let maybe_resource_table = instantiator
+                        .resource_imports
+                        .get(&ty)
+                        .or_else(|| instantiator.resource_exports.get(&ty))
+                        .or(extra_resource_map
                             .as_ref()
                             .and_then(|m| m.get(import_ty_id)));
                     (
