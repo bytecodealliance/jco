@@ -828,6 +828,7 @@ impl AsyncStreamIntrinsic {
                             if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
                                 throw new Error(`stream copy state is not idle`);
                             }}
+                            this.#copyToken = {{}};
                         }}
 
                         const elemMeta = args.elemMeta ?? this.getElemMeta();
@@ -1651,6 +1652,9 @@ impl AsyncStreamIntrinsic {
                         #elemMeta = null;
                         // held by both write and read ends
                         #pendingBufferMeta = null;
+                        // The shared pending buffer can move between peers during
+                        // rendezvous/forwarding. Track this end's operation separately.
+                        #copyToken = null;
 
                         // table index that the stream is in (can change after a stream transfer)
                         #streamTableIdx;
@@ -1773,8 +1777,11 @@ impl AsyncStreamIntrinsic {
 
                         cancel() {{
                             {debug_log_fn}('[{stream_end_class}#cancel()]');
+                            const copyToken = this.#copyToken;
                             const completeCancel = () => {{
                                 if (this.isDropped()) {{ return; }}
+                                if (this.#copyToken !== copyToken
+                                    || this.getCopyState() !== {stream_end_class}.CopyState.CANCELLING_COPY) {{ return; }}
                                 // Host injection may complete the copy before this deferred
                                 // cancellation runs. Preserve that completion event instead of
                                 // cancelling the next operation or starting a duplicate write.
