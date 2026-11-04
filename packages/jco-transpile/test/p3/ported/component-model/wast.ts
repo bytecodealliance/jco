@@ -53,21 +53,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         // artifacts need additional reentrance/threading support.
         artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
-    'async/during-sync-call-blocking-ops.wast': {
-        skip: 'blocking waitable operations reject synchronous calls even with a ready helper thread',
-    },
-    'async/during-sync-call-exclusive-resume.wast': {
-        skip: 'exiting the last ready thread reports deadlock instead of the synchronous blocking trap',
-    },
-    'async/during-sync-call-no-sibling-resume.wast': {
-        skip: 'synchronous call scheduling incorrectly resumes a sibling task thread',
-    },
-    'async/switch-to-ready-callback.wast': {
-        skip: 'resume built-ins enter ready callback threads instead of rejecting non-suspended targets',
-    },
-    'async/trap-if-sync-and-waitable-set.wast': {
-        skip: 'synchronous waitable operations do not reject handles belonging to a waitable set',
-    },
     'binary/binary.wast': { skip: 'the WAST converter does not support assert_malformed' },
     'validation/attributes.wast': { skip: 'the WAST converter does not support assert_malformed' },
     'validation/outer-alias.wast': { skip: 'the WAST converter does not support assert_malformed' },
@@ -79,9 +64,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'values/numerics.wast': { skip: 'integer lifting rejects values that should be truncated to the target width' },
     'values/realloc.wast': { skip: 'out-of-bounds realloc reports a DataView error instead of the canonical trap' },
     'values/strings.wast': { skip: 'out-of-bounds strings report typed array errors instead of canonical traps' },
-    'async/trap-if-block-and-sync.wast': {
-        skip: 'requires stackful async support',
-    },
 };
 
 const WAST_TESTS: readonly WastTest[] = [
