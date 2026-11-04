@@ -32,6 +32,8 @@ pub struct EsmBindgen {
     imports: BTreeMap<String, ImportBinding>,
     exports: BTreeMap<String, ExportBinding>,
     export_aliases: BTreeMap<String, String>,
+    /// Preserve component interface names independently of their JavaScript spelling.
+    interface_export_names: BTreeMap<String, String>,
 }
 
 impl EsmBindgen {
@@ -104,11 +106,14 @@ impl EsmBindgen {
         };
 
         // convert kebab names to camel case, leave ids as-is
+        let original_name = iface_id_or_kebab;
         let iface_id_or_kebab = if iface_id_or_kebab.contains(':') {
             iface_id_or_kebab.to_string()
         } else {
             iface_id_or_kebab.to_lower_camel_case()
         };
+        self.interface_export_names
+            .insert(iface_id_or_kebab.clone(), original_name.to_string());
 
         if !iface.contains_key(&iface_id_or_kebab) {
             iface.insert(
@@ -137,11 +142,14 @@ impl EsmBindgen {
         local_name: String,
         constant_name: String,
     ) {
+        let original_name = iface_id_or_kebab;
         let iface_id_or_kebab = if iface_id_or_kebab.contains(':') {
             iface_id_or_kebab.to_string()
         } else {
             iface_id_or_kebab.to_lower_camel_case()
         };
+        self.interface_export_names
+            .insert(iface_id_or_kebab.clone(), original_name.to_string());
 
         let iface = self
             .exports
@@ -183,12 +191,12 @@ impl EsmBindgen {
     pub fn exports(&self) -> Vec<(&str, &str)> {
         self.export_aliases
             .iter()
-            .map(|(alias, name)| (alias.as_ref(), name.as_ref()))
+            .map(|(alias, name)| (alias.as_ref(), self.interface_export_names[name].as_str()))
             .chain(self.exports.iter().map(|(name, binding)| {
                 (
                     name.as_ref(),
                     match binding {
-                        ExportBinding::Interface(_) => name.as_ref(),
+                        ExportBinding::Interface(_) => self.interface_export_names[name].as_str(),
                         ExportBinding::Constant(_) => {
                             unreachable!("constants are only emitted within interfaces")
                         }

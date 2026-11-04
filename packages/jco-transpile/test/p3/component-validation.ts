@@ -49,6 +49,25 @@ test.concurrent('exported record types produce declarations without runtime expo
     assert.isEmpty(output.exports);
 });
 
+test.concurrent('mixed-case component export names preserve metadata and later transpilation', async () => {
+    await $init;
+    const bytes = await parse(`(component
+        (type $r (resource (rep i32)))
+        (export "R2" (type $r))
+        (core module $m (func (export "f")))
+        (core instance $i (instantiate $m))
+        (func $f (canon lift (core func $i "f")))
+        (export "drop-R1-as-R2" (func $f))
+        (instance $exports (export "f" (func $f)))
+        (export "HTTP-api" (instance $exports)))`);
+    const output = generate(bytes, { name: 'mixed' });
+    assert.deepEqual(output.exports, [
+        ['httpApi', 'instance'],
+        ['dropR1AsR2', 'function'],
+    ].sort(([a], [b]) => a.localeCompare(b)));
+    assert.isNotEmpty(generate(await parse('(component)'), { name: 'after-mixed' }).files);
+});
+
 test.concurrent.each([false, true])(
     'core module exports preserve initialization and functions (trap=%s)',
     async (trap) => {

@@ -6,7 +6,7 @@ use std::ops::Index;
 
 use base64::Engine as _;
 use base64::engine::general_purpose;
-use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use semver::Version;
 use wasmtime_environ::component::{
     CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentExtern, ComponentTranslation,
@@ -457,33 +457,21 @@ pub fn transpile_bindgen(
         .exports()
         .iter()
         .map(|(export_name, canon_export_name)| {
-            let expected_export_name =
-                if canon_export_name.contains(':') || canon_export_name.starts_with("[async]") {
-                    canon_export_name.to_string()
-                } else {
-                    canon_export_name.to_kebab_case()
-                };
             let (export_idx, _extern_data) = instantiator
                 .component
                 .exports
-                .get(&expected_export_name, &NameMapNoIntern)
-                .unwrap_or_else(|| panic!("failed to find component export [{expected_export_name}] (original '{canon_export_name}')"));
+                .get(canon_export_name, &NameMapNoIntern)
+                .unwrap_or_else(|| panic!("failed to find component export [{canon_export_name}]"));
 
             let export_kind = match &instantiator.component.export_items[*export_idx] {
                 wasmtime_environ::component::Export::LiftedFunction { .. } => {
                     ExportKind::LiftedFunction
                 }
-                wasmtime_environ::component::Export::Instance { .. } => {
-                    ExportKind::Instance
-                }
+                wasmtime_environ::component::Export::Instance { .. } => ExportKind::Instance,
                 _ => panic!("unexpected export kind"),
             };
 
-
-            (
-                export_name.to_string(),
-export_kind,
-            )
+            (export_name.to_string(), export_kind)
         })
         .collect();
 
