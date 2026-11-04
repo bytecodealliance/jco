@@ -82,9 +82,7 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         skip: 'invalid handle diagnostics print signed indices instead of the required unsigned indices',
     },
     'linking/tags.wast': { transpile: { bindgenEnableWasmExnref: true } },
-    'linking/unit.wast': {
-        skip: 'a nested component start calls a lowered import without current caller thread metadata',
-    },
+    'linking/unit.wast': { transpile: { multiMemory: true } },
     'validation/instantiation.wast': { transpile: { multiMemory: true } },
     'validation/map.wast': { skip: 'the pinned validator accepts handle types as map keys' },
     'validation/kebab.wast': { skip: 'duplicate-name diagnostics preserve case while upstream expects lowercase' },

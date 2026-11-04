@@ -147,6 +147,14 @@ pub enum AugmentedOp {
 }
 
 impl<'a> Translation<'a> {
+    /// Core start functions execute during instantiation and may call canonical
+    /// imports before any exported component function has created a task.
+    pub fn has_start(&self) -> bool {
+        Parser::new(0)
+            .parse_all(self.wasm())
+            .any(|payload| matches!(payload, Ok(Payload::StartSection { .. })))
+    }
+
     /// Create a new translation
     pub fn new(translation: ModuleTranslation<'a>, multi_memory: bool) -> Result<Translation<'a>> {
         if multi_memory {

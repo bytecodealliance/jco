@@ -4059,6 +4059,11 @@ impl<'a> Instantiator<'a, '_> {
         args: &[CoreDef],
         instance: Option<RuntimeComponentInstanceIndex>,
     ) {
+        if self.modules[module_idx].has_start() {
+            if let Some(component_idx) = instance {
+                self.context_components.borrow_mut().insert(component_idx);
+            }
+        }
         // Build a JS "import object" which represents `args`. The `args` is a
         // flat representation which needs to be zip'd with the list of names to
         // correspond to the JS wasm embedding API. This is one of the major
