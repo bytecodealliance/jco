@@ -61,10 +61,13 @@ test.concurrent('mixed-case component export names preserve metadata and later t
         (instance $exports (export "f" (func $f)))
         (export "HTTP-api" (instance $exports)))`);
     const output = generate(bytes, { name: 'mixed' });
-    assert.deepEqual(output.exports, [
-        ['httpApi', 'instance'],
-        ['dropR1AsR2', 'function'],
-    ].sort(([a], [b]) => a.localeCompare(b)));
+    assert.deepEqual(
+        output.exports,
+        [
+            ['httpApi', 'instance'],
+            ['dropR1AsR2', 'function'],
+        ].sort(([a], [b]) => a.localeCompare(b)),
+    );
     assert.isNotEmpty(generate(await parse('(component)'), { name: 'after-mixed' }).files);
 });
 
