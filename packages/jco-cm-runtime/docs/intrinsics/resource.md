@@ -31,6 +31,11 @@ index (`handle >>> 0`), including when a core Wasm call supplies a signed i32.
   handle index zero is reserved.
 - A missing slot or freed entry traps with
   `unknown handle index <handle>` using `context.RuntimeError`.
+- Generated resource tables optionally carry `_resourceKind` and a shared
+  `_resourceOwners` map from live handle indices to their owning resource table.
+  If an index belongs to a different resource table, the trap identifies the
+  resource type mismatch. Providers read this metadata without changing it;
+  plain array-like tables without metadata retain the missing-index diagnostic.
 
 The API version is currently 1. See the [runtime API](../runtime.md) for module contracts.
 

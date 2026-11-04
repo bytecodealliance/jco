@@ -221,8 +221,9 @@ impl ResourceIntrinsic {
                             space = {{
                                 next: 1,
                                 free: [],
+                                resources: new Map(),
                                 alloc() {{ return this.free.length > 0 ? this.free.pop() : this.next++; }},
-                                release(idx) {{ this.free.push(idx); }},
+                                release(idx) {{ this.resources.delete(idx); this.free.push(idx); }},
                             }};
                             {handle_index_spaces}.set(key, space);
                         }}
@@ -242,7 +243,10 @@ impl ResourceIntrinsic {
                           if (scopeId === undefined) {{ throw new Error("missing scopeId"); }}
                           // (a table's component instance shares one index space between all
                           // its handle kinds; a table without an instance keeps its own)
-                          const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
+                          const space = {get_handle_index_space_fn}(table._componentIdx ?? table);
+                          const handle = space.alloc();
+                          table._resourceOwners = space.resources;
+                          space.resources.set(handle, table);
                           table[handle * 2] = scopeId;
                           table[(handle * 2) + 1] = rep >>> 0;
                           return handle;
@@ -262,7 +266,10 @@ impl ResourceIntrinsic {
                     // Reps are u32: one from a core function arrives as a signed i32
                     rep >>>= 0;
                     table._createdReps.add(rep);
-                    const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
+                    const space = {get_handle_index_space_fn}(table._componentIdx ?? table);
+                    const handle = space.alloc();
+                    table._resourceOwners = space.resources;
+                    space.resources.set(handle, table);
                     table[handle * 2] = 0;
                     table[(handle * 2) + 1] = rep + {own_flag};
                     return handle;
@@ -289,6 +296,10 @@ impl ResourceIntrinsic {
                     // index may belong to another handle kind of the instance)
                     // Zero reps are valid; freed entries are identified by the scope flag.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
+                        const owner = table._resourceOwners?.get(handle);
+                        if (owner && owner !== table) {{
+                            throw new {runtime_error}(`handle index ${{handle}} used with the wrong type, expected ${{table._resourceKind ?? 'resource'}} but found a different ${{owner._resourceKind ?? 'resource'}}`);
+                        }}
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
                     }}
                     return {{ rep, scope, own }};
@@ -326,6 +337,10 @@ impl ResourceIntrinsic {
                     const rep = own ? val - {own_flag} : val;
                     // A borrowed entry can store zero without being freed.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
+                        const owner = table._resourceOwners?.get(handle);
+                        if (owner && owner !== table) {{
+                            throw new {runtime_error}(`handle index ${{handle}} used with the wrong type, expected ${{table._resourceKind ?? 'resource'}} but found a different ${{owner._resourceKind ?? 'resource'}}`);
+                        }}
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
                     }}
                     if (own && scope !== 0) {{

@@ -33,6 +33,17 @@ suite('external runtime codegen', () => {
                 scope: 0,
                 own: true,
             });
+            const owners = new Map([[1, table]]);
+            Object.assign(table, { _resourceKind: 'guest-defined resource', _resourceOwners: owners });
+            const other = Object.assign([1 << 30, 0], {
+                _resourceKind: 'guest-defined resource',
+                _resourceOwners: owners,
+            });
+            assert.throws(
+                () => tableGet({ RuntimeError: SelectedRuntimeError }, other, 1),
+                SelectedRuntimeError,
+                'handle index 1 used with the wrong type, expected guest-defined resource but found a different guest-defined resource',
+            );
         },
     );
 

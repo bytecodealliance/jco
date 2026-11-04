@@ -25,11 +25,17 @@ export interface ResourceTableEntry {
     readonly own: boolean;
 }
 
+/** Optional ownership metadata shared by the tables of a component instance. */
+export interface ResourceTable extends ArrayLike<number> {
+    readonly _resourceKind?: string;
+    readonly _resourceOwners?: ReadonlyMap<number, ResourceTable>;
+}
+
 /** Exports required at the public intrinsics/resource subpath. */
 export interface ResourceModule {
     readonly tableGet: (
         context: ResourceTableGetContext,
-        table: ArrayLike<number>,
+        table: ResourceTable,
         handle: ResourceHandle,
     ) => ResourceTableEntry;
 }

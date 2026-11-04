@@ -1647,6 +1647,14 @@ impl<'a> Instantiator<'a, '_> {
         let rsc_table_remove = self
             .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+        let index_space = self
+            .bindgen
+            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::GetHandleIndexSpace));
+        let resource_kind = if is_imported {
+            "host-defined resource"
+        } else {
+            "guest-defined resource"
+        };
 
         // Create the relevant handle table
         let rtid = resource_table_idx.as_u32();
@@ -1658,6 +1666,8 @@ impl<'a> Instantiator<'a, '_> {
                   const handleTable{rtid} = [{rsc_table_flag}, 0];
                   handleTable{rtid}._createdReps = new Set();
                   handleTable{rtid}._componentIdx = {component_idx};
+                  handleTable{rtid}._resourceOwners = {index_space}({component_idx}).resources;
+                  handleTable{rtid}._resourceKind = '{resource_kind}';
                 "#,
             );
             if !self.resources_initialized.contains_key(&resource_idx) {
@@ -1682,6 +1692,8 @@ impl<'a> Instantiator<'a, '_> {
                    const handleTable{rtid} = [{rsc_table_flag}, 0];
                    handleTable{rtid}._createdReps = new Set();
                    handleTable{rtid}._componentIdx = {component_idx};
+                   handleTable{rtid}._resourceOwners = {index_space}({component_idx}).resources;
+                   handleTable{rtid}._resourceKind = '{resource_kind}';
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
                        const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
                    }});
@@ -7422,6 +7434,10 @@ pub fn gen_flat_lift_fn_js_expr(
                                      "#
                                     )
                                 } else {
+                                    let table_get = instantiator.bindgen.intrinsic_call(
+                                        Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                        &format!("handleTable{tid}, handle"),
+                                    );
                                     let dtor_setup_js = dtor_name
                                         .as_ref()
                                         .map(|dtor| {
@@ -7458,6 +7474,8 @@ pub fn gen_flat_lift_fn_js_expr(
                                     format!(
                                         r#"
                                       (handle) => {{
+                                          handle >>>= 0;
+                                          {table_get};
                                           const resourceObj = Object.create({local_name}.prototype);
                                           Object.defineProperty(resourceObj, {symbol_resource_handle}, {{
                                               writable: true,

@@ -2967,6 +2967,11 @@ impl Bindgen for FunctionBindgen<'_> {
                             );
 
                             if is_own {
+                                let table_get = self.intrinsic_call(
+                                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                    &format!("handleTable{tid}, {handle}"),
+                                );
+                                uwriteln!(self.src, "{table_get};");
                                 // Sending an own handle out to JS as a return value - set up finalizer and disposal.
                                 let empty_func = self
                                     .intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::EmptyFunc));

@@ -14,6 +14,12 @@ export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => 
     // belong to another handle kind of the instance, and `value` is undefined
     // past the end of the table.
     if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
+        const owner = table._resourceOwners?.get(handle);
+        if (owner && owner !== table) {
+            throw new context.RuntimeError(
+                `handle index ${handle} used with the wrong type, expected ${table._resourceKind ?? 'resource'} but found a different ${owner._resourceKind ?? 'resource'}`,
+            );
+        }
         throw new context.RuntimeError(`unknown handle index ${handle}`);
     }
     return { rep, scope, own };
