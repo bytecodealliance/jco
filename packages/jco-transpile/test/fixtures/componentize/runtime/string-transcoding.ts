@@ -65,7 +65,10 @@ const INTERFACES = [
  * A trap leaves the component instances involved unusable, so every
  * call is made against newly instantiated components.
  */
-async function assertTraps(call: (wasm: any) => unknown, expected: RegExp | typeof TypeError) {
+async function assertTraps(
+    call: (wasm: any) => unknown,
+    expected: RegExp | typeof TypeError | typeof WebAssembly.RuntimeError,
+) {
     const wasm = await instantiate(loadWasm, {});
     assert.throws(() => call(wasm), expected);
 }
@@ -141,12 +144,12 @@ async function run() {
     // Truncated sequences are not valid UTF-8, and must not be transcoded
     for (const s of ['é', 'abc中', 'abc🚀']) {
         // utf8 -> latin1+utf16
-        await assertTraps((wasm) => wasm.utf8ToCompact.truncatedRaw(s), TypeError);
+        await assertTraps((wasm) => wasm.utf8ToCompact.truncatedRaw(s), WebAssembly.RuntimeError);
         // utf8 -> utf16
-        await assertTraps((wasm) => wasm.utf8ViaUtf16.truncatedRaw(s), TypeError);
+        await assertTraps((wasm) => wasm.utf8ViaUtf16.truncatedRaw(s), WebAssembly.RuntimeError);
         // utf8 -> utf8
-        await assertTraps((wasm) => wasm.utf8ToUtf8.truncatedRaw(s), TypeError);
-        await assertTraps((wasm) => wasm.utf8ViaHighCompact.truncatedRaw(s), TypeError);
+        await assertTraps((wasm) => wasm.utf8ToUtf8.truncatedRaw(s), WebAssembly.RuntimeError);
+        await assertTraps((wasm) => wasm.utf8ViaHighCompact.truncatedRaw(s), WebAssembly.RuntimeError);
     }
 
     // Writing part of a surrogate into a string is fine as long as it ends up paired

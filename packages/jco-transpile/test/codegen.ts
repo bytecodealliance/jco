@@ -559,7 +559,11 @@ suite('--perf-strings-skip-copy-utf8-validation', () => {
     test.concurrent('copied strings are validated by default', async () => {
         const { instance, cleanup } = await setup({});
         try {
-            assert.throws(() => instance.utf8ToUtf8.truncatedRaw('é'), TypeError);
+            assert.throws(
+                () => instance.utf8ToUtf8.truncatedRaw('é'),
+                WebAssembly.RuntimeError,
+                /incomplete utf-8 byte sequence/,
+            );
         } finally {
             await cleanup();
         }
@@ -578,7 +582,11 @@ suite('--perf-strings-skip-copy-utf8-validation', () => {
     test.concurrent('strings that are transcoded are still validated when skipped', async () => {
         const { instance, cleanup } = await setup({ perfStringsSkipCopyUtf8Validation: true });
         try {
-            assert.throws(() => instance.utf8ToCompact.truncatedRaw('é'), TypeError);
+            assert.throws(
+                () => instance.utf8ToCompact.truncatedRaw('é'),
+                WebAssembly.RuntimeError,
+                /incomplete utf-8 byte sequence/,
+            );
         } finally {
             await cleanup();
         }

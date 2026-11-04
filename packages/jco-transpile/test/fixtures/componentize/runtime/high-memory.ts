@@ -32,7 +32,10 @@ const IMPORTS = {
  * A trap leaves the component instance unusable, so every call is made
  * against a newly instantiated component.
  */
-async function assertThrows(call: (wasm: any) => unknown, expected: typeof TypeError) {
+async function assertThrows(
+    call: (wasm: any) => unknown,
+    expected: typeof TypeError | typeof WebAssembly.RuntimeError,
+) {
     const wasm = await instantiate(loadWasm, IMPORTS);
     assert.throws(() => call(wasm), expected);
 }
@@ -79,10 +82,12 @@ async function run() {
     // Strings that are not valid must not be lifted, whether they are the result
     // of an export (`direct`) or an argument to an import (`viaHost`)
     for (const iface of ['direct', 'viaHost']) {
+        // Canonical ABI load_string_from_range traps on malformed UTF-8;
+        // the component JS embedding exposes traps as WebAssembly.RuntimeError.
         // a continuation byte is missing
-        await assertThrows((wasm) => wasm[iface].pokeString('é', 1, 0x41), TypeError);
+        await assertThrows((wasm) => wasm[iface].pokeString('é', 1, 0x41), WebAssembly.RuntimeError);
         // a byte that never appears in UTF-8
-        await assertThrows((wasm) => wasm[iface].pokeString('abc', 1, 0xff), TypeError);
+        await assertThrows((wasm) => wasm[iface].pokeString('abc', 1, 0xff), WebAssembly.RuntimeError);
         // a high surrogate that is not followed by a low surrogate
         await assertThrows((wasm) => wasm[iface].pokeStringUtf16('ab', 1, 0xd8), TypeError);
         // a low surrogate that does not follow a high surrogate

@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { runInNewContext } from 'node:vm';
 
 import { assert, test } from 'vitest';
 
@@ -156,3 +157,102 @@ test.concurrent('transcoding calls custom UTF-8 encoder objects', async () => {
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test.concurrent.each([
+    { errorType: 'TypeError', ptr: 16, len: 2 },
+    { errorType: 'TypeError', ptr: 8, len: 1, canonical: 'invalid utf-8' },
+    { errorType: 'TypeError', ptr: 9, len: 1, canonical: 'incomplete utf-8 byte sequence' },
+    { errorType: 'Error', ptr: 8, len: 1 },
+    { errorType: 'WebAssembly.RuntimeError', ptr: 8, len: 1 },
+])('UTF-8 provider error identity ($errorType, $ptr, $len)', async ({ errorType, ptr, len, canonical }) => {
+    const dir = await getTmpDir();
+    try {
+        await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
+        await writeProvider(dir);
+        const defaults = new URL('intrinsics/string.js', defaultRuntimeUrl).href;
+        await writeFile(
+            join(dir, 'provider/intrinsics/string.js'),
+            `
+            export * from ${JSON.stringify(defaults)};
+            export const failure = new ${errorType}('provider codec failure');
+            export function initializeUtf8Decoder() {
+                const decoder = { decode() {
+                    if (this !== decoder) throw new Error('lost codec object receiver');
+                    throw failure;
+                } };
+                return decoder;
+            }
+        `,
+        );
+        const component = await readFile(
+            new URL('../fixtures/components/p3/string-bounds/read.wat', import.meta.url),
+            'utf8',
+        );
+        const { files } = await transpileBytes(await parse(component), {
+            name: 'codec-errors',
+            instantiation: 'sync',
+            cmRuntimeEsModule: './provider/',
+        });
+        await writeFiles(files, { baseDir: dir });
+        const bindings = await import(pathToFileURL(join(dir, 'codec-errors.js')).href);
+        const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/string.js')).href);
+        const RuntimeError = runInNewContext('WebAssembly.RuntimeError');
+        const wasm = Object.create(WebAssembly);
+        wasm.RuntimeError = RuntimeError;
+        const instance = bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {}, undefined, {
+            shim: { globals: { WebAssembly: wasm } },
+        });
+        let failure;
+        try {
+            instance.read(ptr, len);
+        } catch (error) {
+            failure = error;
+        }
+        if (canonical) {
+            assert.instanceOf(failure, RuntimeError);
+            assert.strictEqual(failure.message, canonical);
+        } else {
+            assert.strictEqual(failure, provider.failure);
+        }
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test.concurrent.each(['utf8ToUtf8', 'utf8ToCompact', 'utf8ViaUtf16'])(
+    'UTF-8 transcoding errors use the selected error realm (%s)',
+    async (boundary) => {
+        const dir = await getTmpDir();
+        try {
+            await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
+            await writeProvider(dir);
+            const component = await readFile(
+                new URL('../fixtures/components/runtime/string-transcoding.component.wat', import.meta.url),
+                'utf8',
+            );
+            const { files } = await transpileBytes(await parse(component), {
+                name: 'transcoding-errors',
+                instantiation: 'sync',
+                cmRuntimeEsModule: './provider/',
+            });
+            await writeFiles(files, { baseDir: dir });
+            const bindings = await import(pathToFileURL(join(dir, 'transcoding-errors.js')).href);
+            const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/string.js')).href);
+            const RuntimeError = runInNewContext('WebAssembly.RuntimeError');
+            const wasm = Object.create(WebAssembly);
+            wasm.RuntimeError = RuntimeError;
+            const instance = bindings.instantiate(
+                (name: string) => new WebAssembly.Module(files[name]),
+                {},
+                undefined,
+                {
+                    shim: { globals: { WebAssembly: wasm } },
+                },
+            );
+            assert.throws(() => instance[boundary].truncatedRaw('é'), RuntimeError, /incomplete utf-8 byte sequence/);
+            assert.include(provider.calls, 'utf8Decoder.decode');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    },
+);
