@@ -2800,8 +2800,11 @@ impl<'a> Instantiator<'a, '_> {
                         let decoder = self
                             .bindgen
                             .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+                        let decode_utf8 = self
+                            .bindgen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8));
                         format!(
-                            "{decoder}.decode(new Uint8Array(memory{memory_idx}.buffer, ptr >>> 0, len >>> 0))"
+                            "{decode_utf8}({decoder}, new Uint8Array(memory{memory_idx}.buffer, ptr >>> 0, len >>> 0))"
                         )
                     }
                     wasmtime_environ::component::StringEncoding::Utf16 => {
@@ -3190,7 +3193,10 @@ impl<'a> Instantiator<'a, '_> {
                             let utf8_decoder = self.bindgen.intrinsic(Intrinsic::String(
                                 StringIntrinsic::GlobalTextDecoderUtf8,
                             ));
-                            format!("{utf8_decoder}.decode(from);")
+                            let decode_utf8 = self
+                                .bindgen
+                                .intrinsic(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8));
+                            format!("{decode_utf8}({utf8_decoder}, from);")
                         };
                         uwriteln!(
                             self.src.js,
@@ -3389,6 +3395,9 @@ impl<'a> Instantiator<'a, '_> {
                         let utf8_decoder = self
                             .bindgen
                             .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+                        let decode_utf8 = self
+                            .bindgen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8));
                         uwriteln!(
                             self.src.js,
                             r#"
@@ -3398,7 +3407,7 @@ impl<'a> Instantiator<'a, '_> {
                                   const latin1 = new Uint8Array(memory{to}.buffer, dst, latin1_bytes_so_far);
                                   const inflated = new Uint16Array(memory{to}.buffer, dst, latin1_bytes_so_far);
                                   for (let i = latin1_bytes_so_far - 1; i >= 0; i--) {{ inflated[i] = latin1[i]; }}
-                                  const content = {utf8_decoder}.decode(new Uint8Array(memory{from}.buffer, src, src_len));
+                                  const content = {decode_utf8}({utf8_decoder}, new Uint8Array(memory{from}.buffer, src, src_len));
                                   const codeUnits = content.length;
                                   const to = new Uint16Array(memory{to}.buffer, dst + 2 * latin1_bytes_so_far, codeUnits);
                                   for (let i = 0; i < codeUnits; i++) {{
@@ -3444,13 +3453,16 @@ impl<'a> Instantiator<'a, '_> {
                         let utf8_decoder = self
                             .bindgen
                             .intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+                        let decode_utf8 = self
+                            .bindgen
+                            .intrinsic(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8));
                         uwriteln!(
                             self.src.js,
                             r#"
                               function trampoline{i} (from_ptr, len, to_ptr) {{
                                   from_ptr >>>= 0;
                                   to_ptr >>>= 0;
-                                  const content = {utf8_decoder}.decode(new Uint8Array(memory{from}.buffer, from_ptr, len));
+                                  const content = {decode_utf8}({utf8_decoder}, new Uint8Array(memory{from}.buffer, from_ptr, len));
                                   const codeUnits = content.length;
                                   const view = new Uint16Array(memory{to}.buffer, to_ptr, codeUnits);
                                   for (var i = 0; i < codeUnits; i++) {{
