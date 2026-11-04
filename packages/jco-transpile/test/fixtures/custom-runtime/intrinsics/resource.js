@@ -10,6 +10,7 @@ export function resetTableGetCallCount() {
 }
 
 export function tableGet(context, table, handle) {
+    handle >>>= 0;
     if (this !== undefined) {
         throw new Error('named operations must not require a receiver');
     }

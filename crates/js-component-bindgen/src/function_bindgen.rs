@@ -841,7 +841,7 @@ impl FunctionBindgen<'_> {
                   task.registerOnResolveHandler(() => {{
                       {scope_id}--;
                       for (const {{ rid, handle }} of {resource_borrows}) {{
-                          const storedScopeId = {handle_tables}[rid][handle << 1]
+                          const storedScopeId = {handle_tables}[rid][(handle >>> 0) * 2]
                           if (storedScopeId === {scope_id}) {{
                               throw new TypeError('borrows not dropped for resource call');
                           }}
@@ -2941,7 +2941,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let is_own = matches!(handle, Handle::Own(_));
                 let rsc = format!("rsc{}", self.tmp());
                 let handle = format!("handle{}", self.tmp());
-                uwriteln!(self.src, "var {handle} = {};", &operands[0]);
+                uwriteln!(self.src, "var {handle} = {} >>> 0;", &operands[0]);
 
                 match data {
                     ResourceData::Host {
@@ -2957,9 +2957,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
                         let rsc_table_remove = self
                             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-                        let rsc_own_flag = self.intrinsic(Intrinsic::Resource(
-                            ResourceIntrinsic::ResourceTableOwnFlag,
-                        ));
                         if !imported {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
@@ -3014,6 +3011,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             }
                         } else {
                             let rep = format!("rep{}", self.tmp());
+                            let table_get = self.intrinsic_call(
+                                Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                &format!("handleTable{tid}, {handle}"),
+                            );
                             // Imported handles either lift as instance capture from a previous lowering,
                             // or we create a new JS class to represent it.
                             let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
@@ -3023,7 +3024,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 r#"
-                                  var {rep} = handleTable{tid}[({handle} << 1) + 1] % {rsc_own_flag};
+                                  var {rep} = {table_get}.rep;
                                   var {rsc} = captureTable{rid}.get({rep});
                                   if (!{rsc}) {{
                                       {rsc} = Object.create({local_name}.prototype);
@@ -3183,10 +3184,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     r#"
                                       var {own_handle} = {op}[{symbol_resource_handle}];
-                                      if (!{own_handle} || !(handleTable{tid}[({own_handle} << 1) + 1] >= {rsc_own_flag})) {{
+                                      if (!{own_handle} || !(handleTable{tid}[{own_handle} * 2 + 1] >= {rsc_own_flag})) {{
                                           throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                       }}
-                                      var {handle} = handleTable{tid}[({own_handle} << 1) + 1] - {rsc_own_flag};
+                                      var {handle} = handleTable{tid}[{own_handle} * 2 + 1] - {rsc_own_flag};
                                     "#,
                                 );
                             }

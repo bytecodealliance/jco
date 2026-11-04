@@ -362,6 +362,7 @@ impl ResourceIntrinsic {
                     output,
                     r#"
                     function {resource_transfer_borrow_fn}(handle, fromTid, toTid) {{
+                        handle >>>= 0;
                         const fromTable = {handle_tables}[fromTid];
                         const {{ rep, own }} = {table_get_call};
 

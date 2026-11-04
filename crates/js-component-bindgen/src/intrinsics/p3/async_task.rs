@@ -1649,7 +1649,7 @@ impl AsyncTaskIntrinsic {
                                 throw new {runtime_error_class}('borrow handles still remain at the end of the call');
                             }}
                             for (const {{ table, handle }} of this.#resourceLenders) {{
-                                const idx = handle << 1;
+                                const idx = (handle >>> 0) * 2;
                                 const lendCount = table[idx];
                                 if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2**30) {{
                                     throw new Error('invalid resource lender state at scope exit');

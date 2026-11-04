@@ -18,12 +18,13 @@ No codecs, scratch arrays, scheduler or optional JSPI facilities are initialized
 by this operation or by importing runtime metadata.
 
 `tableGet(context, table, handle)` reads an array-like table without changing it
-and returns `{ rep, scope, own }`.
+and returns `{ rep, scope, own }`. The handle is interpreted as an unsigned 32-bit
+index (`handle >>> 0`), including when a core Wasm call supplies a signed i32.
 
 - Slots 0 and 1 form a sentinel; resource handles start at 1. Indices are shared
   by all handle kinds of a component instance, so a table may contain holes.
-- Slot `handle << 1` holds the scope; bit 30 marks a freed entry.
-- Slot `(handle << 1) + 1` holds an unsigned 32-bit representation. Owned entries
+- Slot `handle * 2` holds the scope; bit 30 marks a freed entry.
+- Slot `handle * 2 + 1` holds an unsigned 32-bit representation. Owned entries
   store the representation plus `2 ** 32`; subtract that value to obtain `rep`.
   A freed entry stores zero.
 - A representation of zero is valid for both owned and borrowed entries. Only
