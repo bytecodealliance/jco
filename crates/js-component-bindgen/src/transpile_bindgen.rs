@@ -4416,10 +4416,13 @@ impl<'a> Instantiator<'a, '_> {
         // `implements` feature) falls back to a mapping for the implemented
         // interface id when the label itself has no mapping, so that e.g.
         // WASI shim mappings apply to labeled imports as well.
-        let implements = self.resolve.external_id_value(
-            world_key,
-            &self.resolve.worlds[self.world].imports[world_key],
-        );
+        let implements = self
+            .resolve
+            .implements_interface(
+                world_key,
+                &self.resolve.worlds[self.world].imports[world_key],
+            )
+            .and_then(|id| self.resolve.id_of(id));
 
         // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import_with_implements(
@@ -5087,7 +5090,8 @@ impl<'a> Instantiator<'a, '_> {
             let implements = self.resolve.worlds[self.world]
                 .imports
                 .get(&world_key)
-                .and_then(|item| self.resolve.external_id_value(&world_key, item));
+                .and_then(|item| self.resolve.implements_interface(&world_key, item))
+                .and_then(|id| self.resolve.id_of(id));
             let (local_name, _) = self
                 .bindgen
                 .local_names
