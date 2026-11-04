@@ -1400,7 +1400,8 @@ impl Intrinsic {
                                   ? {get_current_thread}(saved.componentIdx, saved.threadID, saved.taskID)
                                   : null;
                               const mayBlock = savedThread
-                                  ? (savedThread?.task.mayBlock() ?? ({current_task_may_block}.value !== 0))
+                                  ? ((savedThread?.task.mayBlock() ?? ({current_task_may_block}.value !== 0))
+                                      || {get_or_create_async_state_fn}(componentIdx).hasReadyThread(savedThread.thread))
                                   : false;
                               if (!saved && !mayBlock && !callsHost) {{
                                   throw new {runtime_error_class}('cannot block a synchronous task before returning');
@@ -1424,6 +1425,15 @@ impl Intrinsic {
                                   if (result !== null &&
                                       (typeof result === 'object' || typeof result === 'function') &&
                                       typeof result.then === 'function') {{
+                                      if (!syncOnly && savedThread && {get_or_create_async_state_fn}(componentIdx).isSyncWaiting(savedThread.thread)) {{
+                                          return Promise.resolve(result).then(value => {{
+                                              {get_or_create_async_state_fn}(componentIdx).throwIfInterrupted();
+                                              return value;
+                                          }}, err => {{ throw {record_trap_fn}(componentIdx, err, convertsRangeErrors); }}).finally(() => {{
+                                              {global_current_thread_meta_obj}[componentIdx] = saved;
+                                              if (!switchesTask) {{ {global_current_thread_meta_obj}.current = saved; }}
+                                          }});
+                                      }}
                                       // The helper may already have returned a rejected promise.
                                       // Mark it handled before replacing it with the canonical
                                       // synchronous-task trap.
@@ -1718,7 +1728,7 @@ mod tests {
         assert!(source.contains("syncOnly = false"));
         assert!(
             source.contains(
-                "? (savedThread?.task.mayBlock() ?? (CURRENT_TASK_MAY_BLOCK.value !== 0))"
+                "? ((savedThread?.task.mayBlock() ?? (CURRENT_TASK_MAY_BLOCK.value !== 0))"
             )
         );
         assert!(source.contains(": false;"));
@@ -1767,7 +1777,7 @@ mod tests {
 
         assert!(source.contains("isManualAsync() { return this.#isManualAsync; }"));
         assert!(source.contains(
-            "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }"
+            "mayBlock() { return this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }"
         ));
     }
 
@@ -1958,7 +1968,8 @@ mod tests {
         assert!(!poll.contains("deliverPendingCancel"));
 
         let yield_ = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadYield));
-        assert!(yield_.contains("if (!task.mayBlock()) {"));
+        assert!(yield_.contains("const boundary = task.blockingBoundary();"));
+        assert!(yield_.contains(".hasReadyThread(thread)"));
         assert!(yield_.contains(".runTickLoop();"));
         assert!(yield_.contains("return thread.suspend({"));
         assert!(yield_.contains(".then(keepGoing => keepGoing ? 0 : 1)"));
@@ -2159,9 +2170,11 @@ mod tests {
         assert!(check.contains("for (const state of ASYNC_STATE.values())"));
         assert!(check.contains("STORE_ASYNC_STATE.pendingHostOperations > 0"));
         assert!(check.contains("const root = task.getRootTask();"));
-        assert!(check.contains(
-            "new WebAssemblyRuntimeError('wasm trap: deadlock detected: event loop cannot make further progress')"
-        ));
+        assert!(
+            check.contains(
+                "'wasm trap: deadlock detected: event loop cannot make further progress'"
+            )
+        );
         assert!(check.contains("for (const root of unresolvedRoots)"));
         assert!(check.contains("root.reject(err);"));
         assert!(check.contains("task.reject(err);"));

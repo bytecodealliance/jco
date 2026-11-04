@@ -1583,10 +1583,6 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        if (!task.mayBlock() && !isAsync) {{
-                            throw new Error('only tasks that may block may call future.{future_op_fn}');
-                        }}
-
                         const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
                         if (!futureEnd) {{
                             throw new Error(`missing future with waitable idx [${{futureEndWaitableIdx}}] (component [${{componentIdx}}])`);
@@ -1594,6 +1590,7 @@ impl AsyncFutureIntrinsic {
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new {runtime_error_class}('invalid future end, expected [{future_end_class}]');
                         }}
+                        const perform = () => {{
                         if (futureEnd.isDoneState()) {{
                             const message = futureEnd.isWritable()
                                 ? 'cannot write to future after previous write succeeded or readable end dropped'
@@ -1654,6 +1651,8 @@ impl AsyncFutureIntrinsic {
                         if (index !== futureEnd.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
 
                         return payload;
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : futureEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#
                 );
@@ -1707,6 +1706,12 @@ impl AsyncFutureIntrinsic {
                             throw new {runtime_error_class}('invalid future end, expected value of type [{future_end_class}]');
                         }}
 
+                        futureEnd.getWaitable().assertNoSyncWaiter();
+                        if (!ctx.resumeCancel && futureEnd.getCopyState() === {future_end_class}.CopyState.CANCELLING_COPY) {{
+                            throw new {runtime_error_class}('cannot cancel future while cancellation is already in progress');
+                        }}
+                        const perform = () => {{
+
                         if (!futureEnd.isCopying()) {{ throw new {runtime_error_class}('future end is not copying, cannot cancel'); }}
 
                         futureEnd.setCopyState({future_end_class}.CopyState.CANCELLING_COPY);
@@ -1735,6 +1740,8 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         return finishCancel();
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : futureEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#));
             }
