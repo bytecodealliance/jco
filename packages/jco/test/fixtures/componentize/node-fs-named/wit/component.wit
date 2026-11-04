@@ -1,0 +1,6 @@
+package example:filesystem-named;
+
+world app {
+  export inspect: func(path: string) -> tuple<string, u32>;
+  export read-error: func(path: string) -> string;
+}

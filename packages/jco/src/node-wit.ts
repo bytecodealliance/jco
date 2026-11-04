@@ -1,6 +1,42 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseSync, Visitor } from "rolldown/utils";
+
+/** Resolution visits unused modules too. Only the final bundle requests capabilities. */
+export function retainedNodeWitRequirements(
+    source: string,
+    requirements: Iterable<NodeWitRequirement>,
+): NodeWitRequirement[] {
+    const parsed = parseSync("component.js", source);
+    if (parsed.errors.length) {
+        throw new Error("Unable to parse bundled component when selecting WIT imports");
+    }
+    const imports = new Set<string>();
+    let dynamic = false;
+    new Visitor({
+        ImportDeclaration(node) {
+            imports.add(node.source.value);
+        },
+        ExportNamedDeclaration(node) {
+            if (node.source) {
+                imports.add(node.source.value);
+            }
+        },
+        ExportAllDeclaration(node) {
+            imports.add(node.source.value);
+        },
+        ImportExpression(node) {
+            if (node.source.type === "Literal" && typeof node.source.value === "string") {
+                imports.add(node.source.value);
+            } else {
+                // An unknown external import cannot prove any capability unused.
+                dynamic = true;
+            }
+        },
+    }).visit(parsed.program);
+    return [...requirements].filter((requirement) => dynamic || imports.has(requirement.witImport));
+}
 
 export interface NodeWitRequirement {
     nodeSpecifier: string;

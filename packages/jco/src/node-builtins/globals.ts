@@ -67,7 +67,13 @@ export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [m
                       "Response",
                       "Request",
                       "fetch",
-                  ].map((name) => [name, ["jco:web-globals", name] as [string, string]]),
+                  ].map((name) => [
+                      name,
+                      [
+                          `jco:web-globals/${name.endsWith("Stream") ? "streams" : name === "Blob" || name === "File" ? "blob" : "fetch"}`,
+                          name,
+                      ] as [string, string],
+                  ]),
               )
             : {}),
         ...nodeErrorGlobals(options),
@@ -91,6 +97,13 @@ export function nodeGlobals(options: NodeGlobalsOptions = {}): Record<string, [m
 
 export function createGlobalsBuiltin({ options }: BuiltinContext): BuiltinAdapter {
     return composeBuiltins([
+        ...["streams", "blob", "fetch"].map((group) =>
+            virtualBuiltin(
+                `jco:web-globals/${group}`,
+                `${VIRTUAL_PREFIX}web-globals/${group}`,
+                () => `export * from ${JSON.stringify(stdModule(undefined, `web-globals/${group}`))};`,
+            ),
+        ),
         virtualBuiltin(
             "jco:web-globals",
             `${VIRTUAL_PREFIX}web-globals`,
