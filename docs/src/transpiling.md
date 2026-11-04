@@ -49,7 +49,7 @@ Options include:
 * `--map`: Provide custom mappings for world imports. Supports both wildcard mappings (`*` similarly as in the package.json "exports" field) as well as `#` mappings for targetting exported interfaces. For example, the WASI mappings are internally defined with mappings like `--map wasi:filesystem/*=@bytecodealliance/preview2-shim/filesystem#*` to map `import as * filesystem from 'wasi:filesystem/types'` to `import { types } from '@bytecodealliance/preview2-shim/filesystem`.
 * `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
 * `--instantiation [mode]`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports. The `instantiate` function can be async (with `--instantiation` or `--instantiation async`), or sync (with `--instantiation sync`).
-* `--cm-runtime-es-module <base>`: Select an experimental API-v1 Component Model runtime package or directory base. Bindings import named exports from `<base>/runtime` and `<base>/intrinsics/resource`; directory and file/HTTP(S) URL bases append `.js`. Relative bases resolve from the generated bindings. Install the runtime alongside the generated component; omitting this option keeps intrinsics inline. The current operation is `tableGet(context, table, handle)`. Legacy provider files such as `./provider.js` must migrate to a directory base. See the [runtime contract](../../packages/jco-cm-runtime/docs/runtime.md).
+* `--cm-runtime-es-module <base>`: Select an experimental API-v2 Component Model runtime package or directory base. Bindings import named exports from `<base>/runtime` and `<base>/intrinsics/resource`; directory and file/HTTP(S) URL bases append `.js`. Relative bases resolve from the generated bindings. Install the runtime alongside the generated component; omitting this option keeps intrinsics inline. The current operation is `tableGet(context, table, handle)`. Legacy provider files such as `./provider.js` must migrate to a directory base. See the [runtime contract](../../packages/jco-cm-runtime/docs/runtime.md).
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
 * `--flags-as-bigint`: Represents WIT flags as `bigint` values and exports named flag constants. By default, flags remain objects of booleans for backwards compatibility.
 * `--variants-inline-cases`: Inlines WIT variant cases in their discriminated unions instead of exporting a named interface for every case. The named interfaces remain the default for backwards compatibility.
@@ -318,20 +318,40 @@ For direct ES module output, import `_util` from the generated module and call
 `_util.stop()` instead. Each call to `instantiate()` has its own stop function;
 stopping one instance does not affect another.
 
-Stopping is permanent and synchronous. It stops the runtime's scheduler timers,
-rejects pending guest calls with a `WebAssembly.RuntimeError`, and prevents further
-calls into any component in the instance. Host resources still owned by the guest
-have their `Symbol.dispose` method called. Resources borrowed from the host or
-already returned to it are not disposed. Guest Wasm destructors are not run.
+Stopping is permanent and synchronous. Like dropping a Wasmtime store, it abandons
+all components and their pending work together. It stops the runtime's scheduler
+and polling timers, rejects pending guest calls and host reads of guest futures
+and streams with a `WebAssembly.RuntimeError`, and prevents further guest execution.
+For direct modules using `--tla-compat`, stopping during initialization also rejects
+`$init`; late module loads cannot restart initialization.
+
+Host resources still owned by the guest have their `Symbol.dispose` method called.
+Resources borrowed from the host or already returned to it are not disposed.
+Guest Wasm destructors are not run.
+
+Pending host operations and unread host futures are disposed through
+`Symbol.asyncDispose`, falling back to `Symbol.dispose`. Host streams are closed
+through their iterator's `return()` method, or through `ReadableStream` cancellation;
+iterators without `return()` fall back to disposing the source. These cleanup hooks
+run in microtasks, and asynchronous cleanup may finish after `stop()` returns.
+Failures in these hooks are reported through `console.error` without preventing
+the remaining cleanup. A host future whose value was already delivered is not disposed.
 
 Repeated calls to `stop()` do nothing. If a host resource's disposal throws, cleanup
 continues for the other resources, then `stop()` throws an `AggregateError`; the
 instance remains stopped. Resources can also be released this way after a guest trap.
 
-Already-started host operations may continue independently, but their completion
-cannot resume guest execution. The host remains responsible for cancelling its own
-I/O and timers. Like other JavaScript APIs, `stop()` cannot interrupt synchronous
-Wasm that never yields control back to JavaScript.
+Once active calls unwind, the runtime releases its references to core instances,
+memories, tables, buffers, and handles, even if the host keeps the stopped instance
+wrapper. Explicitly instantiated components also release their import bindings,
+allowing captured host state to be collected. Actual memory reclamation is controlled
+by JavaScript garbage collection; references retained by host code can keep
+allocations alive.
+
+Host cleanup hooks should cancel their own I/O and timers. Operations without a
+cleanup hook may continue independently, but their completion cannot resume guest
+execution. Like other JavaScript APIs, `stop()` cannot interrupt synchronous Wasm
+that never yields control back to JavaScript.
 
 ### Runtime overrides
 

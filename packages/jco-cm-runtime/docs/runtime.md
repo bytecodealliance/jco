@@ -1,6 +1,6 @@
 # Runtime API and provider contracts
 
-## API version 1: named modules and specific contexts
+## API version 2: named modules and specific contexts
 
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
@@ -46,7 +46,7 @@ import * as resource from './intrinsics/resource.js';
 const conformance: ResourceModule = resource;
 ```
 
-Export `CM_RUNTIME_API_VERSION = 1` from your `runtime.js`. Expose `./runtime`
+Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
 `./intrinsics/js-helper`, `./intrinsics/string`, `./intrinsics/webidl` and
 `./intrinsics/core` subpaths
@@ -65,3 +65,14 @@ intercept its calls. There is no mutable namespace receiver or implicit override
 registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
+
+### Instance teardown
+
+API version 2 adds `BufferManager.clear()` to release all managed buffers and their
+IDs. `disposeHostValue` now takes a context containing `symbolDispose` and a
+`disposedValues: WeakSet<object>` before its existing value and optional disposal
+callback arguments. Bindings create one context per instance. Providers must use
+it to dispose each host value at most once, defer cleanup (including disposal
+property access) to a microtask, and report cleanup errors without interrupting
+other disposal. Update these operations and the exported API version together
+when migrating a custom provider from version 1.
