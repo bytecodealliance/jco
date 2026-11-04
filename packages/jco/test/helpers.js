@@ -76,7 +76,8 @@ export async function exec(cmd, ...args) {
             }
         });
         cp.on("error", reject);
-        cp.on("exit", (code) => {
+        // Wait for the output pipes to close before returning captured output.
+        cp.on("close", (code) => {
             if (code === 0) {
                 resolve();
                 return;
