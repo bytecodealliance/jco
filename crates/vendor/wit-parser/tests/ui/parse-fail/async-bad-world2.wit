@@ -1,6 +1,0 @@
-package a:b;
-
-world foo {
-  import x: async func();
-  import x: interface {}
-}

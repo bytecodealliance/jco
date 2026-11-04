@@ -1,5 +1,0 @@
-type nesting too deep
-     --> tests/ui/parse-fail/type-nesting-too-deep.wit:107:5
-      |
-  107 |     list<
-      |     ^---

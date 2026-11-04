@@ -16,4 +16,4 @@ Published archive SHA256: `00f0dc051466ffe46787721fca3d088536f158ae400be044f1b1c
 
 Patch: decode direct component type exports into WIT world type exports, including resources and aliases.
 
-Preserve each crate's upstream license files. Remove these patches when compatible upstream releases incorporate the changes.
+Upstream standalone test fixtures, examples, and development-only entry points are omitted; library source and license files are preserved. Remove these patches when compatible upstream releases incorporate the changes.
