@@ -2,7 +2,7 @@
 
 use std::fmt::Write;
 
-use crate::intrinsics::RenderIntrinsicsArgs;
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
@@ -316,15 +316,8 @@ impl ConversionIntrinsic {
             },
 
             Self::I32ToChar => {
-                output.push_str("
-                    function i32ToChar(n) {
-                        if (!n || typeof n !== 'number') { throw new Error('invalid i32'); }
-                        if (n < 0) { throw new Error('i32 must be greater than zero'); }
-                        if (n >= 0x110000) { throw new Error('invalid i32, out of range'); }
-                        if (0xD800 <= n && n <= 0xDFFF) { throw new Error('invalid i32 out of range'); }
-                        return String.fromCharCode(n);
-                    }
-                ");
+                let validate = render_args.require_intrinsic(Intrinsic::String(super::string::StringIntrinsic::ValidateGuestChar));
+                uwriteln!(output, "function i32ToChar(n) {{ return {validate}(n); }}");
             }
 
             Self::RequireValidNumericPrimitive => {

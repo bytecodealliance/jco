@@ -579,14 +579,6 @@ impl FunctionBindgen<'_> {
         Some((code, result_var))
     }
 
-    fn clamp_guest<T>(&mut self, results: &mut Vec<String>, operands: &[String], min: T, max: T)
-    where
-        T: std::fmt::Display,
-    {
-        let clamp = self.intrinsic(Intrinsic::ClampGuest);
-        results.push(format!("{}({}, {}, {})", clamp, operands[0], min, max));
-    }
-
     fn load(
         &mut self,
         method: &str,
@@ -1058,13 +1050,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::U8FromI32 => self.clamp_guest(results, operands, u8::MIN, u8::MAX),
+            Instruction::U8FromI32 => results.push(format!("({} & 0xff)", operands[0])),
 
-            Instruction::S8FromI32 => self.clamp_guest(results, operands, i8::MIN, i8::MAX),
+            Instruction::S8FromI32 => results.push(format!("({} << 24 >> 24)", operands[0])),
 
-            Instruction::U16FromI32 => self.clamp_guest(results, operands, u16::MIN, u16::MAX),
+            Instruction::U16FromI32 => results.push(format!("({} & 0xffff)", operands[0])),
 
-            Instruction::S16FromI32 => self.clamp_guest(results, operands, i16::MIN, i16::MAX),
+            Instruction::S16FromI32 => results.push(format!("({} << 16 >> 16)", operands[0])),
 
             Instruction::U32FromI32 => results.push(format!("{} >>> 0", operands[0])),
 
@@ -1166,16 +1158,7 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::BoolFromI32 => {
-                let tmp = self.tmp();
-                uwrite!(self.src, "var bool{} = {};\n", tmp, operands[0]);
-                if self.valid_lifting_optimization {
-                    results.push(format!("!!bool{tmp}"));
-                } else {
-                    let throw = self.intrinsic(Intrinsic::ThrowInvalidBool);
-                    results.push(format!(
-                        "bool{tmp} == 0 ? false : (bool{tmp} == 1 ? true : {throw}())"
-                    ));
-                }
+                results.push(format!("({} !== 0)", operands[0]));
             }
 
             Instruction::I32FromBool => {
@@ -1310,20 +1293,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let tmp = self.tmp();
                 results.push(format!("flags{tmp}"));
 
-                if let Some(op) = operands.last() {
-                    // We only need an extraneous bits check if the number of flags isn't a multiple
-                    // of 32, because if it is then all the bits are used and there are no
-                    // extraneous bits.
-                    if flags.flags.len() % 32 != 0 && !self.valid_lifting_optimization {
-                        let mask: u32 = 0xffffffff << (flags.flags.len() % 32);
-                        uwriteln!(
-                            self.src,
-                            "if (({op} & {mask}) !== 0) {{
-                                throw new TypeError('flags have extraneous bits set');
-                            }}"
-                        );
-                    }
-                }
+                // Canonical lifting ignores unused upper bits; only the declared
+                // flag positions are exposed to the host or lowered callee.
 
                 if self.flags_as_bigint {
                     uwriteln!(self.src, "var flags{tmp} = 0n;");

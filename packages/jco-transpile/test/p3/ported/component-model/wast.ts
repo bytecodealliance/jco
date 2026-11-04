@@ -89,7 +89,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'validation/map.wast': { skip: 'the pinned validator accepts handle types as map keys' },
     'validation/kebab.wast': { skip: 'duplicate-name diagnostics preserve case while upstream expects lowercase' },
     'values/concat.wast': { skip: "transpilation does not support the fixture's exported record type" },
-    'values/numerics.wast': { skip: 'integer lifting rejects values that should be truncated to the target width' },
     'values/realloc.wast': { skip: 'out-of-bounds realloc reports a DataView error instead of the canonical trap' },
     'values/strings.wast': { skip: 'out-of-bounds strings report typed array errors instead of canonical traps' },
     'async/forward.wast': {
