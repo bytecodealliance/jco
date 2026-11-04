@@ -78,9 +78,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     },
     'validation/version-suffix.wast': { skip: 'the pinned wast parser does not support version-suffix syntax' },
     'values/post-return.wast': { skip: 'the pinned wast parser does not support stream.forward/future.forward' },
-    'resources/handle-table.wast': {
-        skip: 'invalid handle diagnostics print signed indices instead of the required unsigned indices',
-    },
     'linking/tags.wast': { transpile: { bindgenEnableWasmExnref: true } },
     'linking/unit.wast': {
         skip: 'a nested component start calls a lowered import without current caller thread metadata',
