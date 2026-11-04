@@ -69,6 +69,7 @@ pub enum ResourceIntrinsic {
     ResourceTableCreateBorrow,
     ResourceTableCreateOwn,
     ResourceTableGet,
+    ResourceTableGetOwn,
     ResourceTableEnsureBorrowDrop,
     ResourceTableRemove,
     ResourceCallBorrows,
@@ -93,6 +94,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableCreateBorrow.name(),
             Self::ResourceTableCreateOwn.name(),
             Self::ResourceTableGet.name(),
+            Self::ResourceTableGetOwn.name(),
             Self::ResourceTableEnsureBorrowDrop.name(),
             Self::ResourceTableRemove.name(),
             Self::ResourceTransferBorrow.name(),
@@ -118,6 +120,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
             Self::ResourceTableCreateOwn => "rscTableCreateOwn",
             Self::ResourceTableGet => "rscTableGet",
+            Self::ResourceTableGetOwn => "rscTableGetOwn",
             Self::ResourceTableEnsureBorrowDrop => "rscTableTryGet",
             Self::ResourceTableRemove => "rscTableRemove",
             Self::ResourceTransferBorrow => "resourceTransferBorrow",
@@ -308,6 +311,28 @@ impl ResourceIntrinsic {
                 )
             }
 
+            Self::ResourceTableGetOwn => {
+                let name = self.name();
+                let table_get = render_args.intrinsic_call(Self::ResourceTableGet, "table, handle");
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}(table, handle) {{
+                        const entry = {table_get};
+                        if (!entry.own) {{
+                            throw new {runtime_error}('cannot lift a borrow handle as own');
+                        }}
+                        if (entry.scope !== 0) {{
+                            throw new {runtime_error}('cannot remove owned resource while borrowed');
+                        }}
+                        return entry;
+                    }}
+                "#
+                );
+            }
+
             Self::ResourceTableEnsureBorrowDrop => output.push_str(
                 "
                 function rscTableEnsureBorrowDrop(table, handle, scope) {
@@ -431,6 +456,7 @@ impl ResourceIntrinsic {
             }
 
             Self::ResourceTransferOwn => {
+                let get_own = render_args.require_intrinsic(Self::ResourceTableGetOwn);
                 let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
                 let rsc_table_remove = render_args.require_intrinsic(Self::ResourceTableRemove);
                 let rsc_table_create_own =
@@ -439,6 +465,7 @@ impl ResourceIntrinsic {
                 output.push_str(&format!(
                     r#"
                     function resourceTransferOwn(handle, fromTid, toTid) {{
+                        {get_own}({handle_tables}[fromTid], handle);
                         const {{ rep }} = {rsc_table_remove}({handle_tables}[fromTid], handle);
 
                         let toTable = {handle_tables}[toTid];

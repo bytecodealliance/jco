@@ -19,6 +19,7 @@
     (func (export "run") (param i32) (result i32)
       local.get 0
       call $observe)
+    (func (export "identity") (param i32) (result i32) local.get 0)
   )
   (core instance $instance (instantiate $module
     (with "host" (instance
@@ -29,4 +30,9 @@
   (func (export "seed") (result u32) (canon lift (core func $instance "seed")))
   (func (export "run") (param "handle" u32) (result u32)
     (canon lift (core func $instance "run")))
+  (alias export $host "thing" (type $thing))
+  (func (export "forge-own") (param "value" (borrow $thing)) (result (own $thing))
+    (canon lift (core func $instance "identity")))
+  (func (export "roundtrip-own") (param "value" (own $thing)) (result (own $thing))
+    (canon lift (core func $instance "identity")))
 )

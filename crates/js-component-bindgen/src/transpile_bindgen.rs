@@ -7410,7 +7410,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                 // Mirrors `Instruction::HandleLift` in `function_bindgen.rs`:
                                 let create_resource_fn_js = if *imported {
                                     let table_get = instantiator.bindgen.intrinsic_call(
-                                        Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                        Intrinsic::Resource(ResourceIntrinsic::ResourceTableGetOwn),
                                         &format!("handleTable{tid}, handle"),
                                     );
                                     let symbol_resource_rep = Intrinsic::SymbolResourceRep.name();
@@ -7435,7 +7435,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                     )
                                 } else {
                                     let table_get = instantiator.bindgen.intrinsic_call(
-                                        Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                        Intrinsic::Resource(ResourceIntrinsic::ResourceTableGetOwn),
                                         &format!("handleTable{tid}, handle"),
                                     );
                                     let dtor_setup_js = dtor_name

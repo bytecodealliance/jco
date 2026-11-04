@@ -59,3 +59,44 @@ test.concurrent.each(
         }
     },
 );
+
+test.concurrent.each(
+    providers.flatMap((provider) =>
+        [false, true].map((validLiftingOptimization) => ({ ...provider, validLiftingOptimization })),
+    ),
+)(
+    'a borrowed imported handle cannot become owned ($name, optimization=$validLiftingOptimization)',
+    async ({ base, validLiftingOptimization }) => {
+        const directory = await getTmpDir();
+        try {
+            const bytes = await parse(await readFile(fixture, 'utf8'));
+            const { files } = await transpileBytes(bytes, {
+                name: 'ownership',
+                instantiation: 'sync',
+                cmRuntimeEsModule: base,
+                validLiftingOptimization,
+            });
+            await writeFiles(files, { baseDir: directory });
+            await writeFile(join(directory, 'package.json'), JSON.stringify({ type: 'module' }));
+            const bindings = await import(pathToFileURL(join(directory, 'ownership.js')).href);
+            class Thing {}
+            const instance = bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {
+                host: {
+                    Thing,
+                    observe() {
+                        return 42;
+                    },
+                },
+            });
+            const owned = new Thing();
+            assert.strictEqual(instance.roundtripOwn(owned), owned);
+            assert.throws(
+                () => instance.forgeOwn(new Thing()),
+                WebAssembly.RuntimeError,
+                'cannot lift a borrow handle as own',
+            );
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    },
+);
