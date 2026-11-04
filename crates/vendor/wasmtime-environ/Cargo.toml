@@ -169,11 +169,11 @@ features = [
 version = "0.13.5"
 
 [dependencies.wasm-encoder]
-version = "0.262.0"
+version = "0.263.0"
 optional = true
 
 [dependencies.wasmparser]
-version = "0.262.0"
+version = "0.263.0"
 features = [
     "simd",
     "validate",
