@@ -352,13 +352,31 @@ mod tests {
 
     #[test]
     fn manifest_tracks_every_vendored_wast_fixture() {
+        fn collect_fixtures(root: &Path, directory: &Path, names: &mut BTreeSet<String>) {
+            for entry in fs::read_dir(directory).unwrap() {
+                let entry = entry.unwrap();
+                let path = entry.path();
+                if entry.file_type().unwrap().is_dir() {
+                    collect_fixtures(root, &path, names);
+                } else if path
+                    .extension()
+                    .is_some_and(|extension| extension == "wast")
+                {
+                    names.insert(
+                        path.strip_prefix(root)
+                            .unwrap()
+                            .to_str()
+                            .unwrap()
+                            .replace('\\', "/"),
+                    );
+                }
+            }
+        }
+
         let manifest = load_manifest(&WORKSPACE_DIR).unwrap();
         let fixture_dir = WORKSPACE_DIR.join(&manifest.destination_directory);
-        let vendored = fs::read_dir(fixture_dir)
-            .unwrap()
-            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
-            .filter(|name| name.ends_with(".wast"))
-            .collect::<BTreeSet<_>>();
+        let mut vendored = BTreeSet::new();
+        collect_fixtures(&fixture_dir, &fixture_dir, &mut vendored);
         let tracked = manifest
             .fixtures
             .iter()
