@@ -1,0 +1,2101 @@
+use super::{ParamList, WorldOrInterface};
+use crate::alloc::borrow::ToOwned;
+use crate::ast::error::{ParseError, ParseErrorKind};
+use crate::ast::toposort::toposort;
+use crate::*;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use alloc::{format, vec};
+use core::mem;
+use wasmparser::names::{ComponentName, ComponentNameKind, KebabStr};
+
+#[derive(Default)]
+pub struct Resolver<'a> {
+    /// Current package name learned through the ASTs pushed onto this resolver.
+    package_name: Option<(PackageName, Span)>,
+
+    /// Package docs.
+    package_docs: Docs,
+
+    /// All non-`package` WIT decls are going to be resolved together.
+    decl_lists: Vec<ast::DeclList<'a>>,
+
+    // Arenas that get plumbed to the final `UnresolvedPackage`
+    types: Arena<TypeDef>,
+    interfaces: Arena<Interface>,
+    worlds: Arena<World>,
+
+    // Interning structure for types which-need-not-be-named such as
+    // `list<string>` and such.
+    anon_types: HashMap<Key, TypeId>,
+
+    /// The index within `self.ast_items` that lookups should go through. This
+    /// is updated as the ASTs are walked.
+    cur_ast_index: usize,
+
+    /// A map per `ast::DeclList` which keeps track of the file's top level
+    /// names in scope. This maps each name onto either a world or an interface,
+    /// handling things like `use` at the top level.
+    ast_items: Vec<IndexMap<&'a str, AstItem>>,
+
+    /// A map for the entire package being created of all names defined within,
+    /// along with the ID they're mapping to.
+    package_items: IndexMap<&'a str, AstItem>,
+
+    /// A per-interface map of name to item-in-the-interface. This is the same
+    /// length as `self.types` and is pushed to whenever `self.types` is pushed
+    /// to.
+    interface_types: Vec<IndexMap<&'a str, (TypeOrItem, Span)>>,
+
+    /// Metadata about foreign dependencies which are not defined in this
+    /// package. This map is keyed by the name of the package being imported
+    /// from. The next level of key is the name of the interface being imported
+    /// from, and the final value is a tuple containing the assigned ID of the
+    /// dependency, and a Vector of the Stability attributes associated with each
+    /// of its imports.
+    foreign_deps: IndexMap<PackageName, IndexMap<&'a str, (AstItem, Vec<Stability>)>>,
+
+    /// All interfaces that are present within `self.foreign_deps`.
+    foreign_interfaces: HashSet<InterfaceId>,
+
+    foreign_worlds: HashSet<WorldId>,
+
+    /// The current type lookup scope which will eventually make its way into
+    /// `self.interface_types`.
+    type_lookup: IndexMap<&'a str, (TypeOrItem, Span)>,
+
+    /// An assigned span for where all types inserted into `self.types` as
+    /// imported from foreign interfaces. These types all show up first in the
+    /// `self.types` arena and this span is used to generate an error message
+    /// pointing to it if the item isn't actually defined.
+    unknown_type_spans: Vec<Span>,
+
+    /// Spans per entry in `self.foreign_deps` for where the dependency was
+    /// introduced to print an error message if necessary.
+    foreign_dep_spans: Vec<Span>,
+
+    /// A list of `TypeDefKind::Unknown` types which are required to be
+    /// resources when this package is resolved against its dependencies.
+    required_resource_types: Vec<(TypeId, Span)>,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+enum Key {
+    Variant(Vec<(String, Option<Type>)>),
+    BorrowHandle(TypeId),
+    Record(Vec<(String, Type)>),
+    Flags(Vec<String>),
+    Tuple(Vec<Type>),
+    Enum(Vec<String>),
+    List(Type),
+    Map(Type, Type),
+    FixedLengthList(Type, u32),
+    Option(Type),
+    Result(Option<Type>, Option<Type>),
+    Future(Option<Type>),
+    Stream(Option<Type>),
+}
+
+enum TypeItem<'a, 'b> {
+    Use(&'b ast::Use<'a>),
+    Def(&'b ast::TypeDef<'a>),
+}
+
+enum TypeOrItem {
+    Type(TypeId),
+    Item(&'static str),
+}
+
+impl<'a> Resolver<'a> {
+    pub(super) fn push(&mut self, file: ast::PackageFile<'a>) -> ParseResult<()> {
+        // As each WIT file is pushed into this resolver keep track of the
+        // current package name assigned. Only one file needs to mention it, but
+        // if multiple mention it then they must all match.
+        if let Some(cur) = &file.package_id {
+            let cur_name = cur.package_name();
+            if let Some((prev, _)) = &self.package_name {
+                if cur_name != *prev {
+                    return Err(ParseError::new_syntax(
+                        cur.span,
+                        format!(
+                            "package identifier `{cur_name}` does not match \
+                         previous package name of `{prev}`"
+                        ),
+                    ));
+                }
+            }
+            self.package_name = Some((cur_name, cur.span));
+
+            // At most one 'package' item can have doc comments.
+            let docs = self.docs(&cur.docs);
+            if docs.contents.is_some() {
+                if self.package_docs.contents.is_some() {
+                    return Err(ParseError::new_syntax(
+                        cur.docs.span,
+                        "found doc comments on multiple 'package' items".to_owned(),
+                    ));
+                }
+                self.package_docs = docs;
+            }
+        }
+
+        // Ensure that there are no nested packages in `file`. Note that for
+        // top level files nested packages are handled separately in `ast.rs`
+        // with their own resolver.
+        for item in file.decl_list.items.iter() {
+            let span = match item {
+                ast::AstItem::Package(pkg) => pkg.package_id.as_ref().unwrap().span,
+                _ => continue,
+            };
+            return Err(ParseError::new_syntax(
+                span,
+                "nested packages must be placed at the top-level".to_owned(),
+            ));
+        }
+
+        self.decl_lists.push(file.decl_list);
+        Ok(())
+    }
+
+    pub(crate) fn resolve(&mut self) -> ParseResult<UnresolvedPackage> {
+        // At least one of the WIT files must have a `package` annotation.
+        let (name, package_name_span) = match &self.package_name {
+            Some(name) => name.clone(),
+            None => {
+                return Err(ParseError::new_syntax(
+                    Span::default(),
+                    "no `package` header was found in any WIT file for this package".to_owned(),
+                ));
+            }
+        };
+
+        // First populate information about foreign dependencies and the general
+        // structure of the package. This should resolve the "base" of many
+        // `use` statements and additionally generate a topological ordering of
+        // all interfaces in the package to visit.
+        let decl_lists = mem::take(&mut self.decl_lists);
+        self.populate_foreign_deps(&decl_lists);
+        let (iface_order, world_order) = self.populate_ast_items(&decl_lists)?;
+        self.populate_foreign_types(&decl_lists)?;
+
+        // Use the topological ordering of all interfaces to resolve all
+        // interfaces in-order. Note that a reverse-mapping from ID to AST is
+        // generated here to assist with this.
+        let mut iface_id_to_ast = IndexMap::default();
+        let mut world_id_to_ast = IndexMap::default();
+        for (i, decl_list) in decl_lists.iter().enumerate() {
+            for item in decl_list.items.iter() {
+                match item {
+                    ast::AstItem::Interface(iface) => {
+                        let id = match self.ast_items[i][iface.name.name] {
+                            AstItem::Interface(id) => id,
+                            AstItem::World(_) => unreachable!(),
+                        };
+                        iface_id_to_ast.insert(id, (iface, i));
+                    }
+                    ast::AstItem::World(world) => {
+                        let id = match self.ast_items[i][world.name.name] {
+                            AstItem::World(id) => id,
+                            AstItem::Interface(_) => unreachable!(),
+                        };
+                        world_id_to_ast.insert(id, (world, i));
+                    }
+                    ast::AstItem::Use(_) => {}
+                    ast::AstItem::Package(_) => unreachable!(),
+                }
+            }
+        }
+
+        for id in iface_order {
+            let (interface, i) = &iface_id_to_ast[&id];
+            self.cur_ast_index = *i;
+            self.resolve_interface(id, &interface.items, &interface.docs, &interface.attributes)?;
+        }
+
+        for id in world_order {
+            let (world, i) = &world_id_to_ast[&id];
+            self.cur_ast_index = *i;
+            self.resolve_world(id, world)?;
+        }
+
+        self.decl_lists = decl_lists;
+        Ok(UnresolvedPackage {
+            package_name_span,
+            name,
+            docs: mem::take(&mut self.package_docs),
+            worlds: mem::take(&mut self.worlds),
+            types: mem::take(&mut self.types),
+            interfaces: mem::take(&mut self.interfaces),
+            foreign_deps: self
+                .foreign_deps
+                .iter()
+                .map(|(name, deps)| {
+                    (
+                        name.clone(),
+                        deps.iter()
+                            .map(|(name, (id, stabilities))| {
+                                (name.to_string(), (*id, stabilities.clone()))
+                            })
+                            .collect(),
+                    )
+                })
+                .collect(),
+            unknown_type_spans: mem::take(&mut self.unknown_type_spans),
+            foreign_dep_spans: mem::take(&mut self.foreign_dep_spans),
+            required_resource_types: mem::take(&mut self.required_resource_types),
+        })
+    }
+
+    /// Registers all foreign dependencies made within the ASTs provided.
+    ///
+    /// This will populate the `self.foreign_{deps,interfaces,worlds}` maps with all
+    /// `UsePath::Package` entries.
+    fn populate_foreign_deps(&mut self, decl_lists: &[ast::DeclList<'a>]) {
+        let mut foreign_deps = mem::take(&mut self.foreign_deps);
+        let mut foreign_interfaces = mem::take(&mut self.foreign_interfaces);
+        let mut foreign_worlds = mem::take(&mut self.foreign_worlds);
+        for decl_list in decl_lists {
+            decl_list
+                .for_each_path(&mut |_, attrs, path, _names, world_or_iface| {
+                    let (id, name) = match path {
+                        ast::UsePath::Package { id, name } => (id, name),
+                        _ => return Ok(()),
+                    };
+
+                    let stability = self.stability(attrs)?;
+
+                    let deps = foreign_deps.entry(id.package_name()).or_insert_with(|| {
+                        self.foreign_dep_spans.push(id.span);
+                        IndexMap::default()
+                    });
+                    let (id, stabilities) = deps.entry(name.name).or_insert_with(|| {
+                        let id = match world_or_iface {
+                            WorldOrInterface::World => {
+                                log::trace!(
+                                    "creating a world for foreign dep: {}/{}",
+                                    id.package_name(),
+                                    name.name
+                                );
+                                AstItem::World(self.alloc_world(name.span))
+                            }
+                            WorldOrInterface::Interface | WorldOrInterface::Unknown => {
+                                // Currently top-level `use` always assumes an interface, so the
+                                // `Unknown` case is the same as `Interface`.
+                                log::trace!(
+                                    "creating an interface for foreign dep: {}/{}",
+                                    id.package_name(),
+                                    name.name
+                                );
+                                AstItem::Interface(self.alloc_interface(name.span))
+                            }
+                        };
+                        (id, Vec::new())
+                    });
+
+                    stabilities.push(stability);
+
+                    let _ = match *id {
+                        AstItem::Interface(id) => foreign_interfaces.insert(id),
+                        AstItem::World(id) => foreign_worlds.insert(id),
+                    };
+
+                    Ok(())
+                })
+                .unwrap();
+        }
+        self.foreign_deps = foreign_deps;
+        self.foreign_interfaces = foreign_interfaces;
+        self.foreign_worlds = foreign_worlds;
+    }
+
+    fn alloc_interface(&mut self, span: Span) -> InterfaceId {
+        self.interface_types.push(IndexMap::default());
+        self.interfaces.alloc(Interface {
+            name: None,
+            types: IndexMap::default(),
+            docs: Docs::default(),
+            stability: Default::default(),
+            functions: IndexMap::default(),
+            package: None,
+            span,
+            clone_of: None,
+        })
+    }
+
+    fn alloc_world(&mut self, span: Span) -> WorldId {
+        self.worlds.alloc(World {
+            name: String::new(),
+            docs: Docs::default(),
+            exports: IndexMap::default(),
+            imports: IndexMap::default(),
+            package: None,
+            includes: Default::default(),
+            stability: Default::default(),
+            span,
+        })
+    }
+
+    /// This method will create a `World` and an `Interface` for all items
+    /// present in the specified set of ASTs. Additionally maps for each AST are
+    /// generated for resolving use-paths later on.
+    fn populate_ast_items(
+        &mut self,
+        decl_lists: &[ast::DeclList<'a>],
+    ) -> ParseResult<(Vec<InterfaceId>, Vec<WorldId>)> {
+        let mut package_items = IndexMap::default();
+
+        // Validate that all worlds and interfaces have unique names within this
+        // package across all ASTs which make up the package.
+        let mut names = HashMap::new();
+        let mut decl_list_namespaces = Vec::new();
+        let mut order = IndexMap::default();
+        for decl_list in decl_lists {
+            let mut decl_list_ns = IndexMap::default();
+            for item in decl_list.items.iter() {
+                match item {
+                    ast::AstItem::Interface(i) => {
+                        if package_items.insert(i.name.name, i.name.span).is_some() {
+                            return Err(ParseError::new_syntax(
+                                i.name.span,
+                                format!("duplicate item named `{}`", i.name.name),
+                            ));
+                        }
+                        let prev = decl_list_ns.insert(i.name.name, ());
+                        assert!(prev.is_none());
+                        let prev = order.insert(i.name.name, Vec::new());
+                        assert!(prev.is_none());
+                        let prev = names.insert(i.name.name, item);
+                        assert!(prev.is_none());
+                    }
+                    ast::AstItem::World(w) => {
+                        if package_items.insert(w.name.name, w.name.span).is_some() {
+                            return Err(ParseError::new_syntax(
+                                w.name.span,
+                                format!("duplicate item named `{}`", w.name.name),
+                            ));
+                        }
+                        let prev = decl_list_ns.insert(w.name.name, ());
+                        assert!(prev.is_none());
+                        let prev = order.insert(w.name.name, Vec::new());
+                        assert!(prev.is_none());
+                        let prev = names.insert(w.name.name, item);
+                        assert!(prev.is_none());
+                    }
+                    // These are processed down below.
+                    ast::AstItem::Use(_) => {}
+
+                    ast::AstItem::Package(_) => unreachable!(),
+                }
+            }
+            decl_list_namespaces.push(decl_list_ns);
+        }
+
+        // Next record dependencies between interfaces as induced via `use`
+        // paths. This step is used to perform a topological sort of all
+        // interfaces to ensure there are no cycles and to generate an ordering
+        // which we can resolve in.
+        enum ItemSource<'a> {
+            Foreign,
+            Local(ast::Id<'a>),
+        }
+
+        for decl_list in decl_lists {
+            // Record, in the context of this file, what all names are defined
+            // at the top level and whether they point to other items in this
+            // package or foreign items. Foreign deps are ignored for
+            // topological ordering.
+            let mut decl_list_ns = IndexMap::default();
+            for item in decl_list.items.iter() {
+                let (name, src) = match item {
+                    ast::AstItem::Use(u) => {
+                        let name = u.as_.as_ref().unwrap_or(u.item.name());
+                        let src = match &u.item {
+                            ast::UsePath::Id(id) => ItemSource::Local(id.clone()),
+                            ast::UsePath::Package { .. } => ItemSource::Foreign,
+                        };
+                        (name, src)
+                    }
+                    ast::AstItem::Interface(i) => (&i.name, ItemSource::Local(i.name.clone())),
+                    ast::AstItem::World(w) => (&w.name, ItemSource::Local(w.name.clone())),
+                    ast::AstItem::Package(_) => unreachable!(),
+                };
+                if decl_list_ns.insert(name.name, (name.span, src)).is_some() {
+                    return Err(ParseError::new_syntax(
+                        name.span,
+                        format!("duplicate name `{}` in this file", name.name),
+                    ));
+                }
+            }
+
+            // With this file's namespace information look at all `use` paths
+            // and record dependencies between interfaces.
+            decl_list.for_each_path(&mut |iface, _attrs, path, _names, _| {
+                // If this import isn't contained within an interface then it's
+                // in a world and it doesn't need to participate in our
+                // topo-sort.
+                let iface = match iface {
+                    Some(name) => name,
+                    None => return Ok(()),
+                };
+                let used_name = match path {
+                    ast::UsePath::Id(id) => id,
+                    ast::UsePath::Package { .. } => return Ok(()),
+                };
+                match decl_list_ns.get(used_name.name) {
+                    Some((_, ItemSource::Foreign)) => return Ok(()),
+                    Some((_, ItemSource::Local(id))) => {
+                        order[iface.name].push(id.clone());
+                    }
+                    None => match package_items.get(used_name.name) {
+                        Some(_) => {
+                            order[iface.name].push(used_name.clone());
+                        }
+                        None => {
+                            return Err(ParseError::from(ParseErrorKind::ItemNotFound {
+                                span: used_name.span,
+                                name: used_name.name.to_string(),
+                                kind: "interface or world".to_string(),
+                                hint: None,
+                            }));
+                        }
+                    },
+                }
+                Ok(())
+            })?;
+        }
+
+        let order = toposort("interface or world", &order)?;
+        log::debug!("toposort for interfaces and worlds in order: {order:?}");
+
+        // Allocate interfaces in-order now that the ordering is defined. This
+        // is then used to build up internal maps for each AST which are stored
+        // in `self.ast_items`.
+        let mut ids = IndexMap::default();
+        let mut iface_id_order = Vec::new();
+        let mut world_id_order = Vec::new();
+        for name in order {
+            match names.get(name).unwrap() {
+                ast::AstItem::Interface(_) => {
+                    let id = self.alloc_interface(package_items[name]);
+                    self.interfaces[id].name = Some(name.to_string());
+                    let prev = ids.insert(name, AstItem::Interface(id));
+                    assert!(prev.is_none());
+                    iface_id_order.push(id);
+                }
+                ast::AstItem::World(_) => {
+                    let id = self.alloc_world(package_items[name]);
+                    self.worlds[id].name = name.to_string();
+                    let prev = ids.insert(name, AstItem::World(id));
+                    assert!(prev.is_none());
+                    world_id_order.push(id);
+                }
+                ast::AstItem::Use(_) | ast::AstItem::Package(_) => unreachable!(),
+            };
+        }
+        for decl_list in decl_lists {
+            let mut items = IndexMap::default();
+            for item in decl_list.items.iter() {
+                let (name, ast_item) = match item {
+                    ast::AstItem::Use(u) => {
+                        if !u.attributes.is_empty() {
+                            return Err(ParseError::new_syntax(
+                                u.span,
+                                format!("attributes not allowed on top-level use"),
+                            ));
+                        }
+                        let name = u.as_.as_ref().unwrap_or(u.item.name());
+                        let item = match &u.item {
+                            ast::UsePath::Id(name) => *ids.get(name.name).ok_or_else(|| {
+                                ParseError::from(ParseErrorKind::ItemNotFound {
+                                    span: name.span,
+                                    name: name.name.to_string(),
+                                    kind: "interface or world".to_owned(),
+                                    hint: None,
+                                })
+                            })?,
+                            ast::UsePath::Package { id, name } => {
+                                self.foreign_deps[&id.package_name()][name.name].0
+                            }
+                        };
+                        (name.name, item)
+                    }
+                    ast::AstItem::Interface(i) => {
+                        let iface_item = ids[i.name.name];
+                        assert!(matches!(iface_item, AstItem::Interface(_)));
+                        (i.name.name, iface_item)
+                    }
+                    ast::AstItem::World(w) => {
+                        let world_item = ids[w.name.name];
+                        assert!(matches!(world_item, AstItem::World(_)));
+                        (w.name.name, world_item)
+                    }
+                    ast::AstItem::Package(_) => unreachable!(),
+                };
+                let prev = items.insert(name, ast_item);
+                assert!(prev.is_none());
+
+                // Items defined via `use` don't go into the package namespace,
+                // only the file namespace.
+                if !matches!(item, ast::AstItem::Use(_)) {
+                    let prev = self.package_items.insert(name, ast_item);
+                    assert!(prev.is_none());
+                }
+            }
+            self.ast_items.push(items);
+        }
+        Ok((iface_id_order, world_id_order))
+    }
+
+    /// Generate a `Type::Unknown` entry for all types imported from foreign
+    /// packages.
+    ///
+    /// This is done after all interfaces are generated so `self.resolve_path`
+    /// can be used to determine if what's being imported from is a foreign
+    /// interface or not.
+    fn populate_foreign_types(&mut self, decl_lists: &[ast::DeclList<'a>]) -> ParseResult<()> {
+        for (i, decl_list) in decl_lists.iter().enumerate() {
+            self.cur_ast_index = i;
+            decl_list.for_each_path(&mut |_, attrs, path, names, _| {
+                let names = match names {
+                    Some(names) => names,
+                    None => return Ok(()),
+                };
+                let stability = self.stability(attrs)?;
+                let external_id = self.external_id(attrs)?;
+                let (item, name, span) = self.resolve_ast_item_path(path)?;
+                let iface = self.extract_iface_from_item(&item, &name, span)?;
+                if !self.foreign_interfaces.contains(&iface) {
+                    return Ok(());
+                }
+
+                let lookup = &mut self.interface_types[iface.index()];
+                for name in names {
+                    // If this name has already been defined then use that prior
+                    // definition, otherwise create a new type with an unknown
+                    // representation and insert it into the various maps.
+                    if lookup.contains_key(name.name.name) {
+                        continue;
+                    }
+                    let id = self.types.alloc(TypeDef {
+                        docs: Docs::default(),
+                        stability: stability.clone(),
+                        kind: TypeDefKind::Unknown,
+                        name: Some(name.name.name.to_string()),
+                        owner: TypeOwner::Interface(iface),
+                        span: name.name.span,
+                        external_id: external_id.clone(),
+                    });
+                    self.unknown_type_spans.push(name.name.span);
+                    lookup.insert(name.name.name, (TypeOrItem::Type(id), name.name.span));
+                    self.interfaces[iface]
+                        .types
+                        .insert(name.name.name.to_string(), id);
+                }
+
+                Ok(())
+            })?;
+        }
+        Ok(())
+    }
+
+    fn resolve_world(&mut self, world_id: WorldId, world: &ast::World<'a>) -> ParseResult<WorldId> {
+        let docs = self.docs(&world.docs);
+        self.worlds[world_id].docs = docs;
+        let stability = self.stability(&world.attributes)?;
+        self.worlds[world_id].stability = stability;
+
+        self.resolve_types(
+            TypeOwner::World(world_id),
+            world.items.iter().filter_map(|i| match i {
+                ast::WorldItem::Use(u) => Some(TypeItem::Use(u)),
+                ast::WorldItem::Type(t) => Some(TypeItem::Def(t)),
+                ast::WorldItem::Import(_) | ast::WorldItem::Export(_) => None,
+                // should be handled in `wit-parser::resolve`
+                ast::WorldItem::Include(_) => None,
+            }),
+        )?;
+
+        // resolve include items
+        let items = world.items.iter().filter_map(|i| match i {
+            ast::WorldItem::Include(i) => Some(i),
+            _ => None,
+        });
+        for include in items {
+            self.resolve_include(world_id, include)?;
+        }
+
+        // The imports and exports of a world must each be strongly unique.
+        let mut import_names = NameScope::default();
+        let mut export_names = NameScope::default();
+
+        for (name, (item, span)) in self.type_lookup.iter() {
+            match *item {
+                TypeOrItem::Type(id) => {
+                    import_names.define(name, *span)?;
+                    let prev = self.worlds[world_id].imports.insert(
+                        WorldKey::Name(name.to_string()),
+                        WorldItem::Type { id, span: *span },
+                    );
+                    if prev.is_some() {
+                        return Err(ParseError::new_syntax(
+                            *span,
+                            format!("import `{name}` conflicts with prior import of same name"),
+                        ));
+                    }
+                }
+                TypeOrItem::Item(_) => unreachable!(),
+            }
+        }
+
+        let mut imported_interfaces = HashSet::new();
+        let mut exported_interfaces = HashSet::new();
+        for item in world.items.iter() {
+            let (docs, attrs, kind, desc, interfaces) = match item {
+                ast::WorldItem::Import(import) => (
+                    &import.docs,
+                    &import.attributes,
+                    &import.kind,
+                    "import",
+                    &mut imported_interfaces,
+                ),
+                ast::WorldItem::Export(export) => (
+                    &export.docs,
+                    &export.attributes,
+                    &export.kind,
+                    "export",
+                    &mut exported_interfaces,
+                ),
+
+                ast::WorldItem::Type(ast::TypeDef {
+                    name,
+                    ty: ast::Type::Resource(r),
+                    ..
+                }) => {
+                    for func in r.funcs.iter() {
+                        let span = func.named_func().name.span;
+                        let func = self.resolve_resource_func(func, name)?;
+                        import_names.define(&func.name, span)?;
+                        let prev = self.worlds[world_id]
+                            .imports
+                            .insert(WorldKey::Name(func.name.clone()), WorldItem::Function(func));
+                        // Resource names themselves are unique, and methods are
+                        // uniquely named, so this should be possible to assert
+                        // at this point and never trip.
+                        assert!(prev.is_none());
+                    }
+                    continue;
+                }
+
+                // handled in `resolve_types`
+                ast::WorldItem::Use(_) | ast::WorldItem::Type(_) | ast::WorldItem::Include(_) => {
+                    continue;
+                }
+            };
+
+            let world_item = self.resolve_world_item(docs, attrs, kind)?;
+            let key = match kind {
+                // Interfaces are always named exactly as they are in the WIT.
+                ast::ExternKind::Interface(name, _) => WorldKey::Name(name.name.to_string()),
+
+                // Functions, however, might get mangled (e.g. with async)
+                // meaning that the item's name comes from the function, not
+                // from the in-WIT name.
+                ast::ExternKind::Func(..) => {
+                    let func = match &world_item {
+                        WorldItem::Function(f) => f,
+                        _ => unreachable!(),
+                    };
+                    WorldKey::Name(func.name.clone())
+                }
+
+                ast::ExternKind::Path(path) => {
+                    let (item, name, span) = self.resolve_ast_item_path(path)?;
+                    let id = self.extract_iface_from_item(&item, &name, span)?;
+                    WorldKey::Interface(id)
+                }
+
+                // Named paths use the label as the key.
+                ast::ExternKind::NamedPath(name, _) => WorldKey::Name(name.name.to_string()),
+            };
+            if let WorldKey::Interface(id) = key {
+                if !interfaces.insert(id) {
+                    return Err(ParseError::new_syntax(
+                        kind.span(),
+                        format!("interface cannot be {desc}ed more than once"),
+                    ));
+                }
+            }
+            let dst = if desc == "import" {
+                &mut self.worlds[world_id].imports
+            } else {
+                &mut self.worlds[world_id].exports
+            };
+            let prev = dst.insert(key.clone(), world_item);
+            if let Some(prev) = prev {
+                let prev = match prev {
+                    WorldItem::Interface { .. } => "interface",
+                    WorldItem::Function(..) => "func",
+                    WorldItem::Type { .. } => "type",
+                };
+                let name = match key {
+                    WorldKey::Name(name) => name,
+                    WorldKey::Interface(..) => unreachable!(),
+                };
+                return Err(ParseError::new_syntax(
+                    kind.span(),
+                    format!("{desc} `{name}` conflicts with prior {prev} of same name",),
+                ));
+            }
+
+            // Check that names are strongly unique. This is somewhat redundant
+            // with the checks above, which are exact instead of using strong
+            // uniqueness, but it's nice to have WIT-oriented error messages
+            // for the most common kinds of name collisions.
+            if let WorldKey::Name(name) = &key {
+                let names = if desc == "import" {
+                    &mut import_names
+                } else {
+                    &mut export_names
+                };
+                names.define(name, kind.span())?;
+            }
+        }
+        self.type_lookup.clear();
+
+        Ok(world_id)
+    }
+
+    fn resolve_world_item(
+        &mut self,
+        docs: &ast::Docs<'a>,
+        attrs: &[ast::Attribute<'a>],
+        kind: &ast::ExternKind<'a>,
+    ) -> ParseResult<WorldItem> {
+        match kind {
+            ast::ExternKind::Interface(name, items) => {
+                let prev = mem::take(&mut self.type_lookup);
+                let id = self.alloc_interface(name.span);
+                self.resolve_interface(id, items, docs, attrs)?;
+                self.type_lookup = prev;
+                let stability = self.interfaces[id].stability.clone();
+                let external_id = self.external_id(attrs)?;
+                Ok(WorldItem::Interface {
+                    id,
+                    stability,
+                    docs: Default::default(),
+                    span: name.span,
+                    external_id,
+                })
+            }
+            ast::ExternKind::Path(path) => {
+                let stability = self.stability(attrs)?;
+                let external_id = self.external_id(attrs)?;
+                let docs = self.docs(docs);
+                let (item, name, item_span) = self.resolve_ast_item_path(path)?;
+                let id = self.extract_iface_from_item(&item, &name, item_span)?;
+                Ok(WorldItem::Interface {
+                    id,
+                    stability,
+                    external_id,
+                    docs,
+                    span: item_span,
+                })
+            }
+            ast::ExternKind::NamedPath(name, path) => {
+                let stability = self.stability(attrs)?;
+                let external_id = self.external_id(attrs)?;
+                let docs = self.docs(docs);
+                let (item, iface_name, item_span) = self.resolve_ast_item_path(path)?;
+                let id = self.extract_iface_from_item(&item, &iface_name, item_span)?;
+                Ok(WorldItem::Interface {
+                    id,
+                    stability,
+                    external_id,
+                    docs,
+                    span: name.span,
+                })
+            }
+            ast::ExternKind::Func(name, func) => {
+                let (mangled_name, kind) = freestanding_func(name.name, func);
+                let func =
+                    self.resolve_function(docs, attrs, &mangled_name, name.span, func, kind)?;
+                Ok(WorldItem::Function(func))
+            }
+        }
+    }
+
+    fn resolve_interface(
+        &mut self,
+        interface_id: InterfaceId,
+        fields: &[ast::InterfaceItem<'a>],
+        docs: &ast::Docs<'a>,
+        attrs: &[ast::Attribute<'a>],
+    ) -> ParseResult<()> {
+        let docs = self.docs(docs);
+        self.interfaces[interface_id].docs = docs;
+        let stability = self.stability(attrs)?;
+        self.interfaces[interface_id].stability = stability;
+
+        self.resolve_types(
+            TypeOwner::Interface(interface_id),
+            fields.iter().filter_map(|i| match i {
+                ast::InterfaceItem::Use(u) => Some(TypeItem::Use(u)),
+                ast::InterfaceItem::TypeDef(t) => Some(TypeItem::Def(t)),
+                ast::InterfaceItem::Func(_) => None,
+            }),
+        )?;
+
+        // All names in an interface must be strongly unique.
+        let mut names = NameScope::default();
+
+        for (name, (ty, span)) in self.type_lookup.iter() {
+            match *ty {
+                TypeOrItem::Type(id) => {
+                    names.define(name, *span)?;
+                    self.interfaces[interface_id]
+                        .types
+                        .insert(name.to_string(), id);
+                }
+                TypeOrItem::Item(_) => unreachable!(),
+            }
+        }
+
+        // Finally process all function definitions now that all types are
+        // defined.
+        let mut funcs = Vec::new();
+        for field in fields {
+            match field {
+                ast::InterfaceItem::Func(f) => {
+                    // Record that this name is a function so that attempts to
+                    // reference it as a type produce a helpful error.
+                    self.type_lookup
+                        .entry(f.name.name)
+                        .or_insert((TypeOrItem::Item("function"), f.name.span));
+                    let (name, kind) = freestanding_func(f.name.name, &f.func);
+                    let func = self.resolve_function(
+                        &f.docs,
+                        &f.attributes,
+                        &name,
+                        f.name.span,
+                        &f.func,
+                        kind,
+                    )?;
+                    names.define(&func.name, f.name.span)?;
+                    funcs.push(func);
+                }
+                ast::InterfaceItem::Use(_) => {}
+                ast::InterfaceItem::TypeDef(ast::TypeDef {
+                    name,
+                    ty: ast::Type::Resource(r),
+                    ..
+                }) => {
+                    for func in r.funcs.iter() {
+                        let span = func.named_func().name.span;
+                        let func = self.resolve_resource_func(func, name)?;
+                        names.define(&func.name, span)?;
+                        funcs.push(func);
+                    }
+                }
+                ast::InterfaceItem::TypeDef(_) => {}
+            }
+        }
+        names.check_setters()?;
+        for func in funcs {
+            let prev = self.interfaces[interface_id]
+                .functions
+                .insert(func.name.clone(), func);
+            assert!(prev.is_none());
+        }
+        place_setters_after_getters(&mut self.interfaces[interface_id].functions, |f| Some(f));
+
+        let lookup = mem::take(&mut self.type_lookup);
+        self.interface_types[interface_id.index()] = lookup;
+
+        Ok(())
+    }
+
+    fn resolve_types<'b>(
+        &mut self,
+        owner: TypeOwner,
+        fields: impl Iterator<Item = TypeItem<'a, 'b>> + Clone,
+    ) -> ParseResult<()>
+    where
+        'a: 'b,
+    {
+        assert!(self.type_lookup.is_empty());
+
+        // First, populate our namespace with `use` statements
+        for field in fields.clone() {
+            match field {
+                TypeItem::Use(u) => {
+                    self.resolve_use(owner, u)?;
+                }
+                TypeItem::Def(_) => {}
+            }
+        }
+
+        // Next determine dependencies between types, perform a topological
+        // sort, and then define all types. This will define types in a
+        // topological fashion, forbid cycles, and weed out references to
+        // undefined types all in one go.
+        let mut type_deps = IndexMap::default();
+        let mut type_defs = IndexMap::default();
+        for field in fields {
+            match field {
+                TypeItem::Def(t) => {
+                    let prev = type_defs.insert(t.name.name, Some(t));
+                    if prev.is_some() {
+                        return Err(ParseError::new_syntax(
+                            t.name.span,
+                            format!("name `{}` is defined more than once", t.name.name),
+                        ));
+                    }
+                    let mut deps = Vec::new();
+                    collect_deps(&t.ty, &mut deps);
+                    type_deps.insert(t.name.name, deps);
+                }
+                TypeItem::Use(u) => {
+                    for name in u.names.iter() {
+                        let name = name.as_.as_ref().unwrap_or(&name.name);
+                        type_deps.insert(name.name, Vec::new());
+                        type_defs.insert(name.name, None);
+                    }
+                }
+            }
+        }
+        let order = toposort("type", &type_deps).map_err(attach_old_float_type_context)?;
+        for ty in order {
+            let def = match type_defs.swap_remove(&ty).unwrap() {
+                Some(def) => def,
+                None => continue,
+            };
+            let docs = self.docs(&def.docs);
+            let stability = self.stability(&def.attributes)?;
+            let external_id = self.external_id(&def.attributes)?;
+            let kind = self.resolve_type_def(&def.ty, &stability)?;
+            let id = self.types.alloc(TypeDef {
+                docs,
+                stability,
+                kind,
+                name: Some(def.name.name.to_string()),
+                owner,
+                span: def.name.span,
+                external_id,
+            });
+            self.define_interface_name(&def.name, TypeOrItem::Type(id))?;
+        }
+        return Ok(());
+
+        fn attach_old_float_type_context(mut err: ParseError) -> ParseError {
+            if let ParseErrorKind::ItemNotFound { name, hint, .. } = err.kind_mut() {
+                let new = match name.as_str() {
+                    "float32" => "f32",
+                    "float64" => "f64",
+                    _ => return err,
+                };
+                *hint = Some(format!(
+                    "the `{name}` type has been renamed to `{new}` and is \
+                     no longer accepted, but the `WIT_REQUIRE_F32_F64=0` \
+                     environment variable can be used to temporarily \
+                     disable this error"
+                ));
+            }
+            err
+        }
+    }
+
+    fn resolve_use(&mut self, owner: TypeOwner, u: &ast::Use<'a>) -> ParseResult<()> {
+        let (item, name, span) = self.resolve_ast_item_path(&u.from)?;
+        let use_from = self.extract_iface_from_item(&item, &name, span)?;
+        let stability = self.stability(&u.attributes)?;
+        let external_id = self.external_id(&u.attributes)?;
+
+        for name in u.names.iter() {
+            let lookup = &self.interface_types[use_from.index()];
+            let id = match lookup.get(name.name.name) {
+                Some((TypeOrItem::Type(id), _)) => *id,
+                Some((TypeOrItem::Item(s), _)) => {
+                    return Err(ParseError::new_syntax(
+                        name.name.span,
+                        format!("cannot import {s} `{}`", name.name.name),
+                    ));
+                }
+                None => {
+                    return Err(ParseError::from(ParseErrorKind::ItemNotFound {
+                        span: name.name.span,
+                        name: name.name.name.to_string(),
+                        kind: "name".to_string(),
+                        hint: None,
+                    }));
+                }
+            };
+            let span = name.name.span;
+            let name = name.as_.as_ref().unwrap_or(&name.name);
+            let id = self.types.alloc(TypeDef {
+                docs: Docs::default(),
+                stability: stability.clone(),
+                kind: TypeDefKind::Type(Type::Id(id)),
+                name: Some(name.name.to_string()),
+                owner,
+                span,
+                external_id: external_id.clone(),
+            });
+            self.define_interface_name(name, TypeOrItem::Type(id))?;
+        }
+        Ok(())
+    }
+
+    /// For each name in the `include`, resolve the path of the include, add it to the self.includes
+    fn resolve_include(&mut self, world_id: WorldId, i: &ast::Include<'a>) -> ParseResult<()> {
+        let stability = self.stability(&i.attributes)?;
+        let (item, name, span) = self.resolve_ast_item_path(&i.from)?;
+        let include_from = self.extract_world_from_item(&item, &name, span)?;
+        self.worlds[world_id].includes.push(WorldInclude {
+            stability,
+            id: include_from,
+            names: i
+                .names
+                .iter()
+                .map(|n| IncludeName {
+                    name: n.name.name.to_string(),
+                    as_: n.as_.name.to_string(),
+                })
+                .collect(),
+            span,
+        });
+        Ok(())
+    }
+
+    fn resolve_resource_func(
+        &mut self,
+        func: &ast::ResourceFunc<'_>,
+        resource: &ast::Id<'_>,
+    ) -> ParseResult<Function> {
+        let resource_id = match self.type_lookup.get(resource.name) {
+            Some((TypeOrItem::Type(id), _)) => *id,
+            _ => panic!("type lookup for resource failed"),
+        };
+        let (name, kind);
+        let named_func = func.named_func();
+        let async_ = named_func.func.async_;
+        match func {
+            ast::ResourceFunc::Method(f) => match f.func.accessor {
+                None => {
+                    name = format!("[method]{}.{}", resource.name, f.name.name);
+                    kind = if async_ {
+                        FunctionKind::AsyncMethod(resource_id)
+                    } else {
+                        FunctionKind::Method(resource_id)
+                    };
+                }
+                Some(AccessorKind::Getter) => {
+                    assert!(!async_);
+                    name = format!("[method][get]{}.{}", resource.name, f.name.name);
+                    kind = FunctionKind::MethodGetter(resource_id);
+                }
+                Some(AccessorKind::Setter) => {
+                    assert!(!async_);
+                    name = format!("[method][set]{}.{}", resource.name, f.name.name);
+                    kind = FunctionKind::MethodSetter(resource_id);
+                }
+            },
+            ast::ResourceFunc::Static(f) => match f.func.accessor {
+                None => {
+                    name = format!("[static]{}.{}", resource.name, f.name.name);
+                    kind = if async_ {
+                        FunctionKind::AsyncStatic(resource_id)
+                    } else {
+                        FunctionKind::Static(resource_id)
+                    };
+                }
+                Some(AccessorKind::Getter) => {
+                    assert!(!async_);
+                    name = format!("[static][get]{}.{}", resource.name, f.name.name);
+                    kind = FunctionKind::StaticGetter(resource_id);
+                }
+                Some(AccessorKind::Setter) => {
+                    assert!(!async_);
+                    name = format!("[static][set]{}.{}", resource.name, f.name.name);
+                    kind = FunctionKind::StaticSetter(resource_id);
+                }
+            },
+            ast::ResourceFunc::Constructor(_) => {
+                assert!(!async_); // should not be possible to parse
+                name = format!("[constructor]{}", resource.name);
+                kind = FunctionKind::Constructor(resource_id);
+            }
+        }
+        self.resolve_function(
+            &named_func.docs,
+            &named_func.attributes,
+            &name,
+            named_func.name.span,
+            &named_func.func,
+            kind,
+        )
+    }
+
+    fn resolve_function(
+        &mut self,
+        docs: &ast::Docs<'_>,
+        attrs: &[ast::Attribute<'_>],
+        name: &str,
+        name_span: Span,
+        func: &ast::Func,
+        kind: FunctionKind,
+    ) -> ParseResult<Function> {
+        let docs = self.docs(docs);
+        let stability = self.stability(attrs)?;
+        let external_id = self.external_id(attrs)?;
+        let params = self.resolve_params(&func.params, &kind, func.span)?;
+        let result = self.resolve_result(&func.result, &kind, func.span)?;
+        Ok(Function {
+            docs,
+            stability,
+            name: name.to_string(),
+            kind,
+            params,
+            result,
+            span: name_span,
+            external_id,
+        })
+    }
+
+    fn resolve_ast_item_path(
+        &self,
+        path: &ast::UsePath<'a>,
+    ) -> ParseResult<(AstItem, String, Span)> {
+        match path {
+            ast::UsePath::Id(id) => {
+                let item = self.ast_items[self.cur_ast_index]
+                    .get(id.name)
+                    .or_else(|| self.package_items.get(id.name));
+                match item {
+                    Some(item) => Ok((*item, id.name.into(), id.span)),
+                    None => {
+                        return Err(ParseError::from(ParseErrorKind::ItemNotFound {
+                            span: id.span,
+                            name: id.name.to_string(),
+                            kind: "interface or world".to_owned(),
+                            hint: None,
+                        }));
+                    }
+                }
+            }
+            ast::UsePath::Package { id, name } => Ok((
+                self.foreign_deps[&id.package_name()][name.name].0,
+                name.name.into(),
+                name.span,
+            )),
+        }
+    }
+
+    fn extract_iface_from_item(
+        &self,
+        item: &AstItem,
+        name: &str,
+        span: Span,
+    ) -> ParseResult<InterfaceId> {
+        match item {
+            AstItem::Interface(id) => Ok(*id),
+            AstItem::World(_) => {
+                return Err(ParseError::new_syntax(
+                    span,
+                    format!("name `{name}` is defined as a world, not an interface"),
+                ));
+            }
+        }
+    }
+
+    fn extract_world_from_item(
+        &self,
+        item: &AstItem,
+        name: &str,
+        span: Span,
+    ) -> ParseResult<WorldId> {
+        match item {
+            AstItem::World(id) => Ok(*id),
+            AstItem::Interface(_) => {
+                return Err(ParseError::new_syntax(
+                    span,
+                    format!("name `{name}` is defined as an interface, not a world"),
+                ));
+            }
+        }
+    }
+
+    fn define_interface_name(&mut self, name: &ast::Id<'a>, item: TypeOrItem) -> ParseResult<()> {
+        let prev = self.type_lookup.insert(name.name, (item, name.span));
+        if prev.is_some() {
+            return Err(ParseError::new_syntax(
+                name.span,
+                format!("name `{}` is defined more than once", name.name),
+            ));
+        } else {
+            Ok(())
+        }
+    }
+
+    fn resolve_type_def(
+        &mut self,
+        ty: &ast::Type<'_>,
+        stability: &Stability,
+    ) -> ParseResult<TypeDefKind> {
+        Ok(match ty {
+            ast::Type::Bool(_) => TypeDefKind::Type(Type::Bool),
+            ast::Type::U8(_) => TypeDefKind::Type(Type::U8),
+            ast::Type::U16(_) => TypeDefKind::Type(Type::U16),
+            ast::Type::U32(_) => TypeDefKind::Type(Type::U32),
+            ast::Type::U64(_) => TypeDefKind::Type(Type::U64),
+            ast::Type::S8(_) => TypeDefKind::Type(Type::S8),
+            ast::Type::S16(_) => TypeDefKind::Type(Type::S16),
+            ast::Type::S32(_) => TypeDefKind::Type(Type::S32),
+            ast::Type::S64(_) => TypeDefKind::Type(Type::S64),
+            ast::Type::F32(_) => TypeDefKind::Type(Type::F32),
+            ast::Type::F64(_) => TypeDefKind::Type(Type::F64),
+            ast::Type::Char(_) => TypeDefKind::Type(Type::Char),
+            ast::Type::String(_) => TypeDefKind::Type(Type::String),
+            ast::Type::ErrorContext(_) => TypeDefKind::Type(Type::ErrorContext),
+            ast::Type::Name(name) => {
+                let id = self.resolve_type_name(name)?;
+                TypeDefKind::Type(Type::Id(id))
+            }
+            ast::Type::List(list) => {
+                let ty = self.resolve_type(&list.ty, stability)?;
+                TypeDefKind::List(ty)
+            }
+            ast::Type::Map(map) => {
+                let key_ty = self.resolve_type(&map.key, stability)?;
+                let value_ty = self.resolve_type(&map.value, stability)?;
+
+                match key_ty {
+                    Type::Bool
+                    | Type::U8
+                    | Type::U16
+                    | Type::U32
+                    | Type::U64
+                    | Type::S8
+                    | Type::S16
+                    | Type::S32
+                    | Type::S64
+                    | Type::Char
+                    | Type::String => {}
+                    _ => {
+                        return Err(ParseError::new_syntax(map.span, "invalid map key type: map keys must be bool, u8, u16, u32, u64, s8, s16, s32, s64, char, or string".to_owned()));
+                    }
+                }
+
+                TypeDefKind::Map(key_ty, value_ty)
+            }
+            ast::Type::FixedLengthList(list) => {
+                let ty = self.resolve_type(&list.ty, stability)?;
+                TypeDefKind::FixedLengthList(ty, list.size)
+            }
+            ast::Type::Handle(handle) => TypeDefKind::Handle(match handle {
+                ast::Handle::Own { resource } => Handle::Own(self.validate_resource(resource)?),
+                ast::Handle::Borrow { resource } => {
+                    Handle::Borrow(self.validate_resource(resource)?)
+                }
+            }),
+            ast::Type::Resource(_) => TypeDefKind::Resource,
+            ast::Type::Record(record) => {
+                if record.fields.is_empty() {
+                    return Err(ParseError::new_syntax(
+                        record.span,
+                        "empty record".to_owned(),
+                    ));
+                }
+                check_unique_names("field", record.fields.iter().map(|f| &f.name))?;
+                let fields = record
+                    .fields
+                    .iter()
+                    .map(|field| {
+                        Ok(Field {
+                            docs: self.docs(&field.docs),
+                            name: field.name.name.to_string(),
+                            ty: self.resolve_type(&field.ty, stability)?,
+                            span: field.name.span,
+                        })
+                    })
+                    .collect::<ParseResult<Vec<_>>>()?;
+                TypeDefKind::Record(Record { fields })
+            }
+            ast::Type::Flags(flags) => {
+                if flags.flags.is_empty() {
+                    return Err(ParseError::new_syntax(flags.span, "empty flags".to_owned()));
+                }
+                if let Some(flag) = flags.flags.get(32) {
+                    return Err(ParseError::new_syntax(
+                        flag.name.span,
+                        "cannot have more than 32 flags".to_owned(),
+                    ));
+                }
+                check_unique_names("flag", flags.flags.iter().map(|f| &f.name))?;
+                let flags = flags
+                    .flags
+                    .iter()
+                    .map(|flag| Flag {
+                        docs: self.docs(&flag.docs),
+                        name: flag.name.name.to_string(),
+                        span: flag.name.span,
+                    })
+                    .collect::<Vec<_>>();
+                TypeDefKind::Flags(Flags { flags })
+            }
+            ast::Type::Tuple(t) => {
+                if t.types.is_empty() {
+                    return Err(ParseError::new_syntax(t.span, "empty tuple".to_owned()));
+                }
+                let types = t
+                    .types
+                    .iter()
+                    .map(|ty| self.resolve_type(ty, stability))
+                    .collect::<ParseResult<Vec<_>>>()?;
+                TypeDefKind::Tuple(Tuple { types })
+            }
+            ast::Type::Variant(variant) => {
+                if variant.cases.is_empty() {
+                    return Err(ParseError::new_syntax(
+                        variant.span,
+                        "empty variant".to_owned(),
+                    ));
+                }
+                check_unique_names("case", variant.cases.iter().map(|c| &c.name))?;
+                let cases = variant
+                    .cases
+                    .iter()
+                    .map(|case| {
+                        Ok(Case {
+                            docs: self.docs(&case.docs),
+                            name: case.name.name.to_string(),
+                            ty: self.resolve_optional_type(case.ty.as_ref(), stability)?,
+                            span: case.name.span,
+                        })
+                    })
+                    .collect::<ParseResult<Vec<_>>>()?;
+                TypeDefKind::Variant(Variant { cases })
+            }
+            ast::Type::Enum(e) => {
+                if e.cases.is_empty() {
+                    return Err(ParseError::new_syntax(e.span, "empty enum".to_owned()));
+                }
+                check_unique_names("case", e.cases.iter().map(|c| &c.name))?;
+                let cases = e
+                    .cases
+                    .iter()
+                    .map(|case| {
+                        Ok(EnumCase {
+                            docs: self.docs(&case.docs),
+                            name: case.name.name.to_string(),
+                            span: case.name.span,
+                        })
+                    })
+                    .collect::<ParseResult<Vec<_>>>()?;
+                TypeDefKind::Enum(Enum { cases })
+            }
+            ast::Type::Option(ty) => TypeDefKind::Option(self.resolve_type(&ty.ty, stability)?),
+            ast::Type::Result(r) => TypeDefKind::Result(Result_ {
+                ok: self.resolve_optional_type(r.ok.as_deref(), stability)?,
+                err: self.resolve_optional_type(r.err.as_deref(), stability)?,
+            }),
+            ast::Type::Future(t) => {
+                TypeDefKind::Future(self.resolve_optional_type(t.ty.as_deref(), stability)?)
+            }
+            ast::Type::Stream(s) => {
+                TypeDefKind::Stream(self.resolve_optional_type(s.ty.as_deref(), stability)?)
+            }
+        })
+    }
+
+    fn resolve_type_name(&mut self, name: &ast::Id<'_>) -> ParseResult<TypeId> {
+        match self.type_lookup.get(name.name) {
+            Some((TypeOrItem::Type(id), _)) => Ok(*id),
+            Some((TypeOrItem::Item(s), _)) => {
+                return Err(ParseError::new_syntax(
+                    name.span,
+                    format!("cannot use {s} `{name}` as a type", name = name.name),
+                ));
+            }
+            None => {
+                return Err(ParseError::from(ParseErrorKind::ItemNotFound {
+                    span: name.span,
+                    name: name.name.to_string(),
+                    kind: "name".to_owned(),
+                    hint: None,
+                }));
+            }
+        }
+    }
+
+    fn validate_resource(&mut self, name: &ast::Id<'_>) -> ParseResult<TypeId> {
+        let id = self.resolve_type_name(name)?;
+        let mut cur = id;
+        loop {
+            match self.types[cur].kind {
+                TypeDefKind::Resource => break Ok(id),
+                TypeDefKind::Type(Type::Id(ty)) => cur = ty,
+                TypeDefKind::Unknown => {
+                    self.required_resource_types.push((cur, name.span));
+                    break Ok(id);
+                }
+                _ => {
+                    return Err(ParseError::new_syntax(
+                        name.span,
+                        format!("type `{}` used in a handle must be a resource", name.name),
+                    ));
+                }
+            }
+        }
+    }
+
+    /// If `stability` is `Stability::Unknown`, recursively inspect the
+    /// specified `kind` until we either bottom out or find a type which has a
+    /// stability that's _not_ unknown.  If we find such a type, return a clone
+    /// of its stability; otherwise return `Stability::Unknown`.
+    ///
+    /// The idea here is that e.g. `option<T>` should inherit `T`'s stability.
+    /// This gets a little ambiguous in the case of e.g. `tuple<T, U, V>`; for
+    /// now, we just pick the first one has a known stability, if any.
+    fn find_stability(&self, kind: &TypeDefKind, stability: &Stability) -> Stability {
+        fn find_in_type(types: &Arena<TypeDef>, ty: Type) -> Option<&Stability> {
+            if let Type::Id(id) = ty {
+                let ty = &types[id];
+                if !matches!(&ty.stability, Stability::Unknown) {
+                    Some(&ty.stability)
+                } else {
+                    // Note that this type isn't searched recursively since the
+                    // creation of `id` should already have searched its
+                    // recursive edges, so there's no need to search again.
+                    None
+                }
+            } else {
+                None
+            }
+        }
+
+        fn find_in_kind<'a>(
+            types: &'a Arena<TypeDef>,
+            kind: &TypeDefKind,
+        ) -> Option<&'a Stability> {
+            match kind {
+                TypeDefKind::Type(ty) => find_in_type(types, *ty),
+                TypeDefKind::Handle(Handle::Borrow(id) | Handle::Own(id)) => {
+                    find_in_type(types, Type::Id(*id))
+                }
+                TypeDefKind::Tuple(t) => t.types.iter().find_map(|ty| find_in_type(types, *ty)),
+                TypeDefKind::List(ty)
+                | TypeDefKind::FixedLengthList(ty, _)
+                | TypeDefKind::Option(ty) => find_in_type(types, *ty),
+                TypeDefKind::Map(k, v) => {
+                    find_in_type(types, *k).or_else(|| find_in_type(types, *v))
+                }
+                TypeDefKind::Future(ty) | TypeDefKind::Stream(ty) => {
+                    ty.as_ref().and_then(|ty| find_in_type(types, *ty))
+                }
+                TypeDefKind::Result(r) => {
+                    r.ok.as_ref()
+                        .and_then(|ty| find_in_type(types, *ty))
+                        .or_else(|| r.err.as_ref().and_then(|ty| find_in_type(types, *ty)))
+                }
+                // Assume these are named types which will be annotated with an
+                // explicit stability if applicable:
+                TypeDefKind::Resource
+                | TypeDefKind::Variant(_)
+                | TypeDefKind::Record(_)
+                | TypeDefKind::Flags(_)
+                | TypeDefKind::Enum(_)
+                | TypeDefKind::Unknown => None,
+            }
+        }
+
+        if let Stability::Unknown = stability {
+            find_in_kind(&self.types, kind)
+                .cloned()
+                .unwrap_or(Stability::Unknown)
+        } else {
+            stability.clone()
+        }
+    }
+
+    fn resolve_type(&mut self, ty: &super::Type<'_>, stability: &Stability) -> ParseResult<Type> {
+        // Resources must be declared at the top level to have their methods
+        // processed appropriately, but resources also shouldn't show up
+        // recursively so assert that's not happening here.
+        match ty {
+            ast::Type::Resource(_) => unreachable!(),
+            _ => {}
+        }
+        let kind = self.resolve_type_def(ty, stability)?;
+        let stability = self.find_stability(&kind, stability);
+        Ok(self.anon_type_def(TypeDef {
+            kind,
+            name: None,
+            docs: Docs::default(),
+            stability,
+            owner: TypeOwner::None,
+            span: ty.span(),
+            external_id: None,
+        }))
+    }
+
+    fn resolve_optional_type(
+        &mut self,
+        ty: Option<&super::Type<'_>>,
+        stability: &Stability,
+    ) -> ParseResult<Option<Type>> {
+        match ty {
+            Some(ty) => Ok(Some(self.resolve_type(ty, stability)?)),
+            None => Ok(None),
+        }
+    }
+
+    fn anon_type_def(&mut self, ty: TypeDef) -> Type {
+        let key = match &ty.kind {
+            TypeDefKind::Type(t) => return *t,
+            TypeDefKind::Variant(v) => Key::Variant(
+                v.cases
+                    .iter()
+                    .map(|case| (case.name.clone(), case.ty))
+                    .collect::<Vec<_>>(),
+            ),
+            TypeDefKind::Handle(Handle::Borrow(h)) => Key::BorrowHandle(*h),
+            // An anonymous `own<T>` type is the same as a reference to the type
+            // `T`, so avoid creating anonymous type and return that here
+            // directly. Note that this additionally avoids creating distinct
+            // anonymous types for `list<T>` and `list<own<T>>` for example.
+            TypeDefKind::Handle(Handle::Own(id)) => return Type::Id(*id),
+            TypeDefKind::Resource => unreachable!("anonymous resources aren't supported"),
+            TypeDefKind::Record(r) => Key::Record(
+                r.fields
+                    .iter()
+                    .map(|case| (case.name.clone(), case.ty))
+                    .collect::<Vec<_>>(),
+            ),
+            TypeDefKind::Flags(r) => {
+                Key::Flags(r.flags.iter().map(|f| f.name.clone()).collect::<Vec<_>>())
+            }
+            TypeDefKind::Tuple(t) => Key::Tuple(t.types.clone()),
+            TypeDefKind::Enum(r) => {
+                Key::Enum(r.cases.iter().map(|f| f.name.clone()).collect::<Vec<_>>())
+            }
+            TypeDefKind::List(ty) => Key::List(*ty),
+            TypeDefKind::Map(k, v) => Key::Map(*k, *v),
+            TypeDefKind::FixedLengthList(ty, size) => Key::FixedLengthList(*ty, *size),
+            TypeDefKind::Option(t) => Key::Option(*t),
+            TypeDefKind::Result(r) => Key::Result(r.ok, r.err),
+            TypeDefKind::Future(ty) => Key::Future(*ty),
+            TypeDefKind::Stream(ty) => Key::Stream(*ty),
+            TypeDefKind::Unknown => unreachable!(),
+        };
+        let id = self
+            .anon_types
+            .entry(key)
+            .or_insert_with(|| self.types.alloc(ty));
+        Type::Id(*id)
+    }
+
+    fn docs(&mut self, doc: &super::Docs<'_>) -> Docs {
+        let mut docs = vec![];
+
+        for doc in doc.docs.iter() {
+            let contents = match doc.strip_prefix("/**") {
+                Some(doc) => doc.strip_suffix("*/").unwrap(),
+                None => doc.trim_start_matches('/'),
+            };
+
+            docs.push(contents.trim_end());
+        }
+
+        // Scan the (non-empty) doc lines to find the minimum amount of leading whitespace.
+        // This amount of whitespace will be removed from the start of all doc lines,
+        // normalizing the output while retaining intentional spacing added by the original authors.
+        let min_leading_ws = docs
+            .iter()
+            .filter(|doc| !doc.is_empty())
+            .map(|doc| doc.bytes().take_while(|c| c.is_ascii_whitespace()).count())
+            .min()
+            .unwrap_or(0);
+
+        if min_leading_ws > 0 {
+            let leading_ws_pattern = " ".repeat(min_leading_ws);
+            docs = docs
+                .iter()
+                .map(|doc| doc.strip_prefix(&leading_ws_pattern).unwrap_or(doc))
+                .collect();
+        }
+
+        let contents = if docs.is_empty() {
+            None
+        } else {
+            // NB: this notably, through the use of `lines`, normalizes `\r\n`
+            // to `\n`.
+            let mut contents = String::new();
+            for doc in docs {
+                if doc.is_empty() {
+                    contents.push_str("\n");
+                } else {
+                    for line in doc.lines() {
+                        contents.push_str(line);
+                        contents.push_str("\n");
+                    }
+                }
+            }
+            while contents.ends_with("\n") {
+                contents.pop();
+            }
+            Some(contents)
+        };
+        Docs { contents }
+    }
+
+    fn stability(&mut self, attrs: &[ast::Attribute<'_>]) -> ParseResult<Stability> {
+        let mut since = None;
+        let mut since_span = Span::default();
+        let mut deprecated = None;
+        let mut deprecated_span = Span::default();
+        let mut unstable = None;
+        for attr in attrs {
+            match attr {
+                ast::Attribute::Since { version, span } => {
+                    if since.is_some() {
+                        return Err(ParseError::new_syntax(
+                            *span,
+                            "cannot specify @since twice".to_owned(),
+                        ));
+                    }
+                    since = Some(version.clone());
+                    since_span = *span;
+                }
+                ast::Attribute::Deprecated { version, span } => {
+                    if deprecated.is_some() {
+                        return Err(ParseError::new_syntax(
+                            *span,
+                            "cannot specify @deprecated twice".to_owned(),
+                        ));
+                    }
+                    deprecated = Some(version.clone());
+                    deprecated_span = *span;
+                }
+                ast::Attribute::Unstable { feature, span } => {
+                    if unstable.is_some() {
+                        return Err(ParseError::new_syntax(
+                            *span,
+                            "cannot specify @unstable twice".to_owned(),
+                        ));
+                    }
+                    unstable = Some(feature.name.to_string());
+                }
+                _ => {}
+            }
+        }
+        match (since, deprecated, unstable) {
+            (Some(since), deprecated, None) => Ok(Stability::Stable { since, deprecated }),
+            (None, deprecated, Some(feature)) => Ok(Stability::Unstable {
+                feature,
+                deprecated,
+            }),
+            (Some(_), _deprecated, Some(_)) => {
+                return Err(ParseError::new_syntax(
+                    since_span,
+                    "cannot specify both @since and @unstable".to_owned(),
+                ));
+            }
+            (None, Some(_), None) => {
+                return Err(ParseError::new_syntax(
+                    deprecated_span,
+                    "cannot specify both @deprecated without @since or @unstable".to_owned(),
+                ));
+            }
+            (None, None, None) => Ok(Stability::Unknown),
+        }
+    }
+
+    fn external_id(&mut self, attrs: &[ast::Attribute<'_>]) -> ParseResult<Option<String>> {
+        let mut external_id = None;
+        for attr in attrs {
+            match attr {
+                ast::Attribute::ExternalId { span, id } => {
+                    if external_id.is_some() {
+                        return Err(ParseError::new_syntax(
+                            *span,
+                            "cannot specify @external-id twice".to_owned(),
+                        ));
+                    }
+                    external_id = Some(id.clone())
+                }
+                _ => {}
+            }
+        }
+        Ok(external_id)
+    }
+
+    fn resolve_params(
+        &mut self,
+        params: &ParamList<'_>,
+        kind: &FunctionKind,
+        span: Span,
+    ) -> ParseResult<Vec<Param>> {
+        let mut ret = Vec::new();
+        match *kind {
+            // These kinds of methods don't have any adjustments to the
+            // parameters, so do nothing here.
+            FunctionKind::Freestanding
+            | FunctionKind::AsyncFreestanding
+            | FunctionKind::Constructor(_)
+            | FunctionKind::Static(_)
+            | FunctionKind::AsyncStatic(_)
+            | FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {}
+
+            // Methods automatically get a `self` initial argument so insert
+            // that here before processing the normal parameters.
+            FunctionKind::Method(id)
+            | FunctionKind::AsyncMethod(id)
+            | FunctionKind::MethodGetter(id)
+            | FunctionKind::MethodSetter(id) => {
+                let kind = TypeDefKind::Handle(Handle::Borrow(id));
+                let stability = self.find_stability(&kind, &Stability::Unknown);
+                let shared = self.anon_type_def(TypeDef {
+                    docs: Docs::default(),
+                    stability,
+                    kind,
+                    name: None,
+                    owner: TypeOwner::None,
+                    span,
+                    external_id: None,
+                });
+                ret.push(Param {
+                    name: "self".to_string(),
+                    ty: shared,
+                    span,
+                });
+            }
+        }
+
+        match kind.accessor() {
+            Some(AccessorKind::Getter) => {
+                if let Some((name, _)) = params.first() {
+                    return Err(ParseError::new_syntax(
+                        name.span,
+                        "getters cannot have parameters".to_owned(),
+                    ));
+                }
+            }
+            Some(AccessorKind::Setter) => {
+                if params.len() != 1 {
+                    return Err(ParseError::new_syntax(
+                        params.get(1).map(|(name, _)| name.span).unwrap_or(span),
+                        "setters must have exactly one parameter".to_owned(),
+                    ));
+                }
+            }
+            None => {}
+        }
+
+        for (name, ty) in params {
+            if ret
+                .iter()
+                .any(|p| KebabStr::new(&p.name) == KebabStr::new(name.name))
+            {
+                return Err(ParseError::new_syntax(
+                    name.span,
+                    format!("param `{}` is defined more than once", name.name),
+                ));
+            }
+            ret.push(Param {
+                name: name.name.to_string(),
+                ty: self.resolve_type(ty, &Stability::Unknown)?,
+                span: name.span,
+            });
+        }
+        Ok(ret)
+    }
+
+    fn resolve_result(
+        &mut self,
+        result: &Option<ast::Type<'_>>,
+        kind: &FunctionKind,
+        span: Span,
+    ) -> ParseResult<Option<Type>> {
+        match *kind {
+            // These kinds of methods don't have any adjustments to the return
+            // values, so plumb them through as-is.
+            FunctionKind::Freestanding
+            | FunctionKind::AsyncFreestanding
+            | FunctionKind::Method(_)
+            | FunctionKind::AsyncMethod(_)
+            | FunctionKind::Static(_)
+            | FunctionKind::AsyncStatic(_) => match result {
+                Some(ty) => Ok(Some(self.resolve_type(ty, &Stability::Unknown)?)),
+                None => Ok(None),
+            },
+
+            // Getters must return a value.
+            FunctionKind::Getter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::StaticGetter(_) => match result {
+                Some(ty) => Ok(Some(self.resolve_type(ty, &Stability::Unknown)?)),
+                None => Err(ParseError::new_syntax(
+                    span,
+                    "getters must return a value".to_owned(),
+                )),
+            },
+
+            // Setters must either return nothing or `result<_, error?>`.
+            FunctionKind::Setter
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticSetter(_) => match result {
+                None => Ok(None),
+                Some(ty) => {
+                    let resolved = self.resolve_type(ty, &Stability::Unknown)?;
+                    if let Type::Id(id) = resolved
+                        && let TypeDefKind::Result(r) = &self.types[id].kind
+                        && r.ok.is_none()
+                    {
+                        Ok(Some(resolved))
+                    } else {
+                        Err(ParseError::new_syntax(
+                            ty.span(),
+                            "if a setter return type is declared it must be a `result` with no `ok` type".to_owned(),
+                        ))
+                    }
+                }
+            },
+
+            FunctionKind::Constructor(id) => match result {
+                // When constructors don't define a return type, they're
+                // implicitly assumed to return an owned handle to the type
+                // they construct.
+                None => Ok(Some(Type::Id(id))),
+
+                // If a constructor does define a return type, it must be in the
+                // form of `-> result<R, E?>` where `R` is the resource being
+                // constructed and `E` is an optional error type.
+                Some(ty) => Ok(Some(self.resolve_constructor_result(id, ty)?)),
+            },
+        }
+    }
+
+    fn resolve_constructor_result(
+        &mut self,
+        resource_id: TypeId,
+        result_ast: &ast::Type<'_>,
+    ) -> ParseResult<Type> {
+        let result = self.resolve_type(result_ast, &Stability::Unknown)?;
+        let ok_type = match result {
+            Type::Id(id) => match &self.types[id].kind {
+                TypeDefKind::Result(r) => Some(r.ok),
+                _ => None,
+            },
+            _ => None,
+        };
+        let Some(ok_type) = ok_type else {
+            return Err(ParseError::new_syntax(
+                result_ast.span(),
+                "if a constructor return type is declared it must be a `result`".to_owned(),
+            ));
+        };
+        match ok_type {
+            Some(Type::Id(ok_id)) if resource_id == ok_id => Ok(result),
+            _ => {
+                let ok_span =
+                    if let ast::Type::Result(ast::Result_ { ok: Some(ok), .. }) = result_ast {
+                        ok.span()
+                    } else {
+                        result_ast.span()
+                    };
+                return Err(ParseError::new_syntax(
+                    ok_span,
+                    "the `ok` type must be the resource being constructed".to_owned(),
+                ));
+            }
+        }
+    }
+}
+
+/// Computes the mangled name and [`FunctionKind`] of a function which is not
+/// attached to a resource.
+fn freestanding_func(name: &str, func: &ast::Func<'_>) -> (String, FunctionKind) {
+    match func.accessor {
+        None => (
+            name.to_string(),
+            if func.async_ {
+                FunctionKind::AsyncFreestanding
+            } else {
+                FunctionKind::Freestanding
+            },
+        ),
+        Some(AccessorKind::Getter) => {
+            assert!(!func.async_);
+            (format!("[get]{name}"), FunctionKind::Getter)
+        }
+        Some(AccessorKind::Setter) => {
+            assert!(!func.async_);
+            (format!("[set]{name}"), FunctionKind::Setter)
+        }
+    }
+}
+
+/// Checks that `names` are strongly unique, which the component model
+/// requires of record fields, flags and cases.
+fn check_unique_names<'b, 'a: 'b>(
+    desc: &str,
+    names: impl Iterator<Item = &'b ast::Id<'a>>,
+) -> ParseResult<()> {
+    let mut seen = HashMap::new();
+    for name in names {
+        let Some(kebab) = KebabStr::new(name.name) else {
+            continue;
+        };
+        if let Some(prev) = seen.insert(kebab, name.name) {
+            return Err(ParseError::new_syntax(
+                name.span,
+                if prev == name.name {
+                    format!("duplicate {desc} `{prev}`")
+                } else {
+                    format!(
+                        "{desc} `{}` conflicts with previous {desc} `{prev}`",
+                        name.name
+                    )
+                },
+            ));
+        }
+    }
+    Ok(())
+}
+
+/// A container for names in a single scope of a component, used to check
+/// strong uniqueness. A scope in WIT is an interface, or a world's imports
+/// or exports.
+///
+/// Also used to check other naming-related conditions like a matching getter
+/// for every setter.
+#[derive(Default)]
+struct NameScope {
+    /// All names in this scope, keyed by their canonicalized form.
+    names: IndexMap<ComponentName, Span>,
+    /// All names in this scope exactly as written.
+    raw_names: HashSet<String>,
+}
+
+impl NameScope {
+    /// Defines an already-mangled component name in this scope. Returns an
+    /// error if `name` is not strongly unique with all other names already in
+    /// the scope.
+    fn define(&mut self, name: &str, span: Span) -> ParseResult<()> {
+        let component_name = crate::parse_component_name(name).map_err(|e| {
+            ParseError::new_syntax(
+                span,
+                format!(
+                    "name `{name}` is not a valid component name: {}",
+                    e.message()
+                ),
+            )
+        })?;
+        if let Some((prev, _)) = self.names.get_key_value(&component_name) {
+            return Err(ParseError::new_syntax(
+                span,
+                if prev.as_str() == name {
+                    format!("duplicate name `{name}`")
+                } else {
+                    format!("name `{name}` conflicts with previous name `{prev}`")
+                },
+            ));
+        }
+        self.names.insert(component_name, span);
+        self.raw_names.insert(name.to_string());
+        Ok(())
+    }
+
+    /// Validate that every setter in this scope has a corresponding getter.
+    fn check_setters(&self) -> ParseResult<()> {
+        use wasmparser::names::AccessorKind as AK;
+
+        for (name, span) in self.names.iter() {
+            let ComponentNameKind::Plain(plain) = name.kind() else {
+                continue;
+            };
+            if plain.accessor == Some(AK::Set) {
+                let getter = plain.getter_for_setter();
+                if !self.raw_names.contains(&getter) {
+                    return Err(ParseError::new_syntax(
+                        *span,
+                        format!("setter `{name}` has no corresponding getter `{getter}`"),
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn collect_deps<'a>(ty: &ast::Type<'a>, deps: &mut Vec<ast::Id<'a>>) {
+    match ty {
+        ast::Type::Bool(_)
+        | ast::Type::U8(_)
+        | ast::Type::U16(_)
+        | ast::Type::U32(_)
+        | ast::Type::U64(_)
+        | ast::Type::S8(_)
+        | ast::Type::S16(_)
+        | ast::Type::S32(_)
+        | ast::Type::S64(_)
+        | ast::Type::F32(_)
+        | ast::Type::F64(_)
+        | ast::Type::Char(_)
+        | ast::Type::String(_)
+        | ast::Type::Flags(_)
+        | ast::Type::Enum(_)
+        | ast::Type::ErrorContext(_) => {}
+        ast::Type::Name(name) => deps.push(name.clone()),
+        ast::Type::Handle(handle) => match handle {
+            ast::Handle::Own { resource } => deps.push(resource.clone()),
+            ast::Handle::Borrow { resource } => deps.push(resource.clone()),
+        },
+        ast::Type::Resource(_) => {}
+        ast::Type::Record(record) => {
+            for field in record.fields.iter() {
+                collect_deps(&field.ty, deps);
+            }
+        }
+        ast::Type::Tuple(t) => {
+            for ty in t.types.iter() {
+                collect_deps(ty, deps);
+            }
+        }
+        ast::Type::Variant(variant) => {
+            for case in variant.cases.iter() {
+                if let Some(ty) = &case.ty {
+                    collect_deps(ty, deps);
+                }
+            }
+        }
+        ast::Type::Option(ast::Option_ { ty, .. })
+        | ast::Type::List(ast::List { ty, .. })
+        | ast::Type::FixedLengthList(ast::FixedLengthList { ty, .. }) => collect_deps(ty, deps),
+        ast::Type::Map(ast::Map { key, value, .. }) => {
+            collect_deps(key, deps);
+            collect_deps(value, deps);
+        }
+        ast::Type::Result(r) => {
+            if let Some(ty) = &r.ok {
+                collect_deps(ty, deps);
+            }
+            if let Some(ty) = &r.err {
+                collect_deps(ty, deps);
+            }
+        }
+        ast::Type::Future(t) => {
+            if let Some(t) = &t.ty {
+                collect_deps(t, deps)
+            }
+        }
+        ast::Type::Stream(s) => {
+            if let Some(t) = &s.ty {
+                collect_deps(t, deps)
+            }
+        }
+    }
+}

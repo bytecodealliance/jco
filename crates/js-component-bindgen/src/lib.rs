@@ -94,6 +94,34 @@ pub struct TranspileConfig {
     pub cm_runtime_es_module: Option<String>,
 }
 
+fn ensure_supported_accessors(resolve: &Resolve) -> Result<()> {
+    let functions = resolve
+        .interfaces
+        .iter()
+        .flat_map(|(_, iface)| iface.functions.values())
+        .chain(
+            resolve
+                .worlds
+                .iter()
+                .flat_map(|(_, world)| world.imports.values().chain(world.exports.values()))
+                .filter_map(|item| {
+                    if let wit_parser::WorldItem::Function(function) = item {
+                        Some(function)
+                    } else {
+                        None
+                    }
+                }),
+        );
+    for function in functions {
+        ensure!(
+            function.kind.accessor().is_none(),
+            "WIT accessor functions are not supported: {}",
+            function.name
+        );
+    }
+    Ok(())
+}
+
 pub fn generate_types(
     name: &str,
     resolve: Resolve,
@@ -101,6 +129,7 @@ pub fn generate_types(
     mut opts: TranspileOpts,
 ) -> Result<Vec<(String, Vec<u8>)>> {
     normalize_namespace_object_options(&mut opts)?;
+    ensure_supported_accessors(&resolve)?;
     let mut files = files::Files::default();
 
     ts_bindgen(name, &resolve, world_id, &opts, &mut files)
@@ -111,6 +140,17 @@ pub fn generate_types(
         files_out.push((name.to_string(), source.to_vec()));
     }
     Ok(files_out)
+}
+
+/// Validate a core module or component without extracting a WIT interface.
+///
+/// This checks untrusted binary input before decoding it or generating bindings.
+/// Feature availability for a selected JS target is checked during translation.
+pub fn validate_component(bytes: &[u8]) -> Result<()> {
+    wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+        .validate_all(bytes)
+        .context("failed to validate WebAssembly binary")?;
+    Ok(())
 }
 
 /// Generate the JS transpilation bindgen for a given Wasm component binary
@@ -129,6 +169,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     use wasmtime_environ::component::{Component, Translator};
 
     normalize_transpile_config(&mut config)?;
+    validate_component(component)?;
     let TranspileConfig {
         mut opts,
         #[cfg(feature = "external-runtime")]
@@ -152,6 +193,8 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         DecodedWasm::WitPackage(_, _) => bail!("unexpected wit package as input"),
         DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
     };
+
+    ensure_supported_accessors(&resolve)?;
 
     // Components are complicated, there's no real way around that. To
     // handle all the work of parsing a component and figuring out how to
@@ -185,7 +228,9 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         | WasmFeatures::CM_FIXED_LENGTH_LISTS
         | WasmFeatures::CM_MAP
         | WasmFeatures::CM_IMPLEMENTS
-        | WasmFeatures::CM_THREADING;
+        | WasmFeatures::CM_THREADING
+        | WasmFeatures::CM_CANON_NAMES
+        | WasmFeatures::CM_FORWARD;
 
     // Unless the target engine is known to support the exception handling
     // proposal, mask exception handling off: with the feature enabled,
