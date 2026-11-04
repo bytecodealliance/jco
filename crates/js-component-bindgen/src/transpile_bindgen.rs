@@ -4474,7 +4474,14 @@ impl<'a> Instantiator<'a, '_> {
                     }
                     FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => import_name,
 
-                    _ => unreachable!("accessors rejected before code generation"),
+                    FunctionKind::Getter
+                    | FunctionKind::Setter
+                    | FunctionKind::MethodGetter(_)
+                    | FunctionKind::MethodSetter(_)
+                    | FunctionKind::StaticGetter(_)
+                    | FunctionKind::StaticSetter(_) => {
+                        unreachable!("accessors rejected before code generation")
+                    }
                 }
             },
             implements.as_deref(),
@@ -4556,7 +4563,14 @@ impl<'a> Instantiator<'a, '_> {
                 CallType::Standard,
             ),
 
-            _ => unreachable!("accessors rejected before code generation"),
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("accessors rejected before code generation")
+            }
         };
 
         // A function's interface type can be async while its canonical lower is
@@ -4712,7 +4726,14 @@ impl<'a> Instantiator<'a, '_> {
                     )
                 }
 
-                _ => unreachable!("accessors rejected before code generation"),
+                FunctionKind::Getter
+                | FunctionKind::Setter
+                | FunctionKind::MethodGetter(_)
+                | FunctionKind::MethodSetter(_)
+                | FunctionKind::StaticGetter(_)
+                | FunctionKind::StaticSetter(_) => {
+                    unreachable!("accessors rejected before code generation")
+                }
             };
 
             // Save information about imported resources for later
@@ -4795,7 +4816,14 @@ impl<'a> Instantiator<'a, '_> {
                 (class_name, resource_name)
             }
 
-            _ => unreachable!("accessors rejected before code generation"),
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("accessors rejected before code generation")
+            }
         };
 
         self.ensure_import(
@@ -6072,7 +6100,14 @@ impl<'a> Instantiator<'a, '_> {
                             self.bindgen.local_names.create_once(&export_name)
                         }
 
-                        _ => unreachable!("accessors rejected before code generation"),
+                        FunctionKind::Getter
+                        | FunctionKind::Setter
+                        | FunctionKind::MethodGetter(_)
+                        | FunctionKind::MethodSetter(_)
+                        | FunctionKind::StaticGetter(_)
+                        | FunctionKind::StaticSetter(_) => {
+                            unreachable!("accessors rejected before code generation")
+                        }
                     });
 
                     let options = self
@@ -6107,7 +6142,14 @@ impl<'a> Instantiator<'a, '_> {
                             export_name.to_lower_camel_case()
                         }
 
-                        _ => unreachable!("accessors rejected before code generation"),
+                        FunctionKind::Getter
+                        | FunctionKind::Setter
+                        | FunctionKind::MethodGetter(_)
+                        | FunctionKind::MethodSetter(_)
+                        | FunctionKind::StaticGetter(_)
+                        | FunctionKind::StaticSetter(_) => {
+                            unreachable!("accessors rejected before code generation")
+                        }
                     };
 
                     // Add the export binding
@@ -6240,7 +6282,14 @@ impl<'a> Instantiator<'a, '_> {
                                 self.bindgen.local_names.create_once(&func_name)
                             }
 
-                            _ => unreachable!("accessors rejected before code generation"),
+                            FunctionKind::Getter
+                            | FunctionKind::Setter
+                            | FunctionKind::MethodGetter(_)
+                            | FunctionKind::MethodSetter(_)
+                            | FunctionKind::StaticGetter(_)
+                            | FunctionKind::StaticSetter(_) => {
+                                unreachable!("accessors rejected before code generation")
+                            }
                         });
 
                         let options = self
@@ -6276,7 +6325,14 @@ impl<'a> Instantiator<'a, '_> {
                                 func_name.to_lower_camel_case()
                             }
 
-                            _ => unreachable!("accessors rejected before code generation"),
+                            FunctionKind::Getter
+                            | FunctionKind::Setter
+                            | FunctionKind::MethodGetter(_)
+                            | FunctionKind::MethodSetter(_)
+                            | FunctionKind::StaticGetter(_)
+                            | FunctionKind::StaticSetter(_) => {
+                                unreachable!("accessors rejected before code generation")
+                            }
                         };
 
                         // Add the export binding
@@ -6370,7 +6426,14 @@ impl<'a> Instantiator<'a, '_> {
                 unreachable!("constructors cannot return futures")
             }
 
-            _ => unreachable!("accessors rejected before code generation"),
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("accessors rejected before code generation")
+            }
         });
 
         // Start building early variable declarations
@@ -6475,7 +6538,14 @@ impl<'a> Instantiator<'a, '_> {
                     "\n{local_name}.{method_name} = {maybe_async}function {fn_name}",
                 );
             }
-            _ => unreachable!("accessors rejected before code generation"),
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("accessors rejected before code generation")
+            }
         };
 
         // Perform bindgen
@@ -6490,7 +6560,14 @@ impl<'a> Instantiator<'a, '_> {
                 FunctionKind::AsyncFreestanding | FunctionKind::AsyncStatic(_) => {
                     CallType::AsyncStandard
                 }
-                _ => unreachable!("accessors rejected before code generation"),
+                FunctionKind::Getter
+                | FunctionKind::Setter
+                | FunctionKind::MethodGetter(_)
+                | FunctionKind::MethodSetter(_)
+                | FunctionKind::StaticGetter(_)
+                | FunctionKind::StaticSetter(_) => {
+                    unreachable!("accessors rejected before code generation")
+                }
             },
             iface_name: iface_name.map(|v| v.as_str()),
             callee: &callee,
@@ -6521,7 +6598,14 @@ impl<'a> Instantiator<'a, '_> {
             | FunctionKind::Method(_)
             | FunctionKind::Static(_) => self.src.js(";\n"),
             FunctionKind::Constructor(_) => self.src.js("\n}\n"),
-            _ => unreachable!("accessors rejected before code generation"),
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("accessors rejected before code generation")
+            }
         }
     }
 }

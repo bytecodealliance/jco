@@ -55,9 +55,6 @@ wat = [
 name = "wit_parser"
 path = "src/lib.rs"
 
-
-
-
 [dependencies.anyhow]
 version = "1.0.58"
 default-features = false

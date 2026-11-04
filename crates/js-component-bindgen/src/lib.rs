@@ -94,30 +94,26 @@ pub struct TranspileConfig {
     pub cm_runtime_es_module: Option<String>,
 }
 
-fn ensure_supported_accessors(resolve: &Resolve) -> Result<()> {
-    let functions = resolve
-        .interfaces
-        .iter()
-        .flat_map(|(_, iface)| iface.functions.values())
-        .chain(
-            resolve
-                .worlds
-                .iter()
-                .flat_map(|(_, world)| world.imports.values().chain(world.exports.values()))
-                .filter_map(|item| {
-                    if let wit_parser::WorldItem::Function(function) = item {
-                        Some(function)
-                    } else {
-                        None
-                    }
-                }),
-        );
-    for function in functions {
+fn ensure_supported_accessors(resolve: &Resolve, world: WorldId) -> Result<()> {
+    fn check(function: &Function) -> Result<()> {
         ensure!(
             function.kind.accessor().is_none(),
             "WIT accessor functions are not supported: {}",
             function.name
         );
+        Ok(())
+    }
+    let world = &resolve.worlds[world];
+    for item in world.imports.values().chain(world.exports.values()) {
+        match item {
+            wit_parser::WorldItem::Function(function) => check(function)?,
+            wit_parser::WorldItem::Interface { id, .. } => {
+                for function in resolve.interfaces[*id].functions.values() {
+                    check(function)?;
+                }
+            }
+            wit_parser::WorldItem::Type { .. } => {}
+        }
     }
     Ok(())
 }
@@ -129,7 +125,7 @@ pub fn generate_types(
     mut opts: TranspileOpts,
 ) -> Result<Vec<(String, Vec<u8>)>> {
     normalize_namespace_object_options(&mut opts)?;
-    ensure_supported_accessors(&resolve)?;
+    ensure_supported_accessors(&resolve, world_id)?;
     let mut files = files::Files::default();
 
     ts_bindgen(name, &resolve, world_id, &opts, &mut files)
@@ -210,7 +206,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
     };
 
-    ensure_supported_accessors(&resolve)?;
+    ensure_supported_accessors(&resolve, world_id)?;
 
     // Components are complicated, there's no real way around that. To
     // handle all the work of parsing a component and figuring out how to

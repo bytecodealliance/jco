@@ -14,6 +14,6 @@ Patches: use wasm-tools 0.263 parser/encoder and 0.262 printer; adapt parser API
 Source: https://crates.io/crates/wit-parser/0.262.0
 Published archive SHA256: `00f0dc051466ffe46787721fca3d088536f158ae400be044f1b1c386ba9397ad`
 
-Patch: decode direct component type exports into WIT world type exports, including resources and aliases.
+Patches: decode direct component type exports into WIT world type exports, including resources and aliases; omit core module and component-definition exports from the WIT host surface. Their module initialization and start functions remain part of normal component translation and execution.
 
 Upstream standalone test fixtures, examples, and development-only entry points are omitted; library source and license files are preserved. Remove these patches when compatible upstream releases incorporate the changes.

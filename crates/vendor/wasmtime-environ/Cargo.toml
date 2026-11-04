@@ -80,8 +80,6 @@ wmemcheck = ["std"]
 name = "wasmtime_environ"
 path = "src/lib.rs"
 
-
-
 [dependencies.anyhow]
 version = "1.0.103"
 default-features = false

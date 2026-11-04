@@ -443,7 +443,14 @@ fn interface_export(
                 .push(function.item_name().to_lower_camel_case()),
             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => unreachable!(),
 
-            _ => unreachable!("accessors rejected before code generation"),
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("accessors rejected before code generation")
+            }
         }
     }
 

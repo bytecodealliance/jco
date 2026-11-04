@@ -1308,7 +1308,14 @@ impl<'a> TsInterface<'a> {
                     iface.src.push_str(&escaped_name);
                 }
 
-                _ => unreachable!("accessors rejected before code generation"),
+                FunctionKind::Getter
+                | FunctionKind::Setter
+                | FunctionKind::MethodGetter(_)
+                | FunctionKind::MethodSetter(_)
+                | FunctionKind::StaticGetter(_)
+                | FunctionKind::StaticSetter(_) => {
+                    unreachable!("accessors rejected before code generation")
+                }
             }
         } else {
             iface.src.push_str(&escaped_name);
@@ -1325,7 +1332,14 @@ impl<'a> TsInterface<'a> {
             FunctionKind::AsyncMethod(_) => 1,
             FunctionKind::AsyncStatic(_) => 0,
 
-            _ => unreachable!("accessors rejected before code generation"),
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("accessors rejected before code generation")
+            }
         };
 
         for (i, p) in func.params[param_start..].iter().enumerate() {
