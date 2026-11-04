@@ -10,6 +10,7 @@ import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../..
 import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime/intrinsics/resource.js';
 import upstreamManifest from '../../../fixtures/wast/upstream-manifest.json' with { type: 'json' };
 import type { TranspilationOptions } from '../../../../src/transpile.js';
+import { validate as validateWasm, $init as initBindgen } from '../../../../vendor/js-component-bindgen-component.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
@@ -325,7 +326,10 @@ suite('component-model WAST', () => {
                     instance,
                     instantiate: async (artifact) => (await loadArtifact(artifact))(),
                     validate: async (artifact) => {
-                        await loadArtifact(artifact);
+                        const artifactPath = artifactPaths.get(artifact);
+                        assert(artifactPath, 'WAST requested an unknown artifact');
+                        await initBindgen;
+                        validateWasm(await readComponentBytes(artifactPath));
                     },
                     assert,
                     expect,

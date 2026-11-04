@@ -171,7 +171,11 @@ fn convert_wast_file(
                         writeln!(
                             output_js,
                             "await expect(() => validate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});",
-                            js_string(message)?,
+                            if message.is_empty() {
+                                String::new()
+                            } else {
+                                js_string(message)?
+                            },
                         )?;
                     }
                     Err(error) => {
@@ -196,7 +200,11 @@ fn convert_wast_file(
                     r#"
                           await expect(() => validate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});
                         "#,
-                    js_string(message)?,
+                    if message.is_empty() {
+                        String::new()
+                    } else {
+                        js_string(message)?
+                    },
                 )?;
             }
             wast::WastDirective::Register { .. } => {
@@ -1019,7 +1027,7 @@ mod tests {
                 b"\0asm\x0d\0\x01\0"
             );
             let script = fs::read_to_string(path.with_extension("wast.js"))?;
-            ensure!(script.contains("validate(wastTestArtifacts[0])).rejects.toThrow(\"\")"));
+            ensure!(script.contains("validate(wastTestArtifacts[0])).rejects.toThrow()"));
             ensure!(!script.contains("assert_malformed text diagnostic"));
             Ok(())
         })
