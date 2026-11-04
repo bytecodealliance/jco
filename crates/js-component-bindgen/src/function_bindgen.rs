@@ -235,6 +235,10 @@ pub struct FunctionBindgen<'a> {
     /// and in the case of an export this is simply code generation metadata.
     pub requires_async_porcelain: bool,
 
+    /// Whether an explicit legacy async-export option permits a sync-typed task to block.
+    #[builder(default)]
+    pub manual_async: bool,
+
     /// Whether the function is guest async lifted (i.e. WASI P3)
     pub is_async: bool,
 
@@ -739,7 +743,7 @@ impl FunctionBindgen<'_> {
             return;
         }
         let is_async = self.is_async;
-        let is_manual_async = self.requires_async_porcelain;
+        let is_manual_async = self.manual_async;
         let preserve_future_result = self.wrap_async_future_result;
         let fn_name = self.callee;
         let err_handling = self.err.to_js_string();

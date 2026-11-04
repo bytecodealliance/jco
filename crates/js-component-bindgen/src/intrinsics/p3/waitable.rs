@@ -123,7 +123,16 @@ pub enum WaitableIntrinsic {
 impl WaitableIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        []
+        [
+            Self::RemoveWaitableSet.name(),
+            Self::WaitableSetNew.name(),
+            Self::WaitableSetWait.name(),
+            Self::WaitableSetPoll.name(),
+            Self::WaitableSetDrop.name(),
+            Self::WaitableJoin.name(),
+            Self::WaitableSetClass.name(),
+            Self::WaitableClass.name(),
+        ]
     }
 
     /// Get the name for the intrinsic
@@ -318,6 +327,8 @@ impl WaitableIntrinsic {
             }
 
             Self::WaitableClass => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let waitable_class = render_args.require_intrinsic(Self::WaitableClass);
                 let promise_with_resolvers_fn =
@@ -336,7 +347,7 @@ impl WaitableIntrinsic {
 
                         #waitableSet = null;
 
-                        #hasSyncWaiter = false;
+                        #syncUses = 0;
 
                         #idx = null; // to component-global waitables
 
@@ -351,6 +362,28 @@ impl WaitableIntrinsic {
 
                         componentIdx() {{ return this.#componentIdx; }}
                         isInSet() {{ return this.#waitableSet !== null; }}
+
+                        assertNoSyncWaiter(message = 'waitable already has a synchronous waiter') {{
+                            if (this.#syncUses > 0) {{ throw new {runtime_error_class}(message); }}
+                        }}
+
+                        assertSyncUsable() {{
+                            if (this.isInSet()) {{
+                                throw new {runtime_error_class}('waitable cannot be used synchronously while added to a waitable set');
+                            }}
+                        }}
+
+                        withSyncUse(fn) {{
+                            this.assertSyncUsable();
+                            this.#syncUses++;
+                            let result;
+                            try {{ result = fn(); }} catch (err) {{ this.#syncUses--; throw err; }}
+                            if (result && typeof result.then === 'function') {{
+                                return Promise.resolve(result).finally(() => {{ this.#syncUses--; }});
+                            }}
+                            this.#syncUses--;
+                            return result;
+                        }}
 
                         idx() {{ return this.#idx; }}
                         setIdx(idx) {{
@@ -410,6 +443,9 @@ impl WaitableIntrinsic {
                                 isRemoval: waitableSet === null,
                             }});
 
+                            if (waitableSet !== null && this.#syncUses > 0) {{
+                                throw new {runtime_error_class}('waitable cannot be used synchronously while added to a waitable set');
+                            }}
                             if (this.#waitableSet === undefined) {{
                                 throw new TypeError('waitable set must be not be undefined');
                             }}
@@ -437,15 +473,10 @@ impl WaitableIntrinsic {
                             const {{ cstate }} = args;
                             if (!cstate) {{ throw new TypeError('missing component state'); }}
 
-                            if (this.#waitableSet !== null || this.#hasSyncWaiter) {{
-                                throw new Error("waitable is already in a set/has a sync waiter");
-                            }}
-                            this.#hasSyncWaiter = true;
-                            await cstate.waitUntil({{
+                            return this.withSyncUse(() => cstate.waitUntil({{
                                 cancellable: false,
                                 readyFn: () => this.hasPendingEvent(),
-                            }});
-                            this.#hasSyncWaiter = false;
+                            }}));
                         }}
 
                     }}
@@ -709,6 +740,7 @@ impl WaitableIntrinsic {
                             throw new {runtime_error_class}("handle does not name a waitable");
                         }}
 
+                        waitable.assertNoSyncWaiter('waitable cannot be used synchronously while added to a waitable set');
                         const waitableSet = waitableSetRep === 0 ? null : state.handles.get(waitableSetRep);
                         if (waitableSetRep !== 0 && !(waitableSet instanceof {waitable_set_class})) {{
                             throw new {runtime_error_class}(`missing waitable set [${{waitableSetRep}}] in component idx [${{componentIdx}}]`);

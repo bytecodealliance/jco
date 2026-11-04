@@ -808,6 +808,7 @@ impl AsyncStreamIntrinsic {
                             if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
                                 throw new Error(`stream copy state is not idle`);
                             }}
+                            this.#copyToken = {{}};
                         }}
 
                         const elemMeta = args.elemMeta ?? this.getElemMeta();
@@ -1631,6 +1632,9 @@ impl AsyncStreamIntrinsic {
                         #elemMeta = null;
                         // held by both write and read ends
                         #pendingBufferMeta = null;
+                        // The shared pending buffer can move between peers during
+                        // rendezvous/forwarding. Track this end's operation separately.
+                        #copyToken = null;
 
                         // table index that the stream is in (can change after a stream transfer)
                         #streamTableIdx;
@@ -1736,8 +1740,11 @@ impl AsyncStreamIntrinsic {
 
                         cancel() {{
                             {debug_log_fn}('[{stream_end_class}#cancel()]');
+                            const copyToken = this.#copyToken;
                             const completeCancel = () => {{
                                 if (this.isDropped()) {{ return; }}
+                                if (this.#copyToken !== copyToken
+                                    || this.getCopyState() !== {stream_end_class}.CopyState.CANCELLING_COPY) {{ return; }}
                                 // Host injection may complete the copy before this deferred
                                 // cancellation runs. Preserve that completion event instead of
                                 // cancelling the next operation or starting a duplicate write.
@@ -2347,6 +2354,8 @@ impl AsyncStreamIntrinsic {
                             throw new {runtime_error_class}(message);
                         }}
 
+                        const perform = () => {{
+
                         // Validate before copy's early return for a dropped peer, too.
                         const memory = getMemoryFn?.();
                         {managed_buffer_class}.validateGuestBuffer(memory, ptr, count, elemMeta ?? streamEnd.getElemMeta());
@@ -2378,6 +2387,8 @@ impl AsyncStreamIntrinsic {
                             elemMeta,
                             deferSyncFinish,
                         }});
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : streamEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#));
             }
@@ -2419,6 +2430,12 @@ impl AsyncStreamIntrinsic {
                         if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
+                        streamEnd.getWaitable().assertNoSyncWaiter();
+                        if (!ctx.resumeCancel && streamEnd.getCopyState() === {stream_end_class}.CopyState.CANCELLING_COPY) {{
+                            throw new {runtime_error_class}('cannot cancel stream while cancellation is already in progress');
+                        }}
+                        const perform = () => {{
+
                         if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
 
                         streamEnd.setCopyState({stream_end_class}.CopyState.CANCELLING_COPY);
@@ -2455,6 +2472,8 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         return finishCancel();
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : streamEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#));
             }

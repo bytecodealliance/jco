@@ -746,6 +746,7 @@ impl HostIntrinsic {
                         // one that exited without `task.return`) traps its caller as well,
                         // as in the Canonical ABI: the call does not return a subtask
                         // state that implies a cancellation nobody requested.
+                        calleeComponentState.throwIfInterrupted();
                         const calleeTrap = preparedTask.isErrored() ?? subtask.getParentTask().isErrored();
                         if (calleeTrap) {{ throw calleeTrap; }}
 
