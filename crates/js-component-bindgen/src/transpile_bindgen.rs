@@ -7469,7 +7469,10 @@ pub fn gen_flat_lift_fn_js_expr(
                                 let empty_func = JsHelperIntrinsic::EmptyFunc.name();
                                 let symbol_resource_handle = Intrinsic::SymbolResourceHandle.name();
                                 let symbol_dispose = Intrinsic::SymbolDispose.name();
-                                let tid = tid.as_u32();
+                                // Imported resource metadata is shared by type and may
+                                // describe another instance's table. Lift the handle
+                                // from the table specified by this own<T> payload.
+                                let tid = if *imported { table_idx } else { tid.as_u32() };
                                 let rsc_table_remove = instantiator.bindgen.runtime().call(
                                     Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
                                     &format!("handleTable{tid}, handle"),
