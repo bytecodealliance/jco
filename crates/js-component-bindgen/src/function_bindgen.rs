@@ -465,6 +465,21 @@ impl FunctionBindgen<'_> {
         );
     }
 
+    fn emit_realloc_check(&mut self, ptr: &str, len: &str, size: usize, align: usize) {
+        let runtime_error = self.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+        let memory = self.memory.as_ref().unwrap();
+        uwriteln!(
+            self.src,
+            r#"
+            {ptr} >>>= 0;
+            if ({ptr} % {align} !== 0) {{ throw new {runtime_error}('realloc return: result not aligned'); }}
+            if ({ptr} > {memory}.buffer.byteLength || {len} > Math.floor(({memory}.buffer.byteLength - {ptr}) / {size})) {{
+                throw new {runtime_error}('realloc return: beyond end of memory');
+            }}
+        "#
+        );
+    }
+
     fn emit_list_bounds_check(&mut self, ptr: &str, len: &str, element_size: usize) {
         const MAX_LIST_BYTE_LENGTH: usize = (1 << 28) - 1;
 
@@ -1770,7 +1785,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     ConversionIntrinsic::RequireValidNumericPrimitive,
                 ));
                 let tmp = self.tmp();
-                let memory = self.memory.as_ref().unwrap();
+                let memory = self.memory.as_ref().unwrap().to_string();
                 let realloc = self.realloc.unwrap();
 
                 // Alias the list to a local variable
@@ -1798,6 +1813,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         realloc.to_string()
                     },
                 );
+                self.emit_realloc_check(&format!("ptr{tmp}"), &format!("len{tmp}"), size, align);
 
                 // Determine what methods to use with a DataView when setting the data
                 let (dataview_set_method, check_fn_intrinsic) =
@@ -1909,19 +1925,46 @@ impl Bindgen for FunctionBindgen<'_> {
                     StringEncoding::UTF16 => Intrinsic::String(StringIntrinsic::Utf16Decoder),
                     _ => Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8),
                 });
+                let decode_utf8 = (self.encoding == StringEncoding::UTF8)
+                    .then(|| self.intrinsic(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8)));
                 let tmp = self.tmp();
-                let memory = self.memory.as_ref().unwrap();
                 uwriteln!(self.src, "var ptr{tmp} = {} >>> 0;", operands[0]);
-                uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
+                uwriteln!(self.src, "var len{tmp} = {} >>> 0;", operands[1]);
+                let runtime_error = self.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let memory = self.memory.as_ref().unwrap();
+                let unit_size = if self.encoding == StringEncoding::UTF16 {
+                    2
+                } else {
+                    1
+                };
+                if self.encoding == StringEncoding::UTF16 {
+                    uwriteln!(
+                        self.src,
+                        "if (ptr{tmp} % 2 !== 0) throw new {runtime_error}('wasm trap: unaligned pointer');"
+                    );
+                }
                 uwriteln!(
                     self.src,
-                    "var result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
+                    r#"
+                    if (ptr{tmp} > {memory}.buffer.byteLength || len{tmp} > Math.floor(({memory}.buffer.byteLength - ptr{tmp}) / {unit_size})) {{
+                        throw new {runtime_error}('string pointer/length out of bounds of memory');
+                    }}
+                "#
+                );
+
+                let buffer = format!(
+                    "new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp})",
                     if self.encoding == StringEncoding::UTF16 {
                         "16"
                     } else {
                         "8"
-                    }
+                    },
                 );
+                let decode = match decode_utf8 {
+                    Some(decode_utf8) => format!("{decode_utf8}({decoder}, {buffer})"),
+                    None => format!("{decoder}.decode({buffer})"),
+                };
+                uwriteln!(self.src, "var result{tmp} = {decode};");
                 let code_unit_size = if self.encoding == StringEncoding::UTF16 {
                     2
                 } else {
@@ -1962,6 +2005,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         realloc.to_string()
                     },
                 );
+                self.emit_realloc_check(&result, &len, size, align);
 
                 // ... then consume the vector and use the block to lower the
                 // result.

@@ -18,6 +18,9 @@ use super::conversion::ConversionIntrinsic;
 /// This enum contains intrinsics that enable Lift
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum LiftIntrinsic {
+    /// Decode UTF-8 with the selected codec and canonicalize malformed guest data.
+    DecodeUtf8,
+
     /// Lift a boolean into provided storage, given a core type
     ///
     /// This function is of the form:
@@ -212,12 +215,13 @@ pub enum LiftIntrinsic {
 impl LiftIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        []
+        [Self::DecodeUtf8.name()]
     }
 
     /// Get the name for the intrinsic
     pub fn name(&self) -> &'static str {
         match self {
+            Self::DecodeUtf8 => "_decodeUtf8",
             Self::LiftFlatBool => "_liftFlatBool",
             Self::LiftFlatS8 => "_liftFlatS8",
             Self::LiftFlatU8 => "_liftFlatU8",
@@ -253,6 +257,47 @@ impl LiftIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
+            Self::DecodeUtf8 => {
+                let name = self.name();
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}(decoder, input) {{
+                        try {{ return decoder.decode(input); }} catch (error) {{
+                            if (!(error instanceof TypeError)) {{ throw error; }}
+                            let bytes;
+                            try {{
+                                bytes = ArrayBuffer.isView(input)
+                                    ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+                                    : new Uint8Array(input);
+                            }} catch {{ throw error; }}
+                            // Preserve provider errors for valid input. Fatal codecs
+                            // do not distinguish malformed data from a truncated prefix.
+                            for (let i = 0; i < bytes.length; i++) {{
+                                const lead = bytes[i];
+                                if (lead < 0x80) {{ continue; }}
+                                const count = lead >= 0xc2 && lead <= 0xdf ? 1
+                                    : lead >= 0xe0 && lead <= 0xef ? 2
+                                    : lead >= 0xf0 && lead <= 0xf4 ? 3 : -1;
+                                if (count < 0) {{ throw new {runtime_error}('invalid utf-8'); }}
+                                for (let j = 1; j <= count; j++) {{
+                                    if (i + j >= bytes.length) {{ throw new {runtime_error}('incomplete utf-8 byte sequence'); }}
+                                    const byte = bytes[i + j];
+                                    if (byte < 0x80 || byte > 0xbf || (j === 1 && (
+                                        (lead === 0xe0 && byte < 0xa0) || (lead === 0xed && byte > 0x9f) ||
+                                        (lead === 0xf0 && byte < 0x90) || (lead === 0xf4 && byte > 0x8f)
+                                    ))) {{ throw new {runtime_error}('invalid utf-8'); }}
+                                }}
+                                i += count;
+                            }}
+                            throw error;
+                        }}
+                    }}
+                "#
+                );
+            }
             Self::LiftFlatBool => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lift_flat_bool_fn = self.name();
@@ -681,9 +726,12 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStringUtf8 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let decoder = render_args
                     .require_intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
                 let lift_flat_string_utf8_fn = self.name();
+                let decode_utf8 = render_args.require_intrinsic(Self::DecodeUtf8);
 
                 output.push_str(&format!(r#"
                     function {lift_flat_string_utf8_fn}(ctx) {{
@@ -697,7 +745,11 @@ impl LiftIntrinsic {
                             if (!Number.isSafeInteger(offset)) {{ throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
-                            val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len));
+                            if (offset % 1 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                            if (offset > ctx.memory.buffer.byteLength || len < 0 || len > Math.floor((ctx.memory.buffer.byteLength - offset) / 1)) {{
+                                throw new {runtime_error}('string pointer/length out of bounds of memory');
+                            }}
+                            val = {decode_utf8}({decoder}, new DataView(ctx.memory.buffer, offset, len));
                             ctx.params = ctx.params.slice(2);
                             return [val, ctx];
                         }}
@@ -709,7 +761,11 @@ impl LiftIntrinsic {
                         const start = dv.getUint32(ctx.storagePtr, true);
                         const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
 
-                        val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
+                        if (start % 1 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                        if (start > ctx.memory.buffer.byteLength || codeUnits > Math.floor((ctx.memory.buffer.byteLength - start) / 1)) {{
+                            throw new {runtime_error}('string pointer/length out of bounds of memory');
+                        }}
+                        val = {decode_utf8}({decoder}, new Uint8Array(ctx.memory.buffer, start, codeUnits));
 
                         ctx.storagePtr += 8;
                         if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 8; }}
@@ -721,6 +777,8 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStringUtf16 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let decoder =
                     render_args.require_intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder));
                 let lift_flat_string_utf16_fn = self.name();
@@ -736,6 +794,10 @@ impl LiftIntrinsic {
                             if (!Number.isSafeInteger(offset)) {{  throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
+                            if (offset % 2 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                            if (offset > ctx.memory.buffer.byteLength || len < 0 || len > Math.floor((ctx.memory.buffer.byteLength - offset) / 2)) {{
+                                throw new {runtime_error}('string pointer/length out of bounds of memory');
+                            }}
                             val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len * 2));
                             ctx.params = ctx.params.slice(2);
                             return [val, ctx];
@@ -748,6 +810,10 @@ impl LiftIntrinsic {
                         const start = dv.getUint32(ctx.storagePtr, true);
                         const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
 
+                        if (start % 2 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                        if (start > ctx.memory.buffer.byteLength || codeUnits > Math.floor((ctx.memory.buffer.byteLength - start) / 2)) {{
+                            throw new {runtime_error}('string pointer/length out of bounds of memory');
+                        }}
                         val = {decoder}.decode(new DataView(ctx.memory.buffer, start, codeUnits * 2));
 
                         ctx.storagePtr += 8;
