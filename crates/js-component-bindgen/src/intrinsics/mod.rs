@@ -2728,12 +2728,17 @@ mod tests {
         let default_source = render(false);
         assert!(default_source.contains("val[name] = (bits & 1) === 1;"));
         assert!(default_source.contains("const flagObj = ctx.vals[0];"));
-        assert!(!default_source.contains("val = BigInt(bits >>> 0);"));
+        assert!(!default_source.contains("val = BigInt("));
 
         let bigint_source = render(true);
-        assert!(bigint_source.contains("val = BigInt(bits >>> 0);"));
+        // Partial flag words discard undeclared upper bits; a full 32-bit
+        // word must retain its unsigned high bit when converted to bigint.
+        assert!(bigint_source.contains(
+            "val = BigInt(names.length < 32 ? bits & (2 ** names.length - 1) : bits >>> 0);"
+        ));
         assert!(bigint_source.contains("typeof bigintFlags !== 'bigint'"));
         assert!(!bigint_source.contains("const flagObj = ctx.vals[0];"));
+        assert!(!bigint_source.contains("val[name] = (bits & 1) === 1;"));
     }
 }
 
