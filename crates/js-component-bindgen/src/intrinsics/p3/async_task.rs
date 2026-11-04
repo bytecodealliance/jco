@@ -143,6 +143,9 @@ pub enum AsyncTaskIntrinsic {
     /// thread-meta register, throwing if there is none (shared `thread.*` prologue)
     CurrentThreadOrThrow,
 
+    /// Reject a synchronous blocking boundary before entering a JSPI slow path.
+    CheckSyncTaskCanSuspend,
+
     /// Function that creates a new implicit thread, and marks it as the current executing thread
     CreateNewCurrentImplicitThread,
 
@@ -292,6 +295,7 @@ impl AsyncTaskIntrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
             Self::CurrentTaskMayBlock.name(),
+            Self::CheckSyncTaskCanSuspend.name(),
             Self::AsyncBlockingCallDepth.name(),
             Self::AsyncBlockedConstant.name(),
             Self::AsyncSubtaskClass.name(),
@@ -334,6 +338,7 @@ impl AsyncTaskIntrinsic {
     pub fn name(&self) -> &'static str {
         match self {
             Self::CurrentTaskMayBlock => "CURRENT_TASK_MAY_BLOCK",
+            Self::CheckSyncTaskCanSuspend => "checkSyncTaskCanSuspend",
             Self::AsyncBlockingCallDepth => "ASYNC_BLOCKING_CALL_DEPTH",
             Self::AsyncBlockedConstant => "ASYNC_BLOCKED_CODE",
             Self::AsyncSubtaskClass => "AsyncSubtask",
@@ -375,6 +380,24 @@ impl AsyncTaskIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
+            Self::CheckSyncTaskCanSuspend => {
+                let check = self.name();
+                let current_thread = render_args.require_intrinsic(Self::CurrentThreadOrThrow);
+                let get_state =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(r#"
+                    function {check}(componentIdx, resumeTarget) {{
+                        const {{ thread, task }} = {current_thread}(componentIdx);
+                        const boundary = task.blockingBoundary();
+                        if (boundary && !{get_state}(boundary.componentIdx()).hasReadyThread(thread)
+                            && resumeTarget?.componentIdx() !== boundary.componentIdx()) {{
+                            throw new {runtime_error}('cannot block a synchronous task before returning');
+                        }}
+                    }}
+                "#));
+            }
             Self::CurrentTaskMayBlock => {
                 let var_name = self.name();
                 uwriteln!(
@@ -704,6 +727,7 @@ impl AsyncTaskIntrinsic {
                             {get_or_create_async_state_fn}(componentIdx).runTickLoop();
                             return isCancellable && thread.isCancelled() ? 1 : 0;
                         }}
+                        if (ctx.syncFastOnly) {{ return -2; }}
 
                         // A canonical thread.yield must give the scheduler a chance to
                         // run other work before reporting NOT_CANCELLED. Unlike an
@@ -741,23 +765,25 @@ impl AsyncTaskIntrinsic {
             // targets it via `thread.resume-later` -- unlike `thread.yield`,
             // it is never spontaneously ready on its own.
             Self::ThreadSuspend => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(Self::CheckSyncTaskCanSuspend);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_suspend_fn = self.name();
                 let current_thread_or_throw_fn =
                     render_args.require_intrinsic(Self::CurrentThreadOrThrow);
                 output.push_str(&format!(
                     "
-                    async function {thread_suspend_fn}(ctx) {{
+                    function {thread_suspend_fn}(ctx) {{
                         {debug_log_fn}('[{thread_suspend_fn}()] args', {{ ctx }});
                         const {{ componentIdx, isCancellable }} = ctx;
                         const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
-                        const keepGoing = await thread.suspend({{
+                        if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx); return -2; }}
+                        return thread.suspend({{
                             cancellable: isCancellable,
                             suspended: true,
                             readyFn: () => false,
-                        }});
-                        return keepGoing ? 0 : 1;
+                        }}).then(keepGoing => keepGoing ? 0 : 1);
                     }}
                 "
                 ));
@@ -893,6 +919,8 @@ impl AsyncTaskIntrinsic {
             // target so its continuation cannot race ahead and observe this
             // thread as still running.
             Self::ThreadSuspendThenResume | Self::ThreadYieldThenResume => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(Self::CheckSyncTaskCanSuspend);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
                 let current_thread_or_throw_fn =
@@ -922,6 +950,7 @@ impl AsyncTaskIntrinsic {
                         if (!other || other === thread || !cstate.isThreadSuspended(other)) {{
                             throw new {runtime_error_class}('cannot resume thread which is not suspended');
                         }}
+                        if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx, other); return -2; }}
 
                         const suspension = thread.suspend({{
                             cancellable: isCancellable,
@@ -944,6 +973,8 @@ impl AsyncTaskIntrinsic {
             // above; otherwise ignore `other` entirely and fall back to a
             // plain `thread.suspend`/`thread.yield`.
             Self::ThreadSuspendThenPromote | Self::ThreadYieldThenPromote => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(Self::CheckSyncTaskCanSuspend);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
                 let current_thread_or_throw_fn =
@@ -983,6 +1014,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         if (cstate.isThreadReady(other)) {{
+                            if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx, other); return -2; }}
                             const suspension = thread.suspend({{
                                 cancellable: isCancellable,
                                 suspended: {self_suspended},

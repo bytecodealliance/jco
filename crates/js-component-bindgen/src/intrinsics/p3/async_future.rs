@@ -1545,6 +1545,8 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureWrite | Self::FutureRead => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CheckSyncTaskCanSuspend);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -1647,6 +1649,7 @@ impl AsyncFutureIntrinsic {
                         // without entering JSPI. Probe before registering a blocked
                         // copy so the suspending path starts the operation once.
                         if (ctx.syncFastOnly && !futureEnd.isPeerDropped() && !futureEnd.getPendingBufferMeta().buffer) {{
+                            {check_sync_suspend}(componentIdx);
                             return {async_blocked_const};
                         }}
 
@@ -1699,6 +1702,8 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureCancelRead | Self::FutureCancelWrite => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CheckSyncTaskCanSuspend);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
@@ -1767,7 +1772,10 @@ impl AsyncFutureIntrinsic {
                             if (!ctx.resumeCancel) {{ futureEnd.cancel(); }}
 
                             if (!futureEnd.hasPendingEvent()) {{
-                                if (isAsync) {{ return ctx.syncFastOnly ? -2 : {async_blocked_const}; }}
+                                if (isAsync) {{
+                                    if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx); return -2; }}
+                                    return {async_blocked_const};
+                                }}
 
                                 const taskMeta = {current_task_get_fn}(componentIdx);
                                 if (!taskMeta?.task) {{ throw new Error('missing current task while cancelling future'); }}

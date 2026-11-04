@@ -2074,7 +2074,12 @@ impl<'a> Instantiator<'a, '_> {
             self.src.js,
             r#"
             const trampoline{i} = {conditional}(
-                {guard}({instance}, () => {{ {check_leave}({instance}); return -2; }}),
+                {guard}({instance}, (...args) => {{
+                    {check_leave}({instance});
+                    return {concede_fn}({{
+                        isCancellable: {cancellable}, componentIdx: {instance}, syncFastOnly: true,
+                    }}, ...args);
+                }}),
                 {suspending_wrap_fn}({instance}, {concede_fn}.bind(null, {{
                     isCancellable: {cancellable},
                     componentIdx: {instance},

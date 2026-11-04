@@ -2330,6 +2330,8 @@ impl AsyncStreamIntrinsic {
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
+                let check_sync_suspend =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CheckSyncTaskCanSuspend);
                 output.push_str(&format!(r#"
                     function {stream_op_fn}(
                         ctx,
@@ -2403,6 +2405,7 @@ impl AsyncStreamIntrinsic {
                             && !streamEnd.hasPendingBuffer()) {{
                             // -2 tells the conditional trampoline to take its suspending
                             // slow path (a synchronous copy must block, never report BLOCKED).
+                            {check_sync_suspend}(componentIdx);
                             return 0xFFFFFFFE;
                         }}
 
@@ -2450,6 +2453,8 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
+                let check_sync_suspend =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CheckSyncTaskCanSuspend);
                 output.push_str(&format!(r#"
                     function {stream_cancel_fn}(ctx, streamEndWaitableIdx) {{
                         {debug_log_fn}('[{stream_cancel_fn}()] args', {{ ctx, streamEndWaitableIdx }});
@@ -2489,7 +2494,10 @@ impl AsyncStreamIntrinsic {
                             if (!ctx.resumeCancel) {{ streamEnd.cancel(); }}
 
                             if (!streamEnd.hasPendingEvent()) {{
-                                if (isAsync) {{ return ctx.syncFastOnly ? -2 : {async_blocked_const}; }}
+                                if (isAsync) {{
+                                    if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx); return -2; }}
+                                    return {async_blocked_const};
+                                }}
 
                                 const taskMeta = {current_task_get_fn}(componentIdx);
                                 if (!taskMeta) {{ throw new Error('missing current task metadata while doing stream transfer'); }}
