@@ -142,12 +142,28 @@ pub fn generate_types(
     Ok(files_out)
 }
 
+fn component_features() -> WasmFeatures {
+    WasmFeatures::WASM3
+        | WasmFeatures::WIDE_ARITHMETIC
+        | WasmFeatures::COMPONENT_MODEL
+        | WasmFeatures::CM_ASYNC
+        | WasmFeatures::CM_MORE_ASYNC_BUILTINS
+        | WasmFeatures::CM_ASYNC_STACKFUL
+        | WasmFeatures::CM_ERROR_CONTEXT
+        | WasmFeatures::CM_FIXED_LENGTH_LISTS
+        | WasmFeatures::CM_MAP
+        | WasmFeatures::CM_IMPLEMENTS
+        | WasmFeatures::CM_THREADING
+        | WasmFeatures::CM_CANON_NAMES
+        | WasmFeatures::CM_FORWARD
+}
+
 /// Validate a core module or component without extracting a WIT interface.
 ///
 /// This checks untrusted binary input before decoding it or generating bindings.
 /// Feature availability for a selected JS target is checked during translation.
 pub fn validate_component(bytes: &[u8]) -> Result<()> {
-    wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+    wasmparser::Validator::new_with_features(component_features())
         .validate_all(bytes)
         .context("failed to validate WebAssembly binary")?;
     Ok(())
@@ -218,19 +234,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     //
     // This does not require the correct execution of the related features post-transpilation,
     // but without the right features specified, components won't load at all.
-    let mut features = WasmFeatures::WASM3
-        | WasmFeatures::WIDE_ARITHMETIC
-        | WasmFeatures::COMPONENT_MODEL
-        | WasmFeatures::CM_ASYNC
-        | WasmFeatures::CM_MORE_ASYNC_BUILTINS
-        | WasmFeatures::CM_ASYNC_STACKFUL
-        | WasmFeatures::CM_ERROR_CONTEXT
-        | WasmFeatures::CM_FIXED_LENGTH_LISTS
-        | WasmFeatures::CM_MAP
-        | WasmFeatures::CM_IMPLEMENTS
-        | WasmFeatures::CM_THREADING
-        | WasmFeatures::CM_CANON_NAMES
-        | WasmFeatures::CM_FORWARD;
+    let mut features = component_features();
 
     // Unless the target engine is known to support the exception handling
     // proposal, mask exception handling off: with the feature enabled,

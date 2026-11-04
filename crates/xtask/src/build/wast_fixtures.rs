@@ -4,15 +4,26 @@ use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+use wasmparser::component_types::{ComponentDefinedType, ComponentEntityType, ComponentValType};
+use wasmparser::types::Types;
 use wast::core::WastRetCore;
 
 struct WastArtifact {
     file_name: String,
     kind: &'static str,
+    types: Option<Types>,
 }
 
 fn js_string(value: &str) -> Result<String> {
     serde_json::to_string(value).context("failed to encode JavaScript string")
+}
+
+fn js_expected_message(message: &str) -> Result<String> {
+    if message.is_empty() {
+        Ok(String::new())
+    } else {
+        js_string(message)
+    }
 }
 
 fn js_export_name(name: &str) -> Result<String> {
@@ -69,6 +80,8 @@ fn convert_wast_file(
     let mut primary_module_seen = false;
     let mut artifacts = Vec::new();
     let mut definitions = HashMap::new();
+    let mut current_artifact = None;
+    let mut named_artifacts = HashMap::new();
     for directive in parsed.directives {
         match directive {
             wast::WastDirective::Module(mut quote_wat) => {
@@ -101,13 +114,16 @@ fn convert_wast_file(
                     artifacts.push(WastArtifact {
                         file_name: artifact_file_name(&artifact_path)?,
                         kind: encoded_kind(&encoded)?,
+                        types: artifact_types(&encoded),
                     });
                 }
+                current_artifact = Some(artifact_idx);
                 writeln!(
                     output_js,
                     "currentInstance = await instantiate(wastTestArtifacts[{artifact_idx}]);"
                 )?;
                 if let Some(name) = definition_name {
+                    named_artifacts.insert(name.clone(), artifact_idx);
                     writeln!(
                         output_js,
                         "namedInstances.set({}, currentInstance);",
@@ -139,11 +155,13 @@ fn convert_wast_file(
                         .map_or("<unnamed>".to_owned(), |name| format!("${name}"));
                     format!("unknown WAST module/component definition {name}")
                 })?;
+                current_artifact = Some(artifact_idx);
                 writeln!(
                     output_js,
                     "currentInstance = await instantiate(wastTestArtifacts[{artifact_idx}]);"
                 )?;
                 if let Some(instance) = instance {
+                    named_artifacts.insert(instance.name().to_string(), artifact_idx);
                     writeln!(
                         output_js,
                         "namedInstances.set({}, currentInstance);",
@@ -200,27 +218,35 @@ fn convert_wast_file(
                     r#"
                           await expect(() => validate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});
                         "#,
-                    if message.is_empty() {
-                        String::new()
-                    } else {
-                        js_string(message)?
-                    },
+                    js_expected_message(message)?,
                 )?;
             }
             wast::WastDirective::Register { .. } => {
                 bail!("unsupported directive Register")
             }
             wast::WastDirective::Invoke(invoke) => {
+                let artifact = invoked_artifact(
+                    &artifacts,
+                    current_artifact,
+                    &named_artifacts,
+                    invoke.module,
+                );
                 writeln!(
                     output_js,
                     "await getInstance({})[{}]({});",
                     invocation_instance_name(invoke.module)?,
                     js_export_name(invoke.name)?,
-                    args_to_js_params(&invoke.args)?,
+                    typed_args_to_js_params(&invoke.args, artifact, invoke.name)?,
                 )?;
             }
             wast::WastDirective::AssertTrap { exec, message, .. } => match exec {
                 wast::WastExecute::Invoke(invoke) => {
+                    let artifact = invoked_artifact(
+                        &artifacts,
+                        current_artifact,
+                        &named_artifacts,
+                        invoke.module,
+                    );
                     writeln!(
                         output_js,
                         r#"
@@ -228,8 +254,8 @@ fn convert_wast_file(
                             "#,
                         invocation_instance_name(invoke.module)?,
                         js_export_name(invoke.name)?,
-                        args_to_js_params(&invoke.args)?,
-                        js_string(message)?,
+                        typed_args_to_js_params(&invoke.args, artifact, invoke.name)?,
+                        js_expected_message(message)?,
                     )?;
                 }
                 wast::WastExecute::Wat(wat) => {
@@ -240,7 +266,7 @@ fn convert_wast_file(
                         r#"
                               await expect(() => instantiate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});
                             "#,
-                        js_string(message)?,
+                        js_expected_message(message)?,
                     )?;
                 }
                 wast::WastExecute::Get { .. } => {
@@ -249,6 +275,12 @@ fn convert_wast_file(
             },
             wast::WastDirective::AssertReturn { exec, results, .. } => {
                 let invoke = extract_invoke(&exec)?;
+                let artifact = invoked_artifact(
+                    &artifacts,
+                    current_artifact,
+                    &named_artifacts,
+                    invoke.module,
+                );
                 let expected = results
                     .iter()
                     .map(wast_ret_to_js_param)
@@ -266,7 +298,7 @@ fn convert_wast_file(
                     "#,
                     invocation_instance_name(invoke.module)?,
                     js_export_name(invoke.name)?,
-                    args_to_js_params(&invoke.args)?,
+                    typed_args_to_js_params(&invoke.args, artifact, invoke.name)?,
                 )?;
             }
             wast::WastDirective::AssertExhaustion { .. } => {
@@ -419,7 +451,181 @@ fn write_artifact_with_kind(
     Ok(WastArtifact {
         file_name: artifact_file_name(&artifact_path)?,
         kind,
+        types: artifact_types(encoded),
     })
+}
+
+fn artifact_types(bytes: &[u8]) -> Option<Types> {
+    wasmparser::Validator::new_with_features(wasmparser::WasmFeatures::all())
+        .validate_all(bytes)
+        .ok()
+}
+
+fn invoked_artifact<'a>(
+    artifacts: &'a [WastArtifact],
+    current: Option<usize>,
+    named: &HashMap<String, usize>,
+    name: Option<wast::token::Id<'_>>,
+) -> Option<&'a WastArtifact> {
+    let index = match name {
+        Some(name) => named.get(name.name()).copied(),
+        None => current,
+    }?;
+    artifacts.get(index)
+}
+
+fn typed_args_to_js_params(
+    args: &[wast::WastArg<'_>],
+    artifact: Option<&WastArtifact>,
+    export: &str,
+) -> Result<String> {
+    let Some(artifact) = artifact.filter(|a| a.kind == "component") else {
+        return args_to_js_params(args);
+    };
+    let Some(types) = &artifact.types else {
+        return args_to_js_params(args);
+    };
+    let Some(item) = types.component_item_for_export(export) else {
+        return args_to_js_params(args);
+    };
+    let ComponentEntityType::Func(function) = item.ty else {
+        return args_to_js_params(args);
+    };
+    let params = &types[function].params;
+    ensure!(
+        params.len() == args.len(),
+        "WAST invocation argument count does not match {export}"
+    );
+    args.iter()
+        .zip(params.iter())
+        .map(|(arg, (_, ty))| match arg {
+            wast::WastArg::Component(value) => typed_cm_val_to_js_param(value, ty, types),
+            _ => bail!("expected component WAST argument for {export}"),
+        })
+        .collect::<Result<Vec<_>>>()
+        .map(|parts| parts.join(","))
+}
+
+fn nullable_option(ty: &ComponentValType, types: &Types) -> bool {
+    match ty {
+        ComponentValType::Type(id) => match &types[*id] {
+            ComponentDefinedType::Option { ty, .. } => !nullable_option(ty, types),
+            _ => false,
+        },
+        _ => false,
+    }
+}
+
+/// Convert canonical WAST values using the actual component function type.
+/// In particular, nested option values cannot be represented correctly from
+/// their value syntax alone: option<u32> is nullable, option<option<u32>> is tagged.
+fn typed_cm_val_to_js_param(
+    value: &wast::component::WastVal<'_>,
+    ty: &ComponentValType,
+    types: &Types,
+) -> Result<String> {
+    use wast::component::WastVal;
+    let ComponentValType::Type(id) = ty else {
+        return cm_val_to_js_param(value);
+    };
+    match (&types[*id], value) {
+        (ComponentDefinedType::Option { ty: payload, .. }, WastVal::Option(value)) => {
+            match (nullable_option(ty, types), value) {
+                (true, None) => Ok("null".into()),
+                (true, Some(value)) => typed_cm_val_to_js_param(value, payload, types),
+                (false, None) => Ok("{ tag: 'none' }".into()),
+                (false, Some(value)) => Ok(format!(
+                    "{{ tag: 'some', val: {} }}",
+                    typed_cm_val_to_js_param(value, payload, types)?
+                )),
+            }
+        }
+        (
+            ComponentDefinedType::List { element, .. }
+            | ComponentDefinedType::FixedLengthList { element, .. },
+            WastVal::List(values),
+        ) => {
+            let parts = values
+                .iter()
+                .map(|value| typed_cm_val_to_js_param(value, element, types))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(format!("[{}]", parts.join(",")))
+        }
+        (ComponentDefinedType::Tuple(tuple), WastVal::Tuple(values)) => {
+            ensure!(
+                tuple.types.len() == values.len(),
+                "WAST tuple arity does not match component type"
+            );
+            let parts = values
+                .iter()
+                .zip(tuple.types.iter())
+                .map(|(value, ty)| typed_cm_val_to_js_param(value, ty, types))
+                .collect::<Result<Vec<_>>>()?;
+            Ok(format!("[{}]", parts.join(",")))
+        }
+        (ComponentDefinedType::Record(record), WastVal::Record(values)) => {
+            let parts = values
+                .iter()
+                .map(|(name, value)| {
+                    let ty = record
+                        .fields
+                        .iter()
+                        .find(|(field, _)| field.as_str() == *name)
+                        .map(|(_, ty)| ty)
+                        .context("unknown WAST record field")?;
+                    Ok(format!(
+                        "{}: {}",
+                        js_string(&name.to_lower_camel_case())?,
+                        typed_cm_val_to_js_param(value, ty, types)?
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(format!("{{ {} }}", parts.join(",")))
+        }
+        (ComponentDefinedType::Map { key, value, .. }, WastVal::Map(entries)) => {
+            let entries = entries
+                .iter()
+                .map(|(k, v)| {
+                    Ok(format!(
+                        "[{}, {}]",
+                        typed_cm_val_to_js_param(k, key, types)?,
+                        typed_cm_val_to_js_param(v, value, types)?,
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(format!("new Map([{}])", entries.join(",")))
+        }
+        (ComponentDefinedType::Variant(variant), WastVal::Variant(tag, Some(value))) => {
+            let case = variant
+                .cases
+                .iter()
+                .find(|(name, _)| name.as_str() == *tag)
+                .map(|(_, case)| case)
+                .context("unknown WAST variant case")?;
+            let ty = case
+                .ty
+                .as_ref()
+                .context("WAST variant payload does not match type")?;
+            Ok(format!(
+                "{{ tag: {}, val: {} }}",
+                js_string(tag)?,
+                typed_cm_val_to_js_param(value, ty, types)?
+            ))
+        }
+        (ComponentDefinedType::Result { ok, err, .. }, WastVal::Result(result)) => {
+            let (tag, value, ty) = match result {
+                Ok(value) => ("ok", value, ok),
+                Err(value) => ("err", value, err),
+            };
+            let payload = match (value, ty) {
+                (Some(value), Some(ty)) => typed_cm_val_to_js_param(value, ty, types)?,
+                (None, None) => "undefined".into(),
+                _ => bail!("WAST result payload does not match component type"),
+            };
+            Ok(format!("{{ tag: '{tag}', val: {payload} }}"))
+        }
+        _ => cm_val_to_js_param(value),
+    }
 }
 
 /// Generate a list of JS params
@@ -514,6 +720,19 @@ fn cm_val_to_js_param(wast_val: &wast::component::WastVal<'_>) -> Result<String>
         wast::component::WastVal::F64(v) => Ok(float_to_js(f64::from_bits(v.bits))),
         wast::component::WastVal::Char(v) => js_string(&v.to_string()),
         wast::component::WastVal::String(s) => js_string(s),
+        wast::component::WastVal::Map(entries) => {
+            let entries = entries
+                .iter()
+                .map(|(key, value)| {
+                    Ok(format!(
+                        "[{}, {}]",
+                        cm_val_to_js_param(key)?,
+                        cm_val_to_js_param(value)?
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(format!("new Map([{}])", entries.join(",")))
+        }
         wast::component::WastVal::List(vals) | wast::component::WastVal::Tuple(vals) => vals
             .iter()
             .map(|v| cm_val_to_js_param(v))
@@ -634,6 +853,56 @@ mod tests {
         let result = test(&wast_path);
         fs::remove_dir_all(fixture_dir)?;
         result
+    }
+
+    #[test]
+    fn option_arguments_follow_the_component_type() -> Result<()> {
+        with_wast_fixture(
+            r#"
+                (component
+                    (core module $m
+                        (func (export "flat") (param i32 i32))
+                        (func (export "nested") (param i32 i32 i32)))
+                    (core instance $i (instantiate $m))
+                    (func (export "flat") (param "v" (option u32))
+                        (canon lift (core func $i "flat")))
+                    (func (export "nested") (param "v" (option (option u32)))
+                        (canon lift (core func $i "nested"))))
+                (invoke "flat" (option.some (u32.const 5)))
+                (invoke "flat" (option.none))
+                (invoke "nested" (option.none))
+                (invoke "nested" (option.some (option.none)))
+                (invoke "nested" (option.some (option.some (u32.const 5))))
+            "#,
+            |path| {
+                run(path)?;
+                let script = fs::read_to_string(path.with_extension("wast.js"))?;
+                let test = format!(
+                    r#"
+                    import {{ deepStrictEqual }} from 'node:assert';
+                    {script}
+                    const values = [];
+                    await runWastTest({{
+                        assert: {{}}, expect: {{}}, validate: async () => {{}},
+                        instantiate: async () => ({{
+                            flat(value) {{ values.push(value); }},
+                            nested(value) {{ values.push(value); }},
+                        }}),
+                    }});
+                    deepStrictEqual(values, [5, null, {{tag:'none'}}, {{tag:'some',val:null}}, {{tag:'some',val:5}}]);
+                    "#
+                );
+                let output = std::process::Command::new("node")
+                    .args(["--input-type=module", "--eval", &test])
+                    .output()?;
+                ensure!(
+                    output.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                Ok(())
+            },
+        )
     }
 
     #[test]

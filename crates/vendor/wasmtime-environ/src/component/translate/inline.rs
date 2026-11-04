@@ -1711,7 +1711,9 @@ impl<'a> Inliner<'a> {
             // FIXME(#4283) should make an official decision on whether this is
             // the final treatment of this or not.
             ComponentItemDef::Component(_) => {
-                bail!("exporting a component from the root component is not supported")
+                // Component definitions have no JavaScript/WIT host value.
+                // Any instances of them have already contributed initializers.
+                return Ok(());
             }
 
             ComponentItemDef::Type(def) => dfg::Export::Type(def),
