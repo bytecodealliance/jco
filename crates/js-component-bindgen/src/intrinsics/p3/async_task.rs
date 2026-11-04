@@ -1588,16 +1588,19 @@ impl AsyncTaskIntrinsic {
                                reject: rejectCompletionPromise,
                            }} = {promise_with_resolvers_fn}();
                            this.#completionPromise = completionPromise;
-                           // A nested rejection can reach the root task while its Wasm
-                           // entrypoint is still suspended, before the export wrapper awaits
-                           // this promise. Mark it handled immediately while preserving the
-                           // original rejected promise for the eventual caller.
-                           completionPromise.catch(() => {{}});
+                           // An async task can reject before its suspended export wrapper
+                           // awaits completion. Handle that rejection immediately. Successful
+                           // synchronous calls must not queue a reaction for every result.
+                           const completionIsAsync = this.#isAsync || this.#isManualAsync;
+                           if (completionIsAsync) {{ completionPromise.catch(() => {{}}); }}
 
                            let completionSettled = false;
                            const settleCompletionPromise = () => {{
                                if (completionSettled || !this.#completionReady) {{ return; }}
                                completionSettled = true;
+                               if (!completionIsAsync && (this.#errored !== null || this.#rejected)) {{
+                                   completionPromise.catch(() => {{}});
+                               }}
                                if (this.#errored !== null) {{
                                    rejectCompletionPromise(this.#errored);
                                }} else if (this.#rejected) {{
@@ -1608,6 +1611,15 @@ impl AsyncTaskIntrinsic {
                                ) {{
                                    this.#completionValue.resolveAsValue(resolveCompletionPromise);
                                }} else {{
+                                   // Promise resolution may reject when it assimilates an
+                                   // object, including a throwing `then` getter. Do not read
+                                   // `then` ourselves or change its observable lookup count.
+                                   if (!completionIsAsync && this.#completionValue !== null && (
+                                       typeof this.#completionValue === 'object'
+                                       || typeof this.#completionValue === 'function'
+                                   )) {{
+                                       completionPromise.catch(() => {{}});
+                                   }}
                                    resolveCompletionPromise(this.#completionValue);
                                }}
                            }};
