@@ -14,6 +14,40 @@ test.concurrent.each([false, true])(
             },
             jco: { transpile: { extraArgs: { validLiftingOptimization } } },
         });
+
+        test.concurrent.each([
+            { validLiftingOptimization: false, flagsAsBigInt: false },
+            { validLiftingOptimization: false, flagsAsBigInt: true },
+            { validLiftingOptimization: true, flagsAsBigInt: false },
+            { validLiftingOptimization: true, flagsAsBigInt: true },
+        ])('ignores unused flag bits with $validLiftingOptimization and bigint=$flagsAsBigInt', async (options) => {
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    name: `flag-canonicalization-${options.validLiftingOptimization}-${options.flagsAsBigInt}`,
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'scalar-canonicalization/flags.wat'),
+                },
+                jco: { transpile: { extraArgs: options } },
+            });
+            try {
+                expect(await instance.junk()).toEqual(
+                    options.flagsAsBigInt
+                        ? 0x111n
+                        : {
+                              a: true,
+                              b: false,
+                              c: false,
+                              d: false,
+                              e: true,
+                              f: false,
+                              g: false,
+                              h: false,
+                              i: true,
+                          },
+                );
+            } finally {
+                await cleanup();
+            }
+        });
         try {
             assert.equal(await instance.u8(0xf01), 1);
             assert.equal(await instance.s8(0xff), -1);

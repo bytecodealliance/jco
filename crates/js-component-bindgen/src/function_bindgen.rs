@@ -1300,7 +1300,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     uwriteln!(self.src, "var flags{tmp} = 0n;");
                     for (i, op) in operands.iter().enumerate() {
                         let shift = i * 32;
-                        uwriteln!(self.src, "flags{tmp} |= BigInt({op} >>> 0) << {shift}n;");
+                        let remaining = flags.flags.len().saturating_sub(shift);
+                        let bits = if remaining < 32 {
+                            format!("({op} & {})", (1_u32 << remaining) - 1)
+                        } else {
+                            format!("({op} >>> 0)")
+                        };
+                        uwriteln!(self.src, "flags{tmp} |= BigInt({bits}) << {shift}n;");
                     }
                     return;
                 }

@@ -1252,7 +1252,7 @@ impl LiftIntrinsic {
                     "{}"
                 };
                 let finish_value = if render_args.transpile_opts.flags_as_bigint {
-                    "val = BigInt(bits >>> 0);"
+                    "val = BigInt(names.length < 32 ? bits & (2 ** names.length - 1) : bits >>> 0);"
                 } else {
                     r#"
                             for (const name of names) {
