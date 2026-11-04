@@ -442,6 +442,8 @@ fn interface_export(
                 .statics
                 .push(function.item_name().to_lower_camel_case()),
             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => unreachable!(),
+
+            _ => unreachable!("accessors rejected before code generation"),
         }
     }
 

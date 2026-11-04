@@ -1290,7 +1290,14 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
                 WorldItem::Function(_) => {}
-                WorldItem::Type { .. } => unreachable!("unexpected exported world item type"),
+                WorldItem::Type { id, .. } => {
+                    if let Export::Type(TypeDef::Resource(resource)) = export {
+                        let ty = crate::dealias(self.resolve, *id);
+                        let concrete_ty = self.types[*resource].unwrap_concrete_ty();
+                        self.exports_resource_types.insert(ty, concrete_ty);
+                        self.exports_resource_index_types.insert(concrete_ty, ty);
+                    }
+                }
             }
         }
     }
@@ -4434,7 +4441,7 @@ impl<'a> Instantiator<'a, '_> {
         // `implements` feature) falls back to a mapping for the implemented
         // interface id when the label itself has no mapping, so that e.g.
         // WASI shim mappings apply to labeled imports as well.
-        let implements = self.resolve.implements_value(
+        let implements = self.resolve.external_id_value(
             world_key,
             &self.resolve.worlds[self.world].imports[world_key],
         );
@@ -4466,6 +4473,8 @@ impl<'a> Instantiator<'a, '_> {
                         import_name.strip_prefix("[constructor]").unwrap()
                     }
                     FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => import_name,
+
+                    _ => unreachable!("accessors rejected before code generation"),
                 }
             },
             implements.as_deref(),
@@ -4546,6 +4555,8 @@ impl<'a> Instantiator<'a, '_> {
                 ),
                 CallType::Standard,
             ),
+
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         // A function's interface type can be async while its canonical lower is
@@ -4700,6 +4711,8 @@ impl<'a> Instantiator<'a, '_> {
                         self.imported_resource_name(*import_index, resource_id)
                     )
                 }
+
+                _ => unreachable!("accessors rejected before code generation"),
             };
 
             // Save information about imported resources for later
@@ -4781,6 +4794,8 @@ impl<'a> Instantiator<'a, '_> {
                 let resource_name = self.imported_resource_name(*import_index, tid);
                 (class_name, resource_name)
             }
+
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         self.ensure_import(
@@ -5100,7 +5115,7 @@ impl<'a> Instantiator<'a, '_> {
             let implements = self.resolve.worlds[self.world]
                 .imports
                 .get(&world_key)
-                .and_then(|item| self.resolve.implements_value(&world_key, item));
+                .and_then(|item| self.resolve.external_id_value(&world_key, item));
             let (local_name, _) = self
                 .bindgen
                 .local_names
@@ -6048,6 +6063,8 @@ impl<'a> Instantiator<'a, '_> {
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                             self.bindgen.local_names.create_once(&export_name)
                         }
+
+                        _ => unreachable!("accessors rejected before code generation"),
                     });
 
                     let options = self
@@ -6081,6 +6098,8 @@ impl<'a> Instantiator<'a, '_> {
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                             export_name.to_lower_camel_case()
                         }
+
+                        _ => unreachable!("accessors rejected before code generation"),
                     };
 
                     // Add the export binding
@@ -6212,6 +6231,8 @@ impl<'a> Instantiator<'a, '_> {
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                                 self.bindgen.local_names.create_once(&func_name)
                             }
+
+                            _ => unreachable!("accessors rejected before code generation"),
                         });
 
                         let options = self
@@ -6246,6 +6267,8 @@ impl<'a> Instantiator<'a, '_> {
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                                 func_name.to_lower_camel_case()
                             }
+
+                            _ => unreachable!("accessors rejected before code generation"),
                         };
 
                         // Add the export binding
@@ -6338,6 +6361,8 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Constructor(_) => {
                 unreachable!("constructors cannot return futures")
             }
+
+            _ => unreachable!("accessors rejected before code generation"),
         });
 
         // Start building early variable declarations
@@ -6442,6 +6467,7 @@ impl<'a> Instantiator<'a, '_> {
                     "\n{local_name}.{method_name} = {maybe_async}function {fn_name}",
                 );
             }
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         // Perform bindgen
@@ -6456,6 +6482,7 @@ impl<'a> Instantiator<'a, '_> {
                 FunctionKind::AsyncFreestanding | FunctionKind::AsyncStatic(_) => {
                     CallType::AsyncStandard
                 }
+                _ => unreachable!("accessors rejected before code generation"),
             },
             iface_name: iface_name.map(|v| v.as_str()),
             callee: &callee,
@@ -6486,6 +6513,7 @@ impl<'a> Instantiator<'a, '_> {
             | FunctionKind::Method(_)
             | FunctionKind::Static(_) => self.src.js(";\n"),
             FunctionKind::Constructor(_) => self.src.js("\n}\n"),
+            _ => unreachable!("accessors rejected before code generation"),
         }
     }
 }

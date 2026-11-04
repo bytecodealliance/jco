@@ -110,8 +110,14 @@ pub fn script_component(script: &ScriptComponent) -> Result<Vec<u8>> {
         .section(&data_section);
     let mut bytes = module.finish();
 
-    wit_component::embed_component_metadata(&mut bytes, &resolve, world, StringEncoding::UTF8)
-        .context("embedding the jco:script world")?;
+    wit_component::embed_component_metadata(
+        &mut bytes,
+        &resolve,
+        world,
+        StringEncoding::UTF8,
+        false,
+    )
+    .context("embedding the jco:script world")?;
     let component = ComponentEncoder::default()
         .validate(true)
         .module(&bytes)
