@@ -1,4 +1,4 @@
-import { $init, generate as _generate } from '../../../vendor/js-component-bindgen-component.js';
+import { $init, generate as _generate } from '../../../dist/component.js';
 
 await $init;
 

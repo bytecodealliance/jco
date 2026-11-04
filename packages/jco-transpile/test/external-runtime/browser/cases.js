@@ -65,7 +65,7 @@ export async function runComponent({ componentPath, corePaths, instantiation, pr
 /** Exercise the option through the bindgen component running in the browser as well. */
 export async function transpileInBrowser({ componentPath, cmRuntimeEsModule, providerPath }) {
     const provider = await loadProvider(providerPath);
-    const bindgen = await import('/jco-transpile/vendor/js-component-bindgen-component.js');
+    const bindgen = await import('/jco-transpile/dist/component.js');
     await bindgen.$init;
     const output = await bindgen.generate(await fetchBytes(componentPath), {
         name: 'browser-generated',
