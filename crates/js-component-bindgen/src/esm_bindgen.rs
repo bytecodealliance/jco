@@ -205,8 +205,9 @@ impl EsmBindgen {
         instantiation: bool,
         local_names: &mut LocalNames,
         opts: &TranspileOpts,
+        stop_instance: Option<&str>,
     ) {
-        if self.exports.is_empty() {
+        if self.exports.is_empty() && stop_instance.is_none() {
             if instantiation {
                 output.push_str("return {}");
             }
@@ -238,6 +239,9 @@ impl EsmBindgen {
             "\n{} {{ ",
             if instantiation { "return" } else { "export" }
         );
+        if let Some(stop) = stop_instance {
+            uwrite!(output, "_util: {{ stop: {stop} }}, ");
+        }
         let mut first = true;
         for (alias, export_name) in &self.export_aliases {
             if first {

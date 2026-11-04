@@ -2,6 +2,7 @@
 
 use std::fmt::Write as _;
 
+use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
@@ -17,6 +18,9 @@ pub enum ComponentIntrinsic {
 
     /// Shared trap state for all component instances in this generated store.
     GlobalStoreTrap,
+
+    /// Permanently stop this generated store and release its host resources.
+    StopInstance,
 
     /// Shared scheduling state for all component instances in this generated store.
     GlobalStoreAsyncState,
@@ -97,7 +101,7 @@ pub enum ComponentIntrinsic {
 impl ComponentIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        ["_postReturnTrap", "_guardPostReturn"]
+        ["_postReturnTrap", "_guardPostReturn", "_stopInstance"]
     }
 
     /// Get the name for the intrinsic
@@ -105,6 +109,7 @@ impl ComponentIntrinsic {
         match self {
             Self::GlobalInstanceFlagsMap => "INSTANCE_FLAGS",
             Self::GlobalStoreTrap => "STORE_TRAP",
+            Self::StopInstance => "_stopInstance",
             Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
             Self::CheckForDeadlock => "_checkForDeadlock",
             Self::TrackHostOperation => "_trackHostOperation",
@@ -134,7 +139,66 @@ impl ComponentIntrinsic {
 
             Self::GlobalStoreTrap => {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreTrap);
-                uwriteln!(output, r#"const {var_name} = {{ error: null }};"#);
+                uwriteln!(
+                    output,
+                    r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set() }};"#
+                );
+            }
+
+            Self::StopInstance => {
+                let name = self.name();
+                let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let states = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
+                let scheduler = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                let tasks =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
+                let own = render_args.require_intrinsic(ResourceIntrinsic::ResourceTableOwnFlag);
+                let flag = render_args.require_intrinsic(ResourceIntrinsic::ResourceTableFlag);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}() {{
+                        if ({store}.stopped) {{ return; }}
+                        {store}.stopped = true;
+                        const err = new {runtime_error}('component instance has been stopped');
+                        {store}.error ??= err;
+                        clearTimeout({scheduler}.deadlockCheck);
+                        {scheduler}.deadlockCheck = null;
+
+                        // Poison every component before releasing any continuation or
+                        // calling host cleanup, which can reenter the instance.
+                        for (const state of {states}.values()) {{ state.markTrapped(err); }}
+                        for (const reject of {store}.stopWaiters) {{ reject(err); }}
+                        {store}.stopWaiters.clear();
+                        const pending = [...{tasks}.values()].flat().map(meta => meta.task);
+                        for (const task of pending) {{ task.stop(err); }}
+                        for (const state of {states}.values()) {{ state.stop(); }}
+
+                        // A capture table also contains borrowed resources. Only live
+                        // owned handles belong to the guest; lifting an own back to the
+                        // host removes its capture. Shared tables/reps are deduplicated.
+                        const resources = new Set();
+                        for (const {{ handles, captures }} of {store}.resourceTables) {{
+                            for (let i = 2; i < handles.length; i += 2) {{
+                                if ((handles[i] & {flag}) !== 0 || !(handles[i + 1] >= {own})) {{ continue; }}
+                                const resource = captures.get(handles[i + 1] - {own});
+                                if (resource !== undefined) {{ resources.add(resource); }}
+                            }}
+                        }}
+                        for (const {{ captures }} of {store}.resourceTables) {{ captures.clear(); }}
+                        {store}.resourceTables.length = 0;
+                        const errors = [];
+                        for (const resource of resources) {{
+                            try {{ resource[{dispose}]?.(); }}
+                            catch (error) {{ errors.push(error); }}
+                        }}
+                        if (errors.length) {{ throw new AggregateError(errors, 'failed to dispose stopped instance resources'); }}
+                    }}
+                "#
+                );
             }
 
             Self::GlobalStoreAsyncState => {
@@ -223,18 +287,26 @@ impl ComponentIntrinsic {
                 let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
                 let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 let symbol_dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
+                let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 output.push_str(&format!(
                     r#"
                     function {track_host_operation_fn}(operation) {{
+                        if ({store}.stopped) {{ throw {store}.error; }}
                         const result = operation();
                         if (result === null ||
                             (typeof result !== 'object' && typeof result !== 'function') ||
                             typeof result.then !== 'function') {{
+                            if ({store}.stopped) {{ throw {store}.error; }}
                             return result;
                         }}
 
                         {store_async_state}.pendingHostOperations++;
-                        const tracked = Promise.resolve(result).finally(() => {{
+                        let rejectStopped;
+                        const stopped = new Promise((_, reject) => {{ rejectStopped = reject; }});
+                        {store}.stopWaiters.add(rejectStopped);
+                        if ({store}.stopped) {{ rejectStopped({store}.error); }}
+                        const tracked = Promise.race([result, stopped]).finally(() => {{
+                            {store}.stopWaiters.delete(rejectStopped);
                             {store_async_state}.pendingHostOperations--;
                             if ({store_async_state}.pendingHostOperations < 0) {{
                                 throw new Error('negative pending host operation count');
@@ -505,7 +577,6 @@ impl ComponentIntrinsic {
                         #nextHandlerID = 0n;
 
                         #tickLoop = null;
-                        #tickLoopInterval = null;
 
                         #onExclusiveReleaseHandlers = [];
 
@@ -565,11 +636,13 @@ impl ComponentIntrinsic {
                         // For work that was already under way or queued when the instance
                         // trapped: it fails with that trap (nothing runs after a trap).
                         throwIfInterrupted() {{
+                            if ({store_trap}.stopped) {{ throw {store_trap}.error; }}
                             if (this.#trapped) {{
                                 throw this.#trapError ?? new {runtime_error_class}({cannot_enter_component:?});
                             }}
                         }}
                         throwIfTrapped() {{
+                            if ({store_trap}.stopped) {{ throw {store_trap}.error; }}
                             if (this.#trapped) {{
                                 throw new {runtime_error_class}({cannot_enter_component:?});
                             }}
@@ -933,6 +1006,11 @@ impl ComponentIntrinsic {
                                 promise = resolvers.promise;
                                 resume = () => resolvers.resolve(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());
                             }}
+                            if ({store_trap}.stopped) {{
+                                this.markTrapped({store_trap}.error);
+                                resume();
+                                return promise;
+                            }}
                             this.#suspendedThreadsByRef.set(thread, {{ thread, cancellable, readyFn, resume, suspended }});
 
                             thread.notifyProgress();
@@ -994,25 +1072,34 @@ impl ComponentIntrinsic {
                             return false;
                         }}
 
-                        async runTickLoop() {{
-                            if (this.#tickLoop !== null) {{ return; }}
-                            this.#tickLoop = 1;
-                            setTimeout(async () => {{
-                                let result = this.tick();
-                                while (result !== {component_async_state_class}.TickResult.DONE) {{
-                                    if (result === {component_async_state_class}.TickResult.IDLE) {{
-                                        {check_for_deadlock_fn}();
-                                    }}
-                                    // After resuming a task, re-tick as soon as the resumed
-                                    // slice's microtask continuations have drained (timeout 0)
-                                    // so queued sibling resumptions aren't charged the idle
-                                    // polling interval; otherwise poll at the idle cadence.
-                                    const delay = result === {component_async_state_class}.TickResult.RESUMED ? 0 : 10;
-                                    await new Promise((resolve) => setTimeout(resolve, delay));
-                                    result = this.tick();
+                        stop() {{
+                            clearTimeout(this.#tickLoop);
+                            this.#tickLoop = null;
+                            this.abandonLockWaiters();
+                            this.abandonAdmissionWaiters();
+                            for (const thread of [...this.#suspendedThreadsByRef.keys()]) {{
+                                this.resumeThread(thread);
+                            }}
+                        }}
+
+                        runTickLoop() {{
+                            if ({store_trap}.stopped || this.#tickLoop !== null) {{ return; }}
+                            const run = () => {{
+                                if ({store_trap}.stopped) {{ this.#tickLoop = null; return; }}
+                                const result = this.tick();
+                                if ({store_trap}.stopped || result === {component_async_state_class}.TickResult.DONE) {{
+                                    this.#tickLoop = null;
+                                    return;
                                 }}
-                                this.#tickLoop = null;
-                            }}, 10);
+                                if (result === {component_async_state_class}.TickResult.IDLE) {{
+                                    {check_for_deadlock_fn}();
+                                }}
+                                // Let resumed microtasks drain before the next slice;
+                                // otherwise poll at the idle cadence.
+                                const delay = result === {component_async_state_class}.TickResult.RESUMED ? 0 : 10;
+                                this.#tickLoop = setTimeout(run, delay);
+                            }};
+                            this.#tickLoop = setTimeout(run, 10);
                         }}
 
                         tick() {{

@@ -579,6 +579,13 @@ impl JsBindgen<'_> {
         opts: &TranspileOpts,
         intrinsic_definitions: source::Source,
     ) {
+        // An empty component has no runtime state to stop. Keep its utility a
+        // no-op so it does not acquire an otherwise-unused external runtime.
+        let stop_instance = if self.all_intrinsics.is_empty() {
+            "() => {}".to_string()
+        } else {
+            self.intrinsic(Intrinsic::Component(ComponentIntrinsic::StopInstance))
+        };
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
         let mut core_exported_funcs = source::Source::default();
@@ -751,6 +758,7 @@ impl JsBindgen<'_> {
                 self.opts.instantiation_mode.is_some(),
                 &mut self.local_names,
                 opts,
+                Some(&stop_instance),
             );
             let helper = self.instantiation_helper_names();
             uwrite!(
@@ -893,13 +901,14 @@ impl JsBindgen<'_> {
                 self.opts.instantiation_mode.is_some(),
                 &mut self.local_names,
                 opts,
+                None,
             );
         }
 
         // The generated ES module will have a `util` member that can be used,
         // (but may be empty), which hosts can use to perform special functionality
         // like nesting futures where necessary.
-        self.write_util_export(&mut output);
+        self.write_util_export(&mut output, &stop_instance);
 
         let mut bytes = output.as_bytes();
         // strip leading newline
@@ -930,7 +939,7 @@ impl JsBindgen<'_> {
     }
 
     /// Write out utility helpers/objects (available via esModule._util)
-    fn write_util_export(&mut self, output: &mut source::Source) {
+    fn write_util_export(&mut self, output: &mut source::Source, stop_instance: &str) {
         // Future` class that can be used by external consumers (e.g. host code) to build nested future values
         //
         // This class is exposed via module._util, always
@@ -971,10 +980,16 @@ impl JsBindgen<'_> {
             "".into()
         };
 
+        let stop = if self.opts.instantiation_mode.is_none() {
+            format!("stop: {stop_instance},")
+        } else {
+            String::new()
+        };
         uwriteln!(
             output,
             r#"
               export const _util = {{
+                  {stop}
                   {maybe_ext_future_class}
               }}
             "#,
@@ -1650,7 +1665,10 @@ impl<'a> Instantiator<'a, '_> {
                     } else {
                         format!("\n{dtor}(rep);")
                     };
-                    (false, maybe_dtor)
+                    let store = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+                    (false, format!("\nif (!{store}.stopped) {{ {maybe_dtor} }}"))
                 } else {
                     (false, "".into())
                 }
@@ -1689,6 +1707,14 @@ impl<'a> Instantiator<'a, '_> {
                 );
                 self.resources_initialized.insert(resource_idx, true);
             }
+            let store = self
+                .bindgen
+                .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+            let ridx = resource_idx.as_u32();
+            uwriteln!(
+                self.src.js,
+                "{store}.resourceTables.push({{ handles: handleTable{rtid}, captures: captureTable{ridx} }});"
+            );
         } else {
             // non imported
             let finalization_registry_create = self
@@ -3592,8 +3618,8 @@ impl<'a> Instantiator<'a, '_> {
                                             "
                             const rsc = captureTable{rid}.get(handleEntry.rep);
                             if (rsc) {{
-                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
                                 captureTable{rid}.delete(handleEntry.rep);
+                                if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
                             }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
                                 {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
                             }}"
@@ -7481,6 +7507,8 @@ pub fn gen_flat_lift_fn_js_expr(
                                             } else {
                                                 format!("{dtor}(handleEntry.rep);")
                                             };
+                                            let store = instantiator.bindgen.intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+                                            let dtor_call = format!("if (!{store}.stopped) {{ {dtor_call} }}");
                                             format!(
                                              r#"
                                                Object.defineProperty(

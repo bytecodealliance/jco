@@ -2259,7 +2259,7 @@ mod tests {
         let tracker =
             render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
         assert!(tracker.contains("STORE_ASYNC_STATE.pendingHostOperations++;"));
-        assert!(tracker.contains("Promise.resolve(result).finally(() =>"));
+        assert!(tracker.contains("Promise.race([result, stopped]).finally(() =>"));
         assert!(tracker.contains("STORE_ASYNC_STATE.pendingHostOperations--;"));
         assert!(tracker.contains("_checkForDeadlock();"));
 
