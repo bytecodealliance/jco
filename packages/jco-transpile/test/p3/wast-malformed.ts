@@ -10,6 +10,10 @@ import { validate, $init } from '../../vendor/js-component-bindgen-component.js'
 const run = promisify(execFile);
 
 test.concurrent.each([
+    {
+        source: String.raw`(assert_malformed (component binary "\00asm\0d\00\01\00\01\08") "unexpected end")`,
+        passes: true,
+    },
     { source: '(assert_malformed (module binary "\\00as") "")', passes: true },
     { source: '(assert_malformed (component quote "(unknown)") "expected")', passes: true },
     { source: '(assert_malformed (module (func (result i32))) "type mismatch")', passes: false },

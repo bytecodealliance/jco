@@ -477,6 +477,14 @@ fn decode_binary(bytes: &[u8], kind: &str) -> Result<Option<String>> {
     }
     let mut parser = wasmparser::Parser::new(0);
     parser.set_features(wasmparser::WasmFeatures::all());
+    // ReencodeComponent slices unchecked nested-section ranges before decoding
+    // their contents. Traverse those ranges first so truncation remains a
+    // syntax diagnostic instead of an upstream re-encoder bounds panic.
+    for payload in parser.clone().parse_all(bytes) {
+        if let Err(error) = payload {
+            return Ok(Some(error.to_string()));
+        }
+    }
     let result = if kind == "component" {
         decoder.parse_component(&mut wasm_encoder::Component::new(), parser, bytes)
     } else {
