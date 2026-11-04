@@ -255,20 +255,15 @@ impl StringIntrinsic {
                 );
             }
 
-            Self::ValidateGuestChar => {
-                let runtime_error =
-                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
-                uwriteln!(
-                    output,
-                    r#"
+            Self::ValidateGuestChar => uwriteln!(
+                output,
+                r#"
                   function {name}(i) {{
-                      i >>>= 0;
-                      if ((i > 0x10ffff) || (i >= 0xd800 && i <= 0xdfff)) {{ throw new {runtime_error}('invalid `char` bit pattern'); }}
+                      if ((i > 0x10ffff) || (i >= 0xd800 && i <= 0xdfff)) {{ throw new TypeError(`not a valid char`); }}
                       return String.fromCodePoint(i);
                   }}
-                "#
-                );
-            }
+                "#,
+            ),
 
             Self::ValidateHostChar => uwriteln!(
                 output,

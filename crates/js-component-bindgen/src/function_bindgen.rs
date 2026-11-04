@@ -1141,9 +1141,18 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::CharFromI32 => {
-                let validate =
-                    self.intrinsic(Intrinsic::String(StringIntrinsic::ValidateGuestChar));
-                results.push(format!("{}({})", validate, operands[0]));
+                let value = format!("char{}", self.tmp());
+                let runtime_error = self.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                uwriteln!(self.src, "const {value} = {} >>> 0;", operands[0]);
+                uwriteln!(
+                    self.src,
+                    "if ({value} > 0x10ffff || ({value} >= 0xd800 && {value} <= 0xdfff)) {{ throw new {runtime_error}('invalid `char` bit pattern'); }}"
+                );
+                let validate = self.intrinsic_call(
+                    Intrinsic::String(StringIntrinsic::ValidateGuestChar),
+                    &value,
+                );
+                results.push(validate);
             }
 
             Instruction::I32FromChar => {

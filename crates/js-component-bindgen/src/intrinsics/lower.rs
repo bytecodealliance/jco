@@ -521,8 +521,10 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatChar => {
-                let i32_to_char_fn = render_args
-                    .require_intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToChar));
+                let validate = render_args.intrinsic_call(
+                    Intrinsic::String(StringIntrinsic::ValidateHostChar),
+                    "ctx.vals[0]",
+                );
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 output.push_str(&format!("
                     function _lowerFlatChar(ctx) {{
@@ -532,7 +534,7 @@ impl LowerIntrinsic {
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
-                        new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, {i32_to_char_fn}(ctx.vals[0]), true);
+                        new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, {validate}, true);
 
                         ctx.storagePtr += 4;
                     }}

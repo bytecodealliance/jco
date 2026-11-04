@@ -13,8 +13,6 @@ use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
-use super::conversion::ConversionIntrinsic;
-
 /// This enum contains intrinsics that enable Lift
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum LiftIntrinsic {
@@ -621,32 +619,26 @@ impl LiftIntrinsic {
 
             Self::LiftFlatChar => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let i32_to_char_fn = render_args
-                    .require_intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToChar));
+                let lift_u32 = render_args.require_intrinsic(Self::LiftFlatU32);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let validate = render_args.intrinsic_call(
+                    Intrinsic::String(StringIntrinsic::ValidateGuestChar),
+                    "value",
+                );
                 let lift_flat_char_fn = self.name();
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    "
                     function {lift_flat_char_fn}(ctx) {{
                         {debug_log_fn}('[{lift_flat_char_fn}()] args', {{ ctx }});
-                        let val;
-
-                        if (ctx.useDirectParams) {{
-                            if (ctx.params.length === 0) {{ throw new Error('expected at least one single i32 argument'); }}
-                            val = {i32_to_char_fn}(ctx.params[0]);
-                            ctx.params = ctx.params.slice(1);
-                            return [val, ctx];
+                        const [value, nextCtx] = {lift_u32}(ctx);
+                        if (value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {{
+                            throw new {runtime_error}('invalid `char` bit pattern');
                         }}
-
-                        if (ctx.storageLen !== undefined && ctx.storageLen < 4) {{
-                            throw new Error(`insufficient storage ([${{ctx.storageLen}}] bytes) for lift (char requires 4 bytes)`);
-                        }}
-
-                        val = {i32_to_char_fn}(new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true));
-                        ctx.storagePtr += 4;
-                        if (ctx.storageLen !== undefined) {{ ctx.storageLen -= 4; }}
-
-                        return [val, ctx];
+                        return [{validate}, nextCtx];
                     }}
-                "));
+                "
+                ));
             }
 
             Self::LiftFlatStringAny => {
