@@ -70,9 +70,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'async/validate-task-return.wast': {
         skip: 'the pinned validator accepts task.return results containing borrow types',
     },
-    'binary/binary.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'validation/attributes.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'validation/outer-alias.wast': { skip: 'the WAST converter does not support assert_malformed' },
     'validation/extern-names.wast': {
         skip: 'the pinned translator panics on malformed namespace names, trapping the bindgen instance',
     },

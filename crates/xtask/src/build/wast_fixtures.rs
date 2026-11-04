@@ -37,6 +37,10 @@ fn convert_wast_file(
             input_wast_path.display()
         )
     })?;
+    ensure!(
+        !parsed.directives.is_empty(),
+        "wast file did not contain any directives"
+    );
 
     // Start exported test function
     writeln!(
@@ -119,6 +123,10 @@ fn convert_wast_file(
                     input_wast_path,
                     artifact_idx,
                 )?);
+                writeln!(
+                    output_js,
+                    "await validate(wastTestArtifacts[{artifact_idx}]);"
+                )?;
                 register_definition(definition_name.as_deref(), artifact_idx, &mut definitions);
             }
             wast::WastDirective::ModuleInstance {
@@ -143,8 +151,40 @@ fn convert_wast_file(
                     )?;
                 }
             }
-            wast::WastDirective::AssertMalformed { .. } => {
-                bail!("unsupported directive AssertMalformed")
+            wast::WastDirective::AssertMalformed {
+                mut module,
+                message,
+                ..
+            } => {
+                // The declaration tells us the intended binary kind even when
+                // the bytes deliberately omit or corrupt the Wasm header.
+                let kind = quote_wat_kind(&module);
+                match module.encode() {
+                    Ok(encoded) => {
+                        let artifact_idx = artifacts.len();
+                        artifacts.push(write_artifact_with_kind(
+                            &encoded,
+                            input_wast_path,
+                            artifact_idx,
+                            kind,
+                        )?);
+                        writeln!(
+                            output_js,
+                            "await expect(() => validate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});",
+                            js_string(message)?,
+                        )?;
+                    }
+                    Err(error) => {
+                        // Only a WAT parser/encoder error satisfies a malformed
+                        // text assertion. I/O and harness failures still abort.
+                        writeln!(
+                            output_js,
+                            "assert.include({}, {}, 'assert_malformed text diagnostic');",
+                            js_string(&error.to_string())?,
+                            js_string(message)?,
+                        )?;
+                    }
+                }
             }
             wast::WastDirective::AssertInvalid {
                 module, message, ..
@@ -244,11 +284,6 @@ fn convert_wast_file(
         }
     }
 
-    ensure!(
-        !artifacts.is_empty(),
-        "wast file did not contain an executable module or component"
-    );
-
     // Close out the function
     writeln!(output_js, "}}",)?;
     writeln!(output_js, "export const wastTestRequiresInstance = false;")?;
@@ -300,6 +335,15 @@ fn encoded_kind(encoded: &[u8]) -> Result<&'static str> {
     }
 }
 
+fn quote_wat_kind(quote_wat: &wast::QuoteWat<'_>) -> &'static str {
+    match quote_wat {
+        wast::QuoteWat::Wat(wast::Wat::Module(_)) | wast::QuoteWat::QuoteModule(..) => "module",
+        wast::QuoteWat::Wat(wast::Wat::Component(_)) | wast::QuoteWat::QuoteComponent(..) => {
+            "component"
+        }
+    }
+}
+
 fn write_quote_artifact(
     mut quote_wat: wast::QuoteWat<'_>,
     input_wast_path: &Path,
@@ -334,6 +378,15 @@ fn write_artifact(
     artifact_idx: usize,
 ) -> Result<WastArtifact> {
     let kind = encoded_kind(encoded)?;
+    write_artifact_with_kind(encoded, input_wast_path, artifact_idx, kind)
+}
+
+fn write_artifact_with_kind(
+    encoded: &[u8],
+    input_wast_path: &Path,
+    artifact_idx: usize,
+    kind: &'static str,
+) -> Result<WastArtifact> {
     let mut artifact_path = PathBuf::from(input_wast_path);
     artifact_path.set_extension(format!("wast.{artifact_idx}.wasm"));
     let mut artifact_file = OpenOptions::new()
@@ -926,6 +979,50 @@ mod tests {
                 Ok(())
             },
         )
+    }
+
+    #[test]
+    fn preserves_malformed_binary_bytes_without_requiring_a_header() -> Result<()> {
+        with_wast_fixture(
+            r#"(assert_malformed (component binary "\00as") "unexpected end")"#,
+            |path| {
+                run(path)?;
+                assert_eq!(fs::read(path.with_extension("wast.0.wasm"))?, b"\0as");
+                let script = fs::read_to_string(path.with_extension("wast.js"))?;
+                ensure!(script.contains("kind: \"component\""));
+                ensure!(script.contains("rejects.toThrow(\"unexpected end\")"));
+                Ok(())
+            },
+        )
+    }
+
+    #[test]
+    fn malformed_text_does_not_require_a_binary_artifact() -> Result<()> {
+        with_wast_fixture(
+            r#"(assert_malformed (component quote "(not-a-section)") "expected")"#,
+            |path| {
+                run(path)?;
+                let script = fs::read_to_string(path.with_extension("wast.js"))?;
+                ensure!(script.contains("assert_malformed text diagnostic"));
+                ensure!(script.contains("wastTestArtifacts = []"));
+                Ok(())
+            },
+        )
+    }
+
+    #[test]
+    fn malformed_assertion_with_valid_input_still_requires_validation_failure() -> Result<()> {
+        with_wast_fixture(r#"(assert_malformed (component) "")"#, |path| {
+            run(path)?;
+            assert_eq!(
+                fs::read(path.with_extension("wast.0.wasm"))?,
+                b"\0asm\x0d\0\x01\0"
+            );
+            let script = fs::read_to_string(path.with_extension("wast.js"))?;
+            ensure!(script.contains("validate(wastTestArtifacts[0])).rejects.toThrow(\"\")"));
+            ensure!(!script.contains("assert_malformed text diagnostic"));
+            Ok(())
+        })
     }
 
     #[test]
