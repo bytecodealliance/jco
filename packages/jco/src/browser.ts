@@ -5,13 +5,21 @@ import {
 } from "@bytecodealliance/jco-transpile/component";
 
 export async function generate(...args: Parameters<typeof _generate>) {
-    await $init;
-    return _generate(...args);
+    return callBindgen(() => _generate(...args));
 }
 
 export async function generateTypes(...args: Parameters<typeof _generateTypes>) {
-    await $init;
-    return _generateTypes(...args);
+    return callBindgen(() => _generateTypes(...args));
+}
+
+async function callBindgen<T>(run: () => T): Promise<T> {
+    for (;;) {
+        const init = $init;
+        await init;
+        if (init === $init) {
+            return run();
+        }
+    }
 }
 
 // for backwards compat
