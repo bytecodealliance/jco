@@ -136,6 +136,7 @@ fn published_intrinsics_remain_exhaustively_matchable() {
         | Intrinsic::WithGlobalCurrentTaskMetaFnAsync
         | Intrinsic::ClearGlobalCurrentTaskMetaFn
         | Intrinsic::SuspendingImportWrapperFn
+        | Intrinsic::ConditionalSuspending0ToI32Fn
         | Intrinsic::ConditionalSuspending1I32ToI32Fn
         | Intrinsic::ConditionalSuspending2I32ToI32Fn
         | Intrinsic::ConditionalSuspending3I32ToI32Fn
