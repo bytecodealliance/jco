@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { hrtime, env } from 'node:process';
+import { hrtime, env, threadCpuUsage } from 'node:process';
 import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
@@ -17,6 +17,9 @@ const ASYNC_G2G_CALL_LIMIT_NS = env.CI ? 70_000_000 : 40_000_000;
 const WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT = env.CI ? 12 : 10;
 const SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT = env.CI ? 2_000 : 1_000;
 const ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT = env.CI ? 60_000 : 8_000;
+// CPU accounting can advance in millisecond-sized ticks. Sample for at least
+// 50ms of CPU time so the fast native baseline cannot round down to zero.
+const MIN_SAMPLE_CPU_US = 50_000;
 const ADDER_COMPONENT_PATH = fileURLToPath(new URL('./fixtures/components/adder.component.wasm', import.meta.url));
 const ADDER_MODULE_PATH = fileURLToPath(new URL('./fixtures/runtime/adder.wat', import.meta.url));
 
@@ -29,15 +32,25 @@ function median(values: number[]) {
     return sorted[Math.floor(sorted.length / 2)];
 }
 
+// Measure work done by this thread, excluding time descheduled while other CI
+// workers run. Wall-clock ratios sampled at different times can otherwise make
+// an unchanged component look slower simply because its sample was preempted.
 function measureSyncCall(call: (a: number, b: number) => number, calls: number) {
     const samples = [];
     let result = 0;
     for (let sample = 0; sample < 5; sample++) {
-        const start = hrtime.bigint();
-        for (let i = 0; i < calls; i++) {
-            result = call(i, 1);
-        }
-        samples.push(Number(hrtime.bigint() - start) / calls);
+        const start = threadCpuUsage();
+        let elapsedUs = 0;
+        let measuredCalls = 0;
+        do {
+            for (let i = 0; i < calls; i++) {
+                result = call(i, 1);
+            }
+            measuredCalls += calls;
+            const { user, system } = threadCpuUsage(start);
+            elapsedUs = user + system;
+        } while (elapsedUs < MIN_SAMPLE_CPU_US);
+        samples.push((elapsedUs * 1_000) / measuredCalls);
     }
     assert.strictEqual(result, calls);
     return median(samples);
@@ -47,11 +60,18 @@ async function measureAsyncCall(call: (a: number, b: number) => Promise<number>,
     const samples = [];
     let result = 0;
     for (let sample = 0; sample < 5; sample++) {
-        const start = hrtime.bigint();
-        for (let i = 0; i < calls; i++) {
-            result = await call(i, 1);
-        }
-        samples.push(Number(hrtime.bigint() - start) / calls);
+        const start = threadCpuUsage();
+        let elapsedUs = 0;
+        let measuredCalls = 0;
+        do {
+            for (let i = 0; i < calls; i++) {
+                result = await call(i, 1);
+            }
+            measuredCalls += calls;
+            const { user, system } = threadCpuUsage(start);
+            elapsedUs = user + system;
+        } while (elapsedUs < MIN_SAMPLE_CPU_US);
+        samples.push((elapsedUs * 1_000) / measuredCalls);
     }
     assert.strictEqual(result, calls);
     return median(samples);
@@ -87,6 +107,7 @@ suite('performance', () => {
                 const moduleNs = measureSyncCall(moduleAdd, 1_000_000);
                 const syncComponentNs = measureSyncCall(syncAdd, 100_000);
                 const asyncComponentNs = await measureAsyncCall(asyncAdd, 1_000);
+                const timings = JSON.stringify({ nativeNs, moduleNs, syncComponentNs, asyncComponentNs });
                 const moduleRatio = moduleNs / nativeNs;
                 const syncComponentRatio = syncComponentNs / nativeNs;
                 const asyncComponentRatio = asyncComponentNs / nativeNs;
@@ -94,17 +115,17 @@ suite('performance', () => {
                 assert.isBelow(
                     moduleRatio,
                     WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT,
-                    `sync Wasm module call overhead should remain below ${WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT}x native`,
+                    `sync Wasm module call overhead should remain below ${WASM_MODULE_CALL_OVERHEAD_RATIO_LIMIT}x native; CPU ns/call: ${timings}`,
                 );
                 assert.isBelow(
                     syncComponentRatio,
                     SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT,
-                    `sync component call overhead should remain below ${SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native`,
+                    `sync component call overhead should remain below ${SYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native; CPU ns/call: ${timings}`,
                 );
                 assert.isBelow(
                     asyncComponentRatio,
                     ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT,
-                    `async component call overhead should remain below ${ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native`,
+                    `async component call overhead should remain below ${ASYNC_COMPONENT_CALL_OVERHEAD_RATIO_LIMIT}x native; CPU ns/call: ${timings}`,
                 );
             } finally {
                 await Promise.all([sync.cleanup(), async.cleanup()]);
