@@ -1,10 +1,15 @@
 """ABI sensitivity controls for the pinned fixture refresh's printed-WIT comparison.
 
-Run with: python3 -m unittest discover -s scripts/fixtures/p3_sdk -p 'test_*.py'
+Run with: python3 -m unittest discover -s scripts/fixtures/p3_sdk/test -p '*.py'
 """
+import importlib.util
+from pathlib import Path
 import unittest
 
-from wit_surface import normalize_wit
+spec = importlib.util.spec_from_file_location('fixture_wit_surface', Path(__file__).resolve().parents[1] / 'wit_surface.py')
+normalizer = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(normalizer)
+normalize_wit = normalizer.normalize_wit
 
 
 class WitSurfaceTests(unittest.TestCase):

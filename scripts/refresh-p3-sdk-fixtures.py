@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild pinned Wasmtime P3 fixtures with the SDK cancellation-order fix.
+"""Rebuild pinned Wasmtime P3 fixtures with SDK cancellation and TCP EOF fixes.
 
 Requires Python 3.12+, the pinned Rust toolchain with wasm32-wasip1 installed,
 and the pinned wasm-tools CLI. Source archives, dependency versions, historical
@@ -77,8 +77,8 @@ def prepare(work, config, offline):
     sdk = source / 'wit-bindgen-patched'
     unpack(archives['sdk'], sdk)
 
-    # This is the upstream SDK 0.63 ordering fix backported to the original SDK.
-    # Guest program logic, WIT signatures, and the SDK's remaining code are intact.
+    # Backport the upstream SDK 0.63 cancellation ordering fix to SDK 0.58.
+    # The independent TCP guest correction is documented below.
     patch = sdk / 'src/rt/async_support/inter_task_wakeup.rs'
     before = '''        unsafe {
             UnitStreamOps.cancel_read(handle);
@@ -100,6 +100,23 @@ def prepare(work, config, offline):
         url = f"https://raw.githubusercontent.com/bytecodealliance/wasmtime/{override['revision']}/{override['path']}"
         cached = download(url, override['sha256'], cache / override['sha256'], offline)
         shutil.copyfile(cached, source / override['path'])
+
+    # A cancelled TCP read may observe EOF during its zero-length readiness
+    # probe. Stop before issuing another read after Dropped; the original
+    # per-byte checks and final total-byte assertion below this loop remain.
+    tcp = source / 'crates/test-programs/src/bin/p3_sockets_tcp_streams.rs'
+    before = '                            server.receive_stream.read(Vec::new()).await;'
+    after = '''                            let (status, empty) = server.receive_stream.read(Vec::new()).await;
+                            assert!(empty.is_empty());
+                            match status {
+                                StreamResult::Complete(0) => {},
+                                StreamResult::Dropped => break,
+                                _ => panic!("unexpected zero-length read result: {status:?}"),
+                            }'''
+    text = tcp.read_text()
+    if text.count(before) != 1:
+        raise RuntimeError('TCP source no longer matches the exact EOF readiness fix')
+    tcp.write_text(text.replace(before, after))
 
     with tarfile.open(archives['wasmtime']) as archive:
         member = next(item for item in archive.getmembers() if item.name.count('/') == 1 and item.name.endswith('/Cargo.toml'))
