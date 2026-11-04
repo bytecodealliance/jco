@@ -127,7 +127,7 @@ if (
     throw new Error('bitcast consumer failed');
 }
 const customModule: Pick<ResourceModule, 'tableGet'> = custom;
-const version: 1 = rootVersion;
+const version: 2 = rootVersion;
 const entry = defaultModule.tableGet({ RuntimeError: WebAssembly.RuntimeError }, [1 << 30, 0, 7, 42], 1);
 if (
     version !== CM_RUNTIME_API_VERSION ||

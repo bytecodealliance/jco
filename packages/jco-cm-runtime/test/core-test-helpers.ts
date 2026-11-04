@@ -38,6 +38,7 @@ export function createTestIntrinsics(options: CoreTestOptions = {}) {
     const asyncConstructor = operations.initializeAsyncFunctionConstructor();
     const ownProperty = operations.initializeHasOwnProperty();
     const disposeSymbol = operations.initializeSymbolDispose();
+    const disposalContext = { symbolDispose: disposeSymbol, disposedValues: new WeakSet<object>() };
     const fileCache = operations.initializeFileCompileCache(nodejsCompat);
     const base64Context = { WebAssembly: wasm as CoreCompilePlatform, nodejsCompat };
     const fetchContext = { WebAssembly: wasm as CoreStreamingCompilePlatform, nodejsCompat, fileCache };
@@ -76,7 +77,7 @@ export function createTestIntrinsics(options: CoreTestOptions = {}) {
         getErrorPayload: (value: unknown) => operations.getErrorPayload(ownProperty, value),
         getErrorPayloadString: (value: unknown) => operations.getErrorPayloadString(ownProperty, value),
         disposeHostValue: (value: unknown, disposeFn?: (this: unknown) => unknown) =>
-            operations.disposeHostValue(disposeSymbol, value, disposeFn),
+            operations.disposeHostValue(disposalContext, value, disposeFn),
         registerMemory: (args: Parameters<typeof operations.registerMemory>[1]) =>
             operations.registerMemory(memoryMap, args),
         lookupMemories: (args: { componentIdx: number; memoryIdx?: number }) =>

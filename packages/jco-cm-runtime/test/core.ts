@@ -150,6 +150,7 @@ test.concurrent('disposal is deferred, preserves the receiver, and prefers async
         },
     };
     core.disposeHostValue(value);
+    core.disposeHostValue(value);
     expect(calls).toEqual([]);
     await Promise.resolve();
     expect(calls).toEqual([value]);

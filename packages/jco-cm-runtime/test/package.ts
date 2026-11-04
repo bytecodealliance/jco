@@ -88,7 +88,7 @@ suite('runtime package', () => {
                 new URL('../../../crates/js-component-bindgen/src/intrinsics/ext.rs', import.meta.url),
                 'utf8',
             );
-            expect(rust).toContain('CM_RUNTIME_API_VERSION: u32 = 1;');
+            expect(rust).toContain('CM_RUNTIME_API_VERSION: u32 = 2;');
 
             // The independent provider needs only the published declaration, without private files.
             await writeFile(join(consumer, 'contract.d.ts'), contract);

@@ -13,7 +13,7 @@ suite('resource intrinsics', () => {
         const table = Object.freeze([TABLE_FLAG, 0, 7, 42 + TABLE_OWN, 11, 24]);
         expect(tableGet(context, table, 1)).toEqual({ rep: 42, scope: 7, own: true });
         expect(tableGet(context, table, 2)).toEqual({ rep: 24, scope: 11, own: false });
-        expect(CM_RUNTIME_API_VERSION).toBe(1);
+        expect(CM_RUNTIME_API_VERSION).toBe(2);
     });
 
     test.concurrent.each([

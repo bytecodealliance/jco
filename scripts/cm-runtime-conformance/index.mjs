@@ -33,7 +33,7 @@ export async function runRuntimeConformance({ base = DEFAULT_RUNTIME_BASE, group
     }
     const load = createRuntimeLoader(base);
     const runtime = await load('runtime');
-    testRuntimeApiVersion(runtime, 1);
+    testRuntimeApiVersion(runtime, 2);
     for (const group of selected) {
         try {
             await TEST_GROUPS.get(group)({ load, runtime });
