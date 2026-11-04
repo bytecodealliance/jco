@@ -1,0 +1,28 @@
+mod bindings {
+    use super::Component;
+    wit_bindgen::generate!({ world: "stream-host-resource-caller" });
+    export!(Component);
+}
+
+use bindings::jco::test_components::stream_host_resource_source::{Thing, make};
+use bindings::jco::test_components::stream_host_resource_writer;
+use bindings::wit_stream;
+use wit_bindgen::StreamReader;
+
+struct Component;
+
+impl bindings::Guest for Component {
+    async fn run(use_callee: bool) -> StreamReader<Thing> {
+        if use_callee {
+            return stream_host_resource_writer::run().await;
+        }
+        let (mut tx, rx) = wit_stream::new();
+        let thing = make();
+        wit_bindgen::spawn_local(async move {
+            assert!(tx.write_all(vec![thing]).await.is_empty());
+        });
+        rx
+    }
+}
+
+fn main() {}
