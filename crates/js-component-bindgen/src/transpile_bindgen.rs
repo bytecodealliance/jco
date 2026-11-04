@@ -282,6 +282,7 @@ struct JsFunctionBindgenArgs<'a> {
     abi: AbiVariant,
     /// Whether the function in question is a host async function (i.e. JSPI)
     requires_async_porcelain: bool,
+    manual_async: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
     is_async: bool,
     /// Whether the function in question is an import generated as a generator function
@@ -1277,7 +1278,14 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
                 WorldItem::Function(_) => {}
-                WorldItem::Type { .. } => unreachable!("unexpected exported world item type"),
+                WorldItem::Type { id, .. } => {
+                    if let Export::Type(TypeDef::Resource(resource)) = export {
+                        let ty = crate::dealias(self.resolve, *id);
+                        let concrete_ty = self.types[*resource].unwrap_concrete_ty();
+                        self.exports_resource_types.insert(ty, concrete_ty);
+                        self.exports_resource_index_types.insert(concrete_ty, ty);
+                    }
+                }
             }
         }
     }
@@ -1792,13 +1800,15 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::StreamCancelWrite { instance, .. }
             | Trampoline::StreamDropReadable { instance, .. }
             | Trampoline::StreamDropWritable { instance, .. }
+            | Trampoline::StreamForward { instance, .. }
             | Trampoline::FutureNew { instance, .. }
             | Trampoline::FutureRead { instance, .. }
             | Trampoline::FutureWrite { instance, .. }
             | Trampoline::FutureCancelRead { instance, .. }
             | Trampoline::FutureCancelWrite { instance, .. }
             | Trampoline::FutureDropReadable { instance, .. }
-            | Trampoline::FutureDropWritable { instance, .. } => *instance,
+            | Trampoline::FutureDropWritable { instance, .. }
+            | Trampoline::FutureForward { instance, .. } => *instance,
         };
         Some(instance)
     }
@@ -1993,6 +2003,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::FutureCancelWrite { .. }
                 | Trampoline::FutureDropReadable { .. }
                 | Trampoline::FutureDropWritable { .. }
+                | Trampoline::FutureForward { .. }
                 | Trampoline::FutureNew { .. }
                 | Trampoline::FutureRead { .. }
                 | Trampoline::FutureTransfer
@@ -2008,6 +2019,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::StreamCancelWrite { .. }
                 | Trampoline::StreamDropReadable { .. }
                 | Trampoline::StreamDropWritable { .. }
+                | Trampoline::StreamForward { .. }
                 | Trampoline::StreamNew { .. }
                 | Trampoline::StreamRead { .. }
                 | Trampoline::StreamTransfer
@@ -2043,14 +2055,37 @@ impl<'a> Instantiator<'a, '_> {
     ) {
         let concede_fn = self.bindgen.intrinsic(Intrinsic::AsyncTask(intrinsic));
         let suspending_wrap_fn = self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+        let conditional = self.bindgen.intrinsic(match intrinsic {
+            AsyncTaskIntrinsic::ThreadYield | AsyncTaskIntrinsic::ThreadSuspend => {
+                Intrinsic::ConditionalSuspending0ToI32Fn
+            }
+            _ => Intrinsic::ConditionalSuspending1I32ToI32Fn,
+        });
+        let check_leave = self
+            .bindgen
+            .intrinsic(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
+        let guard = self
+            .bindgen
+            .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
+        // A post-return runs on a plain Wasm activation. Check may_leave
+        // before entering a Suspending import, which would otherwise throw
+        // SuspendError before the canonical built-in gets to enforce it.
         uwriteln!(
             self.src.js,
             r#"
-              const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({instance}, {concede_fn}.bind(null, {{
-                  isCancellable: {cancellable},
-                  componentIdx: {instance},
-              }})));
-            "#
+            const trampoline{i} = {conditional}(
+                {guard}({instance}, (...args) => {{
+                    {check_leave}({instance});
+                    return {concede_fn}({{
+                        isCancellable: {cancellable}, componentIdx: {instance}, syncFastOnly: true,
+                    }}, ...args);
+                }}),
+                {suspending_wrap_fn}({instance}, {concede_fn}.bind(null, {{
+                    isCancellable: {cancellable},
+                    componentIdx: {instance},
+                }})),
+            );
+        "#
         );
     }
 
@@ -2375,7 +2410,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}(
                             {guard_trap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
-                            {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                            {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true, resumeCopy: true }})),
                         );"#,
                     );
                 }
@@ -2481,7 +2516,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}(
                             {guard_trap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
-                            {suspending_wrap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                            {suspending_wrap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true, resumeCopy: true }})),
                         );"#,
                     );
                 }
@@ -2524,9 +2559,20 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending1I32ToI32Fn);
+                    let guard = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {stream_cancel_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional}(
+                            {guard}({component_idx}, {stream_cancel_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
+                            {suspending_wrap_fn}({component_idx}, {stream_cancel_fn}.bind(null, {{ ...{ctx}, resumeCancel: true }})),
+                        );
+                    "#
                     );
                 }
             }
@@ -2674,9 +2720,20 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending2I32ToI32Fn);
+                    let guard = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {intrinsic_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional}(
+                            {guard}({component_idx}, {intrinsic_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
+                            {suspending_wrap_fn}({component_idx}, {intrinsic_fn}.bind(null, {ctx})),
+                        );
+                    "#
                     );
                 }
             }
@@ -2719,9 +2776,20 @@ impl<'a> Instantiator<'a, '_> {
                 } else {
                     let suspending_wrap_fn =
                         self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let conditional = self
+                        .bindgen
+                        .intrinsic(Intrinsic::ConditionalSuspending1I32ToI32Fn);
+                    let guard = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {future_cancel_op_fn}.bind(null, {ctx})));",
+                        r#"
+                        const trampoline{i} = {conditional}(
+                            {guard}({component_idx}, {future_cancel_op_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }})),
+                            {suspending_wrap_fn}({component_idx}, {future_cancel_op_fn}.bind(null, {{ ...{ctx}, resumeCancel: true }})),
+                        );
+                    "#
                     );
                 }
             }
@@ -2752,6 +2820,30 @@ impl<'a> Instantiator<'a, '_> {
                           }},
                       );
                 "#,
+                );
+            }
+
+            Trampoline::StreamForward { instance, ty } => {
+                let forward = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamForward));
+                let component_idx = instance.as_u32();
+                let table_idx = ty.as_u32();
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {forward}.bind(null, {{ componentIdx: {component_idx}, streamTableIdx: {table_idx} }});"
+                );
+            }
+
+            Trampoline::FutureForward { instance, ty } => {
+                let forward = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureForward));
+                let component_idx = instance.as_u32();
+                let table_idx = ty.as_u32();
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {forward}.bind(null, {{ componentIdx: {component_idx}, futureTableIdx: {table_idx} }});"
                 );
             }
 
@@ -4178,21 +4270,33 @@ impl<'a> Instantiator<'a, '_> {
                     )
             )
         });
-        let uses_thread_suspension = args.iter().any(|def| {
-            matches!(
-                def,
-                CoreDef::Trampoline(index)
-                    if matches!(
-                        &self.translation.trampolines[*index],
-                        Trampoline::ThreadYield { .. }
-                            | Trampoline::ThreadSuspend { .. }
-                            | Trampoline::ThreadSuspendThenResume { .. }
-                            | Trampoline::ThreadSuspendThenPromote { .. }
-                            | Trampoline::ThreadYieldThenResume { .. }
-                            | Trampoline::ThreadYieldThenPromote { .. }
-                    )
-            )
+        // Ready helpers can make a synchronous built-in legally block even
+        // when this module never imports yield/suspend directly. Scope this
+        // capability to the owning component, including its other modules.
+        let has_cooperative_threads = instance.is_some_and(|owner| {
+            self.translation.trampolines.iter().any(|(_, trampoline)| {
+                matches!(trampoline,
+                    Trampoline::ThreadNewIndirect { instance, .. }
+                    | Trampoline::ThreadResumeLater { instance }
+                    if *instance == owner)
+            })
         });
+        let uses_thread_suspension = has_cooperative_threads
+            || args.iter().any(|def| {
+                matches!(
+                    def,
+                    CoreDef::Trampoline(index)
+                        if matches!(
+                            &self.translation.trampolines[*index],
+                            Trampoline::ThreadYield { .. }
+                                | Trampoline::ThreadSuspend { .. }
+                                | Trampoline::ThreadSuspendThenResume { .. }
+                                | Trampoline::ThreadSuspendThenPromote { .. }
+                                | Trampoline::ThreadYieldThenResume { .. }
+                                | Trampoline::ThreadYieldThenPromote { .. }
+                        )
+                )
+            });
         // Mutable imported/exported tables make indirect calls unsafe to run
         // directly, but do not by themselves change a component export's API
         // into a Promise-returning one. Only known suspending targets propagate
@@ -4421,10 +4525,13 @@ impl<'a> Instantiator<'a, '_> {
         // `implements` feature) falls back to a mapping for the implemented
         // interface id when the label itself has no mapping, so that e.g.
         // WASI shim mappings apply to labeled imports as well.
-        let implements = self.resolve.implements_value(
-            world_key,
-            &self.resolve.worlds[self.world].imports[world_key],
-        );
+        let implements = self
+            .resolve
+            .implements_interface(
+                world_key,
+                &self.resolve.worlds[self.world].imports[world_key],
+            )
+            .and_then(|id| self.resolve.id_of(id));
 
         // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import_with_implements(
@@ -4453,6 +4560,8 @@ impl<'a> Instantiator<'a, '_> {
                         import_name.strip_prefix("[constructor]").unwrap()
                     }
                     FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => import_name,
+
+                    _ => unreachable!("accessors rejected before code generation"),
                 }
             },
             implements.as_deref(),
@@ -4533,6 +4642,8 @@ impl<'a> Instantiator<'a, '_> {
                 ),
                 CallType::Standard,
             ),
+
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         // A function's interface type can be async while its canonical lower is
@@ -4605,6 +4716,7 @@ impl<'a> Instantiator<'a, '_> {
                     resource_map: &import_resource_map,
                     abi,
                     requires_async_porcelain,
+                    manual_async: requires_async_porcelain,
                     is_async,
                     host_import_generator,
                     wrap_async_future_result: false,
@@ -4687,6 +4799,8 @@ impl<'a> Instantiator<'a, '_> {
                         self.imported_resource_name(*import_index, resource_id)
                     )
                 }
+
+                _ => unreachable!("accessors rejected before code generation"),
             };
 
             // Save information about imported resources for later
@@ -4768,6 +4882,8 @@ impl<'a> Instantiator<'a, '_> {
                 let resource_name = self.imported_resource_name(*import_index, tid);
                 (class_name, resource_name)
             }
+
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         self.ensure_import(
@@ -5084,7 +5200,8 @@ impl<'a> Instantiator<'a, '_> {
             let implements = self.resolve.worlds[self.world]
                 .imports
                 .get(&world_key)
-                .and_then(|item| self.resolve.implements_value(&world_key, item));
+                .and_then(|item| self.resolve.implements_interface(&world_key, item))
+                .and_then(|id| self.resolve.id_of(id));
             let (local_name, _) = self
                 .bindgen
                 .local_names
@@ -5405,6 +5522,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             abi,
             requires_async_porcelain,
+            manual_async,
             is_async,
             host_import_generator,
             wrap_async_future_result,
@@ -5631,6 +5749,7 @@ impl<'a> Instantiator<'a, '_> {
             src: source::Source::default(),
             resolve: self.resolve,
             requires_async_porcelain,
+            manual_async,
             is_async,
             host_import_generator,
             canonical_abi_async: opts.async_,
@@ -5997,6 +6116,14 @@ impl<'a> Instantiator<'a, '_> {
         for (export_name, (export_idx, _extern_data)) in self.component.exports.raw_iter() {
             let export_name = export_name.as_ref().to_string();
             let export = &self.component.export_items[*export_idx];
+            // Core-module exports are outside the WIT host surface. All module
+            // initializers are still emitted and executed during instantiation.
+            if matches!(
+                export,
+                Export::ModuleStatic { .. } | Export::ModuleImport { .. }
+            ) {
+                continue;
+            }
             let world_key = &self.exports[&export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut export_resource_map = ResourceMap::new();
@@ -6032,6 +6159,8 @@ impl<'a> Instantiator<'a, '_> {
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                             self.bindgen.local_names.create_once(&export_name)
                         }
+
+                        _ => unreachable!("accessors rejected before code generation"),
                     });
 
                     let options = self
@@ -6065,6 +6194,8 @@ impl<'a> Instantiator<'a, '_> {
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                             export_name.to_lower_camel_case()
                         }
+
+                        _ => unreachable!("accessors rejected before code generation"),
                     };
 
                     // Add the export binding
@@ -6196,6 +6327,8 @@ impl<'a> Instantiator<'a, '_> {
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                                 self.bindgen.local_names.create_once(&func_name)
                             }
+
+                            _ => unreachable!("accessors rejected before code generation"),
                         });
 
                         let options = self
@@ -6230,6 +6363,8 @@ impl<'a> Instantiator<'a, '_> {
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                                 func_name.to_lower_camel_case()
                             }
+
+                            _ => unreachable!("accessors rejected before code generation"),
                         };
 
                         // Add the export binding
@@ -6279,12 +6414,12 @@ impl<'a> Instantiator<'a, '_> {
                     format!("{export_name}#{func_name}")
                 });
         }
-        let requires_async_porcelain = inferred_async
-            || requires_async_porcelain(
-                FunctionIdentifier::Fn(func),
-                export_name,
-                &self.async_exports,
-            );
+        let manual_async = requires_async_porcelain(
+            FunctionIdentifier::Fn(func),
+            export_name,
+            &self.async_exports,
+        );
+        let requires_async_porcelain = inferred_async || manual_async;
         // If the function is *also* async lifted, it
         if options.async_ {
             assert!(
@@ -6322,6 +6457,8 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Constructor(_) => {
                 unreachable!("constructors cannot return futures")
             }
+
+            _ => unreachable!("accessors rejected before code generation"),
         });
 
         // Start building early variable declarations
@@ -6426,6 +6563,7 @@ impl<'a> Instantiator<'a, '_> {
                     "\n{local_name}.{method_name} = {maybe_async}function {fn_name}",
                 );
             }
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         // Perform bindgen
@@ -6440,6 +6578,7 @@ impl<'a> Instantiator<'a, '_> {
                 FunctionKind::AsyncFreestanding | FunctionKind::AsyncStatic(_) => {
                     CallType::AsyncStandard
                 }
+                _ => unreachable!("accessors rejected before code generation"),
             },
             iface_name: iface_name.map(|v| v.as_str()),
             callee: &callee,
@@ -6448,6 +6587,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map: export_resource_map,
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
+            manual_async,
             is_async,
             host_import_generator: false,
             wrap_async_future_result,
@@ -6470,6 +6610,7 @@ impl<'a> Instantiator<'a, '_> {
             | FunctionKind::Method(_)
             | FunctionKind::Static(_) => self.src.js(";\n"),
             FunctionKind::Constructor(_) => self.src.js("\n}\n"),
+            _ => unreachable!("accessors rejected before code generation"),
         }
     }
 }

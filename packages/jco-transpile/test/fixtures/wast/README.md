@@ -26,10 +26,9 @@ The manifest covers all 78 WAST paths in upstream `test/` at
 [`c818a1925e1c7e3d3c8bdecf2fba070b4e737b03`](https://github.com/WebAssembly/component-model/tree/c818a1925e1c7e3d3c8bdecf2fba070b4e737b03/test),
 including the async tests added by
 [#761](https://github.com/WebAssembly/component-model/pull/761), as well as
-binary, linking, resource, validation, and value tests. All fixtures use that
-revision except `async/big-interleaving-test.wast`: it retains its earlier pin
-so its existing coverage can run until Jco's parser supports `stream.forward`
-and `future.forward`.
+binary, linking, resource, validation, and value tests. All fixtures, including
+`async/big-interleaving-test.wast`, use that revision; forwarding syntax and
+runtime support allow the full interleaving fixture to run.
 
 The [WAST runner](../../p3/ported/component-model/wast.ts) derives its test
 list from the manifest. Vendored fixtures that cannot yet run have explicit

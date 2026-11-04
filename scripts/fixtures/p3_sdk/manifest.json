@@ -1,0 +1,346 @@
+{
+  "wasmtime": {
+    "revision": "90fed3c6adf53f112c4dea56851728557bb73799",
+    "url": "https://codeload.github.com/bytecodealliance/wasmtime/tar.gz/90fed3c6adf53f112c4dea56851728557bb73799",
+    "sha256": "78c551de7fe196c440d2d7ef471170e8f1f96a70a48b1260aba34789b06cff86"
+  },
+  "sdk": {
+    "version": "0.58.0",
+    "url": "https://static.crates.io/crates/wit-bindgen/wit-bindgen-0.58.0.crate",
+    "sha256": "a43552cfa071f246cfd99e5dbb23710dfe7336b3259e09339818483359470749"
+  },
+  "adapter40": {
+    "url": "https://static.crates.io/crates/wasi-preview1-component-adapter-provider/wasi-preview1-component-adapter-provider-40.0.2.crate",
+    "sha256": "48687079c363ba466161242dae89227601feb12d19b7c5ac5ed8c7ca39266ca5"
+  },
+  "rustc": "1.99.1",
+  "wasmTools": "1.262.0",
+  "sourceOverrides": [
+    {
+      "path": "crates/test-programs/src/bin/p3_sockets_ip_name_lookup.rs",
+      "revision": "f10f708c0412b94faadfcf8d9594acd8156d68e6",
+      "sha256": "f5d1ebd12d87136c11c7c42a66306d9d098ec7c39be217790687914a53863074"
+    },
+    {
+      "path": "crates/test-programs/src/bin/async_backpressure_callee.rs",
+      "revision": "02ebcd1c6c4e70cd933bb8f341fa45c15ff1b605",
+      "sha256": "887169ffcb1b2f7957bcef9ec829172d85cfc9294b98dd71ea609b01ad824cec"
+    },
+    {
+      "path": "crates/misc/component-async-tests/wit/test.wit",
+      "revision": "02ebcd1c6c4e70cd933bb8f341fa45c15ff1b605",
+      "sha256": "03b97189ab6d2c6615129432292a0533855ab522626d1c8651b3ebc3627fafa3"
+    }
+  ],
+  "fixtures": [
+    {
+      "path": "backpressure/async-backpressure-callee.wasm",
+      "bin": "async_backpressure_callee",
+      "wasi": "0.2.6"
+    },
+    {
+      "path": "backpressure/async-backpressure-caller.wasm",
+      "bin": "async_backpressure_caller",
+      "wasi": "0.2.6"
+    },
+    {
+      "path": "cli/p3-cli-hello-stdout-post-return.wasm",
+      "bin": "p3_cli_hello_stdout_post_return",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "cli/p3-cli-hello-stdout.wasm",
+      "bin": "p3_cli_hello_stdout",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "cli/p3-cli-much-stdout.wasm",
+      "bin": "p3_cli_much_stdout",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "cli/p3-cli-serve-hello-world.wasm",
+      "bin": "p3_cli_serve_hello_world",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "cli/p3-cli.wasm",
+      "bin": "p3_cli",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "clocks/p3-clocks-sleep.wasm",
+      "bin": "p3_clocks_sleep",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "fs/p3-file-write.wasm",
+      "bin": "p3_file_write",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "fs/p3-filesystem-file-read-write.wasm",
+      "bin": "p3_filesystem_file_read_write",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "fs/p3-readdir.wasm",
+      "bin": "p3_readdir",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "general/async-transmit-callee.wasm",
+      "bin": "async_transmit_callee",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "general/async-transmit-caller.wasm",
+      "bin": "async_transmit_caller",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-api-proxy.wasm",
+      "bin": "p3_api_proxy",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-echo.wasm",
+      "bin": "p3_http_echo",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-middleware-with-chain.wasm",
+      "bin": "p3_http_middleware_with_chain",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-middleware.wasm",
+      "bin": "p3_http_middleware",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-content-length.wasm",
+      "bin": "p3_http_outbound_request_content_length",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-get.wasm",
+      "bin": "p3_http_outbound_request_get",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-invalid-dnsname.wasm",
+      "bin": "p3_http_outbound_request_invalid_dnsname",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-invalid-header.wasm",
+      "bin": "p3_http_outbound_request_invalid_header",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-invalid-port.wasm",
+      "bin": "p3_http_outbound_request_invalid_port",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-invalid-version.wasm",
+      "bin": "p3_http_outbound_request_invalid_version",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-large-post.wasm",
+      "bin": "p3_http_outbound_request_large_post",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-missing-path-and-query.wasm",
+      "bin": "p3_http_outbound_request_missing_path_and_query",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-post.wasm",
+      "bin": "p3_http_outbound_request_post",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-put.wasm",
+      "bin": "p3_http_outbound_request_put",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-response-build.wasm",
+      "bin": "p3_http_outbound_request_response_build",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-timeout.wasm",
+      "bin": "p3_http_outbound_request_timeout",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-unknown-method.wasm",
+      "bin": "p3_http_outbound_request_unknown_method",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-outbound-request-unsupported-scheme.wasm",
+      "bin": "p3_http_outbound_request_unsupported_scheme",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "http/p3-http-proxy.wasm",
+      "bin": "p3_http_proxy",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "random/p3-random-imports.wasm",
+      "bin": "p3_random_imports",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-direct-stackless.wasm",
+      "bin": "async_round_trip_direct_stackless",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-many-stackful.wasm",
+      "bin": "async_round_trip_many_stackful",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-many-stackless.wasm",
+      "bin": "async_round_trip_many_stackless",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-many-synchronous.wasm",
+      "bin": "async_round_trip_many_synchronous",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-many-wait.wasm",
+      "bin": "async_round_trip_many_wait",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-stackful.wasm",
+      "bin": "async_round_trip_stackful",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-stackless-sync-import.wasm",
+      "bin": "async_round_trip_stackless_sync_import",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-stackless.wasm",
+      "bin": "async_round_trip_stackless",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-synchronous.wasm",
+      "bin": "async_round_trip_synchronous",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "round-trip/async-round-trip-wait.wasm",
+      "bin": "async_round_trip_wait",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-ip-name-lookup.wasm",
+      "bin": "p3_sockets_ip_name_lookup",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-tcp-bind.wasm",
+      "bin": "p3_sockets_tcp_bind",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-tcp-connect.wasm",
+      "bin": "p3_sockets_tcp_connect",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-tcp-listen.wasm",
+      "bin": "p3_sockets_tcp_listen",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-tcp-sample-application.wasm",
+      "bin": "p3_sockets_tcp_sample_application",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-tcp-sockopts.wasm",
+      "bin": "p3_sockets_tcp_sockopts",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-tcp-states.wasm",
+      "bin": "p3_sockets_tcp_states",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-tcp-streams.wasm",
+      "bin": "p3_sockets_tcp_streams",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-udp-bind.wasm",
+      "bin": "p3_sockets_udp_bind",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-udp-connect.wasm",
+      "bin": "p3_sockets_udp_connect",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-udp-receive.wasm",
+      "bin": "p3_sockets_udp_receive",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-udp-sample-application.wasm",
+      "bin": "p3_sockets_udp_sample_application",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-udp-send.wasm",
+      "bin": "p3_sockets_udp_send",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-udp-sockopts.wasm",
+      "bin": "p3_sockets_udp_sockopts",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "sockets/p3-sockets-udp-states.wasm",
+      "bin": "p3_sockets_udp_states",
+      "wasi": "0.2.12"
+    },
+    {
+      "path": "streams/async-read-resource-stream.wasm",
+      "bin": "async_read_resource_stream",
+      "wasi": "0.2.6"
+    },
+    {
+      "path": "streams/async-unit-stream-callee.wasm",
+      "bin": "async_unit_stream_callee",
+      "wasi": "0.2.6"
+    },
+    {
+      "path": "streams/async-unit-stream-caller.wasm",
+      "bin": "async_unit_stream_caller",
+      "wasi": "0.2.6"
+    }
+  ],
+  "repositoryAdapters": {
+    "reactor": "b857310c4753c8fafaa0f890e9ccf978dc3d9dbe8804b1125291a627485041d0",
+    "command": "2a652d711c1fff34f9d5a0e073e50ef7eeb8fe7d8a6d559eae643a4c049a7b94"
+  }
+}

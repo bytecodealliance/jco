@@ -46,6 +46,15 @@ suite('resource intrinsics', () => {
         });
         expect(() => tableGet.call(null, outer, table, 1)).toThrowError(OuterTrap);
     });
+    test.concurrent.each([-1, -2147483648])('reports signed core handle %i as an unsigned index', (handle) => {
+        expect(() => tableGet(context, [TABLE_FLAG, 0], handle)).toThrow(`unknown handle index ${handle >>> 0}`);
+    });
+    test.concurrent('a high-bit handle cannot alias a live entry', () => {
+        const table = [TABLE_FLAG, 0, 0, 42 + TABLE_OWN];
+        expect(tableGet(context, table, 1)).toEqual({ rep: 42, scope: 0, own: true });
+        expect(() => tableGet(context, table, 0x80000001)).toThrow('unknown handle index 2147483649');
+        expect(tableGet(context, table, 1)).toEqual({ rep: 42, scope: 0, own: true });
+    });
     // Preserve the full-u32 and zero-representation regressions from the inline runtime.
     test.concurrent.each([0, 0x40000000, 0x7ffffff0, 0x80000010, 0xc0000010, 0xffffffff])(
         'keeps every bit of owned and borrowed rep %i',

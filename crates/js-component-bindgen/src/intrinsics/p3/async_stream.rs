@@ -235,6 +235,12 @@ pub enum AsyncStreamIntrinsic {
     /// ```
     StreamTransfer,
 
+    /// Consume a readable and writable end, connecting their surviving peers.
+    StreamForward,
+
+    /// Shared endpoint-splicing implementation for streams and futures.
+    SpliceStreamEnds,
+
     /// Function to check whether a JS object can be used as a stream
     IsStreamLowerableObject,
 
@@ -278,6 +284,8 @@ impl AsyncStreamIntrinsic {
             Self::StreamDropReadable.name(),
             Self::StreamDropWritable.name(),
             Self::StreamTransfer.name(),
+            Self::StreamForward.name(),
+            Self::SpliceStreamEnds.name(),
             Self::StreamCancelRead.name(),
             Self::StreamCancelWrite.name(),
             Self::IsStreamLowerableObject.name(),
@@ -310,6 +318,8 @@ impl AsyncStreamIntrinsic {
             Self::StreamDropReadable => "streamDropReadable",
             Self::StreamDropWritable => "streamDropWritable",
             Self::StreamTransfer => "streamTransfer",
+            Self::StreamForward => "streamForward",
+            Self::SpliceStreamEnds => "spliceStreamEnds",
             Self::StreamCancelRead => "streamCancelRead",
             Self::StreamCancelWrite => "streamCancelWrite",
             Self::IsStreamLowerableObject => "_isStreamLowerableObject",
@@ -469,11 +479,12 @@ impl AsyncStreamIntrinsic {
                             throw new TypeError("must specify either waitable idx or handle to retrieve stream");
                         }}
 
-                        if (!(streamEnd instanceof {stream_end_class})) {{
-                            throw new {runtime_error_class}(`missing stream end (tableIdx [${{tableIdx}}], handle [${{streamEndHandle}}], waitableIdx [${{streamEndWaitableIdx}}])`);
+                        const index = (streamEndWaitableIdx ?? streamEndHandle) >>> 0;
+                        if (!streamEnd) {{
+                            throw new {runtime_error_class}(`unknown handle index ${{index}}`);
                         }}
-                        if (streamEnd.streamTableIdx() !== tableIdx) {{
-                            throw new {runtime_error_class}(`stream end table idx [${{streamEnd.streamTableIdx()}}] does not match [${{tableIdx}}]`);
+                        if (!(streamEnd instanceof {stream_end_class}) || streamEnd.streamTableIdx() !== tableIdx) {{
+                            throw new {runtime_error_class}(`handle index ${{index}} used with the wrong type`);
                         }}
 
                         return streamEnd;
@@ -612,6 +623,7 @@ impl AsyncStreamIntrinsic {
                         #dropped = false;
                         #isPeerDroppedFn;
                         #notifyPeerDroppedFn;
+                        #peer = null;
 
                         target;
 
@@ -701,7 +713,15 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         isDropped() {{ return this.#dropped; }}
-                        isPeerDropped() {{ return this.#isPeerDroppedFn(); }}
+                        peer() {{ return this.#peer; }}
+                        setPeer(peer) {{
+                            this.#peer = peer;
+                            // Constructor callbacks capture the original pair. Once
+                            // peers can move, retain only the live endpoint graph.
+                            this.#isPeerDroppedFn = () => false;
+                            this.#notifyPeerDroppedFn = () => {{}};
+                        }}
+                        isPeerDropped() {{ return this.#peer ? this.#peer.isDropped() : this.#isPeerDroppedFn(); }}
 
                         notifyDropped() {{
                             if (this.isDropped() || this.isDoneState() || this.hasPendingEvent()) {{ return; }}
@@ -735,7 +755,7 @@ impl AsyncStreamIntrinsic {
                             }}
 
                             this.#dropped = true;
-                            this.#notifyPeerDroppedFn();
+                            if (this.#peer) {{ this.#peer.notifyDropped(); }} else {{ this.#notifyPeerDroppedFn(); }}
                             if (this.#waitable) {{
                                 const w = this.#waitable;
                                 if (opts.allowPendingEvent) {{
@@ -808,6 +828,7 @@ impl AsyncStreamIntrinsic {
                             if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
                                 throw new Error(`stream copy state is not idle`);
                             }}
+                            this.#copyToken = {{}};
                         }}
 
                         const elemMeta = args.elemMeta ?? this.getElemMeta();
@@ -1631,6 +1652,9 @@ impl AsyncStreamIntrinsic {
                         #elemMeta = null;
                         // held by both write and read ends
                         #pendingBufferMeta = null;
+                        // The shared pending buffer can move between peers during
+                        // rendezvous/forwarding. Track this end's operation separately.
+                        #copyToken = null;
 
                         // table index that the stream is in (can change after a stream transfer)
                         #streamTableIdx;
@@ -1696,6 +1720,22 @@ impl AsyncStreamIntrinsic {
                         }}
                         setHostCancelFn(f) {{ this.#hostCancelFn = f; }}
                         hasHostInject() {{ return !!this.#hostInjectFn; }}
+                        moveHostHooksTo(end) {{
+                            if (end.isDropped()) {{
+                                const hostDropFn = this.#hostDropFn;
+                                this.#hostInjectFn = null;
+                                this.#hostDropFn = null;
+                                this.#hostCancelFn = null;
+                                if (hostDropFn) {{ hostDropFn(); }}
+                                return;
+                            }}
+                            if (this.#hostInjectFn) {{ end.setHostInjectFn(this.#hostInjectFn); }}
+                            if (this.#hostDropFn) {{ end.setHostDropFn(this.#hostDropFn); }}
+                            if (this.#hostCancelFn) {{ end.setHostCancelFn(this.#hostCancelFn); }}
+                            this.#hostInjectFn = null;
+                            this.#hostDropFn = null;
+                            this.#hostCancelFn = null;
+                        }}
                         setSourceRebufferFn(f) {{ this.#sourceRebufferFn = f; }}
 
                         getElemMeta() {{ return {{...this.#elemMeta}}; }}
@@ -1725,6 +1765,7 @@ impl AsyncStreamIntrinsic {
                             this.setPendingBufferMeta({{ componentIdx: null, buffer: null, onCopyFn: null, onCopyDoneFn: null, rejectLength: undefined, dropAfterCopy: false }});
                         }}
 
+                        setPendingBufferStore(meta) {{ this.#pendingBufferMeta = meta; }}
                         getPendingBufferMeta() {{ return this.#pendingBufferMeta; }}
                         hasPendingBuffer() {{ return !!this.#pendingBufferMeta?.buffer; }}
 
@@ -1736,8 +1777,11 @@ impl AsyncStreamIntrinsic {
 
                         cancel() {{
                             {debug_log_fn}('[{stream_end_class}#cancel()]');
+                            const copyToken = this.#copyToken;
                             const completeCancel = () => {{
                                 if (this.isDropped()) {{ return; }}
+                                if (this.#copyToken !== copyToken
+                                    || this.getCopyState() !== {stream_end_class}.CopyState.CANCELLING_COPY) {{ return; }}
                                 // Host injection may complete the copy before this deferred
                                 // cancellation runs. Preserve that completion event instead of
                                 // cancelling the next operation or starting a duplicate write.
@@ -1828,6 +1872,8 @@ impl AsyncStreamIntrinsic {
                                 isPeerDroppedFn: () => this.#readEnd.isDropped(),
                                 notifyPeerDroppedFn: () => this.#readEnd.notifyDropped(),
                             }});
+                            this.#readEnd.setPeer(this.#writeEnd);
+                            this.#writeEnd.setPeer(this.#readEnd);
                         }}
 
                         elemMeta() {{ return this.#elemMeta; }}
@@ -2265,6 +2311,10 @@ impl AsyncStreamIntrinsic {
             // The pending buffer represents waiting write/read buffer.
             //
             Self::StreamWrite | Self::StreamRead => {
+                let current_thread =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CurrentThreadOrThrow);
+                let blocked =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::AsyncBlockedConstant);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_op_fn = self.name();
                 let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
@@ -2291,6 +2341,8 @@ impl AsyncStreamIntrinsic {
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
+                let check_sync_suspend =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CheckSyncTaskCanSuspend);
                 output.push_str(&format!(r#"
                     function {stream_op_fn}(
                         ctx,
@@ -2324,7 +2376,7 @@ impl AsyncStreamIntrinsic {
                         count = Math.min(count >>> 0, {managed_buffer_class}.MAX_LENGTH);
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        if (!cstate.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         if (!{may_block} && !isAsync) {{
                             throw new {runtime_error_class}('only async tasks or otherwise blocking-allowed tasks my stream.{stream_op_fn}');
@@ -2347,6 +2399,8 @@ impl AsyncStreamIntrinsic {
                             throw new {runtime_error_class}(message);
                         }}
 
+                        const perform = () => {{
+
                         // Validate before copy's early return for a dropped peer, too.
                         const memory = getMemoryFn?.();
                         {managed_buffer_class}.validateGuestBuffer(memory, ptr, count, elemMeta ?? streamEnd.getElemMeta());
@@ -2362,10 +2416,11 @@ impl AsyncStreamIntrinsic {
                             && !streamEnd.hasPendingBuffer()) {{
                             // -2 tells the conditional trampoline to take its suspending
                             // slow path (a synchronous copy must block, never report BLOCKED).
+                            {check_sync_suspend}(componentIdx);
                             return 0xFFFFFFFE;
                         }}
 
-                        return streamEnd.copy({{
+                        const copy = () => streamEnd.copy({{
                             isAsync,
                             memory,
                             ptr,
@@ -2378,6 +2433,24 @@ impl AsyncStreamIntrinsic {
                             elemMeta,
                             deferSyncFinish,
                         }});
+                        // A zero-length rendezvous can notify the peer while
+                        // leaving this operation pending. Resume that same copy
+                        // on the slow path instead of registering it twice.
+                        if (ctx.resumeCopy && streamEnd.isCopying() && !streamEnd.hasPendingEvent()) {{
+                            const {{ task }} = {current_thread}(componentIdx);
+                            return task.suspendUntil({{
+                                cancellable: false,
+                                readyFn: () => streamEnd.hasPendingEvent(),
+                            }}).then(copy);
+                        }}
+                        const result = copy();
+                        if (syncFastOnly && result === {blocked}) {{
+                            {check_sync_suspend}(componentIdx);
+                            return -2;
+                        }}
+                        return result;
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : streamEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#));
             }
@@ -2407,17 +2480,21 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
+                let check_sync_suspend =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CheckSyncTaskCanSuspend);
                 output.push_str(&format!(r#"
                     function {stream_cancel_fn}(ctx, streamEndWaitableIdx) {{
                         {debug_log_fn}('[{stream_cancel_fn}()] args', {{ ctx, streamEndWaitableIdx }});
                         const {{ streamTableIdx, isAsync, componentIdx }} = ctx;
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-                        if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        if (!cstate.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         const streamEnd = {get_stream_end_fn}({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
                         if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
+
+                        const perform = () => {{
 
                         if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
 
@@ -2439,10 +2516,15 @@ impl AsyncStreamIntrinsic {
                         }};
 
                         if (!streamEnd.hasPendingEvent()) {{
-                            streamEnd.cancel();
+                            // The conditional JSPI fast path has already started
+                            // this cancellation. Its slow path only waits for it.
+                            if (!ctx.resumeCancel) {{ streamEnd.cancel(); }}
 
                             if (!streamEnd.hasPendingEvent()) {{
-                                if (isAsync) {{ return {async_blocked_const}; }}
+                                if (isAsync) {{
+                                    if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx); return -2; }}
+                                    return {async_blocked_const};
+                                }}
 
                                 const taskMeta = {current_task_get_fn}(componentIdx);
                                 if (!taskMeta) {{ throw new Error('missing current task metadata while doing stream transfer'); }}
@@ -2455,6 +2537,8 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         return finishCancel();
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : streamEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#));
             }
@@ -2514,6 +2598,86 @@ impl AsyncStreamIntrinsic {
                             throw new Error('removed stream end does not match validated stream end');
                         }}
                         streamEnd.drop();
+                    }}
+                "#));
+            }
+
+            Self::SpliceStreamEnds => {
+                let splice_stream_ends = self.name();
+                output.push_str(&format!(r#"
+                    function {splice_stream_ends}(readEnd, writeEnd) {{
+                        const reader = writeEnd.peer();
+                        const writer = readEnd.peer();
+                        // Forwarding both ends of one pair consumes it entirely.
+                        // Connecting already spliced pairs has the same result,
+                        // so cycles collapse rather than retaining dead endpoints.
+                        if (reader === readEnd && writer === writeEnd) {{ return; }}
+
+                        // Only genuinely blocked copies move to the new pair.
+                        // A completed event can retain its old buffer until the
+                        // event is observed; that buffer must not rendezvous twice.
+                        const pendingWrite = writer.hasPendingEvent() ? null : {{ ...readEnd.getPendingBufferMeta() }};
+                        const pendingRead = reader.hasPendingEvent() ? null : {{ ...writeEnd.getPendingBufferMeta() }};
+                        const shared = {{}};
+                        reader.setPendingBufferStore(shared);
+                        writer.setPendingBufferStore(shared);
+                        reader.setPeer(writer);
+                        writer.setPeer(reader);
+                        readEnd.moveHostHooksTo(reader);
+
+                        if (pendingRead?.buffer) {{ reader.setPendingBufferMeta(pendingRead); }}
+                        else if (pendingWrite?.buffer) {{ writer.setPendingBufferMeta(pendingWrite); }}
+
+                        if (reader.isDropped()) {{
+                            writer.resetAndNotifyPending(writer.constructor.CopyResult.DROPPED);
+                            writer.notifyDropped();
+                        }} else if (writer.isDropped()) {{
+                            reader.resetAndNotifyPending(reader.constructor.CopyResult.DROPPED);
+                            reader.notifyDropped();
+                        }} else if (pendingRead?.buffer && pendingWrite?.buffer) {{
+                            // Reuse the ordinary copy path, including same-instance
+                            // payload restrictions and the original event callbacks.
+                            writer._write(pendingWrite);
+                        }}
+                    }}
+                "#));
+            }
+
+            Self::StreamForward => {
+                let stream_forward_fn = self.name();
+                let read_class = render_args.require_intrinsic(Self::StreamReadableEndClass);
+                let write_class = render_args.require_intrinsic(Self::StreamWritableEndClass);
+                let remove_end = render_args.require_intrinsic(Self::RemoveStreamEndFromTable);
+                let splice_ends = render_args.require_intrinsic(Self::SpliceStreamEnds);
+                let get_state =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(r#"
+                    function {stream_forward_fn}(ctx, src, dst) {{
+                        const {{ componentIdx, streamTableIdx }} = ctx;
+                        const state = {get_state}(componentIdx);
+                        const take = (index, readable) => {{
+                            index >>>= 0;
+                            const end = index === 0 ? undefined : state.handles.get(index);
+                            if (!end) {{ throw new {runtime_error}(`unknown handle index ${{index}}`); }}
+                            if (!(end instanceof (readable ? {read_class} : {write_class})) || end.streamTableIdx() !== streamTableIdx) {{
+                                throw new {runtime_error}(`handle index ${{index}} used with the wrong type`);
+                            }}
+                            if (end.isCopying()) {{ throw new {runtime_error}('cannot forward busy stream'); }}
+                            if (end.isInSet()) {{ throw new {runtime_error}("cannot forward stream while it's in a waitable set"); }}
+                            if (end.isDoneState()) {{
+                                throw new {runtime_error}(readable
+                                    ? 'cannot forward stream after being notified that the writable end dropped'
+                                    : 'cannot forward stream after being notified that the readable end dropped');
+                            }}
+                            {remove_end}({{ tableIdx: streamTableIdx, streamWaitableIdx: index }});
+                            end.getWaitable().drop();
+                            return end;
+                        }};
+                        const readEnd = take(src, true);
+                        const writeEnd = take(dst, false);
+                        {splice_ends}(readEnd, writeEnd);
                     }}
                 "#));
             }
@@ -2687,8 +2851,8 @@ impl AsyncStreamIntrinsic {
                 output.push_str(&format!(
                     r#"
                       function {gen_host_inject_fn}(genArgs) {{
-                          const {{ readFn, hostWriteEnd, readEnd }} = genArgs;
-                          if (!readEnd) {{ throw new TypeError('missing read end'); }}
+                          const {{ readFn, hostWriteEnd, readEnd: initialReadEnd }} = genArgs;
+                          if (!initialReadEnd) {{ throw new TypeError('missing read end'); }}
                           const doNothingFn = () => {{}};
                           const resetWriteEndToIdleFn = () => {{
                               // After the write is finished, we consume the event that was generated
@@ -2702,6 +2866,9 @@ impl AsyncStreamIntrinsic {
                           hostWriteEnd.setSourceRebufferFn?.((items) => pendingValues.prepend(items));
 
                           return async function generatedStreamHostInject(args) {{
+                              // A forwarding operation can replace the original read end.
+                              // Resolve the active peer rather than retaining its buffers.
+                              const readEnd = hostWriteEnd.peer();
                               let {{ count }} = args;
                               if (count < 0) {{ throw new Error('invalid count'); }}
                               if (readEnd.hasPendingEvent()) {{ return resetWriteEndToIdleFn; }}

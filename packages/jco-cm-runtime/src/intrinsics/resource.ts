@@ -5,8 +5,9 @@ const RESOURCE_TABLE_FLAG = 1 << 30;
 const RESOURCE_TABLE_OWN = 2 ** 32;
 
 export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => {
-    const scope = table[handle << 1];
-    const value = table[(handle << 1) + 1];
+    handle >>>= 0;
+    const scope = table[handle * 2];
+    const value = table[handle * 2 + 1];
     const own = value >= RESOURCE_TABLE_OWN;
     const rep = own ? value - RESOURCE_TABLE_OWN : value;
     // A freed or never allocated index has no entry in this table: its index may

@@ -178,7 +178,10 @@ impl ComponentIntrinsic {
                             }}
                             if (unresolvedRoots.size === 0) {{ return; }}
 
-                            const err = new {runtime_error_class}('wasm trap: deadlock detected: event loop cannot make further progress');
+                            const syncBlocked = [...suspendedTasks].some(task => task.blockingBoundary());
+                            const err = new {runtime_error_class}(syncBlocked
+                                ? 'cannot block a synchronous task before returning'
+                                : 'wasm trap: deadlock detected: event loop cannot make further progress');
                             // Which tasks were waiting, and on whose behalf. The message stays
                             // exactly what the Canonical ABI calls for, so this rides alongside
                             // it: a deadlock reported from a real program is otherwise a bare
@@ -472,6 +475,11 @@ impl ComponentIntrinsic {
                     class {component_async_state_class} {{
                         static EVENT_HANDLER_EVENTS = [ 'backpressure-change' ];
 
+                        static syncWaiters = [];
+                        static currentSyncWait() {{
+                            // A completed host call no longer restricts later independent calls.
+                            return this.syncWaiters.findLast(entry => !entry.thread.task().getRootTask().isResolvedState());
+                        }}
                         static TickResult = {{
                             // no suspended tasks remain
                             DONE: 'done',
@@ -963,11 +971,42 @@ impl ComponentIntrinsic {
 
                         isThreadReady(thread) {{
                             const meta = this.#suspendedThreadsByRef.get(thread);
-                            return !!meta && !meta.suspended && (meta.thread.isRejected() || meta.readyFn());
+                            return !!meta && !meta.suspended && this.suspendedThreadReady(thread);
+                        }}
+
+                        currentSyncWait() {{
+                            const waiter = {component_async_state_class}.currentSyncWait();
+                            return waiter?.state === this ? waiter : null;
+                        }}
+
+                        hasReadyThread(except) {{
+                            for (const [thread] of this.#suspendedThreadsByRef) {{
+                                if (thread !== except && this.suspendedThreadReady(thread)) {{ return true; }}
+                            }}
+                            return false;
+                        }}
+
+                        isSyncWaiting(thread) {{
+                            return {component_async_state_class}.syncWaiters.some(entry => entry.thread === thread);
+                        }}
+
+                        beginSyncWait(thread, resumeState) {{
+                            const entry = {{ state: this, thread, resumeState }};
+                            {component_async_state_class}.syncWaiters.push(entry);
+                            return entry;
+                        }}
+
+                        endSyncWait(entry) {{
+                            const waiters = {component_async_state_class}.syncWaiters;
+                            const index = waiters.indexOf(entry);
+                            if (index !== -1) {{ waiters.splice(index, 1); }}
                         }}
 
                         suspendedThreadReady(thread) {{
+                            const syncWait = {component_async_state_class}.currentSyncWait();
                             const meta = this.#suspendedThreadsByRef.get(thread);
+                            if (meta && (this.isTrapped() || thread.isRejected())) {{ return true; }}
+                            if (syncWait && syncWait.state !== this) {{ return false; }}
                             if (!meta) {{ return false; }}
                             if (!meta.readyFn) {{
                                 throw new Error(`suspended thread [${{thread.id()}}] is missing a readiness function`);
@@ -1040,6 +1079,16 @@ impl ComponentIntrinsic {
                                 return {component_async_state_class}.TickResult.RESUMED;
                             }}
 
+                            const syncWait = {component_async_state_class}.currentSyncWait();
+                            if (syncWait?.state === this && !this.isTrapped()) {{
+                                // A ready helper may have exited without unblocking the
+                                // synchronous call. That is a sync-call trap, not deadlock.
+                                const err = new {runtime_error_class}('cannot block a synchronous task before returning');
+                                this.markTrapped(err);
+                                syncWait.resumeState.markTrapped(err);
+                                syncWait.resumeState.resumeThread(syncWait.thread);
+                                return {component_async_state_class}.TickResult.RESUMED;
+                            }}
                             const idle = this.#suspendedThreadsByRef.size > 0;
                             return idle
                                 ? {component_async_state_class}.TickResult.IDLE

@@ -143,6 +143,9 @@ pub enum AsyncTaskIntrinsic {
     /// thread-meta register, throwing if there is none (shared `thread.*` prologue)
     CurrentThreadOrThrow,
 
+    /// Reject a synchronous blocking boundary before entering a JSPI slow path.
+    CheckSyncTaskCanSuspend,
+
     /// Function that creates a new implicit thread, and marks it as the current executing thread
     CreateNewCurrentImplicitThread,
 
@@ -292,6 +295,7 @@ impl AsyncTaskIntrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
             Self::CurrentTaskMayBlock.name(),
+            Self::CheckSyncTaskCanSuspend.name(),
             Self::AsyncBlockingCallDepth.name(),
             Self::AsyncBlockedConstant.name(),
             Self::AsyncSubtaskClass.name(),
@@ -334,6 +338,7 @@ impl AsyncTaskIntrinsic {
     pub fn name(&self) -> &'static str {
         match self {
             Self::CurrentTaskMayBlock => "CURRENT_TASK_MAY_BLOCK",
+            Self::CheckSyncTaskCanSuspend => "checkSyncTaskCanSuspend",
             Self::AsyncBlockingCallDepth => "ASYNC_BLOCKING_CALL_DEPTH",
             Self::AsyncBlockedConstant => "ASYNC_BLOCKED_CODE",
             Self::AsyncSubtaskClass => "AsyncSubtask",
@@ -375,6 +380,24 @@ impl AsyncTaskIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
+            Self::CheckSyncTaskCanSuspend => {
+                let check = self.name();
+                let current_thread = render_args.require_intrinsic(Self::CurrentThreadOrThrow);
+                let get_state =
+                    render_args.require_intrinsic(ComponentIntrinsic::GetOrCreateAsyncState);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(r#"
+                    function {check}(componentIdx, resumeTarget) {{
+                        const {{ thread, task }} = {current_thread}(componentIdx);
+                        const boundary = task.blockingBoundary();
+                        if (boundary && !{get_state}(boundary.componentIdx()).hasReadyThread(thread)
+                            && resumeTarget?.componentIdx() !== boundary.componentIdx()) {{
+                            throw new {runtime_error}('cannot block a synchronous task before returning');
+                        }}
+                    }}
+                "#));
+            }
             Self::CurrentTaskMayBlock => {
                 let var_name = self.name();
                 uwriteln!(
@@ -699,10 +722,12 @@ impl AsyncTaskIntrinsic {
                         // A nonblocking task cannot suspend its Wasm stack. The
                         // Canonical ABI permits yield to complete without scheduling
                         // another thread, so take that synchronous fast path here.
-                        if (!task.mayBlock()) {{
+                        const boundary = task.blockingBoundary();
+                        if (boundary && !{get_or_create_async_state_fn}(boundary.componentIdx()).hasReadyThread(thread)) {{
                             {get_or_create_async_state_fn}(componentIdx).runTickLoop();
                             return isCancellable && thread.isCancelled() ? 1 : 0;
                         }}
+                        if (ctx.syncFastOnly) {{ return -2; }}
 
                         // A canonical thread.yield must give the scheduler a chance to
                         // run other work before reporting NOT_CANCELLED. Unlike an
@@ -740,23 +765,25 @@ impl AsyncTaskIntrinsic {
             // targets it via `thread.resume-later` -- unlike `thread.yield`,
             // it is never spontaneously ready on its own.
             Self::ThreadSuspend => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(Self::CheckSyncTaskCanSuspend);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_suspend_fn = self.name();
                 let current_thread_or_throw_fn =
                     render_args.require_intrinsic(Self::CurrentThreadOrThrow);
                 output.push_str(&format!(
                     "
-                    async function {thread_suspend_fn}(ctx) {{
+                    function {thread_suspend_fn}(ctx) {{
                         {debug_log_fn}('[{thread_suspend_fn}()] args', {{ ctx }});
                         const {{ componentIdx, isCancellable }} = ctx;
                         const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
-                        const keepGoing = await thread.suspend({{
+                        if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx); return -2; }}
+                        return thread.suspend({{
                             cancellable: isCancellable,
                             suspended: true,
                             readyFn: () => false,
-                        }});
-                        return keepGoing ? 0 : 1;
+                        }}).then(keepGoing => keepGoing ? 0 : 1);
                     }}
                 "
                 ));
@@ -892,6 +919,8 @@ impl AsyncTaskIntrinsic {
             // target so its continuation cannot race ahead and observe this
             // thread as still running.
             Self::ThreadSuspendThenResume | Self::ThreadYieldThenResume => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(Self::CheckSyncTaskCanSuspend);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
                 let current_thread_or_throw_fn =
@@ -921,9 +950,11 @@ impl AsyncTaskIntrinsic {
                         if (!other || other === thread || !cstate.isThreadSuspended(other)) {{
                             throw new {runtime_error_class}('cannot resume thread which is not suspended');
                         }}
+                        if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx, other); return -2; }}
 
                         const suspension = thread.suspend({{
                             cancellable: isCancellable,
+                            resumeTarget: other,
                             suspended: {self_suspended},
                             readyFn: {self_ready_fn},
                         }});
@@ -942,6 +973,8 @@ impl AsyncTaskIntrinsic {
             // above; otherwise ignore `other` entirely and fall back to a
             // plain `thread.suspend`/`thread.yield`.
             Self::ThreadSuspendThenPromote | Self::ThreadYieldThenPromote => {
+                let check_sync_suspend =
+                    render_args.require_intrinsic(Self::CheckSyncTaskCanSuspend);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
                 let current_thread_or_throw_fn =
@@ -981,6 +1014,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         if (cstate.isThreadReady(other)) {{
+                            if (ctx.syncFastOnly) {{ {check_sync_suspend}(componentIdx, other); return -2; }}
                             const suspension = thread.suspend({{
                                 cancellable: isCancellable,
                                 suspended: {self_suspended},
@@ -1018,7 +1052,7 @@ impl AsyncTaskIntrinsic {
                         {debug_log_fn}('[{subtask_cancel_fn}()] args', {{ componentIdx, isAsync, subtaskRep }});
 
                         const state = {get_or_create_async_state_fn}(componentIdx);
-                        if (!state.mayLeave) {{ throw new {runtime_error_class}('component instance is not marked as may leave, cannot cancel subtask'); }}
+                        if (!state.mayLeave) {{ throw new {runtime_error_class}('cannot leave component instance'); }}
 
                         const subtask = state.handles.get(subtaskRep);
                         if (!(subtask instanceof {subtask_class})) {{
@@ -1027,105 +1061,106 @@ impl AsyncTaskIntrinsic {
                         if (subtask.resolveDelivered()) {{
                             throw new {runtime_error_class}('`subtask.cancel` called after terminal status delivered');
                         }}
-                        if (!isAsync && subtask.getWaitable().isInSet()) {{
-                            throw new {runtime_error_class}('cannot synchronously cancel a subtask that is in a waitable set');
-                        }}
+                        subtask.getWaitable().assertSyncUsable();
 
-                        const finishCancel = () => {{
-                            // Consume the subtask's pending resolution event (which also marks the
-                            // resolution as delivered), then hand the final state back to core wasm.
-                            // Legal states here: RETURNED, CANCELLED_BEFORE_STARTED, CANCELLED_BEFORE_RETURNED.
-                            if (subtask.hasPendingEvent()) {{ subtask.getPendingEvent(); }}
-                            if (!subtask.resolveDelivered()) {{ subtask.deliverResolve(); }}
+                        const perform = () => {{
+                            const finishCancel = () => {{
+                                // Consume the subtask's pending resolution event (which also marks the
+                                // resolution as delivered), then hand the final state back to core wasm.
+                                // Legal states here: RETURNED, CANCELLED_BEFORE_STARTED, CANCELLED_BEFORE_RETURNED.
+                                if (subtask.hasPendingEvent()) {{ subtask.getPendingEvent(); }}
+                                if (!subtask.resolveDelivered()) {{ subtask.deliverResolve(); }}
 
-                            return subtask.getStateNumber();
-                        }};
+                                return subtask.getStateNumber();
+                            }};
 
-                        if (subtask.cancellationRequested()) {{
-                            if (!slowOnly) {{
-                                throw new {runtime_error_class}('cancellation has already been requested for this subtask');
-                            }}
-                            if (subtask.isResolved()) {{ return finishCancel(); }}
-
-                            if (subtask.cancelProgress) {{
-                                const progress = subtask.cancelProgress;
-                                subtask.cancelProgress = null;
-                                return progress.then(() => {{
-                                    if (subtask.isResolved()) {{ return finishCancel(); }}
-                                    if (isAsync) {{ return 0xFFFFFFFF; }}
-                                    const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
-                                    const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                                    if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
-                                    return taskMeta.task.waitUntil({{
-                                        cancellable: false,
-                                        readyFn: () => subtask.isResolved(),
-                                    }}).then(finishCancel);
-                                }});
-                            }}
-
-                            const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
-                            const taskMeta = {current_task_get_fn}(componentIdx, taskID);
-                            if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
-                            return taskMeta.task.waitUntil({{
-                                cancellable: false,
-                                readyFn: () => subtask.isResolved(),
-                            }}).then(finishCancel);
-                        }}
-
-                        let cancellationWillCompleteAsync = false;
-
-                        if (!subtask.isResolved()) {{
-                            const childTask = subtask.getChildTask();
-                            subtask.requestCancellation();
-
-                            if (!subtask.isResolved()) {{
-                                // Cancellation may resume only the cancelled task's
-                                // implicit callback thread, and only while that thread is
-                                // parked cancellably in its event loop. No other ready
-                                // thread in the component instance may run here.
-                                if (childTask?.hasCallback()) {{
-                                    const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
-                                    if (childState.suspendedTaskCancellable(childTask.id()) &&
-                                        childState.suspendedTaskReady(childTask.id())) {{
-                                        const progress = childTask.waitForProgress();
-                                        if (!childState.resumeTaskByID(childTask.id())) {{
-                                            throw new Error('failed to resume cancelled callback task');
-                                        }}
-                                        cancellationWillCompleteAsync = true;
-                                        subtask.cancelProgress = progress;
-                                    }}
+                            if (subtask.cancellationRequested()) {{
+                                if (!slowOnly) {{
+                                    throw new {runtime_error_class}('cancellation has already been requested for this subtask');
                                 }}
-                            }}
+                                if (subtask.isResolved()) {{ return finishCancel(); }}
 
-                            if (!subtask.isResolved()) {{
-                                // The resumed callee blocked again: async-lowered cancels
-                                // report BLOCKED (resolution will arrive via a later SUBTASK event),
-                                // while sync-lowered cancels block the current task until the
-                                // subtask resolves.
-                                if (isAsync) {{
-                                    // -1 is the canonical BLOCKED status. -2 is an
-                                    // internal signal consumed by the conditional JSPI
-                                    // trampoline when a cancellable child was resumed but
-                                    // its suspended Wasm stack must finish in a microtask.
-                                    return cancellationWillCompleteAsync ? 0xFFFFFFFE : 0xFFFFFFFF;
+                                if (subtask.cancelProgress) {{
+                                    const progress = subtask.cancelProgress;
+                                    subtask.cancelProgress = null;
+                                    return progress.then(() => {{
+                                        if (subtask.isResolved()) {{ return finishCancel(); }}
+                                        if (isAsync) {{ return 0xFFFFFFFF; }}
+                                        const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                                        const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                                        if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
+                                        return taskMeta.task.suspendUntil({{
+                                            cancellable: false,
+                                            readyFn: () => subtask.isResolved(),
+                                        }}).then(finishCancel);
+                                    }});
                                 }}
-
-                                // The fast half of the conditional JSPI trampoline
-                                // cannot return a Promise. Signal that the slow,
-                                // suspending half must finish the synchronous cancel.
-                                if (!slowOnly) {{ return 0xFFFFFFFE; }}
 
                                 const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
                                 const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                                 if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
-                                return taskMeta.task.waitUntil({{
+                                return taskMeta.task.suspendUntil({{
                                     cancellable: false,
                                     readyFn: () => subtask.isResolved(),
                                 }}).then(finishCancel);
                             }}
-                        }}
 
-                        return finishCancel();
+                            let cancellationWillCompleteAsync = false;
+
+                            if (!subtask.isResolved()) {{
+                                const childTask = subtask.getChildTask();
+                                subtask.requestCancellation();
+
+                                if (!subtask.isResolved()) {{
+                                    // Cancellation may resume only the cancelled task's
+                                    // implicit callback thread, and only while that thread is
+                                    // parked cancellably in its event loop. No other ready
+                                    // thread in the component instance may run here.
+                                    if (childTask?.hasCallback()) {{
+                                        const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
+                                        if (childState.suspendedTaskCancellable(childTask.id()) &&
+                                            childState.suspendedTaskReady(childTask.id())) {{
+                                            const progress = childTask.waitForProgress();
+                                            if (!childState.resumeTaskByID(childTask.id())) {{
+                                                throw new Error('failed to resume cancelled callback task');
+                                            }}
+                                            cancellationWillCompleteAsync = true;
+                                            subtask.cancelProgress = progress;
+                                        }}
+                                    }}
+                                }}
+
+                                if (!subtask.isResolved()) {{
+                                    // The resumed callee blocked again: async-lowered cancels
+                                    // report BLOCKED (resolution will arrive via a later SUBTASK event),
+                                    // while sync-lowered cancels block the current task until the
+                                    // subtask resolves.
+                                    if (isAsync) {{
+                                        // -1 is the canonical BLOCKED status. -2 is an
+                                        // internal signal consumed by the conditional JSPI
+                                        // trampoline when a cancellable child was resumed but
+                                        // its suspended Wasm stack must finish in a microtask.
+                                        return cancellationWillCompleteAsync ? 0xFFFFFFFE : 0xFFFFFFFF;
+                                    }}
+
+                                    // The fast half of the conditional JSPI trampoline
+                                    // cannot return a Promise. Signal that the slow,
+                                    // suspending half must finish the synchronous cancel.
+                                    if (!slowOnly) {{ return 0xFFFFFFFE; }}
+
+                                    const {{ taskID }} = {get_global_current_thread_meta_fn}(componentIdx);
+                                    const taskMeta = {current_task_get_fn}(componentIdx, taskID);
+                                    if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
+                                    return taskMeta.task.suspendUntil({{
+                                        cancellable: false,
+                                        readyFn: () => subtask.isResolved(),
+                                    }}).then(finishCancel);
+                                }}
+                            }}
+
+                            return finishCancel();
+                        }};
+                        return isAsync ? perform() : subtask.getWaitable().withSyncUse(perform);
                     }}
                 "));
             }
@@ -1553,16 +1588,19 @@ impl AsyncTaskIntrinsic {
                                reject: rejectCompletionPromise,
                            }} = {promise_with_resolvers_fn}();
                            this.#completionPromise = completionPromise;
-                           // A nested rejection can reach the root task while its Wasm
-                           // entrypoint is still suspended, before the export wrapper awaits
-                           // this promise. Mark it handled immediately while preserving the
-                           // original rejected promise for the eventual caller.
-                           completionPromise.catch(() => {{}});
+                           // An async task can reject before its suspended export wrapper
+                           // awaits completion. Handle that rejection immediately. Successful
+                           // synchronous calls must not queue a reaction for every result.
+                           const completionIsAsync = this.#isAsync || this.#isManualAsync;
+                           if (completionIsAsync) {{ completionPromise.catch(() => {{}}); }}
 
                            let completionSettled = false;
                            const settleCompletionPromise = () => {{
                                if (completionSettled || !this.#completionReady) {{ return; }}
                                completionSettled = true;
+                               if (!completionIsAsync && (this.#errored !== null || this.#rejected)) {{
+                                   completionPromise.catch(() => {{}});
+                               }}
                                if (this.#errored !== null) {{
                                    rejectCompletionPromise(this.#errored);
                                }} else if (this.#rejected) {{
@@ -1573,6 +1611,15 @@ impl AsyncTaskIntrinsic {
                                ) {{
                                    this.#completionValue.resolveAsValue(resolveCompletionPromise);
                                }} else {{
+                                   // Promise resolution may reject when it assimilates an
+                                   // object, including a throwing `then` getter. Do not read
+                                   // `then` ourselves or change its observable lookup count.
+                                   if (!completionIsAsync && this.#completionValue !== null && (
+                                       typeof this.#completionValue === 'object'
+                                       || typeof this.#completionValue === 'function'
+                                   )) {{
+                                       completionPromise.catch(() => {{}});
+                                   }}
                                    resolveCompletionPromise(this.#completionValue);
                                }}
                            }};
@@ -1580,7 +1627,6 @@ impl AsyncTaskIntrinsic {
                            this.#settleCompletionPromise = settleCompletionPromise;
                            this.#onResolveHandlers.push((results) => {{
                                if (this.#parentSubtask !== null) {{ return; }}
-                               if (!this.#isAsync && !this.#isManualAsync) {{ return; }}
                                this.#completionValue = results;
                                this.#completionReady = true;
                                // Publish after the current guest slice returns, so a trap
@@ -1597,7 +1643,7 @@ impl AsyncTaskIntrinsic {
                            this.#exitPromise = exitPromise;
 
                            this.#onExitHandlers.push(() => {{
-                               if (this.#parentSubtask === null && (this.#isAsync || this.#isManualAsync)) {{
+                               if (this.#parentSubtask === null) {{
                                    settleCompletionPromise();
                                }}
                                resolveExitPromise();
@@ -1738,7 +1784,11 @@ impl AsyncTaskIntrinsic {
 
                         #checkThreadExit() {{
                             if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {{
-                                const err = new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
+                                const cstate = this.#componentIdx === -1 ? null : {get_or_create_async_state_fn}(this.#componentIdx);
+                                const syncWait = cstate?.currentSyncWait();
+                                const err = new {runtime_error_class}(syncWait && !cstate.hasReadyThread(this.defaultThread())
+                                    ? 'cannot block a synchronous task before returning'
+                                    : `(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
                                 throw this.#componentIdx === -1 ? err : {record_trap_fn}(this.#componentIdx, err);
                             }}
                         }}
@@ -1821,7 +1871,20 @@ impl AsyncTaskIntrinsic {
                         // but use JSPI precisely so their guest stack may suspend.
                         // Canonical ABI: only sync-typed callees may not block (`canon_lift`);
                         // an async-lifted callee may, even when called through a sync lowering.
-                        mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }}
+                        mayBlock() {{ return this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }}
+                        // A synchronous lowering keeps its caller's component call
+                        // active even while an async-typed callee is executing.
+                        blockingBoundary() {{
+                            let task = this;
+                            while (task) {{
+                                if (!task.mayBlock()) {{ return task; }}
+                                const subtask = task.getParentSubtask();
+                                if (!subtask || subtask.isAsync) {{ return null; }}
+                                task = subtask.getParentTask();
+                            }}
+                            return null;
+                        }}
+
                         // (an async-typed function may block however it was lifted)
                         setFuncTypeIsAsync(v) {{ this.#funcTypeIsAsync = v; }}
                         // The interned result type of the task's function (checked by `task.return`)
@@ -2575,6 +2638,8 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::AsyncThreadClass => {
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_class = render_args.require_intrinsic(Self::AsyncThreadClass);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -2659,7 +2724,15 @@ impl AsyncTaskIntrinsic {
                             task.endFirstSlice();
                             task.settleCompletion();
                             const {{ cancellable, readyFn, releaseLock = false }} = opts;
+                            const boundary = task.blockingBoundary();
+                            const boundaryState = boundary ? {get_or_create_async_state_fn}(boundary.componentIdx()) : null;
+                            if (boundaryState && !boundaryState.hasReadyThread(this)
+                                && !(opts.resumeTarget && opts.resumeTarget.componentIdx() === boundary.componentIdx())) {{
+                                if (readyFn()) {{ return true; }}
+                                throw new {runtime_error_class}('cannot block a synchronous task before returning');
+                            }}
                             if (task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
+                            const syncEntry = boundaryState ? boundaryState.beginSyncWait(this, cstate) : null;
                             const reacquireLock = releaseLock && task.needsExclusiveLock() && cstate.exclusivelyLockedBy(task.id());
                             if (reacquireLock) {{ cstate.exclusiveRelease(task.id()); }}
                             try {{
@@ -2672,6 +2745,7 @@ impl AsyncTaskIntrinsic {
                                 if (keepGoing && task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
                                 return keepGoing;
                             }} finally {{
+                                if (syncEntry) {{ boundaryState.endSyncWait(syncEntry); }}
                                 if (reacquireLock && !cstate.exclusivelyLockedBy(task.id())) {{
                                     await cstate.acquireExclusiveLock(task.id());
                                 }}
@@ -2690,18 +2764,7 @@ impl AsyncTaskIntrinsic {
                             const startFn = this.#startFn;
                             this.#startFn = null;
 
-                            {with_global_current_thread_meta_async_fn}({{
-                                threadID: this.#id,
-                                taskID: this.#task.id(),
-                                componentIdx: this.#componentIdx,
-                                fn: () => {{
-                                    {get_or_create_async_state_fn}(this.#componentIdx).throwIfInterrupted();
-                                    return startFn();
-                                }},
-                            }}).then(() => {{
-                                this.#state = {thread_class}.State.COMPLETED;
-                                this.#task.removeThread(this);
-                            }}).catch((err) => {{
+                            const failStart = (err) => {{
                                 err = {record_trap_fn}(this.#componentIdx, err);
                                 this.#state = {thread_class}.State.COMPLETED;
                                 {debug_log_fn}('[{thread_class}#start()] spawned thread errored', {{
@@ -2713,7 +2776,26 @@ impl AsyncTaskIntrinsic {
                                 this.#task.setErrored(err);
                                 this.#task.reject(err);
                                 this.#task.removeThread(this);
-                            }});
+                            }};
+                            let invocation;
+                            try {{
+                                invocation = {with_global_current_thread_meta_async_fn}({{
+                                    threadID: this.#id,
+                                    taskID: this.#task.id(),
+                                    componentIdx: this.#componentIdx,
+                                    fn: () => {{
+                                        {get_or_create_async_state_fn}(this.#componentIdx).throwIfInterrupted();
+                                        return startFn();
+                                    }},
+                                }});
+                            }} catch (err) {{
+                                failStart(err);
+                                return;
+                            }}
+                            Promise.resolve(invocation).then(() => {{
+                                this.#state = {thread_class}.State.COMPLETED;
+                                this.#task.removeThread(this);
+                            }}).catch(failStart);
                         }}
                     }}
                 "#));
@@ -3204,8 +3286,8 @@ impl AsyncTaskIntrinsic {
                     function {unpack_callback_result_fn}(result) {{
                         if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value [' + result + '], not a valid i32'); }}
                         const eventCode = result & 0xF;
-                        if (eventCode < 0 || eventCode > 3) {{
-                            throw new {runtime_error_class}('invalid async return value [' + eventCode + '], outside callback code range');
+                        if (eventCode < 0 || eventCode > 2) {{
+                            throw new {runtime_error_class}('unsupported callback code');
                         }}
                         if (result < 0 || result >= 2**32) {{ throw new {runtime_error_class}('invalid callback result'); }}
                         // TODO: table max length check?
@@ -3270,8 +3352,8 @@ impl AsyncTaskIntrinsic {
                             unpacked = {unpack_callback_result_fn}(value);
                             callbackCode = unpacked[0];
                             waitableSetRep = unpacked[1];
-                            if (callbackCode < 0 || callbackCode > 3) {{
-                                throw new {runtime_error_class}('invalid async return value, outside callback code range');
+                            if (callbackCode < 0 || callbackCode > 2) {{
+                                throw new {runtime_error_class}('unsupported callback code');
                             }}
                         }};
 
@@ -3538,10 +3620,6 @@ impl AsyncTaskIntrinsic {
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-
-                        if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
-                            throw new Error("non async exports cannot synchronously call async functions");
-                        }}
 
                         // If there is an existing task, this should be part of a subtask
                         const memory = getMemoryFn();
@@ -3882,10 +3960,6 @@ impl AsyncTaskIntrinsic {
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
-
-                        if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
-                            throw new Error("non async exports cannot synchronously call async functions");
-                        }}
 
                         // If there is an existing task, this should be part of a subtask
                         const memory = getMemoryFn();

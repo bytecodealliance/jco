@@ -370,7 +370,52 @@ pub fn ts_bindgen(
                     bindgen.export_interface(resolve, &alt_export_name, *id, files, instantiation);
                 }
             }
-            WorldItem::Type { .. } => unimplemented!("type exports"),
+            WorldItem::Type { id, .. } => {
+                let ty = &resolve.types[*id];
+                let name = ty.name.as_ref().unwrap();
+                let mut generator = TsInterface::new(
+                    resolve,
+                    true,
+                    opts.guest,
+                    opts.flags_as_bigint,
+                    opts.variants_inline_cases,
+                    opts.use_namespace_objects,
+                    opts.enum_values_screaming_snake_case,
+                );
+                generator.docs(&ty.docs);
+
+                match &ty.kind {
+                    TypeDefKind::Record(record) => {
+                        generator.type_record(*id, name, record, &ty.docs)
+                    }
+                    TypeDefKind::Flags(flags) => generator.type_flags(*id, name, flags, &ty.docs),
+                    TypeDefKind::Tuple(tuple) => generator.type_tuple(*id, name, tuple, &ty.docs),
+                    TypeDefKind::Enum(enum_) => generator.type_enum(*id, name, enum_, &ty.docs),
+                    TypeDefKind::Variant(variant) => {
+                        generator.type_variant(*id, name, variant, &ty.docs)
+                    }
+                    TypeDefKind::Option(t) => generator.type_option(*id, name, t, &ty.docs),
+                    TypeDefKind::Result(r) => generator.type_result(*id, name, r, &ty.docs),
+                    TypeDefKind::List(t) => generator.type_list(*id, name, t, &ty.docs),
+                    TypeDefKind::FixedLengthList(t, len) => {
+                        generator.type_fixed_size_list(*id, name, t, len, &ty.docs)
+                    }
+                    TypeDefKind::Type(t) => generator.type_alias(name, t, None, &ty.docs),
+                    TypeDefKind::Future(t) => generator.type_future(name, t, &ty.docs),
+                    TypeDefKind::Stream(t) => generator.type_stream(name, t, &ty.docs),
+                    TypeDefKind::Unknown => unreachable!("(async impl) generate for unknown"),
+                    TypeDefKind::Resource => {
+                        generator.type_resource(*id, ty, GeneratedTypeMeta { is_export: true })
+                    }
+                    TypeDefKind::Handle(_) => todo!("type generation for handle"),
+                    TypeDefKind::Map(key, value) => {
+                        generator.type_map(*id, name, key, value, &ty.docs)
+                    }
+                }
+                let (src, references) = generator.finish();
+                bindgen.src.push_str(&src);
+                bindgen.references.extend(references);
+            }
         }
     }
     if !funcs.is_empty() {
@@ -1262,6 +1307,8 @@ impl<'a> TsInterface<'a> {
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
                     iface.src.push_str(&escaped_name);
                 }
+
+                _ => unreachable!("accessors rejected before code generation"),
             }
         } else {
             iface.src.push_str(&escaped_name);
@@ -1277,6 +1324,8 @@ impl<'a> TsInterface<'a> {
             FunctionKind::AsyncFreestanding => 0,
             FunctionKind::AsyncMethod(_) => 1,
             FunctionKind::AsyncStatic(_) => 0,
+
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         for (i, p) in func.params[param_start..].iter().enumerate() {

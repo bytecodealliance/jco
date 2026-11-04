@@ -204,6 +204,9 @@ pub enum Intrinsic {
     /// path before falling back to a JSPI-suspending slow path.
     ConditionalSuspending3I32ToVoidFn,
 
+    /// Build a `() -> i32` Wasm trampoline with a synchronous fast path.
+    ConditionalSuspending0ToI32Fn,
+
     /// Compiled Wasm of the conditional-suspending trampolines, by trampoline name
     ConditionalSuspendingWasm,
 }
@@ -984,8 +987,8 @@ impl Intrinsic {
                         insert(val) {{
                             if (this.#space !== null) {{
                                 const rep = this.#space.alloc();
-                                this.#data[rep << 1] = val;
-                                this.#data[(rep << 1) + 1] = null;
+                                this.#data[rep * 2] = val;
+                                this.#data[(rep * 2) + 1] = null;
                                 this.#size += 1;
                                 return rep;
                             }}
@@ -999,7 +1002,7 @@ impl Intrinsic {
                                 this.#size += 1;
                                 return rep;
                             }}
-                            const placementIdx = freeIdx << 1;
+                            const placementIdx = freeIdx * 2;
                             if (this.#data[placementIdx] !== {rep_table_class}.FREE) {{
                                 throw new Error('corrupt rep table freelist: head does not point at a freed slot');
                             }}
@@ -1012,29 +1015,32 @@ impl Intrinsic {
                         }}
 
                         get(rep) {{
+                            rep >>>= 0;
                             {debug_log_fn}('[{rep_table_class}#get()] args', {{ rep, target: this.target }});
                             if (rep === 0) {{ throw new {runtime_error_class}('invalid resource rep during get, (cannot be 0)'); }}
 
-                            const baseIdx = rep << 1;
+                            const baseIdx = rep * 2;
                             const val = this.#data[baseIdx];
                             if (val === {rep_table_class}.FREE) {{ return undefined; }}
                             return val;
                         }}
 
                         contains(rep) {{
+                            rep >>>= 0;
                             {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
                             if (rep === 0) {{ throw new Error('invalid resource rep during contains, (cannot be 0)'); }}
 
-                            const baseIdx = rep << 1;
+                            const baseIdx = rep * 2;
                             const val = this.#data[baseIdx];
                             return val !== {rep_table_class}.FREE && !!val;
                         }}
 
                         remove(rep) {{
+                            rep >>>= 0;
                             {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
                             if (rep === 0) {{ throw new Error('invalid resource rep during remove, (cannot be 0)'); }}
                             if (this.#space !== null) {{
-                                const baseIdx = rep << 1;
+                                const baseIdx = rep * 2;
                                 const val = this.#data[baseIdx];
                                 if (val === undefined || val === {rep_table_class}.FREE) {{
                                     throw new {runtime_error_class}(`unknown handle index ${{rep}}`);
@@ -1047,7 +1053,7 @@ impl Intrinsic {
                             }}
                             if (this.#data.length === 2) {{ throw new Error('invalid'); }}
 
-                            const baseIdx = rep << 1;
+                            const baseIdx = rep * 2;
                             if (baseIdx >= this.#data.length) {{
                                 throw new Error(`invalid rep [${{rep}}] during remove, out of range`);
                             }}
@@ -1400,7 +1406,8 @@ impl Intrinsic {
                                   ? {get_current_thread}(saved.componentIdx, saved.threadID, saved.taskID)
                                   : null;
                               const mayBlock = savedThread
-                                  ? (savedThread?.task.mayBlock() ?? ({current_task_may_block}.value !== 0))
+                                  ? ((savedThread?.task.mayBlock() ?? ({current_task_may_block}.value !== 0))
+                                      || {get_or_create_async_state_fn}(componentIdx).hasReadyThread(savedThread.thread))
                                   : false;
                               if (!saved && !mayBlock && !callsHost) {{
                                   throw new {runtime_error_class}('cannot block a synchronous task before returning');
@@ -1424,6 +1431,15 @@ impl Intrinsic {
                                   if (result !== null &&
                                       (typeof result === 'object' || typeof result === 'function') &&
                                       typeof result.then === 'function') {{
+                                      if (!syncOnly && savedThread && {get_or_create_async_state_fn}(componentIdx).isSyncWaiting(savedThread.thread)) {{
+                                          return Promise.resolve(result).then(value => {{
+                                              {get_or_create_async_state_fn}(componentIdx).throwIfInterrupted();
+                                              return value;
+                                          }}, err => {{ throw {record_trap_fn}(componentIdx, err, convertsRangeErrors); }}).finally(() => {{
+                                              {global_current_thread_meta_obj}[componentIdx] = saved;
+                                              if (!switchesTask) {{ {global_current_thread_meta_obj}.current = saved; }}
+                                          }});
+                                      }}
                                       // The helper may already have returned a rejected promise.
                                       // Mark it handled before replacing it with the canonical
                                       // synchronous-task trap.
@@ -1453,7 +1469,8 @@ impl Intrinsic {
                 ));
             }
 
-            Self::ConditionalSuspending1I32ToI32Fn
+            Self::ConditionalSuspending0ToI32Fn
+            | Self::ConditionalSuspending1I32ToI32Fn
             | Self::ConditionalSuspending2I32ToI32Fn
             | Self::ConditionalSuspending3I32ToI32Fn
             | Self::ConditionalSuspending3I32ToVoidFn => {
@@ -1718,7 +1735,7 @@ mod tests {
         assert!(source.contains("syncOnly = false"));
         assert!(
             source.contains(
-                "? (savedThread?.task.mayBlock() ?? (CURRENT_TASK_MAY_BLOCK.value !== 0))"
+                "? ((savedThread?.task.mayBlock() ?? (CURRENT_TASK_MAY_BLOCK.value !== 0))"
             )
         );
         assert!(source.contains(": false;"));
@@ -1767,7 +1784,7 @@ mod tests {
 
         assert!(source.contains("isManualAsync() { return this.#isManualAsync; }"));
         assert!(source.contains(
-            "mayBlock() { return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }"
+            "mayBlock() { return this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }"
         ));
     }
 
@@ -1958,7 +1975,8 @@ mod tests {
         assert!(!poll.contains("deliverPendingCancel"));
 
         let yield_ = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadYield));
-        assert!(yield_.contains("if (!task.mayBlock()) {"));
+        assert!(yield_.contains("const boundary = task.blockingBoundary();"));
+        assert!(yield_.contains(".hasReadyThread(thread)"));
         assert!(yield_.contains(".runTickLoop();"));
         assert!(yield_.contains("return thread.suspend({"));
         assert!(yield_.contains(".then(keepGoing => keepGoing ? 0 : 1)"));
@@ -2159,9 +2177,11 @@ mod tests {
         assert!(check.contains("for (const state of ASYNC_STATE.values())"));
         assert!(check.contains("STORE_ASYNC_STATE.pendingHostOperations > 0"));
         assert!(check.contains("const root = task.getRootTask();"));
-        assert!(check.contains(
-            "new WebAssemblyRuntimeError('wasm trap: deadlock detected: event loop cannot make further progress')"
-        ));
+        assert!(
+            check.contains(
+                "'wasm trap: deadlock detected: event loop cannot make further progress'"
+            )
+        );
         assert!(check.contains("for (const root of unresolvedRoots)"));
         assert!(check.contains("root.reject(err);"));
         assert!(check.contains("task.reject(err);"));
@@ -2369,7 +2389,7 @@ mod tests {
         assert!(!source.contains("function rscTableRemove(table, handle)"));
         assert!(source.contains("const { rep, own } = rscTableGet(fromTable, handle);"));
         assert!(!source.contains("if (!own) rscTableRemove(fromTable, handle);"));
-        assert!(source.contains("fromTable[handle << 1]++;"));
+        assert!(source.contains("fromTable[handle * 2]++;"));
         assert!(source.contains("borrowTask.addResourceLender(fromTable, handle);"));
         assert!(source.contains("borrowTask?.resourceScopeId() ?? SCOPE_ID"));
         assert!(source.contains("borrowTask.addBorrowedHandle();"));
@@ -2471,7 +2491,7 @@ mod tests {
 
     #[test]
     fn future_ends_use_canonical_intra_component_copy_trap() {
-        let error = "throw new WebAssemblyRuntimeError('cannot read from and write to intra-component future');";
+        let error = "throw new WebAssemblyRuntimeError('cannot read from and write to intra-component future/stream with non-numeric payload');";
 
         for end in [
             AsyncFutureIntrinsic::FutureReadableEndClass,
@@ -2479,7 +2499,9 @@ mod tests {
         ] {
             let source = render_intrinsic_body(Intrinsic::AsyncFuture(end));
             assert!(source.contains(error));
-            assert!(source.contains("componentIdx === meta.componentIdx"));
+            assert!(source.contains(
+                "componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)"
+            ));
         }
     }
 
@@ -2700,7 +2722,16 @@ mod tests {
 
         assert!(source.contains("#dropped = false;"));
         assert!(source.contains("isDropped() { return this.#dropped; }"));
-        assert!(source.contains("isPeerDropped() { return this.#isPeerDroppedFn(); }"));
+        assert!(source.contains(
+            "isPeerDropped() { return this.#peer ? this.#peer.isDropped() : this.#isPeerDroppedFn(); }"
+        ));
+        assert!(source.contains("this.#readEnd.setPeer(this.#writeEnd);"));
+        assert!(source.contains("this.#writeEnd.setPeer(this.#readEnd);"));
+        // Forwarding replaces constructor-time peer callbacks. Drop checks
+        // must follow the current endpoint graph instead of the original pair.
+        assert!(source.contains("this.#peer = peer;"));
+        assert!(source.contains("this.#isPeerDroppedFn = () => false;"));
+        assert!(source.contains("this.#notifyPeerDroppedFn = () => {};"));
         assert!(source.contains("isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,"));
         assert!(source.contains("isPeerDroppedFn: () => this.#readEnd.isDropped(),"));
         assert!(source.contains("if (this.isPeerDropped()) {"));
@@ -2942,6 +2973,16 @@ fn emit_intrinsic(
     }
 }
 
+const CONDITIONAL_SUSPENDING_0_TO_I32: &[u8] = &[
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60, 0x00, 0x01, 0x7f, 0x02,
+    0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f, 0x77,
+    0x00, 0x00, 0x03, 0x02, 0x01, 0x00, 0x07, 0x07, 0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02, 0x0a,
+    0x15, 0x01, 0x13, 0x01, 0x01, 0x7f, 0x10, 0x00, 0x22, 0x00, 0x41, 0x7e, 0x47, 0x04, 0x7f, 0x20,
+    0x00, 0x05, 0x10, 0x01, 0x0b, 0x0b, 0x00, 0x20, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x01, 0x0d, 0x02,
+    0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x01, 0x04, 0x73, 0x6c, 0x6f, 0x77, 0x02, 0x0a, 0x01, 0x02,
+    0x01, 0x00, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65,
+];
+
 const CONDITIONAL_SUSPENDING_1_I32_TO_I32: &[u8] = &[
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x06, 0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f,
     0x02, 0x11, 0x02, 0x00, 0x04, 0x66, 0x61, 0x73, 0x74, 0x00, 0x00, 0x00, 0x04, 0x73, 0x6c, 0x6f,
@@ -3124,6 +3165,7 @@ impl Intrinsic {
             Self::WithGlobalCurrentTaskMetaFnAsync => "_withGlobalCurrentThreadMetaAsync",
             Self::ClearGlobalCurrentTaskMetaFn => "_clearCurrentTask",
             Self::SuspendingImportWrapperFn => "_suspendingImport",
+            Self::ConditionalSuspending0ToI32Fn => "_conditionalSuspending0ToI32",
             Self::ConditionalSuspending1I32ToI32Fn => "_conditionalSuspending1I32ToI32",
             Self::ConditionalSuspending2I32ToI32Fn => "_conditionalSuspending2I32ToI32",
             Self::ConditionalSuspending3I32ToI32Fn => "_conditionalSuspending3I32ToI32",
@@ -3151,6 +3193,10 @@ impl Intrinsic {
     /// File name suffix and Wasm of a conditional-suspending trampoline
     pub(crate) fn conditional_suspending_wasm(&self) -> Option<(&'static str, &'static [u8])> {
         match self {
+            Self::ConditionalSuspending0ToI32Fn => Some((
+                "conditional-suspending-0-to-i32",
+                CONDITIONAL_SUSPENDING_0_TO_I32,
+            )),
             Self::ConditionalSuspending1I32ToI32Fn => Some((
                 "conditional-suspending-1-i32-to-i32",
                 CONDITIONAL_SUSPENDING_1_I32_TO_I32,

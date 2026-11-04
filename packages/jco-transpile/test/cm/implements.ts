@@ -181,9 +181,56 @@ suite('Implements (labeled imports/exports)', () => {
             },
         );
     });
+
+    test.concurrent('resource classes and functions share the implemented interface mapping', async () => {
+        const component = await buildDummyComponent('multi-label-stores');
+        const { files, imports } = await transpileBytes(component, {
+            name: 'mapped-stores',
+            emitTypescriptDeclarations: false,
+            map: {
+                'test:implements/store': './default-store.js',
+                b: './second-store.js',
+            },
+        });
+        assert.deepStrictEqual([...imports].sort(), ['./default-store.js', './second-store.js']);
+        const source = Buffer.from(files['mapped-stores.js']).toString();
+        for (const module of ['default-store', 'second-store']) {
+            const importList = source.match(new RegExp(`import \\{([^}]*)\\} from ['"]\\./${module}\\.js['"]`));
+            assert.ok(importList, `mapped import ${module} exists`);
+            assert.match(importList[1], /\bBucket\b/);
+            assert.match(importList[1], /\bopen\b/);
+        }
+        await importTranspiled(
+            files,
+            { 'default-store.js': STORE_STUB, 'second-store.js': STORE_STUB },
+            'mapped-stores.js',
+            () => {},
+        );
+    });
 });
 
 suite('External IDs', () => {
+    test.concurrent('interface mapping uses implements independently of external-id', async () => {
+        const component = await buildDummyComponent('with-external-ids');
+        const { files, imports } = await transpileBytes(component, {
+            name: 'external-id-mapping',
+            emitTypescriptDeclarations: false,
+            map: {
+                'test:implements/logger': './logger.js',
+                'com.example:ids/primary': './external-id.js',
+            },
+        });
+        assert.deepStrictEqual(imports, ['./logger.js']);
+        await importTranspiled(
+            files,
+            { 'logger.js': 'export function log(msg) {}' },
+            'external-id-mapping.js',
+            (mod) => {
+                assert.strictEqual(typeof (mod.events as Record<string, unknown>).log, 'function');
+            },
+        );
+    });
+
     test.concurrent('binary encoding carries external-id annotations', async () => {
         const component = await buildDummyComponent('with-external-ids');
         const output = await print(component);

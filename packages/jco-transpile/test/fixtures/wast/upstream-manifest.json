@@ -9,7 +9,7 @@
         },
         {
             "name": "async/big-interleaving-test.wast",
-            "revision": "ea917982dc142251157dfbb15fdf834ff509e604"
+            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
         },
         {
             "name": "async/builtin-trap-poisons-instance.wast",

@@ -270,6 +270,9 @@ world js-component-bindgen {
     exports: list<tuple<string, export-type>>
   }
 
+  /// Structurally validate a core module or component without WIT extraction.
+  export validate: func(component: list<u8>) -> result<_, string>;
+
   /// Generate the file structure for the transpiled of a component
   /// into a JS embedding, returns the file list and imports and exports of the
   /// output JS generation component
