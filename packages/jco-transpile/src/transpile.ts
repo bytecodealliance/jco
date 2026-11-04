@@ -4,7 +4,7 @@ import { extname, basename, resolve } from 'node:path';
 
 import { minify } from 'oxc-minify';
 
-import { $init as $initBindgenComponent, generate } from '../vendor/js-component-bindgen-component.js';
+import { callBindgen, generate } from './component.js';
 import type {
     AsyncMode as WITAsyncMode,
     InstantiationMode as WITInstantiationMode,
@@ -247,8 +247,6 @@ export async function transpileBytes(
     component: Uint8Array,
     opts: TranspilationOptions = {},
 ): Promise<TranspilationResult> {
-    await $initBindgenComponent;
-
     // If we specified an instantiation mode, we should disable WASI shimming
     // as the user must supply their own imports at instantiation time
     if (opts.instantiation) {
@@ -360,7 +358,7 @@ export async function transpileBytes(
     };
 
     // Generate the component
-    const generated = generate(component, generateOpts);
+    const generated = await callBindgen(() => generate(component, generateOpts));
     const imports = generated.imports;
     const exports = generated.exports;
 

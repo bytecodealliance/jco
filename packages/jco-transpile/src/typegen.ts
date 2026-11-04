@@ -1,12 +1,12 @@
 import { basename, resolve, extname } from 'node:path';
 
 import {
-    $init as $initBindgenComponent,
+    callBindgen,
     type AsyncMode,
     type EnabledFeatureSet,
     generateTypes,
     unpackWit as unpackWitComponent,
-} from '../vendor/js-component-bindgen-component.js';
+} from './component.js';
 import type { InstantiationMode as WITInstantiationMode, WitPath } from '../vendor/js-component-bindgen-component.js';
 
 import { TranspilationOptions } from './transpile.js';
@@ -17,8 +17,7 @@ import { ensureWitFilesystemPreopen } from './preopens.js';
 
 /** Expand an encoded WIT package into a conventional path-to-source map. */
 export async function unpackWit(packageSpec: string | undefined, bytes: Uint8Array) {
-    await $initBindgenComponent;
-    return unpackWitComponent(packageSpec, bytes);
+    return callBindgen(() => unpackWitComponent(packageSpec, bytes));
 }
 
 /** Options for type generation */
@@ -116,7 +115,6 @@ export async function generateGuestTypes(witPath: string, opts: TypegenOptions):
  */
 export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
     ensureWitFilesystemPreopen();
-    await $initBindgenComponent;
 
     let name;
     if (opts.name) {
@@ -190,7 +188,10 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
         useNamespaceObjects: opts.useNamespaceObjects === true,
         enumValuesScreamingSnakeCase: opts.enumValuesScreamingSnakeCase === true,
     };
-    const types = generateTypes(name, generateOpts).map(([name, file]) => [`${outDir}${name}`, file]);
+    const types = (await callBindgen(() => generateTypes(name, generateOpts))).map(([name, file]) => [
+        `${outDir}${name}`,
+        file,
+    ]);
 
     return Object.fromEntries(types);
 }

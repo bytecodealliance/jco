@@ -48,8 +48,8 @@
             "default": "./dist/wasm-tools.js"
         },
         "./component": {
-            "types": "./vendor/js-component-bindgen-component.d.ts",
-            "default": "./vendor/js-component-bindgen-component.js"
+            "types": "./dist/component.d.ts",
+            "default": "./dist/component.js"
         }
     },
     "scripts": {
