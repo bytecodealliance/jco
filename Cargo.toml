@@ -49,18 +49,23 @@ xshell = { version = "0.2.7", default-features = false }
 
 wasmtime-environ = { version = "49.0.0", features= [ "component-model", "compile", "anyhow" ] }
 
-wasm-encoder = { version = "0.259.0", default-features = false }
-wasm-metadata = { version = "0.259.0", default-features = false }
-wasmparser = { version = "0.259.0", default-features = false }
-wasmprinter = { version = "0.259.0", default-features = false }
-wit-component = { version = "0.259.0", features = ["dummy-module"] }
-wit-parser = { version = "0.259.0", default-features = false }
+wasm-encoder = { version = "0.263.0", default-features = false }
+wasm-metadata = { version = "0.262.0", default-features = false }
+wasmparser = { version = "0.263.0", default-features = false }
+wasmprinter = { version = "0.262.0", default-features = false }
+wit-component = { version = "0.262.0", features = ["dummy-module"] }
+wit-parser = { version = "0.262.0", default-features = false }
 
-wat = { version = "1.259.0", default-features = false }
+wat = { version = "=1.263.0", default-features = false }
 
-wit-bindgen = { version = "0.62.0", default-features = false }
-wit-bindgen-core = { version = "0.62.0", default-features = false }
+wit-bindgen = { version = "0.63.0", default-features = false }
+wit-bindgen-core = { version = "0.63.0", default-features = false }
 
-wast = { version = "259.0.0", default-features = false, features = [ "component-model" ] }
+wast = { version = "263.0.0", default-features = false, features = [ "component-model" ] }
 
 js-component-bindgen = { version = "2.18.0", path = "./crates/js-component-bindgen" }
+
+# Compatibility patches for component-model reference WAST coverage.
+[patch.crates-io]
+wasmtime-environ = { path = "crates/vendor/wasmtime-environ" }
+wit-parser = { path = "crates/vendor/wit-parser" }
