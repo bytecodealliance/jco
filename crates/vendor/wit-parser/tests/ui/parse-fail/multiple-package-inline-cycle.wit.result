@@ -1,5 +1,0 @@
-package `foo:qux` creates a dependency cycle
-     --> tests/ui/parse-fail/multiple-package-inline-cycle.wit:4:9
-      |
-    4 |     use foo:qux/i.{};
-      |         ^------
