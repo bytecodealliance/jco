@@ -7,7 +7,7 @@ These upstream crates are vendored to keep focused compatibility patches reprodu
 Source: https://crates.io/crates/wasmtime-environ/49.0.0
 Published archive SHA256: `bad97c3c8f3d80de1aa1e6995b6fcf66673b7e388bca0c80bde63e4051210434`
 
-Patches: use wasm-tools 0.262 parser/encoder/printer; adapt parser API changes while retaining the existing FACT start-call ABI. Forwarding translation is maintained here because upstream has not implemented it. Unsupported multiple supertypes fail explicitly.
+Patches: use wasm-tools 0.263 parser/encoder and 0.262 printer; adapt parser API changes while retaining the existing FACT start-call ABI. Forwarding translation is maintained here because upstream has not implemented it. Unsupported multiple supertypes fail explicitly.
 
 ## wit-parser 0.262.0
 

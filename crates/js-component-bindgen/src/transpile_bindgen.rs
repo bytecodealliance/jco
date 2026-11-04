@@ -6012,6 +6012,14 @@ impl<'a> Instantiator<'a, '_> {
         for (export_name, (export_idx, _extern_data)) in self.component.exports.raw_iter() {
             let export_name = export_name.as_ref().to_string();
             let export = &self.component.export_items[*export_idx];
+            // Core-module exports are outside the WIT host surface. All module
+            // initializers are still emitted and executed during instantiation.
+            if matches!(
+                export,
+                Export::ModuleStatic { .. } | Export::ModuleImport { .. }
+            ) {
+                continue;
+            }
             let world_key = &self.exports[&export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut export_resource_map = ResourceMap::new();
