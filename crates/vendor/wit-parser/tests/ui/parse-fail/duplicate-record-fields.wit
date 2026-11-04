@@ -1,6 +1,0 @@
-// parse-fail
-package foo:foo;
-
-interface foo {
-  record r { a: u32, b: u32, a: u32 }
-}

@@ -1,5 +1,0 @@
-duplicate name `x`
-     --> tests/ui/parse-fail/use-conflict3.wit:12:3
-      |
-   12 |   x: func();
-      |   ^
