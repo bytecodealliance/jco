@@ -1,4 +1,4 @@
-import { $init as $initBindgenComponent, scripts } from '../vendor/js-component-bindgen-component.js';
+import { callBindgen, scripts } from './component.js';
 import type { scripts as ScriptsNamespace } from '../vendor/js-component-bindgen-component.js';
 import { ensureWitFilesystemPreopen } from './preopens.js';
 
@@ -22,8 +22,7 @@ export async function createWorld(
     backend: ScriptEngineBackend,
 ): Promise<ScriptEngineWorld> {
     ensureWitFilesystemPreopen();
-    await $initBindgenComponent;
-    return scripts.createWorld(inputs, backend);
+    return callBindgen(() => scripts.createWorld(inputs, backend));
 }
 
 /**
@@ -33,6 +32,5 @@ export async function createWorld(
  * @returns WebAssembly component bytes
  */
 export async function createComponent(opts: ScriptComponentOpts): Promise<Uint8Array> {
-    await $initBindgenComponent;
-    return scripts.createComponent(opts);
+    return callBindgen(() => scripts.createComponent(opts));
 }
