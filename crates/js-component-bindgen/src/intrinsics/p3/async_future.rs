@@ -2024,7 +2024,10 @@ impl AsyncFutureIntrinsic {
                           // Called when the guest drops the read end: a value that was never delivered
                           // was discarded, so the host promise is disposed
                           inject.drop = () => {{
-                              if (!delivered) {{ {dispose_host_value}(promise); }}
+                              // A synchronous retry may consume the value and drop its
+                              // reader before hostWrite's completion observer runs.
+                              // The current peer records that delivery immediately.
+                              if (!delivered && !hostWriteEnd.peer()?.isDoneState()) {{ {dispose_host_value}(promise); }}
                           }};
 
                           return inject;

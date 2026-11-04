@@ -68,3 +68,36 @@ test.concurrent('dropping a cancelled future still disposes its pending host sou
         await cleanup();
     }
 });
+
+test.concurrent('a future fulfilled while its read is cancelled is not disposed after delivery', async () => {
+    const { instance, cleanup } = await setupAsyncTest({
+        asyncMode: 'jspi',
+        component: { name: 'future-copy-identity-early-value', path: fixture },
+    });
+    let finish: (value: number) => void;
+    const source = new Promise<number>((resolve) => {
+        finish = resolve;
+    });
+    let disposals = 0;
+    Object.defineProperty(source, Symbol.dispose, {
+        value: () => {
+            disposals++;
+        },
+    });
+    try {
+        assert.equal(instance.start(source), CANCELLED);
+        finish(42);
+        // The host write buffers its value while the reader is idle. Its
+        // completion observer cannot run during the synchronous read/drop pair.
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(instance.read(), 0); // COMPLETED synchronously
+        assert.equal(instance.value(), 42);
+        instance.drop();
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        assert.equal(disposals, 0, 'a delivered source must not be disposed');
+        assert.equal(instance.poll(), 0);
+    } finally {
+        finish(42);
+        await cleanup();
+    }
+});
