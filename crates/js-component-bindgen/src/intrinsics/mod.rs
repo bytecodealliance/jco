@@ -2491,7 +2491,7 @@ mod tests {
 
     #[test]
     fn future_ends_use_canonical_intra_component_copy_trap() {
-        let error = "throw new WebAssemblyRuntimeError('cannot read from and write to intra-component future');";
+        let error = "throw new WebAssemblyRuntimeError('cannot read from and write to intra-component future/stream with non-numeric payload');";
 
         for end in [
             AsyncFutureIntrinsic::FutureReadableEndClass,
@@ -2499,7 +2499,9 @@ mod tests {
         ] {
             let source = render_intrinsic_body(Intrinsic::AsyncFuture(end));
             assert!(source.contains(error));
-            assert!(source.contains("componentIdx === meta.componentIdx"));
+            assert!(source.contains(
+                "componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)"
+            ));
         }
     }
 
@@ -2720,7 +2722,16 @@ mod tests {
 
         assert!(source.contains("#dropped = false;"));
         assert!(source.contains("isDropped() { return this.#dropped; }"));
-        assert!(source.contains("isPeerDropped() { return this.#isPeerDroppedFn(); }"));
+        assert!(source.contains(
+            "isPeerDropped() { return this.#peer ? this.#peer.isDropped() : this.#isPeerDroppedFn(); }"
+        ));
+        assert!(source.contains("this.#readEnd.setPeer(this.#writeEnd);"));
+        assert!(source.contains("this.#writeEnd.setPeer(this.#readEnd);"));
+        // Forwarding replaces constructor-time peer callbacks. Drop checks
+        // must follow the current endpoint graph instead of the original pair.
+        assert!(source.contains("this.#peer = peer;"));
+        assert!(source.contains("this.#isPeerDroppedFn = () => false;"));
+        assert!(source.contains("this.#notifyPeerDroppedFn = () => {};"));
         assert!(source.contains("isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,"));
         assert!(source.contains("isPeerDroppedFn: () => this.#readEnd.isDropped(),"));
         assert!(source.contains("if (this.isPeerDropped()) {"));
