@@ -9,6 +9,7 @@ import { COMPONENT_MODEL_FIXTURES_WAST_DIR } from '../../../common.js';
 import { fileExists, getTmpDir, readComponentBytes, setupAsyncTest } from '../../../helpers.js';
 import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/custom-runtime/intrinsics/resource.js';
 import upstreamManifest from '../../../fixtures/wast/upstream-manifest.json' with { type: 'json' };
+import { validate as validateWasm, $init as initBindgen } from '../../../../vendor/js-component-bindgen-component.js';
 import type { TranspilationOptions } from '../../../../src/transpile.js';
 
 // Relative paths to component-model WAST tests
@@ -67,16 +68,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'async/trap-if-sync-and-waitable-set.wast': {
         skip: 'synchronous waitable operations do not reject handles belonging to a waitable set',
     },
-    'async/validate-task-return.wast': {
-        skip: 'the pinned validator accepts task.return results containing borrow types',
-    },
-    'binary/binary.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'validation/attributes.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'validation/outer-alias.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'validation/extern-names.wast': {
-        skip: 'the pinned translator panics on malformed namespace names, trapping the bindgen instance',
-    },
-    'validation/version-suffix.wast': { skip: 'the pinned wast parser does not support version-suffix syntax' },
     'values/post-return.wast': { skip: 'the pinned wast parser does not support stream.forward/future.forward' },
     'resources/handle-table.wast': {
         skip: 'invalid handle diagnostics print signed indices instead of the required unsigned indices',
@@ -84,9 +75,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'linking/tags.wast': { transpile: { bindgenEnableWasmExnref: true } },
     'linking/unit.wast': { transpile: { multiMemory: true } },
     'validation/instantiation.wast': { transpile: { multiMemory: true } },
-    'validation/map.wast': { skip: 'the pinned validator accepts handle types as map keys' },
-    'validation/kebab.wast': { skip: 'duplicate-name diagnostics preserve case while upstream expects lowercase' },
-    'values/concat.wast': { skip: "transpilation does not support the fixture's exported record type" },
     'values/numerics.wast': { skip: 'integer lifting rejects values that should be truncated to the target width' },
     'async/forward.wast': {
         skip: 'the pinned wast parser does not support stream.forward/future.forward',
@@ -324,7 +312,10 @@ suite('component-model WAST', () => {
                     instance,
                     instantiate: async (artifact) => (await loadArtifact(artifact))(),
                     validate: async (artifact) => {
-                        await loadArtifact(artifact);
+                        const artifactPath = artifactPaths.get(artifact);
+                        assert(artifactPath, 'WAST requested an unknown artifact');
+                        await initBindgen;
+                        validateWasm(await readComponentBytes(artifactPath));
                     },
                     assert,
                     expect,

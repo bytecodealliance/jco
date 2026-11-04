@@ -160,7 +160,7 @@
   (component
     (import "foo-bar" (func))
     (import "FOOB-ar" (func)))
-  "import name `foob-ar` conflicts with previous name `foo-bar`")
+  "import name `FOOB-ar` conflicts with previous name `foo-bar`")
 (assert_invalid
   (component
     (import "foo-bar" (type (sub resource)))
