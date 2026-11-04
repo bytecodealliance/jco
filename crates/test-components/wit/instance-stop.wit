@@ -1,0 +1,48 @@
+package jco:test-components;
+
+interface instance-stop-host {
+  resource thing;
+  stop: func();
+  destroyed: func(rep: u32);
+}
+
+interface instance-stop-guest {
+  resource thing {
+    constructor(rep: u32);
+  }
+}
+
+world instance-stop-resources {
+  import instance-stop-host;
+  use instance-stop-host.{thing};
+  export hold: func(value: thing);
+  export %borrow: func(value: borrow<thing>);
+  export give-back: func(value: thing) -> thing;
+  export drop: func(value: thing);
+  export stop-with-borrow: func(value: borrow<thing>);
+  export ok: func() -> u32;
+  export trap: func();
+  export instance-stop-guest;
+}
+
+interface instance-stop-runner {
+  run: async func();
+  ok: func() -> u32;
+}
+
+world instance-stop-spin {
+  export instance-stop-runner;
+}
+
+world instance-stop-caller {
+  import instance-stop-runner;
+  export instance-stop-runner;
+}
+
+world instance-stop-host-wait {
+  import wait: async func();
+  import completed: func();
+  export run: async func();
+}
+
+world instance-stop-empty {}
