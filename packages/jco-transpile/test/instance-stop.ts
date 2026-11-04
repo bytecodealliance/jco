@@ -20,7 +20,7 @@ class Thing {
     }
 }
 
-suite('instance stopping', () => {
+suite.skipIf(typeof WebAssembly.Suspending !== 'function')('instance stopping', () => {
     test.concurrent.each([false, true])(
         'disposes only guest-owned resources and isolates instances (minify=%s)',
         async (minify) => {
