@@ -49,10 +49,12 @@ test.concurrent('exported record types produce declarations without runtime expo
     assert.isEmpty(output.exports);
 });
 
-test.concurrent.each([false, true])('core module exports preserve initialization and functions (trap=%s)', async (trap) => {
-    const directory = await getTmpDir();
-    const path = join(directory, 'fixture.wasm');
-    const bytes = await parse(`(component
+test.concurrent.each([false, true])(
+    'core module exports preserve initialization and functions (trap=%s)',
+    async (trap) => {
+        const directory = await getTmpDir();
+        const path = join(directory, 'fixture.wasm');
+        const bytes = await parse(`(component
         (core module $m
             (func $start ${trap ? 'unreachable' : ''})
             (start $start)
@@ -63,23 +65,24 @@ test.concurrent.each([false, true])('core module exports preserve initialization
         (core instance $i (instantiate $m))
         (func (export "value") (result u32) (canon lift (core func $i "value"))))
     `);
-    await writeFile(path, bytes);
-    try {
-        const setup = setupAsyncTest({
-            asyncMode: 'jspi',
-            component: { name: 'module-export', path, outputDir: directory },
-        });
-        if (trap) {
-            await expect(setup).rejects.toThrow(/unreachable/);
-        } else {
-            const { instance, cleanup } = await setup;
-            try {
-                assert.strictEqual(await instance.value(), 42);
-            } finally {
-                await cleanup();
+        await writeFile(path, bytes);
+        try {
+            const setup = setupAsyncTest({
+                asyncMode: 'jspi',
+                component: { name: 'module-export', path, outputDir: directory },
+            });
+            if (trap) {
+                await expect(setup).rejects.toThrow(/unreachable/);
+            } else {
+                const { instance, cleanup } = await setup;
+                try {
+                    assert.strictEqual(await instance.value(), 42);
+                } finally {
+                    await cleanup();
+                }
             }
+        } finally {
+            await rm(directory, { recursive: true, force: true });
         }
-    } finally {
-        await rm(directory, { recursive: true, force: true });
-    }
-});
+    },
+);
