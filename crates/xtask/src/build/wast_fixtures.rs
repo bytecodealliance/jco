@@ -237,10 +237,7 @@ fn convert_wast_file(
                     &named_artifacts,
                     invoke.module,
                 );
-                let expected = results
-                    .iter()
-                    .map(wast_ret_to_js_param)
-                    .collect::<Result<Vec<_>>>()?;
+                let expected = typed_results_to_js_params(&results, artifact, invoke.name)?;
                 let check_expr = match expected.as_slice() {
                     [] => "assert.isUndefined(res);".into(),
                     [expected] => format!("assert.deepEqual(res, {expected});"),
@@ -449,6 +446,30 @@ fn typed_args_to_js_params(
         .map(|parts| parts.join(","))
 }
 
+fn typed_results_to_js_params(
+    results: &[wast::WastRet<'_>],
+    artifact: Option<&WastArtifact>,
+    export: &str,
+) -> Result<Vec<String>> {
+    let result_type = artifact
+        .filter(|artifact| artifact.kind == "component")
+        .and_then(|artifact| artifact.types.as_ref())
+        .and_then(|types| match types.component_item_for_export(export)?.ty {
+            ComponentEntityType::Func(function) => Some((types, types[function].result.as_ref())),
+            _ => None,
+        });
+    let Some((types, result_type)) = result_type else {
+        return results.iter().map(wast_ret_to_js_param).collect();
+    };
+    match (result_type, results) {
+        (None, []) => Ok(Vec::new()),
+        (Some(ty), [wast::WastRet::Component(value)]) => {
+            Ok(vec![typed_cm_val_to_js_param(value, ty, types)?])
+        }
+        _ => bail!("WAST expected result count does not match {export}"),
+    }
+}
+
 fn nullable_option(ty: &ComponentValType, types: &Types) -> bool {
     match ty {
         ComponentValType::Type(id) => match &types[*id] {
@@ -472,6 +493,25 @@ fn typed_cm_val_to_js_param(
         return cm_val_to_js_param(value);
     };
     match (&types[*id], value) {
+        (ComponentDefinedType::Flags(flags), WastVal::Flags(selected)) => {
+            ensure!(
+                selected
+                    .iter()
+                    .all(|name| flags.iter().any(|flag| flag.as_str() == *name)),
+                "unknown WAST flag"
+            );
+            let fields = flags
+                .iter()
+                .map(|flag| {
+                    Ok(format!(
+                        "{}: {}",
+                        js_string(&flag.as_str().to_lower_camel_case())?,
+                        selected.contains(&flag.as_str()),
+                    ))
+                })
+                .collect::<Result<Vec<_>>>()?;
+            Ok(format!("{{ {} }}", fields.join(",")))
+        }
         (ComponentDefinedType::Option { ty: payload, .. }, WastVal::Option(value)) => {
             match (nullable_option(ty, types), value) {
                 (true, None) => Ok("null".into()),
@@ -796,6 +836,66 @@ mod tests {
         let result = test(&wast_path);
         fs::remove_dir_all(fixture_dir)?;
         result
+    }
+
+    #[test]
+    fn expected_values_follow_component_result_types() -> Result<()> {
+        with_wast_fixture(
+            r#"
+                (component
+                    (type $flags (flags "first-flag" "second-flag"))
+                    (export $flags-export "flag-type" (type $flags))
+                    (type $flat (option u32))
+                    (export $flat-export "flat-type" (type $flat))
+                    (type $nested (option $flat-export))
+                    (export $nested-export "nested-type" (type $nested))
+                    (core module $m
+                        (memory (export "memory") 1)
+                        (func (export "f") (result i32) i32.const 0))
+                    (core instance $i (instantiate $m))
+                    (func (export "flags") (result $flags-export)
+                        (canon lift (core func $i "f")))
+                    (func (export "flat") (result $flat-export)
+                        (canon lift (core func $i "f") (memory (core memory $i "memory"))))
+                    (func (export "nested") (result $nested-export)
+                        (canon lift (core func $i "f") (memory (core memory $i "memory")))))
+                (assert_return (invoke "flags") (flags.const "second-flag"))
+                (assert_return (invoke "flat") (option.none))
+                (assert_return (invoke "flat") (option.some (u32.const 5)))
+                (assert_return (invoke "nested") (option.none))
+                (assert_return (invoke "nested") (option.some (option.none)))
+                (assert_return (invoke "nested") (option.some (option.some (u32.const 5))))
+            "#,
+            |path| {
+                run(path)?;
+                let script = fs::read_to_string(path.with_extension("wast.js"))?;
+                let test = format!(
+                    r#"
+                    import {{ deepStrictEqual }} from 'node:assert';
+                    {script}
+                    const flat = [null, 5];
+                    const nested = [{{tag:'none'}}, {{tag:'some',val:null}}, {{tag:'some',val:5}}];
+                    await runWastTest({{
+                        assert: {{deepEqual: deepStrictEqual}}, expect: {{}}, validate: async () => {{}},
+                        instantiate: async () => ({{
+                            flags: () => ({{firstFlag:false, secondFlag:true}}),
+                            flat: () => flat.shift(),
+                            nested: () => nested.shift(),
+                        }}),
+                    }});
+                    "#
+                );
+                let output = std::process::Command::new("node")
+                    .args(["--input-type=module", "--eval", &test])
+                    .output()?;
+                ensure!(
+                    output.status.success(),
+                    "{}",
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                Ok(())
+            },
+        )
     }
 
     #[test]
