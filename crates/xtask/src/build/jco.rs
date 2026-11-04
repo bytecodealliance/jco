@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 use anyhow::{Context, Result, bail};
-use js_component_bindgen::BindingsMode;
+use js_component_bindgen::{BindingsMode, InstantiationMode};
 use wit_component::ComponentEncoder;
 use xshell::{Shell, cmd};
 
@@ -186,11 +186,16 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         ),
     ]);
     let opts = js_component_bindgen::TranspileOpts::builder()
-        .name(name)
+        .name(name.clone())
         .no_typescript(false)
         .map(import_map)
         .nodejs_compat_disabled(false)
-        .base64_cutoff(5000_usize)
+        // Both bindgen entry points share these core modules by filename.
+        .base64_cutoff(if name == "js-component-bindgen-component" {
+            0
+        } else {
+            5000
+        })
         .tla_compat(true)
         .valid_lifting_optimization(false)
         .tracing(false)
@@ -203,7 +208,23 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         .asmjs(false)
         .build();
 
-    let transpiled = js_component_bindgen::transpile(&adapted_component, opts)?;
+    let mut transpiled = js_component_bindgen::transpile(&adapted_component, opts.clone())?;
+
+    // The JS API can discard a trapped bindgen instance and instantiate a new
+    // one without reloading an ES module or recompiling its core Wasm modules.
+    if name == "js-component-bindgen-component" {
+        let mut factory_opts = opts;
+        factory_opts.instantiation_mode = Some(InstantiationMode::Async);
+        factory_opts.map = None;
+        let factory = js_component_bindgen::transpile(&adapted_component, factory_opts)?;
+        for (filename, contents) in factory.files {
+            if let Some(extension @ ("js" | "d.ts")) = filename.strip_prefix(&format!("{name}.")) {
+                transpiled
+                    .files
+                    .push((format!("{name}-instantiation.{extension}"), contents));
+            }
+        }
+    }
 
     for (filename, contents) in transpiled.files.iter() {
         let outfile = obj_dir.join(filename);
