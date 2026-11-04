@@ -261,6 +261,9 @@ struct JsBindgen<'a> {
     /// The second boolean is true when async procelain is required *or* if the
     /// export itself is async.
     all_core_exported_funcs: Vec<(String, bool)>,
+
+    /// Core-instance references released when the generated store is stopped.
+    stop_refs: BTreeSet<String>,
 }
 
 /// Arguments provided to `JSBindgen::bindgen`, normally called to perform bindgen on a given function
@@ -348,6 +351,7 @@ pub fn transpile_bindgen(
         cm_runtime_es_module,
         all_intrinsics: BTreeSet::new(),
         all_core_exported_funcs: Vec::new(),
+        stop_refs: BTreeSet::new(),
     };
     bindgen.local_names.exclude_globals(
         &Intrinsic::get_global_names()
@@ -586,12 +590,31 @@ impl JsBindgen<'_> {
         } else {
             self.intrinsic(Intrinsic::Component(ComponentIntrinsic::StopInstance))
         };
+        // Direct modules expose _util alongside a pending $init. Race module loads
+        // with stop and check before each resumed initialization step.
+        let (init_stop_check, init_wait) = if opts.instantiation_mode.is_none()
+            && self
+                .all_intrinsics
+                .contains(&Intrinsic::Component(ComponentIntrinsic::StopInstance))
+        {
+            let store = self.intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+            let track = self.intrinsic_call_prefix(Intrinsic::Component(
+                ComponentIntrinsic::TrackHostOperation,
+            ));
+            (
+                format!("if ({store}.stopped) throw {store}.error;"),
+                format!("value = {track}() => value);"),
+            )
+        } else {
+            (String::new(), String::new())
+        };
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
         let mut core_exported_funcs = source::Source::default();
 
         for (core_export_fn, is_async) in self.all_core_exported_funcs.iter() {
             let local_name = self.local_names.get(core_export_fn);
+            self.stop_refs.insert(local_name.to_string());
             if *is_async {
                 uwriteln!(
                     core_exported_funcs,
@@ -684,6 +707,20 @@ impl JsBindgen<'_> {
             }
         }
 
+        let mut js_imports = source::Source::default();
+        let import_refs = self.esm_bindgen.render_imports(
+            &mut js_imports,
+            self.opts.instantiation_mode.is_some().then_some("imports"),
+            &mut self.local_names,
+            self.cm_runtime_es_module.is_some(),
+        );
+        if self.opts.instantiation_mode.is_some() {
+            self.stop_refs.extend(import_refs);
+            self.stop_refs.extend(
+                ["imports", "getCoreModule", "instantiateCore", "options"].map(String::from),
+            );
+        }
+
         let render_args = RenderIntrinsicsArgs::builder()
             .intrinsics(&mut self.all_intrinsics)
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
@@ -692,6 +729,84 @@ impl JsBindgen<'_> {
         #[cfg(feature = "external-runtime")]
         let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
         let js_intrinsics = render_intrinsics(render_args.build());
+        if self
+            .all_intrinsics
+            .contains(&Intrinsic::Component(ComponentIntrinsic::StopInstance))
+        {
+            let store = self
+                .runtime()
+                .reference(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+            uwriteln!(self.src.js, "{store}.release = () => {{");
+            for name in &self.stop_refs {
+                uwriteln!(self.src.js, "{name} = null;");
+            }
+            let mut stored_intrinsics = self.all_intrinsics.clone();
+            if self.cm_runtime_es_module.is_some() {
+                stored_intrinsics.extend(ExternalRuntime::storage_intrinsics(&self.all_intrinsics));
+            }
+            for intrinsic in &stored_intrinsics {
+                let name = self.runtime().reference(*intrinsic);
+                match intrinsic {
+                    Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap) => {
+                        uwriteln!(
+                            self.src.js,
+                            "for (const state of {name}.values()) state.release(); {name}.clear();"
+                        );
+                    }
+                    Intrinsic::GlobalBufferManager
+                    | Intrinsic::GlobalComponentMemoryMap
+                    | Intrinsic::Component(ComponentIntrinsic::GlobalInstanceFlagsMap)
+                    | Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap)
+                    | Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap)
+                    | Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap)
+                    | Intrinsic::Resource(
+                        ResourceIntrinsic::HandleIndexSpaces
+                        | ResourceIntrinsic::ResourceScopeTasks,
+                    )
+                    | Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentLocalTable) => {
+                        uwriteln!(self.src.js, "{name}.clear();");
+                    }
+                    Intrinsic::HandleTables => {
+                        uwriteln!(
+                            self.src.js,
+                            "for (const table of {name}) {{ if (table) {{ table.length = 0; table._createdReps?.clear(); }} }} {name}.length = 0;"
+                        );
+                    }
+                    Intrinsic::AsyncTask(
+                        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds
+                        | AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs,
+                    )
+                    | Intrinsic::Resource(
+                        ResourceIntrinsic::ResourceCallBorrows
+                        | ResourceIntrinsic::CurResourceBorrows,
+                    ) => {
+                        uwriteln!(self.src.js, "{name}.length = 0;");
+                    }
+                    Intrinsic::GlobalCurrentTaskMeta
+                    | Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap)
+                    | Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap)
+                    | Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap) => {
+                        uwriteln!(
+                            self.src.js,
+                            "for (const key of Object.keys({name})) delete {name}[key];"
+                        );
+                    }
+                    Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable) => {
+                        uwriteln!(self.src.js, "{name}.data = null;");
+                    }
+                    Intrinsic::JsHelper(JsHelperIntrinsic::DataView) => {
+                        let cache = if self.cm_runtime_es_module.is_some() {
+                            "_jcoDataViewCacheContext.view"
+                        } else {
+                            "dv"
+                        };
+                        uwriteln!(self.src.js, "{cache} = new DataView(new ArrayBuffer(0));");
+                    }
+                    _ => {}
+                }
+            }
+            uwriteln!(self.src.js, "}};");
+        }
         let early_webidl_intrinsics = opts.instantiation_mode.is_none()
             && self.cm_runtime_es_module.is_some()
             && self
@@ -737,18 +852,7 @@ impl JsBindgen<'_> {
             output.push_str(&js_intrinsics);
         }
 
-        // Render all imports
-        let imports_object = if self.opts.instantiation_mode.is_some() {
-            Some("imports")
-        } else {
-            None
-        };
-        self.esm_bindgen.render_imports(
-            &mut output,
-            imports_object,
-            &mut self.local_names,
-            self.cm_runtime_es_module.is_some(),
-        );
+        output.push_str(&js_imports);
 
         // Create instantiation code
         if self.opts.instantiation_mode.is_some() {
@@ -787,6 +891,7 @@ impl JsBindgen<'_> {
                                     ({{ value, done }} = {gen}.next(value));
                                 }} while (!(value instanceof Promise) && !done);
                                 if (done) {{
+                                    {gen} = null;
                                     if ({resolve}) return {resolve}(value);
                                     else return value;
                                 }}
@@ -794,6 +899,7 @@ impl JsBindgen<'_> {
                                 value.then(nextVal => done ? {resolve}() : {run_next}(nextVal), e => {reject}({normalize}(e)));
                             }}
                             catch (e) {{
+                                {gen} = null;
                                 e = {normalize}(e);
                                 if ({reject}) {reject}(e);
                                 else throw e;
@@ -861,16 +967,20 @@ impl JsBindgen<'_> {
                             try {{
                                 let done;
                                 do {{
+                                    {init_stop_check}
                                     ({{ value, done }} = {gen}.next(value));
                                 }} while (!(value instanceof Promise) && !done);
                                 if (done) {{
-                                    if ({resolve}) {resolve}(value);
+                                    {gen} = null;
+                                    if ({resolve}) return {resolve}(value);
                                     else return value;
                                 }}
                                 if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
-                                value.then({run_next}, e => {reject}({normalize}(e)));
+                                {init_wait}
+                                value.then({run_next}, e => {{ {gen} = null; {reject}({normalize}(e)); }});
                             }}
                             catch (e) {{
+                                {gen} = null;
                                 e = {normalize}(e);
                                 if ({reject}) {reject}(e);
                                 else throw e;
@@ -1717,6 +1827,9 @@ impl<'a> Instantiator<'a, '_> {
             );
         } else {
             // non imported
+            let store = self
+                .bindgen
+                .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
             let finalization_registry_create = self
                 .bindgen
                 .intrinsic(Intrinsic::FinalizationRegistryCreate);
@@ -1727,6 +1840,7 @@ impl<'a> Instantiator<'a, '_> {
                    handleTable{rtid}._createdReps = new Set();
                    handleTable{rtid}._componentIdx = {component_idx};
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
+                       if ({store}.stopped) {{ return; }}
                        const {{ rep }} = {rsc_table_remove};{maybe_dtor}
                    }});
                 "#,
@@ -4028,6 +4142,9 @@ impl<'a> Instantiator<'a, '_> {
                 let core_def = self.core_def(def);
                 let core_def_name = js_string_literal(&core_def);
 
+                self.bindgen
+                    .stop_refs
+                    .insert(format!("callback_{callback_idx}"));
                 uwriteln!(self.src.js, "let callback_{callback_idx};",);
 
                 // If the function returns an async value like a stream or future,
@@ -4079,6 +4196,7 @@ impl<'a> Instantiator<'a, '_> {
             GlobalInitializer::ExtractMemory(m) => {
                 let def = self.core_export_var_name(&m.export);
                 let idx = m.index.as_u32();
+                self.bindgen.stop_refs.insert(format!("memory{idx}"));
                 uwriteln!(self.src.js, "let memory{idx};");
                 uwriteln!(self.src.js_init, "memory{idx} = {def};");
             }
@@ -4086,7 +4204,9 @@ impl<'a> Instantiator<'a, '_> {
             GlobalInitializer::ExtractRealloc(r) => {
                 let def = self.core_def(&r.def);
                 let idx = r.index.as_u32();
+                self.bindgen.stop_refs.insert(format!("realloc{idx}"));
                 uwriteln!(self.src.js, "let realloc{idx};");
+                self.bindgen.stop_refs.insert(format!("realloc{idx}Async"));
                 uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // Core functions return pointers as signed 32-bit integers, which are negative
                 // for allocations at or above 2GiB, so make them unsigned for use as offsets
@@ -4112,7 +4232,11 @@ impl<'a> Instantiator<'a, '_> {
             GlobalInitializer::ExtractPostReturn(p) => {
                 let def = self.core_def(&p.def);
                 let idx = p.index.as_u32();
+                self.bindgen.stop_refs.insert(format!("postReturn{idx}"));
                 uwriteln!(self.src.js, "let postReturn{idx};");
+                self.bindgen
+                    .stop_refs
+                    .insert(format!("postReturn{idx}Async"));
                 uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
                 // NOTE: sometimes we may be fed a post return fn that isn't a webassembly function
@@ -4134,6 +4258,7 @@ impl<'a> Instantiator<'a, '_> {
             GlobalInitializer::ExtractTable(t) => {
                 let def = self.core_export_var_name(&t.export);
                 let idx = t.index.as_u32();
+                self.bindgen.stop_refs.insert(format!("table{idx}"));
                 uwriteln!(self.src.js, "let table{idx};");
                 uwriteln!(self.src.js_init, "table{idx} = {def};");
             }
@@ -4315,6 +4440,7 @@ impl<'a> Instantiator<'a, '_> {
             self.bindgen
                 .intrinsic_call_prefix(Intrinsic::InstantiateCore)
         };
+        self.bindgen.stop_refs.insert(format!("exports{iu32}"));
         uwriteln!(self.src.js, "let exports{iu32};");
 
         match self.bindgen.opts.instantiation_mode {
@@ -7518,9 +7644,10 @@ pub fn gen_flat_lift_fn_js_expr(
                                                        writable: true,
                                                        value: function() {{
                                                            finalizationRegistry{tid}.unregister(resourceObj);
-                                                           const handleEntry = {rsc_table_remove};
                                                            resourceObj[{symbol_dispose}] = {empty_func};
                                                            resourceObj[{symbol_resource_handle}] = undefined;
+                                                           if ({store}.stopped) {{ return; }}
+                                                           const handleEntry = {rsc_table_remove};
                                                            {dtor_call}
                                                        }}
                                                   }}

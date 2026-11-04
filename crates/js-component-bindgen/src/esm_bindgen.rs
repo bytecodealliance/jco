@@ -294,18 +294,19 @@ impl EsmBindgen {
         js_string.contains("\"") || js_string.contains("'") || js_string.contains("`")
     }
 
-    /// Render a block of imports
+    /// Render a block of imports and return the mutable instance bindings that
+    /// teardown can release.
     ///
     /// This is normally right before the instantiation code in the generated output, e.g.:
     ///
     /// ```js
-    /// const { someFn } = imports['ns:pkg/iface'];
-    /// const { asyncOtherFn } = imports['ns:pkg/iface2'];
-    /// const { someFn, asyncSomeFn } = imports['ns:pkg/iface3'];
-    /// const { getDirectories } = imports['wasi:filesystem/preopens'];
-    /// const { Descriptor, filesystemErrorCode } = imports['wasi:filesystem/types'];
-    /// const { Error: Error$1 } = imports['wasi:io/error'];
-    /// const { InputStream, OutputStream } = imports['wasi:io/streams'];
+    /// let { someFn } = imports['ns:pkg/iface'];
+    /// let { asyncOtherFn } = imports['ns:pkg/iface2'];
+    /// let { someFn, asyncSomeFn } = imports['ns:pkg/iface3'];
+    /// let { getDirectories } = imports['wasi:filesystem/preopens'];
+    /// let { Descriptor, filesystemErrorCode } = imports['wasi:filesystem/types'];
+    /// let { Error: Error$1 } = imports['wasi:io/error'];
+    /// let { InputStream, OutputStream } = imports['wasi:io/streams'];
     /// let gen = (function* _initGenerator () {
     /// ```
     ///
@@ -315,8 +316,14 @@ impl EsmBindgen {
         imports_object: Option<&str>,
         local_names: &mut LocalNames,
         external_runtime: bool,
-    ) {
+    ) -> Vec<String> {
         let mut iface_imports = Vec::new();
+        let mut local_imports = Vec::new();
+        let binding_keyword = if imports_object.is_some() {
+            "let"
+        } else {
+            "const"
+        };
 
         for (specifier, binding) in &self.imports {
             // Build IDL binding if the specifier uses specifal WebIDL support
@@ -333,7 +340,7 @@ impl EsmBindgen {
             };
 
             if imports_object.is_some() || idl_binding.is_some() {
-                uwrite!(output, "const ");
+                uwrite!(output, "{binding_keyword} ");
             } else {
                 uwrite!(output, "import ");
             }
@@ -443,6 +450,7 @@ impl EsmBindgen {
                             maybe_quote_member(specifier)
                         );
                         for (external_name, local_name) in bound_external_names {
+                            local_imports.push(local_name.clone());
                             let message = js_string_literal(&format!(
                                 "unexpectedly undefined instance import '{local_name}', was '{external_name}' available at instantiation?"
                             ));
@@ -474,6 +482,9 @@ impl EsmBindgen {
 
                 // For local bindings we can use a simpler direct assignment
                 ImportBinding::Local(binding_local_names) => {
+                    if imports_object.is_some() {
+                        local_imports.extend(binding_local_names.iter().cloned());
+                    }
                     let local_name = &binding_local_names[0];
                     if let Some(imports_object) = imports_object {
                         uwriteln!(
@@ -490,7 +501,10 @@ impl EsmBindgen {
                     }
 
                     for other_local_name in &binding_local_names[1..] {
-                        uwriteln!(output, "const {other_local_name} = {local_name};");
+                        uwriteln!(
+                            output,
+                            "{binding_keyword} {other_local_name} = {local_name};"
+                        );
                     }
                 }
             }
@@ -498,7 +512,7 @@ impl EsmBindgen {
 
         // Render interface import member getters
         for (iface_local_name, iface_imports) in iface_imports {
-            uwrite!(output, "const {{");
+            uwrite!(output, "{binding_keyword} {{");
             let mut first = true;
             let mut generated_member_names = Vec::new();
 
@@ -517,6 +531,9 @@ impl EsmBindgen {
                         output.push_str(local_name);
                     } else {
                         uwrite!(output, "{member_name}: {local_name}");
+                    }
+                    if imports_object.is_some() {
+                        local_imports.push(local_name.clone());
                     }
                     generated_member_names.push((member_name, local_name));
                 }
@@ -545,5 +562,6 @@ impl EsmBindgen {
                 );
             }
         }
+        local_imports
     }
 }

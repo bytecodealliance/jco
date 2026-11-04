@@ -684,6 +684,7 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureEndClass => {
+                let store = render_args.require_intrinsic(ComponentIntrinsic::GlobalStoreTrap);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
                 let async_event_code_enum =
@@ -811,6 +812,19 @@ impl AsyncFutureIntrinsic {
                             return event;
                         }}
 
+                        throwIfStopped() {{
+                            if ({store}.stopped) {{ throw {store}.error; }}
+                        }}
+
+                        stop() {{
+                            this.#dropped = true;
+                            this.setCopyState({future_end_class}.CopyState.DONE);
+                            this.resetPendingBufferMeta();
+                            this.#waitable.stop();
+                            this.#isPeerDroppedFn = () => true;
+                            this.#notifyPeerDroppedFn = null;
+                        }}
+
                         isDropped() {{ return this.#dropped; }}
                         isPeerDropped() {{ return this.#isPeerDroppedFn(); }}
 
@@ -830,6 +844,8 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         drop() {{
+                            if ({store}.stopped) {{ return; }}
+                            {store}.stopHooks.delete(this);
                             if (this.isDropped()) {{ throw new Error('future already dropped'); }}
 
                             if (this.#pendingBufferMeta.buffer) {{
@@ -850,6 +866,9 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::FutureReadableEndClass | Self::FutureWritableEndClass => {
+                let wait_for_event =
+                    render_args.require_intrinsic(ComponentIntrinsic::WaitForEvent);
+                let store = render_args.require_intrinsic(ComponentIntrinsic::GlobalStoreTrap);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
@@ -878,6 +897,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                           _read(args) {{
+                              this.throwIfStopped();
                               const {{ buffer, onCopyDoneFn, componentIdx }} = args;
                               if (!buffer) {{ throw new Error('missing buffer for future read'); }}
 
@@ -917,6 +937,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                           _write(args) {{
+                              this.throwIfStopped();
                               const {{ buffer, onCopyDoneFn, componentIdx }} = args;
                               if (!buffer) {{ throw new Error('missing buffer for future write'); }}
 
@@ -969,6 +990,7 @@ impl AsyncFutureIntrinsic {
                             r#"
                               // TODO: rename, guestRead also handles host reads (when data is present)...
                               guestRead(args) {{
+                                  this.throwIfStopped();
                                   {debug_log_fn}('[{class_name}#guestRead()] args', args);
                                   const {{
                                       componentIdx,
@@ -1064,6 +1086,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                               guestWrite(args) {{
+                                  this.throwIfStopped();
                                   {debug_log_fn}('[{class_name}#guestWrite()] args', args);
                                   const {{
                                       componentIdx,
@@ -1145,6 +1168,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                               async hostRead(args) {{
+                                  this.throwIfStopped();
                                   const {{ stringEncoding }} = args;
 
                                   const {{ buffer }} = await this.guestRead({{
@@ -1154,18 +1178,14 @@ impl AsyncFutureIntrinsic {
                                       componentIdx: -1,
                                   }});
 
+                                  this.throwIfStopped();
                                   if (!this.hasPendingEvent()) {{
                                       this.setCopyState({future_end_class}.CopyState.ASYNC_COPYING);
 
                                        // Wait for the write to complete
-                                       await new Promise((resolve) => {{
-                                           let waitInterval = setInterval(() => {{
-                                               if (!this.hasPendingEvent()) {{ return; }}
-                                               clearInterval(waitInterval);
-                                               resolve();
-                                           }});
-                                       }});
+                                       await {wait_for_event}(() => this.hasPendingEvent());
 
+                                       this.throwIfStopped();
                                        if (!this.hasPendingEvent()) {{
                                            throw new Error("missing pending event after blocked future read");
                                        }}
@@ -1190,6 +1210,7 @@ impl AsyncFutureIntrinsic {
                                   const componentIdx = this.getWaitable().componentIdx();
                                   if (componentIdx !== -1) {{
                                       await {get_or_create_async_state_fn}(componentIdx).waitForExclusiveRelease();
+                                      this.throwIfStopped();
                                   }}
 
                                   return {{ value: vs[0] }};
@@ -1202,6 +1223,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                               async hostWrite(args) {{
+                                  this.throwIfStopped();
                                   const {{ stringEncoding, value, getReallocFn }} = args;
 
                                   const {{ buffer }} = await this.guestWrite({{
@@ -1214,18 +1236,14 @@ impl AsyncFutureIntrinsic {
                                       componentIdx: -1,
                                   }});
 
+                                  this.throwIfStopped();
                                   if (!this.hasPendingEvent()) {{
                                       this.setCopyState({future_end_class}.CopyState.ASYNC_COPYING);
 
                                        // Wait for the write to complete
-                                       await new Promise((resolve) => {{
-                                           let waitInterval = setInterval(() => {{
-                                               if (!this.hasPendingEvent()) {{ return; }}
-                                               clearInterval(waitInterval);
-                                               resolve();
-                                           }});
-                                       }});
+                                       await {wait_for_event}(() => this.hasPendingEvent());
 
+                                       this.throwIfStopped();
                                        if (!this.hasPendingEvent()) {{
                                            throw new Error("missing pending event after blocked future write");
                                        }}
@@ -1299,6 +1317,7 @@ impl AsyncFutureIntrinsic {
 
                             this.#hostInjectFn = args.hostInjectFn;
                             this.#isHostOwned = args.hostOwned;
+                            {store}.stopHooks.add(this);
                         }}
 
                         {type_getters}
@@ -1347,7 +1366,16 @@ impl AsyncFutureIntrinsic {
                         {guest_rw_fn}
                         {host_rw_fn}
 
+                        stop() {{
+                            const inject = this.#hostInjectFn;
+                            this.#hostInjectFn = null;
+                            this.#elemMeta = null;
+                            super.stop();
+                            inject?.drop?.();
+                        }}
+
                         drop() {{
+                            if ({store}.stopped) {{ return; }}
                             {drop_check}
                             super.drop();
                             // Let a host-provided future know if its value was discarded
@@ -1857,6 +1885,7 @@ impl AsyncFutureIntrinsic {
             }
 
             Self::GenFutureHostInjectFn => {
+                let store = render_args.require_intrinsic(ComponentIntrinsic::GlobalStoreTrap);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let gen_host_inject_fn = self.name();
                 let nested_future_symbol = render_args.require_intrinsic(Self::NestedFutureSymbol);
@@ -1873,7 +1902,7 @@ impl AsyncFutureIntrinsic {
                       function {gen_host_inject_fn}(genArgs) {{
                           const {{ promise, hostWriteEnd, stringEncoding, getReallocFn }} = genArgs;
                           if (promise instanceof Promise) {{
-                              promise.catch(() => {{}});
+                              promise.then(() => {{}}, () => {{}});
                           }}
                           let done;
                           let delivered = false;
@@ -1896,6 +1925,7 @@ impl AsyncFutureIntrinsic {
                               try {{
                                   value = await {track_host_operation}(() => promise);
                               }} catch (err) {{
+                                  if ({store}.stopped) {{ return () => {{}}; }}
                                   // The reader was dropped (and the promise disposed) while it was pending,
                                   // so a rejection (e.g. from handling disposal) has nowhere to go
                                   if (hostWriteEnd.isPeerDropped()) {{ return () => {{}}; }}
@@ -1907,6 +1937,7 @@ impl AsyncFutureIntrinsic {
                                   value = {{ tag: 'err', val: {get_error_payload}err) }};
                               }}
 
+                              if ({store}.stopped) {{ return () => {{}}; }}
                               // A value produced after the reader was dropped is never delivered
                               if (hostWriteEnd.isPeerDropped()) {{ return () => {{}}; }}
 

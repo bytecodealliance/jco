@@ -22,6 +22,12 @@ pub enum ComponentIntrinsic {
     /// Permanently stop this generated store and release its host resources.
     StopInstance,
 
+    /// Release store state after its last active stack has unwound.
+    ReleaseStoppedStore,
+
+    /// Wait for a runtime event, abandoning the wait when the store stops.
+    WaitForEvent,
+
     /// Shared scheduling state for all component instances in this generated store.
     GlobalStoreAsyncState,
 
@@ -110,6 +116,8 @@ impl ComponentIntrinsic {
             Self::GlobalInstanceFlagsMap => "INSTANCE_FLAGS",
             Self::GlobalStoreTrap => "STORE_TRAP",
             Self::StopInstance => "_stopInstance",
+            Self::ReleaseStoppedStore => "_releaseStoppedStore",
+            Self::WaitForEvent => "_waitForEvent",
             Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
             Self::CheckForDeadlock => "_checkForDeadlock",
             Self::TrackHostOperation => "_trackHostOperation",
@@ -141,7 +149,54 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set() }};"#
+                    r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set(), stopHooks: new Set(), disposedValues: new WeakSet(), stopping: false, release: null }};"#
+                );
+            }
+
+            Self::ReleaseStoppedStore => {
+                let name = self.name();
+                let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let tasks =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}() {{
+                        if (!{store}.stopped || {store}.stopping || !{store}.release) {{ return; }}
+                        if ([...{tasks}.values()].some(tasks => tasks.length)) {{ return; }}
+                        const release = {store}.release;
+                        {store}.release = null;
+                        release();
+                    }}
+                "#
+                );
+            }
+
+            Self::WaitForEvent => {
+                let name = self.name();
+                let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}(ready) {{
+                        return new Promise((resolve, reject) => {{
+                            if ({store}.stopped) {{ reject({store}.error); return; }}
+                            let timer;
+                            const finish = (error) => {{
+                                clearInterval(timer);
+                                {store}.stopWaiters.delete(finish);
+                                if (error) {{ reject(error); }} else {{ resolve(); }}
+                            }};
+                            const poll = () => {{
+                                try {{ if (ready()) {{ finish(); }} }}
+                                catch (error) {{ finish(error); }}
+                            }};
+                            {store}.stopWaiters.add(finish);
+                            timer = setInterval(poll, 0);
+                            poll();
+                        }});
+                    }}
+                "#
                 );
             }
 
@@ -150,6 +205,7 @@ impl ComponentIntrinsic {
                 let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 let states = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
                 let scheduler = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                let release = render_args.require_intrinsic(Self::ReleaseStoppedStore);
                 let tasks =
                     render_args.require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
                 let runtime_error =
@@ -163,6 +219,9 @@ impl ComponentIntrinsic {
                     function {name}() {{
                         if ({store}.stopped) {{ return; }}
                         {store}.stopped = true;
+                        {store}.stopping = true;
+                        const errors = [];
+                        const cleanup = (fn) => {{ try {{ fn(); }} catch (error) {{ errors.push(error); }} }};
                         const err = new {runtime_error}('component instance has been stopped');
                         {store}.error ??= err;
                         clearTimeout({scheduler}.deadlockCheck);
@@ -171,11 +230,13 @@ impl ComponentIntrinsic {
                         // Poison every component before releasing any continuation or
                         // calling host cleanup, which can reenter the instance.
                         for (const state of {states}.values()) {{ state.markTrapped(err); }}
-                        for (const reject of {store}.stopWaiters) {{ reject(err); }}
+                        for (const reject of {store}.stopWaiters) {{ cleanup(() => reject(err)); }}
                         {store}.stopWaiters.clear();
                         const pending = [...{tasks}.values()].flat().map(meta => meta.task);
-                        for (const task of pending) {{ task.stop(err); }}
-                        for (const state of {states}.values()) {{ state.stop(); }}
+                        for (const task of pending) {{ cleanup(() => task.stop(err)); }}
+                        for (const hook of {store}.stopHooks) {{ cleanup(() => hook.stop(err)); }}
+                        {store}.stopHooks.clear();
+                        for (const state of {states}.values()) {{ cleanup(() => state.stop()); }}
 
                         // A capture table also contains borrowed resources. Only live
                         // owned handles belong to the guest; lifting an own back to the
@@ -190,11 +251,12 @@ impl ComponentIntrinsic {
                         }}
                         for (const {{ captures }} of {store}.resourceTables) {{ captures.clear(); }}
                         {store}.resourceTables.length = 0;
-                        const errors = [];
                         for (const resource of resources) {{
                             try {{ resource[{dispose}]?.(); }}
                             catch (error) {{ errors.push(error); }}
                         }}
+                        {store}.stopping = false;
+                        {release}();
                         if (errors.length) {{ throw new AggregateError(errors, 'failed to dispose stopped instance resources'); }}
                     }}
                 "#
@@ -288,6 +350,8 @@ impl ComponentIntrinsic {
                 let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 let symbol_dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
                 let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let dispose_host_value =
+                    render_args.intrinsic_call_prefix(Intrinsic::DisposeHostValue);
                 output.push_str(&format!(
                     r#"
                     function {track_host_operation_fn}(operation) {{
@@ -303,10 +367,14 @@ impl ComponentIntrinsic {
                         {store_async_state}.pendingHostOperations++;
                         let rejectStopped;
                         const stopped = new Promise((_, reject) => {{ rejectStopped = reject; }});
-                        {store}.stopWaiters.add(rejectStopped);
-                        if ({store}.stopped) {{ rejectStopped({store}.error); }}
+                        const stop = (error) => {{
+                            rejectStopped(error);
+                            {dispose_host_value}result);
+                        }};
+                        {store}.stopWaiters.add(stop);
+                        if ({store}.stopped) {{ stop({store}.error); }}
                         const tracked = Promise.race([result, stopped]).finally(() => {{
-                            {store}.stopWaiters.delete(rejectStopped);
+                            {store}.stopWaiters.delete(stop);
                             {store_async_state}.pendingHostOperations--;
                             if ({store_async_state}.pendingHostOperations < 0) {{
                                 throw new Error('negative pending host operation count');
@@ -318,8 +386,8 @@ impl ComponentIntrinsic {
                         // Forward disposal to the host's value, so it is notified if a guest
                         // discards the value (e.g. a future) produced from this operation
                         for (const sym of [Symbol.asyncDispose, {symbol_dispose}]) {{
-                            if (typeof sym === 'symbol' && typeof result[sym] === 'function') {{
-                                tracked[sym] = () => result[sym]();
+                            if (typeof sym === 'symbol') {{
+                                tracked[sym] = () => {dispose_host_value}result);
                             }}
                         }}
 
@@ -539,6 +607,7 @@ impl ComponentIntrinsic {
                 let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
                 let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
+                let wait_for_event = render_args.require_intrinsic(Self::WaitForEvent);
                 let cannot_enter_component = Trap::CannotEnterComponent.to_string();
 
                 output.push_str(&format!(
@@ -702,25 +771,9 @@ impl ComponentIntrinsic {
                         hasBackpressure() {{ return this.#backpressure > 0; }}
 
                         waitForBackpressure() {{
-                            let backpressureCleared = false;
-                            const cstate = this;
-                            cstate.addBackpressureWaiter();
-                            const handlerID = this.registerHandler({{
-                                event: 'backpressure-change',
-                                fn: (bp) => {{
-                                    if (bp === 0) {{
-                                        cstate.removeHandler(handlerID);
-                                        backpressureCleared = true;
-                                    }}
-                                }}
-                            }});
-                            return new Promise((resolve) => {{
-                                const interval = setInterval(() => {{
-                                    if (backpressureCleared) {{ return; }}
-                                    clearInterval(interval);
-                                    cstate.removeBackpressureWaiter();
-                                    resolve(null);
-                                }}, 0);
+                            this.addBackpressureWaiter();
+                            return {wait_for_event}(() => !this.hasBackpressure()).finally(() => {{
+                                this.removeBackpressureWaiter();
                             }});
                         }}
 
@@ -1080,6 +1133,16 @@ impl ComponentIntrinsic {
                             for (const thread of [...this.#suspendedThreadsByRef.keys()]) {{
                                 this.resumeThread(thread);
                             }}
+                        }}
+
+                        release() {{
+                            this.handles.clear();
+                            this.subtasks.clear();
+                            this.threads.clear();
+                            this.#handlerMap.clear();
+                            this.#parkedTasks.clear();
+                            this.#suspendedThreadsByRef.clear();
+                            this.#onExclusiveReleaseHandlers = [];
                         }}
 
                         runTickLoop() {{

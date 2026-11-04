@@ -570,6 +570,7 @@ impl Intrinsic {
             }
 
             Intrinsic::DisposeHostValue => {
+                let store = args.require_intrinsic(ComponentIntrinsic::GlobalStoreTrap);
                 let fn_name = self.name();
                 let symbol_dispose = args.require_intrinsic(Intrinsic::SymbolDispose);
                 uwriteln!(
@@ -582,19 +583,20 @@ impl Intrinsic {
                     // built-in (where it could re-enter the component), and errors are reported
                     // rather than surfaced to the guest.
                     function {fn_name}(value, disposeFn) {{
-                        if (!disposeFn) {{
-                            if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {{ return; }}
-                            if (typeof Symbol.asyncDispose === 'symbol' && typeof value[Symbol.asyncDispose] === 'function') {{
-                                disposeFn = value[Symbol.asyncDispose];
-                            }} else if (typeof value[{symbol_dispose}] === 'function') {{
-                                disposeFn = value[{symbol_dispose}];
-                            }} else {{
-                                return;
-                            }}
+                        const isObject = value !== null && (typeof value === 'object' || typeof value === 'function');
+                        if (!isObject && !disposeFn) {{ return; }}
+                        if (isObject) {{
+                            if ({store}.disposedValues.has(value)) {{ return; }}
+                            {store}.disposedValues.add(value);
                         }}
                         const reportErr = (err) => console.error('[jco] error while disposing discarded host value', err);
                         queueMicrotask(() => {{
                             try {{
+                                if (!disposeFn) {{
+                                    const asyncDispose = typeof Symbol.asyncDispose === 'symbol' ? value[Symbol.asyncDispose] : undefined;
+                                    disposeFn = typeof asyncDispose === 'function' ? asyncDispose : value[{symbol_dispose}];
+                                    if (typeof disposeFn !== 'function') {{ return; }}
+                                }}
                                 const res = disposeFn.call(value);
                                 if (res && typeof res.then === 'function') {{ res.then(undefined, reportErr); }}
                             }} catch (err) {{
@@ -939,6 +941,8 @@ impl Intrinsic {
 
                             return {{ id: nextBufID, buffer }};
                         }}
+
+                        clear() {{ this.#buffers.clear(); this.#bufferIDs.clear(); }}
 
                         deleteBuffer(componentIdx, bufferID) {{
                             {debug_log_fn}('[{buffer_manager_class}#deleteBuffer()] args', {{ componentIdx, bufferID }});

@@ -425,6 +425,12 @@ impl WaitableIntrinsic {
                             }}
                         }}
 
+                        stop() {{
+                            this.join(null);
+                            this.#pendingEventFn = null;
+                            this.#resolve();
+                        }}
+
                         drop() {{
                             {debug_log_fn}('[{waitable_class}#drop()] args', {{
                                 componentIdx: this.#componentIdx,

@@ -3060,6 +3060,9 @@ impl Bindgen for FunctionBindgen<'_> {
                                     let store = self.intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
                                     format!("if (!{store}.stopped) {{ {call} }}")
                                 }).unwrap_or_default();
+                                let store = self.intrinsic(Intrinsic::Component(
+                                    ComponentIntrinsic::GlobalStoreTrap,
+                                ));
                                 // Explicitly dropping an own handle must always release the host-side
                                 // handle and finalizer registration. A component-defined destructor is
                                 // an additional callback, not a prerequisite for resource cleanup.
@@ -3070,9 +3073,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                             self.src,
                                             "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{
                                         finalizationRegistry{tid}.unregister({rsc});
-                                        const handleEntry = {rsc_table_remove};
                                         {rsc}[{symbol_dispose}] = {empty_func};
                                         {rsc}[{symbol_resource_handle}] = undefined;
+                                        if ({store}.stopped) {{ return; }}
+                                        const handleEntry = {rsc_table_remove};
                                         {dtor_call}
                                     }}}});"
                                         );

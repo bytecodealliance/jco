@@ -579,6 +579,7 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::StreamEndClass => {
+                let store = render_args.require_intrinsic(ComponentIntrinsic::GlobalStoreTrap);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
                 let async_event_code_enum =
@@ -700,6 +701,19 @@ impl AsyncStreamIntrinsic {
                             return event;
                         }}
 
+                        throwIfStopped() {{
+                            if ({store}.stopped) {{ throw {store}.error; }}
+                        }}
+
+                        stop() {{
+                            this.#dropped = true;
+                            this.setCopyState({stream_end_class}.CopyState.DONE);
+                            this.resetPendingBufferMeta();
+                            this.#waitable.stop();
+                            this.#isPeerDroppedFn = () => true;
+                            this.#notifyPeerDroppedFn = null;
+                        }}
+
                         isDropped() {{ return this.#dropped; }}
                         isPeerDropped() {{ return this.#isPeerDroppedFn(); }}
 
@@ -719,6 +733,8 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         drop(opts = {{}}) {{
+                            if ({store}.stopped) {{ return; }}
+                            {store}.stopHooks.delete(this);
                             {debug_log_fn}('[{stream_end_class}#drop()]', {{
                                 waitable: this.#waitable,
                                 waitableinSet: this.#waitable.isInSet(),
@@ -763,6 +779,9 @@ impl AsyncStreamIntrinsic {
             // TODO(fix): the stream class itself is ONE CLASS/need to share data. The classes don't have to be distinct.
             //
             Self::StreamReadableEndClass | Self::StreamWritableEndClass => {
+                let wait_for_event =
+                    render_args.require_intrinsic(ComponentIntrinsic::WaitForEvent);
+                let store = render_args.require_intrinsic(ComponentIntrinsic::GlobalStoreTrap);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let (end_class_name, _js_stream_class_name) = match self {
                     Self::StreamReadableEndClass => (self.name(), "ReadableStream"),
@@ -787,6 +806,7 @@ impl AsyncStreamIntrinsic {
                 let copy_setup_impl = format!(
                     r#"
                     setupCopy(args) {{
+                              this.throwIfStopped();
                         const {{
                             memory,
                             ptr,
@@ -900,6 +920,7 @@ impl AsyncStreamIntrinsic {
                         format!(
                             r#"
                             _write(args) {{
+                                this.throwIfStopped();
                                 const {{ buffer, onCopyFn, onCopyDoneFn, componentIdx, dropAfterCopy }} = args;
                                 if (!buffer) {{ throw new TypeError('missing/invalid buffer'); }}
                                 if (!onCopyFn) {{ throw new TypeError("missing/invalid onCopy handler"); }}
@@ -1004,6 +1025,7 @@ impl AsyncStreamIntrinsic {
                         format!(
                             r#"
                             _read(args) {{
+                                this.throwIfStopped();
                                 const {{ buffer, onCopyDoneFn, onCopyFn, componentIdx, rejectLength, dropAfterCopy }} = args;
                                 if (this.isDropped()) {{
                                     onCopyDoneFn({stream_end_class}.CopyResult.DROPPED);
@@ -1104,6 +1126,7 @@ impl AsyncStreamIntrinsic {
                 let copy_impl = format!(
                     r#"
                          copy(args) {{
+                              this.throwIfStopped();
                              const {{
                                  isAsync,
                                  memory,
@@ -1308,6 +1331,7 @@ impl AsyncStreamIntrinsic {
                     Self::StreamWritableEndClass => format!(
                         r#"
                          async write(v) {{
+                            this.throwIfStopped();
                             {debug_log_fn}('[{end_class_name}#write()] args', {{ v }});
 
                             let data;
@@ -1323,6 +1347,7 @@ impl AsyncStreamIntrinsic {
                          }}
 
                          async writeMany(values, opts = {{}}) {{
+                            this.throwIfStopped();
                             {debug_log_fn}('[{end_class_name}#writeMany()] args', {{ values }});
                             if (!Array.isArray(values)) {{ throw new TypeError("writeMany values must be an array"); }}
 
@@ -1352,11 +1377,11 @@ impl AsyncStreamIntrinsic {
 
                             const data = values;
                             const count = data.length;
-                            if (this.#elemMeta.stringEncoding === undefined) {{
-                                this.#elemMeta.string = 'utf8';
-                            }}
-
                             try {{
+                                this.throwIfStopped();
+                                if (this.#elemMeta.stringEncoding === undefined) {{
+                                    this.#elemMeta.string = 'utf8';
+                                }}
                                 const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
                                     componentIdx: -1,
                                     count,
@@ -1386,6 +1411,7 @@ impl AsyncStreamIntrinsic {
                                     return await promise;
                                 }}
                                 packedResult = await copyPromise;
+                                this.throwIfStopped();
 
                                 // If we are dealing with a blocked component write operation, we do an immedaite wait
                                 // on the host side to pause the host until the write can be completed.
@@ -1403,13 +1429,8 @@ impl AsyncStreamIntrinsic {
                                     // If the write was blocked, the pending event produced by the
                                     // read side represents the completed copy.
 
-                                    await new Promise((resolve) => {{
-                                        let waitInterval = setInterval(async () => {{
-                                            if (!this.hasPendingEvent()) {{ return; }}
-                                            clearInterval(waitInterval);
-                                            resolve();
-                                        }});
-                                    }});
+                                    await {wait_for_event}(() => this.hasPendingEvent());
+                                    this.throwIfStopped();
 
                                     if (!this.hasPendingEvent()) {{
                                         throw new Error("missing pending event after blocked stream write");
@@ -1469,6 +1490,7 @@ impl AsyncStreamIntrinsic {
                     Self::StreamReadableEndClass => format!(
                         r#"
                          async read(opts = 1) {{
+                            this.throwIfStopped();
                             {debug_log_fn}('[{end_class_name}#read()]');
 
                             if (this.#endOfStream) {{
@@ -1505,6 +1527,7 @@ impl AsyncStreamIntrinsic {
 
                             count = Math.min(count, {managed_buffer_class}.MAX_LENGTH);
                             try {{
+                                this.throwIfStopped();
                                 const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
                                     componentIdx: -1, // componentIdx of -1 indicates the host
                                     count,
@@ -1526,18 +1549,14 @@ impl AsyncStreamIntrinsic {
                                     rejectLength,
                                     dropAfterCopy,
                                 }});
+                                this.throwIfStopped();
 
                                 if (packedResult === {async_blocked_const}) {{
                                     // If the read was blocked, the pending event produced by the
                                     // write side represents the completed copy.
 
-                                    await new Promise((resolve) => {{
-                                        let waitInterval = setInterval(() => {{
-                                            if (!this.hasPendingEvent()) {{ return; }}
-                                            clearInterval(waitInterval);
-                                            resolve();
-                                        }});
-                                    }});
+                                    await {wait_for_event}(() => this.hasPendingEvent());
+                                    this.throwIfStopped();
 
                                     if (!this.hasPendingEvent()) {{
                                         throw new Error("missing pending event after blocked stream read");
@@ -1574,6 +1593,7 @@ impl AsyncStreamIntrinsic {
                                 const componentIdx = this.getWaitable().componentIdx();
                                 if (componentIdx !== -1) {{
                                     await {get_or_create_async_state_fn}(componentIdx).waitForExclusiveRelease();
+                                    this.throwIfStopped();
                                 }}
 
                                 if (resultKind === {stream_end_class}.CopyResult.DROPPED) {{
@@ -1668,6 +1688,7 @@ impl AsyncStreamIntrinsic {
 
                             this.#hostInjectFn = args.hostInjectFn;
                             this.#isHostOwned = args.hostOwned;
+                            {store}.stopHooks.add(this);
                         }}
 
                         streamTableIdx() {{ return this.#streamTableIdx; }}
@@ -1737,7 +1758,7 @@ impl AsyncStreamIntrinsic {
                         cancel() {{
                             {debug_log_fn}('[{stream_end_class}#cancel()]');
                             const completeCancel = () => {{
-                                if (this.isDropped()) {{ return; }}
+                                if ({store}.stopped || this.isDropped()) {{ return; }}
                                 // Host injection may complete the copy before this deferred
                                 // cancellation runs. Preserve that completion event instead of
                                 // cancelling the next operation or starting a duplicate write.
@@ -1754,13 +1775,25 @@ impl AsyncStreamIntrinsic {
                                     setTimeout(() => {{
                                         try {{ completeCancel(); }} finally {{ resolve(); }}
                                     }}, 0);
-                                }}));
+                                }})).catch(error => {{ if (!{store}.stopped) {{ console.error(error); }} }});
                             }} else {{
                                 completeCancel();
                             }}
                         }}
 
+                        stop() {{
+                            const drop = this.#hostDropFn;
+                            this.#hostDropFn = null;
+                            this.#hostInjectFn = null;
+                            this.#hostCancelFn = null;
+                            this.#sourceRebufferFn = null;
+                            this.#elemMeta = null;
+                            super.stop();
+                            drop?.();
+                        }}
+
                         drop(opts = {{}}) {{
+                            if ({store}.stopped) {{ return; }}
                             {debug_log_fn}('[{stream_end_class}#drop()]');
                             if (this.isDropped()) {{ return; }}
                             const hostDropFn = this.#hostDropFn;
@@ -2646,7 +2679,16 @@ impl AsyncStreamIntrinsic {
                           }}
 
                           let readFn;
-                          if ({async_iterator_symbol} in stream) {{
+                          if (stream instanceof {external_readable_stream_class}) {{
+                              // Cancel the reader directly: an async iterator queues return()
+                              // behind next(), which may never settle during store teardown.
+                              const lockedReader = stream.getReader();
+                              readFn = () => lockedReader.read();
+                              readFn.drop = (reason) => {dispose_host_value}
+                                  lockedReader,
+                                  () => lockedReader.cancel(reason).finally(() => lockedReader.releaseLock()),
+                              );
+                          }} else if ({async_iterator_symbol} in stream) {{
                               let asyncIterator = stream[{async_iterator_symbol}]();
                               readFn = () => asyncIterator.next();
                               readFn.drop = (reason) => asyncIterator.return
@@ -2661,15 +2703,6 @@ impl AsyncStreamIntrinsic {
                               // Synchronous sources can be drained eagerly (up to a
                               // requested count) without risking an indefinite wait
                               readFn.sourceIsSync = true;
-                          }} else if (stream instanceof {external_readable_stream_class}) {{
-                              // At this point we're dealing with a readable stream that *somehow *does not*
-                              // implement the async iterator protocol.
-                              const lockedReader = stream.getReader();
-                              readFn = () => lockedReader.read();
-                              readFn.drop = (reason) => {dispose_host_value}
-                                  lockedReader,
-                                  () => lockedReader.cancel(reason).finally(() => lockedReader.releaseLock()),
-                              );
                           }} else {{
                               throw new Error("invalid stream object, cannot generate read fn");
                           }}

@@ -1351,6 +1351,8 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::ClearCurrentThread => {
+                let release =
+                    render_args.require_intrinsic(ComponentIntrinsic::ReleaseStoppedStore);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let fn_name = self.name();
                 let global_task_map =
@@ -1391,6 +1393,7 @@ impl AsyncTaskIntrinsic {
                             {task_id_globals}.splice(globalTaskIdx, 1);
                             {component_idx_globals}.splice(globalTaskIdx, 1);
                         }}
+                        {release}();
                         return taskMeta.task;
                     }}
                 "#,
@@ -1559,7 +1562,10 @@ impl AsyncTaskIntrinsic {
                            // entrypoint is still suspended, before the export wrapper awaits
                            // this promise. Mark it handled immediately while preserving the
                            // original rejected promise for the eventual caller.
-                           completionPromise.catch(() => {{}});
+                           // A fulfillment handler must discard the value too: catch()
+                           // would assimilate a returned FutureValue in an unobserved
+                           // derived promise, starting a read and leaking its rejection.
+                           completionPromise.then(() => {{}}, () => {{}});
 
                            let completionSettled = false;
                            const settleCompletionPromise = () => {{
