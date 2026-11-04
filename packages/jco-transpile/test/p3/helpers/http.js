@@ -1,4 +1,4 @@
-import { createServer } from 'node:http';
+import { Worker } from 'node:worker_threads';
 import { Buffer } from 'node:buffer';
 
 import { assert } from 'vitest';
@@ -32,38 +32,62 @@ function fieldsToObject(fields) {
 }
 
 export async function startP3HttpServer() {
-    const server = createServer((req, res) => {
-        const headers = {
-            'content-type': 'application/octet-stream',
-            'x-wasmtime-test-method': req.method,
-            'x-wasmtime-test-uri': req.url,
-        };
-
-        if (req.headers['content-length']) {
-            headers['content-length'] = req.headers['content-length'];
+    const worker = new Worker(new URL('./http-server-worker.js', import.meta.url), { execArgv: [] });
+    let resolveReady;
+    let rejectReady;
+    const ready = new Promise((resolve, reject) => {
+        resolveReady = resolve;
+        rejectReady = reject;
+    });
+    let resolveExit;
+    const exit = new Promise((resolve) => {
+        resolveExit = resolve;
+    });
+    let failure;
+    let closed = false;
+    let exited = false;
+    let cleanupPromise;
+    worker.on('message', (message) => {
+        if (message.type === 'ready') {
+            resolveReady(message.address);
+        } else if (message.type === 'closed') {
+            closed = true;
         }
-
-        res.writeHead(200, headers);
-        res.flushHeaders();
-        req.pipe(res);
+    });
+    worker.on('error', (error) => {
+        failure ??= error;
+        rejectReady(error);
+    });
+    worker.on('exit', (code) => {
+        exited = true;
+        if (code !== 0 || !closed) {
+            failure ??= new Error(`P3 HTTP server worker exited before closing (code ${code})`);
+            rejectReady(failure);
+        }
+        resolveExit();
     });
 
-    server.on('connect', (_req, socket) => socket.destroy());
-
-    await new Promise((resolve, reject) => {
-        server.once('error', reject);
-        server.listen(0, '127.0.0.1', resolve);
-    });
-
-    const { address, port } = server.address();
-
+    let address;
+    try {
+        address = await ready;
+    } catch (error) {
+        await worker.terminate();
+        throw error;
+    }
     return {
-        address: `${address}:${port}`,
-        cleanup: () =>
-            new Promise((resolve, reject) => {
-                server.closeAllConnections?.();
-                server.close((err) => (err ? reject(err) : resolve()));
-            }),
+        address,
+        cleanup() {
+            cleanupPromise ??= (async () => {
+                if (!exited) {
+                    worker.postMessage({ type: 'close' });
+                }
+                await exit;
+                if (failure) {
+                    throw failure;
+                }
+            })();
+            return cleanupPromise;
+        },
     };
 }
 
