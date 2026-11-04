@@ -249,7 +249,7 @@ mod tests {
         assert!(prelude(&InlineRuntime, BTreeSet::from([TABLE_GET])).is_empty());
         assert!(prelude(&ExternalRuntime, BTreeSet::from(SAMPLES)).is_empty());
         let prelude = prelude(&ExternalRuntime, BTreeSet::from([TABLE_GET, SAMPLES[0]]));
-        assert_eq!(prelude.matches("_jcoRuntimeApiVersion !== 1").count(), 1);
+        assert_eq!(prelude.matches("_jcoRuntimeApiVersion !== 2").count(), 1);
         assert_eq!(
             prelude.matches("const _jcoResourceTableGetContext").count(),
             1

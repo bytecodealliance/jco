@@ -129,25 +129,31 @@ export const finalizationRegistryCreate: CoreModule['finalizationRegistryCreate'
     }
     return new FinalizationRegistry(cleanup);
 };
-export const disposeHostValue: CoreModule['disposeHostValue'] = (disposeSymbol, value, disposeFn) => {
-    if (!disposeFn) {
-        if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
-            return;
-        }
-        const disposable = value as { [key: symbol]: unknown };
-        if (typeof Symbol.asyncDispose === 'symbol' && typeof disposable[Symbol.asyncDispose] === 'function') {
-            disposeFn = disposable[Symbol.asyncDispose] as (this: unknown) => unknown;
-        } else if (typeof disposable[disposeSymbol] === 'function') {
-            disposeFn = disposable[disposeSymbol] as (this: unknown) => unknown;
-        } else {
-            return;
-        }
+export const disposeHostValue: CoreModule['disposeHostValue'] = (context, value, disposeFn) => {
+    const isObject = value !== null && (typeof value === 'object' || typeof value === 'function');
+    if (!isObject && !disposeFn) {
+        return;
     }
-    const dispose = disposeFn;
+    if (isObject) {
+        if (context.disposedValues.has(value)) {
+            return;
+        }
+        context.disposedValues.add(value);
+    }
     const report = (error: unknown) => console.error('[jco] error while disposing discarded host value', error);
     queueMicrotask(() => {
         try {
-            const result = dispose.call(value) as
+            if (!disposeFn) {
+                const disposable = value as { [key: symbol]: unknown };
+                const asyncDispose =
+                    typeof Symbol.asyncDispose === 'symbol' ? disposable[Symbol.asyncDispose] : undefined;
+                const dispose = typeof asyncDispose === 'function' ? asyncDispose : disposable[context.symbolDispose];
+                if (typeof dispose !== 'function') {
+                    return;
+                }
+                disposeFn = dispose as (this: unknown) => unknown;
+            }
+            const result = disposeFn.call(value) as
                 | { then?: (ok: undefined, error: typeof report) => unknown }
                 | undefined;
             if (result && typeof result.then === 'function') {

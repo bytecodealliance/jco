@@ -16,6 +16,7 @@ pub(crate) enum CoreContext {
     SymbolResourceHandle,
     SymbolResourceRep,
     SymbolDispose,
+    HostValueDisposal,
     SymbolAsyncIterator,
     SymbolIterator,
     AsyncFunctionCtor,
@@ -48,6 +49,7 @@ impl CoreContext {
         Self::SymbolResourceHandle,
         Self::SymbolResourceRep,
         Self::SymbolDispose,
+        Self::HostValueDisposal,
         Self::SymbolAsyncIterator,
         Self::SymbolIterator,
         Self::AsyncFunctionCtor,
@@ -91,6 +93,7 @@ impl CoreContext {
             Self::SymbolResourceHandle => "symbolRscHandle",
             Self::SymbolResourceRep => "symbolRscRep",
             Self::SymbolDispose => "symbolDispose",
+            Self::HostValueDisposal => "_jcoHostValueDisposalContext",
             Self::SymbolAsyncIterator => "symbolAsyncIterator",
             Self::SymbolIterator => "symbolIterator",
             Self::AsyncFunctionCtor => "ASYNC_FN_CTOR",
@@ -200,6 +203,7 @@ impl CoreContext {
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
         match self {
+            Self::HostValueDisposal => &[RuntimeContext::Core(Self::SymbolDispose)],
             Self::ManagedBufferClass => &[RuntimeContext::ResourceTransferOwn],
             Self::BufferManagerClass => &[RuntimeContext::Core(Self::ManagedBufferClass)],
             Self::RepTableClass => &[RuntimeContext::ResourceTableGet],
@@ -231,6 +235,10 @@ impl CoreContext {
         }
         let nodejs_compat = !args.transpile_opts.nodejs_compat_disabled;
         match self {
+            Self::HostValueDisposal => uwriteln!(
+                output,
+                "const {local} = {{ symbolDispose, disposedValues: new WeakSet() }};"
+            ),
             Self::SelectedWebAssembly => {}
             Self::Base64Compile => uwriteln!(
                 output,
@@ -291,7 +299,7 @@ pub(crate) fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
         Intrinsic::FetchCompile => ("fetchCompile", Some(CoreContext::FetchCompile), K::Call),
         Intrinsic::DisposeHostValue => (
             "disposeHostValue",
-            Some(CoreContext::SymbolDispose),
+            Some(CoreContext::HostValueDisposal),
             K::Call,
         ),
         Intrinsic::FinalizationRegistryCreate => ("finalizationRegistryCreate", None, K::Call),

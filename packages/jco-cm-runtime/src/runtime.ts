@@ -1,5 +1,5 @@
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
-export const CM_RUNTIME_API_VERSION = 1 as const;
+export const CM_RUNTIME_API_VERSION = 2 as const;
 
 export type RuntimeApiVersion = number;
 export type ResourceHandle = number;
@@ -439,6 +439,7 @@ export type CreateBufferOptions = Omit<ManagedBufferOptions, 'capacity'> & {
     stringEncoding?: string;
 };
 export interface BufferManager {
+    readonly clear: () => void;
     readonly getNextBufferID: (componentIdx: number) => bigint;
     readonly getBuffer: (componentIdx: number, bufferID: bigint) => ManagedBuffer | undefined;
     readonly createBuffer: (args: CreateBufferOptions) => {
@@ -564,7 +565,11 @@ export interface CoreModule {
     readonly getErrorPayload: (hasOwnProperty: HasOwnPropertyCapability, error: unknown) => unknown;
     readonly getErrorPayloadString: (hasOwnProperty: HasOwnPropertyCapability, error: unknown) => unknown;
     readonly finalizationRegistryCreate: <T>(cleanup: (value: T) => void) => RuntimeFinalizationRegistry<T>;
-    readonly disposeHostValue: (disposeSymbol: symbol, value: unknown, disposeFn?: (this: unknown) => unknown) => void;
+    readonly disposeHostValue: (
+        context: { readonly symbolDispose: symbol; readonly disposedValues: WeakSet<object> },
+        value: unknown,
+        disposeFn?: (this: unknown) => unknown,
+    ) => void;
     readonly throwInvalidBool: () => never;
     readonly throwUninitialized: () => never;
     readonly promiseWithResolvers: <T>() => {

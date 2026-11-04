@@ -226,6 +226,11 @@ export function initializeBufferManagerClass(ManagedBuffer: ManagedBufferConstru
         #buffers = new Map<number, Map<bigint, ManagedBuffer>>();
         #bufferIDs = new Map<number, bigint>();
 
+        clear() {
+            this.#buffers.clear();
+            this.#bufferIDs.clear();
+        }
+
         // NOTE: componentIdx === -1 indicates the host
         getNextBufferID(componentIdx: number): bigint {
             const current = this.#bufferIDs.get(componentIdx);

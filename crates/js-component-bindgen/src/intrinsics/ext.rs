@@ -33,7 +33,7 @@ pub(crate) mod resource;
 pub(crate) mod string;
 pub(crate) mod webidl;
 
-pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
+pub(crate) const CM_RUNTIME_API_VERSION: u32 = 2;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
 pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 
@@ -337,6 +337,45 @@ pub(crate) struct RuntimeImport {
 pub(crate) struct ExternalRuntime;
 
 impl ExternalRuntime {
+    /// Storage can be selected indirectly by an imported operation's context.
+    /// Include those owners when generating teardown, even when no inline
+    /// intrinsic refers to their storage by name.
+    pub(crate) fn storage_intrinsics(intrinsics: &BTreeSet<Intrinsic>) -> BTreeSet<Intrinsic> {
+        let mut contexts = Vec::new();
+        for (_, import) in Self::imports(intrinsics) {
+            if let Some(context) = import.context {
+                context.collect(&mut contexts);
+            }
+        }
+        contexts
+            .into_iter()
+            .filter_map(|context| {
+                Some(match context {
+                    RuntimeContext::Core(CoreContext::GlobalBufferManager) => {
+                        Intrinsic::GlobalBufferManager
+                    }
+                    RuntimeContext::Core(CoreContext::GlobalComponentMemoryMap) => {
+                        Intrinsic::GlobalComponentMemoryMap
+                    }
+                    RuntimeContext::Core(CoreContext::GlobalCurrentTaskMeta) => {
+                        Intrinsic::GlobalCurrentTaskMeta
+                    }
+                    RuntimeContext::HandleTables => Intrinsic::HandleTables,
+                    RuntimeContext::HandleIndexSpaces => {
+                        ResourceIntrinsic::HandleIndexSpaces.into()
+                    }
+                    RuntimeContext::ResourceScopeTasks => {
+                        ResourceIntrinsic::ResourceScopeTasks.into()
+                    }
+                    RuntimeContext::CallBorrows => ResourceIntrinsic::ResourceCallBorrows.into(),
+                    RuntimeContext::CurrentBorrows => ResourceIntrinsic::CurResourceBorrows.into(),
+                    RuntimeContext::DataViewCache => JsHelperIntrinsic::DataView.into(),
+                    _ => return None,
+                })
+            })
+            .collect()
+    }
+
     /// Exports of `<base>/intrinsics/resource`.
     fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
         if let Some(import) = core::import(intrinsic) {
