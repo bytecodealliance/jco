@@ -2304,6 +2304,10 @@ impl AsyncStreamIntrinsic {
             // The pending buffer represents waiting write/read buffer.
             //
             Self::StreamWrite | Self::StreamRead => {
+                let current_thread =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::CurrentThreadOrThrow);
+                let blocked =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::AsyncBlockedConstant);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let stream_op_fn = self.name();
                 let get_stream_end_fn = render_args.require_intrinsic(Self::GetStreamEnd);
@@ -2409,7 +2413,7 @@ impl AsyncStreamIntrinsic {
                             return 0xFFFFFFFE;
                         }}
 
-                        return streamEnd.copy({{
+                        const copy = () => streamEnd.copy({{
                             isAsync,
                             memory,
                             ptr,
@@ -2422,6 +2426,22 @@ impl AsyncStreamIntrinsic {
                             elemMeta,
                             deferSyncFinish,
                         }});
+                        // A zero-length rendezvous can notify the peer while
+                        // leaving this operation pending. Resume that same copy
+                        // on the slow path instead of registering it twice.
+                        if (ctx.resumeCopy && streamEnd.isCopying() && !streamEnd.hasPendingEvent()) {{
+                            const {{ task }} = {current_thread}(componentIdx);
+                            return task.suspendUntil({{
+                                cancellable: false,
+                                readyFn: () => streamEnd.hasPendingEvent(),
+                            }}).then(copy);
+                        }}
+                        const result = copy();
+                        if (syncFastOnly && result === {blocked}) {{
+                            {check_sync_suspend}(componentIdx);
+                            return -2;
+                        }}
+                        return result;
                         }};
                         return isAsync && !ctx.syncFastOnly ? perform() : streamEnd.getWaitable().withSyncUse(perform);
                     }}

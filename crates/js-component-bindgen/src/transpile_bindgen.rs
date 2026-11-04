@@ -2410,7 +2410,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}(
                             {guard_trap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
-                            {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                            {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true, resumeCopy: true }})),
                         );"#,
                     );
                 }
@@ -2516,7 +2516,7 @@ impl<'a> Instantiator<'a, '_> {
                         r#"
                         const trampoline{i} = {conditional_suspending_fn}(
                             {guard_trap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
-                            {suspending_wrap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                            {suspending_wrap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true, resumeCopy: true }})),
                         );"#,
                     );
                 }
@@ -4270,21 +4270,33 @@ impl<'a> Instantiator<'a, '_> {
                     )
             )
         });
-        let uses_thread_suspension = args.iter().any(|def| {
-            matches!(
-                def,
-                CoreDef::Trampoline(index)
-                    if matches!(
-                        &self.translation.trampolines[*index],
-                        Trampoline::ThreadYield { .. }
-                            | Trampoline::ThreadSuspend { .. }
-                            | Trampoline::ThreadSuspendThenResume { .. }
-                            | Trampoline::ThreadSuspendThenPromote { .. }
-                            | Trampoline::ThreadYieldThenResume { .. }
-                            | Trampoline::ThreadYieldThenPromote { .. }
-                    )
-            )
+        // Ready helpers can make a synchronous built-in legally block even
+        // when this module never imports yield/suspend directly. Scope this
+        // capability to the owning component, including its other modules.
+        let has_cooperative_threads = instance.is_some_and(|owner| {
+            self.translation.trampolines.iter().any(|(_, trampoline)| {
+                matches!(trampoline,
+                    Trampoline::ThreadNewIndirect { instance, .. }
+                    | Trampoline::ThreadResumeLater { instance }
+                    if *instance == owner)
+            })
         });
+        let uses_thread_suspension = has_cooperative_threads
+            || args.iter().any(|def| {
+                matches!(
+                    def,
+                    CoreDef::Trampoline(index)
+                        if matches!(
+                            &self.translation.trampolines[*index],
+                            Trampoline::ThreadYield { .. }
+                                | Trampoline::ThreadSuspend { .. }
+                                | Trampoline::ThreadSuspendThenResume { .. }
+                                | Trampoline::ThreadSuspendThenPromote { .. }
+                                | Trampoline::ThreadYieldThenResume { .. }
+                                | Trampoline::ThreadYieldThenPromote { .. }
+                        )
+                )
+            });
         // Mutable imported/exported tables make indirect calls unsafe to run
         // directly, but do not by themselves change a component export's API
         // into a Promise-returning one. Only known suspending targets propagate
