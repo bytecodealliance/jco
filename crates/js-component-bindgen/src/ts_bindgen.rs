@@ -402,9 +402,21 @@ pub fn ts_bindgen(
     if opts.instantiation_mode.is_some() {
         uwriteln!(bindgen.src, "export interface {camel} {{",);
         bindgen.src.push_str(&bindgen.export_object);
+        uwriteln!(
+            bindgen.src,
+            "/** Permanently stop this instance and dispose guest-owned host resources. */"
+        );
+        uwriteln!(bindgen.src, "readonly _util: {{ stop(): void }};");
         uwriteln!(bindgen.src, "}}");
     } else {
         bindgen.src.push_str(&bindgen.export_object);
+        if !opts.guest {
+            uwriteln!(
+                bindgen.src,
+                "/** Permanently stop this instance and dispose guest-owned host resources. */"
+            );
+            uwriteln!(bindgen.src, "export const _util: {{ stop(): void }};");
+        }
     }
 
     // Emitted here, after the `export interface {World}` block above, so the

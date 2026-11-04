@@ -2713,6 +2713,16 @@ impl Bindgen for FunctionBindgen<'_> {
                     );
                 }
 
+                // A host can stop the instance during an import, including an
+                // import returning a WIT result whose catch handler wraps errors.
+                // Do not lower that result or return to guest code afterwards.
+                if task_managed {
+                    uwriteln!(
+                        self.src,
+                        "{get_component_state}({component_idx_expr}).throwIfInterrupted();"
+                    );
+                }
+
                 // TODO: if it was an async call, we may not be able to clear the borrows yet.
                 // save them to the task/ensure they are added to the task's list of borrows?
                 //
@@ -3042,11 +3052,13 @@ impl Bindgen for FunctionBindgen<'_> {
                                     finalizationRegistry{tid}.register({rsc}, {handle}, {rsc});");
                                 let component_idx = component_idx.as_u32();
                                 let dtor_call = dtor_name.as_ref().map(|dtor| {
-                                    if *needs_task_context {
+                                    let call = if *needs_task_context {
                                         self.intrinsic_call(Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall), &format!("{{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }}")) + ";"
                                     } else {
                                         format!("{dtor}(handleEntry.rep);")
-                                    }
+                                    };
+                                    let store = self.intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+                                    format!("if (!{store}.stopped) {{ {call} }}")
                                 }).unwrap_or_default();
                                 // Explicitly dropping an own handle must always release the host-side
                                 // handle and finalizer registration. A component-defined destructor is

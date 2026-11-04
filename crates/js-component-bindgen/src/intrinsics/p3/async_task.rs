@@ -1398,6 +1398,8 @@ impl AsyncTaskIntrinsic {
             }
 
             Self::AsyncTaskClass => {
+                let store = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -1645,6 +1647,14 @@ impl AsyncTaskIntrinsic {
 
                         validateResourceBorrowScope() {{
                             if (this.#resourceScopeExited) {{ return; }}
+                            // Stopping abandons guest stacks, including borrows they
+                            // have not had a chance to drop. This is not a normal return.
+                            if ({store}.stopped) {{
+                                this.#resourceLenders = [];
+                                this.#resourceScopeExited = true;
+                                {resource_scope_tasks}.delete(this.#resourceScopeId);
+                                return;
+                            }}
                             if (this.#resourceBorrowCount !== 0) {{
                                 throw new {runtime_error_class}('borrow handles still remain at the end of the call');
                             }}
@@ -2372,6 +2382,15 @@ impl AsyncTaskIntrinsic {
                             // additional guest frames produces secondary traps (often
                             // an `unreachable` after a call which was expected to trap).
                             if (this.#errored === null) {{ this.#errored = err; }}
+                        }}
+
+                        stop(err) {{
+                            this.reject(err);
+                            // A JSPI stack may still be awaiting a host import. Publish
+                            // rejection now, including for nested host tasks whose normal
+                            // completion is delivered through their parent subtask.
+                            this.#completionReady = true;
+                            this.#settleCompletionPromise();
                         }}
 
                         reject(taskErr) {{

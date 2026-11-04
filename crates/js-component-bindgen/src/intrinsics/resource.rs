@@ -137,12 +137,16 @@ impl ResourceIntrinsic {
                 ));
                 let with_current_task =
                     render_args.require_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                let store = render_args.require_intrinsic(
+                    crate::intrinsics::component::ComponentIntrinsic::GlobalStoreTrap,
+                );
                 let name = self.name();
                 uwriteln!(
                     output,
                     r#"
                       function {name}(args) {{
                           const {{ componentIdx, dtor, rep }} = args;
+                          if ({store}.stopped) {{ return; }}
 
                           // A destructor enters a separate synchronous call, even when
                           // invoked from its own component. Its context slots must start
