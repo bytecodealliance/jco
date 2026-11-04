@@ -4,8 +4,8 @@ import { transpileBytes } from './transpilation.js';
 
 // Exercise the real minifier with malformed generator output. Parser diagnostics
 // must reach the caller instead of publishing an empty module without exports.
-vi.mock('../vendor/js-component-bindgen-component.js', () => ({
-    $init: Promise.resolve(),
+vi.mock('../src/component.js', () => ({
+    callBindgen: (run: () => unknown) => Promise.resolve().then(run),
     generate: () => ({
         files: [['component.js', new TextEncoder().encode('export function instantiate( {')]],
         imports: [],
