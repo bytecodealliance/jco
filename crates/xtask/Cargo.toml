@@ -18,3 +18,5 @@ wit-component = { workspace = true }
 wit-encoder = "0.214.0"
 xshell = { workspace = true }
 wast = { workspace = true }
+
+wasmparser = { workspace = true, features = ["validate", "features", "component-model"] }

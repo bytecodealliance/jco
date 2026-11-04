@@ -14,6 +14,39 @@ const defaultBase = new URL('../../../jco-cm-runtime/dist/', import.meta.url).hr
 const customBase = new URL('../fixtures/custom-runtime/', import.meta.url);
 
 suite('external runtime codegen', () => {
+    test.concurrent.each(['default', 'independent'] as const)(
+        '%s resource provider normalizes signed handle diagnostics in the selected realm',
+        async (provider) => {
+            const base = provider === 'default' ? defaultBase : customBase.href;
+            const { tableGet } = await import(new URL('intrinsics/resource.js', base).href);
+            class SelectedRuntimeError extends Error {}
+            const table = [1 << 30, 0, 0, 42 + 2 ** 32];
+            for (const handle of [-1, -2147483647]) {
+                assert.throws(
+                    () => tableGet({ RuntimeError: SelectedRuntimeError }, table, handle),
+                    SelectedRuntimeError,
+                    `unknown handle index ${handle >>> 0}`,
+                );
+            }
+            assert.deepEqual(tableGet({ RuntimeError: SelectedRuntimeError }, table, 1), {
+                rep: 42,
+                scope: 0,
+                own: true,
+            });
+            const owners = new Map([[1, table]]);
+            Object.assign(table, { _resourceKind: 'guest-defined resource', _resourceOwners: owners });
+            const other = Object.assign([1 << 30, 0], {
+                _resourceKind: 'guest-defined resource',
+                _resourceOwners: owners,
+            });
+            assert.throws(
+                () => tableGet({ RuntimeError: SelectedRuntimeError }, other, 1),
+                SelectedRuntimeError,
+                'handle index 1 used with the wrong type, expected guest-defined resource but found a different guest-defined resource',
+            );
+        },
+    );
+
     for (const instantiation of ['sync', 'async'] as const) {
         test.concurrent.each([false, true])(
             `uses the selected realm without a platform global (${instantiation}, minify=%s)`,

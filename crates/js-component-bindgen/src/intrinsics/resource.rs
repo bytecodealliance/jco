@@ -69,6 +69,7 @@ pub enum ResourceIntrinsic {
     ResourceTableCreateBorrow,
     ResourceTableCreateOwn,
     ResourceTableGet,
+    ResourceTableGetOwn,
     ResourceTableEnsureBorrowDrop,
     ResourceTableRemove,
     ResourceCallBorrows,
@@ -93,6 +94,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableCreateBorrow.name(),
             Self::ResourceTableCreateOwn.name(),
             Self::ResourceTableGet.name(),
+            Self::ResourceTableGetOwn.name(),
             Self::ResourceTableEnsureBorrowDrop.name(),
             Self::ResourceTableRemove.name(),
             Self::ResourceTransferBorrow.name(),
@@ -118,6 +120,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
             Self::ResourceTableCreateOwn => "rscTableCreateOwn",
             Self::ResourceTableGet => "rscTableGet",
+            Self::ResourceTableGetOwn => "rscTableGetOwn",
             Self::ResourceTableEnsureBorrowDrop => "rscTableTryGet",
             Self::ResourceTableRemove => "rscTableRemove",
             Self::ResourceTransferBorrow => "resourceTransferBorrow",
@@ -221,8 +224,9 @@ impl ResourceIntrinsic {
                             space = {{
                                 next: 1,
                                 free: [],
+                                resources: new Map(),
                                 alloc() {{ return this.free.length > 0 ? this.free.pop() : this.next++; }},
-                                release(idx) {{ this.free.push(idx); }},
+                                release(idx) {{ this.resources.delete(idx); this.free.push(idx); }},
                             }};
                             {handle_index_spaces}.set(key, space);
                         }}
@@ -242,9 +246,12 @@ impl ResourceIntrinsic {
                           if (scopeId === undefined) {{ throw new Error("missing scopeId"); }}
                           // (a table's component instance shares one index space between all
                           // its handle kinds; a table without an instance keeps its own)
-                          const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
-                          table[handle << 1] = scopeId;
-                          table[(handle << 1) + 1] = rep >>> 0;
+                          const space = {get_handle_index_space_fn}(table._componentIdx ?? table);
+                          const handle = space.alloc();
+                          table._resourceOwners = space.resources;
+                          space.resources.set(handle, table);
+                          table[handle * 2] = scopeId;
+                          table[(handle * 2) + 1] = rep >>> 0;
                           return handle;
                       }}
                     "#,
@@ -262,9 +269,12 @@ impl ResourceIntrinsic {
                     // Reps are u32: one from a core function arrives as a signed i32
                     rep >>>= 0;
                     table._createdReps.add(rep);
-                    const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
-                    table[handle << 1] = 0;
-                    table[(handle << 1) + 1] = rep + {own_flag};
+                    const space = {get_handle_index_space_fn}(table._componentIdx ?? table);
+                    const handle = space.alloc();
+                    table._resourceOwners = space.resources;
+                    space.resources.set(handle, table);
+                    table[handle * 2] = 0;
+                    table[(handle * 2) + 1] = rep + {own_flag};
                     return handle;
                 }}
             "#
@@ -280,14 +290,19 @@ impl ResourceIntrinsic {
                     output,
                     r#"
                 function rscTableGet(table, handle) {{
-                    const scope = table[handle << 1];
-                    const val = table[(handle << 1) + 1];
+                    handle >>>= 0;
+                    const scope = table[handle * 2];
+                    const val = table[(handle * 2) + 1];
                     const own = val >= {own_flag};
                     const rep = own ? val - {own_flag} : val;
                     // (a freed or never allocated index has no entry in this table: its
                     // index may belong to another handle kind of the instance)
                     // Zero reps are valid; freed entries are identified by the scope flag.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
+                        const owner = table._resourceOwners?.get(handle);
+                        if (owner && owner !== table) {{
+                            throw new {runtime_error}(`handle index ${{handle}} used with the wrong type, expected ${{table._resourceKind ?? 'resource'}} but found a different ${{owner._resourceKind ?? 'resource'}}`);
+                        }}
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
                     }}
                     return {{ rep, scope, own }};
@@ -296,10 +311,32 @@ impl ResourceIntrinsic {
                 )
             }
 
+            Self::ResourceTableGetOwn => {
+                let name = self.name();
+                let table_get = render_args.intrinsic_call(Self::ResourceTableGet, "table, handle");
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                uwriteln!(
+                    output,
+                    r#"
+                    function {name}(table, handle) {{
+                        const entry = {table_get};
+                        if (!entry.own) {{
+                            throw new {runtime_error}('cannot lift a borrow handle as own');
+                        }}
+                        if (entry.scope !== 0) {{
+                            throw new {runtime_error}('cannot remove owned resource while borrowed');
+                        }}
+                        return entry;
+                    }}
+                "#
+                );
+            }
+
             Self::ResourceTableEnsureBorrowDrop => output.push_str(
                 "
                 function rscTableEnsureBorrowDrop(table, handle, scope) {
-                    if (table[handle << 1] === scope) {
+                    if (table[handle * 2] === scope) {
                         throw new TypeError('Resource borrow was not dropped at end of call');
                     }
                 }
@@ -318,12 +355,17 @@ impl ResourceIntrinsic {
                     output,
                     r#"
                 function rscTableRemove(table, handle) {{
-                    const scope = table[handle << 1];
-                    const val = table[(handle << 1) + 1];
+                    handle >>>= 0;
+                    const scope = table[handle * 2];
+                    const val = table[(handle * 2) + 1];
                     const own = val >= {own_flag};
                     const rep = own ? val - {own_flag} : val;
                     // A borrowed entry can store zero without being freed.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
+                        const owner = table._resourceOwners?.get(handle);
+                        if (owner && owner !== table) {{
+                            throw new {runtime_error}(`handle index ${{handle}} used with the wrong type, expected ${{table._resourceKind ?? 'resource'}} but found a different ${{owner._resourceKind ?? 'resource'}}`);
+                        }}
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
                     }}
                     if (own && scope !== 0) {{
@@ -331,8 +373,8 @@ impl ResourceIntrinsic {
                     }}
                     const borrowTask = own ? undefined : {resource_scope_tasks}.get(scope);
                     // Mark the slot freed and give its index back to the instance's space.
-                    table[handle << 1] = {table_flag};
-                    table[(handle << 1) + 1] = 0;
+                    table[handle * 2] = {table_flag};
+                    table[(handle * 2) + 1] = 0;
                     {get_handle_index_space_fn}(table._componentIdx ?? table).release(handle);
                     borrowTask?.removeBorrowedHandle();
                     return {{ rep, scope, own }};
@@ -360,6 +402,7 @@ impl ResourceIntrinsic {
                     output,
                     r#"
                     function {resource_transfer_borrow_fn}(handle, fromTid, toTid) {{
+                        handle >>>= 0;
                         const fromTable = {handle_tables}[fromTid];
                         const {{ rep, own }} = {table_get_call};
 
@@ -379,7 +422,7 @@ impl ResourceIntrinsic {
                             : undefined;
 
                         if (borrowTask && own) {{
-                            fromTable[handle << 1]++;
+                            fromTable[handle * 2]++;
                             borrowTask.addResourceLender(fromTable, handle);
                         }}
 
@@ -413,6 +456,7 @@ impl ResourceIntrinsic {
             }
 
             Self::ResourceTransferOwn => {
+                let get_own = render_args.require_intrinsic(Self::ResourceTableGetOwn);
                 let handle_tables = render_args.require_intrinsic(Intrinsic::HandleTables);
                 let rsc_table_remove = render_args.require_intrinsic(Self::ResourceTableRemove);
                 let rsc_table_create_own =
@@ -421,6 +465,7 @@ impl ResourceIntrinsic {
                 output.push_str(&format!(
                     r#"
                     function resourceTransferOwn(handle, fromTid, toTid) {{
+                        {get_own}({handle_tables}[fromTid], handle);
                         const {{ rep }} = {rsc_table_remove}({handle_tables}[fromTid], handle);
 
                         let toTable = {handle_tables}[toTid];

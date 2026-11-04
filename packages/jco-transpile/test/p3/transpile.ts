@@ -122,7 +122,7 @@ suite('Transpile (WASI P3)', () => {
         });
     }
 
-    test('uses the core signature for sync-lowered async imports', async () => {
+    test.concurrent('uses the core signature for sync-lowered async imports', async () => {
         const componentPath = join(P3_COMPONENT_FIXTURES_DIR, 'sync-lowered-async-import.wat');
         const component = await parse(await readFile(componentPath, 'utf8'));
         const { files } = await transpileBytes(component);
@@ -145,9 +145,9 @@ suite('Transpile (WASI P3)', () => {
             /async function\(arg0, arg1, arg2, arg3, arg4, arg5, arg6\)/,
             'open-at must use its seven-parameter flat core import signature',
         );
-        assert.include(body, 'var handle1 = arg0;');
+        assert.include(body, 'var handle1 = arg0 >>> 0;');
         assert.include(body, 'var ptr3 = (arg2 >>> 0) >>> 0;');
-        assert.include(body, 'var len3 = arg3;');
+        assert.include(body, 'var len3 = arg3 >>> 0;');
         assert.notInclude(body, 'getInt32((arg0 >>> 0) + 0', 'open-at parameters must not use the async buffer ABI');
     });
 

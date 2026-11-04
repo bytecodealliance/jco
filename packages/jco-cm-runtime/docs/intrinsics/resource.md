@@ -18,18 +18,24 @@ No codecs, scratch arrays, scheduler or optional JSPI facilities are initialized
 by this operation or by importing runtime metadata.
 
 `tableGet(context, table, handle)` reads an array-like table without changing it
-and returns `{ rep, scope, own }`.
+and returns `{ rep, scope, own }`. The handle is interpreted as an unsigned 32-bit
+index (`handle >>> 0`), including when a core Wasm call supplies a signed i32.
 
 - Slots 0 and 1 form a sentinel; resource handles start at 1. Indices are shared
   by all handle kinds of a component instance, so a table may contain holes.
-- Slot `handle << 1` holds the scope; bit 30 marks a freed entry.
-- Slot `(handle << 1) + 1` holds an unsigned 32-bit representation. Owned entries
+- Slot `handle * 2` holds the scope; bit 30 marks a freed entry.
+- Slot `handle * 2 + 1` holds an unsigned 32-bit representation. Owned entries
   store the representation plus `2 ** 32`; subtract that value to obtain `rep`.
   A freed entry stores zero.
 - A representation of zero is valid for both owned and borrowed entries. Only
   handle index zero is reserved.
 - A missing slot or freed entry traps with
   `unknown handle index <handle>` using `context.RuntimeError`.
+- Generated resource tables optionally carry `_resourceKind` and a shared
+  `_resourceOwners` map from live handle indices to their owning resource table.
+  If an index belongs to a different resource table, the trap identifies the
+  resource type mismatch. Providers read this metadata without changing it;
+  plain array-like tables without metadata retain the missing-index diagnostic.
 
 The API version is currently 1. See the [runtime API](../runtime.md) for module contracts.
 

@@ -10,6 +10,7 @@ export function resetTableGetCallCount() {
 }
 
 export function tableGet(context, table, handle) {
+    handle >>>= 0;
     if (this !== undefined) {
         throw new Error('named operations must not require a receiver');
     }
@@ -28,6 +29,12 @@ export function tableGet(context, table, handle) {
     const own = value >= 2 ** 32;
     const rep = own ? value - 2 ** 32 : value;
     if (value === undefined || (scope & flag) !== 0) {
+        const owner = table._resourceOwners?.get(handle);
+        if (owner && owner !== table) {
+            throw new context.RuntimeError(
+                `handle index ${handle} used with the wrong type, expected ${table._resourceKind ?? 'resource'} but found a different ${owner._resourceKind ?? 'resource'}`,
+            );
+        }
         throw new context.RuntimeError(`unknown handle index ${handle}`);
     }
     return { rep, scope, own };

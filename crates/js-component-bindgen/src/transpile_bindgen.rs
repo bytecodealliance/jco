@@ -6,7 +6,7 @@ use std::ops::Index;
 
 use base64::Engine as _;
 use base64::engine::general_purpose;
-use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
+use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use semver::Version;
 use wasmtime_environ::component::{
     CanonicalOptions, CanonicalOptionsDataModel, Component, ComponentExtern, ComponentTranslation,
@@ -457,33 +457,21 @@ pub fn transpile_bindgen(
         .exports()
         .iter()
         .map(|(export_name, canon_export_name)| {
-            let expected_export_name =
-                if canon_export_name.contains(':') || canon_export_name.starts_with("[async]") {
-                    canon_export_name.to_string()
-                } else {
-                    canon_export_name.to_kebab_case()
-                };
             let (export_idx, _extern_data) = instantiator
                 .component
                 .exports
-                .get(&expected_export_name, &NameMapNoIntern)
-                .unwrap_or_else(|| panic!("failed to find component export [{expected_export_name}] (original '{canon_export_name}')"));
+                .get(canon_export_name, &NameMapNoIntern)
+                .unwrap_or_else(|| panic!("failed to find component export [{canon_export_name}]"));
 
             let export_kind = match &instantiator.component.export_items[*export_idx] {
                 wasmtime_environ::component::Export::LiftedFunction { .. } => {
                     ExportKind::LiftedFunction
                 }
-                wasmtime_environ::component::Export::Instance { .. } => {
-                    ExportKind::Instance
-                }
+                wasmtime_environ::component::Export::Instance { .. } => ExportKind::Instance,
                 _ => panic!("unexpected export kind"),
             };
 
-
-            (
-                export_name.to_string(),
-export_kind,
-            )
+            (export_name.to_string(), export_kind)
         })
         .collect();
 
@@ -1277,7 +1265,14 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
                 WorldItem::Function(_) => {}
-                WorldItem::Type { .. } => unreachable!("unexpected exported world item type"),
+                WorldItem::Type { id, .. } => {
+                    if let Export::Type(TypeDef::Resource(resource)) = export {
+                        let ty = crate::dealias(self.resolve, *id);
+                        let concrete_ty = self.types[*resource].unwrap_concrete_ty();
+                        self.exports_resource_types.insert(ty, concrete_ty);
+                        self.exports_resource_index_types.insert(concrete_ty, ty);
+                    }
+                }
             }
         }
     }
@@ -1652,6 +1647,14 @@ impl<'a> Instantiator<'a, '_> {
         let rsc_table_remove = self
             .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+        let index_space = self
+            .bindgen
+            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::GetHandleIndexSpace));
+        let resource_kind = if is_imported {
+            "host-defined resource"
+        } else {
+            "guest-defined resource"
+        };
 
         // Create the relevant handle table
         let rtid = resource_table_idx.as_u32();
@@ -1663,6 +1666,8 @@ impl<'a> Instantiator<'a, '_> {
                   const handleTable{rtid} = [{rsc_table_flag}, 0];
                   handleTable{rtid}._createdReps = new Set();
                   handleTable{rtid}._componentIdx = {component_idx};
+                  handleTable{rtid}._resourceOwners = {index_space}({component_idx}).resources;
+                  handleTable{rtid}._resourceKind = '{resource_kind}';
                 "#,
             );
             if !self.resources_initialized.contains_key(&resource_idx) {
@@ -1687,6 +1692,8 @@ impl<'a> Instantiator<'a, '_> {
                    const handleTable{rtid} = [{rsc_table_flag}, 0];
                    handleTable{rtid}._createdReps = new Set();
                    handleTable{rtid}._componentIdx = {component_idx};
+                   handleTable{rtid}._resourceOwners = {index_space}({component_idx}).resources;
+                   handleTable{rtid}._resourceKind = '{resource_kind}';
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
                        const {{ rep }} = {rsc_table_remove}(handleTable{rtid}, handle);{maybe_dtor}
                    }});
@@ -4421,10 +4428,13 @@ impl<'a> Instantiator<'a, '_> {
         // `implements` feature) falls back to a mapping for the implemented
         // interface id when the label itself has no mapping, so that e.g.
         // WASI shim mappings apply to labeled imports as well.
-        let implements = self.resolve.implements_value(
-            world_key,
-            &self.resolve.worlds[self.world].imports[world_key],
-        );
+        let implements = self
+            .resolve
+            .implements_interface(
+                world_key,
+                &self.resolve.worlds[self.world].imports[world_key],
+            )
+            .and_then(|id| self.resolve.id_of(id));
 
         // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import_with_implements(
@@ -4453,6 +4463,8 @@ impl<'a> Instantiator<'a, '_> {
                         import_name.strip_prefix("[constructor]").unwrap()
                     }
                     FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => import_name,
+
+                    _ => unreachable!("accessors rejected before code generation"),
                 }
             },
             implements.as_deref(),
@@ -4533,6 +4545,8 @@ impl<'a> Instantiator<'a, '_> {
                 ),
                 CallType::Standard,
             ),
+
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         // A function's interface type can be async while its canonical lower is
@@ -4687,6 +4701,8 @@ impl<'a> Instantiator<'a, '_> {
                         self.imported_resource_name(*import_index, resource_id)
                     )
                 }
+
+                _ => unreachable!("accessors rejected before code generation"),
             };
 
             // Save information about imported resources for later
@@ -4768,6 +4784,8 @@ impl<'a> Instantiator<'a, '_> {
                 let resource_name = self.imported_resource_name(*import_index, tid);
                 (class_name, resource_name)
             }
+
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         self.ensure_import(
@@ -5084,7 +5102,8 @@ impl<'a> Instantiator<'a, '_> {
             let implements = self.resolve.worlds[self.world]
                 .imports
                 .get(&world_key)
-                .and_then(|item| self.resolve.implements_value(&world_key, item));
+                .and_then(|item| self.resolve.implements_interface(&world_key, item))
+                .and_then(|id| self.resolve.id_of(id));
             let (local_name, _) = self
                 .bindgen
                 .local_names
@@ -5997,6 +6016,14 @@ impl<'a> Instantiator<'a, '_> {
         for (export_name, (export_idx, _extern_data)) in self.component.exports.raw_iter() {
             let export_name = export_name.as_ref().to_string();
             let export = &self.component.export_items[*export_idx];
+            // Core-module exports are outside the WIT host surface. All module
+            // initializers are still emitted and executed during instantiation.
+            if matches!(
+                export,
+                Export::ModuleStatic { .. } | Export::ModuleImport { .. }
+            ) {
+                continue;
+            }
             let world_key = &self.exports[&export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut export_resource_map = ResourceMap::new();
@@ -6032,6 +6059,8 @@ impl<'a> Instantiator<'a, '_> {
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                             self.bindgen.local_names.create_once(&export_name)
                         }
+
+                        _ => unreachable!("accessors rejected before code generation"),
                     });
 
                     let options = self
@@ -6065,6 +6094,8 @@ impl<'a> Instantiator<'a, '_> {
                         FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                             export_name.to_lower_camel_case()
                         }
+
+                        _ => unreachable!("accessors rejected before code generation"),
                     };
 
                     // Add the export binding
@@ -6196,6 +6227,8 @@ impl<'a> Instantiator<'a, '_> {
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                                 self.bindgen.local_names.create_once(&func_name)
                             }
+
+                            _ => unreachable!("accessors rejected before code generation"),
                         });
 
                         let options = self
@@ -6230,6 +6263,8 @@ impl<'a> Instantiator<'a, '_> {
                             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                                 func_name.to_lower_camel_case()
                             }
+
+                            _ => unreachable!("accessors rejected before code generation"),
                         };
 
                         // Add the export binding
@@ -6322,6 +6357,8 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::Constructor(_) => {
                 unreachable!("constructors cannot return futures")
             }
+
+            _ => unreachable!("accessors rejected before code generation"),
         });
 
         // Start building early variable declarations
@@ -6426,6 +6463,7 @@ impl<'a> Instantiator<'a, '_> {
                     "\n{local_name}.{method_name} = {maybe_async}function {fn_name}",
                 );
             }
+            _ => unreachable!("accessors rejected before code generation"),
         };
 
         // Perform bindgen
@@ -6440,6 +6478,7 @@ impl<'a> Instantiator<'a, '_> {
                 FunctionKind::AsyncFreestanding | FunctionKind::AsyncStatic(_) => {
                     CallType::AsyncStandard
                 }
+                _ => unreachable!("accessors rejected before code generation"),
             },
             iface_name: iface_name.map(|v| v.as_str()),
             callee: &callee,
@@ -6470,6 +6509,7 @@ impl<'a> Instantiator<'a, '_> {
             | FunctionKind::Method(_)
             | FunctionKind::Static(_) => self.src.js(";\n"),
             FunctionKind::Constructor(_) => self.src.js("\n}\n"),
+            _ => unreachable!("accessors rejected before code generation"),
         }
     }
 }
@@ -7369,17 +7409,21 @@ pub fn gen_flat_lift_fn_js_expr(
                                 let rsc_table_remove =
                                     ResourceIntrinsic::ResourceTableRemove.name();
                                 let tid = tid.as_u32();
-                                let rsc_own_flag = ResourceIntrinsic::ResourceTableOwnFlag.name();
                                 let component_idx = component_idx.as_u32();
 
                                 // Mirrors `Instruction::HandleLift` in `function_bindgen.rs`:
                                 let create_resource_fn_js = if *imported {
+                                    let table_get = instantiator.bindgen.intrinsic_call(
+                                        Intrinsic::Resource(ResourceIntrinsic::ResourceTableGetOwn),
+                                        &format!("handleTable{tid}, handle"),
+                                    );
                                     let symbol_resource_rep = Intrinsic::SymbolResourceRep.name();
                                     let rid = rid.as_u32();
                                     format!(
                                         r#"
                                       (handle) => {{
-                                          const rep = handleTable{tid}[(handle << 1) + 1] % {rsc_own_flag};
+                                          handle >>>= 0;
+                                          const rep = {table_get}.rep;
                                           let resourceObj = captureTable{rid}.get(rep);
                                           if (!resourceObj) {{
                                               resourceObj = Object.create({local_name}.prototype);
@@ -7394,6 +7438,10 @@ pub fn gen_flat_lift_fn_js_expr(
                                      "#
                                     )
                                 } else {
+                                    let table_get = instantiator.bindgen.intrinsic_call(
+                                        Intrinsic::Resource(ResourceIntrinsic::ResourceTableGetOwn),
+                                        &format!("handleTable{tid}, handle"),
+                                    );
                                     let dtor_setup_js = dtor_name
                                         .as_ref()
                                         .map(|dtor| {
@@ -7430,6 +7478,8 @@ pub fn gen_flat_lift_fn_js_expr(
                                     format!(
                                         r#"
                                       (handle) => {{
+                                          handle >>>= 0;
+                                          {table_get};
                                           const resourceObj = Object.create({local_name}.prototype);
                                           Object.defineProperty(resourceObj, {symbol_resource_handle}, {{
                                               writable: true,

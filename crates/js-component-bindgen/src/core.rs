@@ -471,6 +471,12 @@ impl Augmenter<'_> {
         self.encode()
     }
 
+    fn augment_memop(&mut self, target: wasmparser::MemArgTarget, op: AugmentedOp) {
+        if let wasmparser::MemArgTarget::Memory(memory) = target {
+            self.augment_op(memory, op);
+        }
+    }
+
     fn augment_op(&mut self, mem: u32, op: AugmentedOp) {
         // Memory 0 stays in the module and isn't removed, so no need to
         // register an augmentation.
@@ -622,46 +628,46 @@ macro_rules! define_visit {
     // List of instructions that are augmented which register the memory index
     // and the relevant augmentation operation.
     (augment $self:ident I32Load $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Load);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Load);
     };
     (augment $self:ident I64Load $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I64Load);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I64Load);
     };
     (augment $self:ident F32Load $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::F32Load);
+        $self.0.augment_memop($memarg.target, AugmentedOp::F32Load);
     };
     (augment $self:ident F64Load $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::F64Load);
+        $self.0.augment_memop($memarg.target, AugmentedOp::F64Load);
     };
     (augment $self:ident I32Load8U $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Load8U);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Load8U);
     };
     (augment $self:ident I32Load8S $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Load8S);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Load8S);
     };
     (augment $self:ident I32Load16U $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Load16U);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Load16U);
     };
     (augment $self:ident I32Load16S $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Load16S);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Load16S);
     };
     (augment $self:ident I32Store $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Store);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Store);
     };
     (augment $self:ident I64Store $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I64Store);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I64Store);
     };
     (augment $self:ident F32Store $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::F32Store);
+        $self.0.augment_memop($memarg.target, AugmentedOp::F32Store);
     };
     (augment $self:ident F64Store $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::F64Store);
+        $self.0.augment_memop($memarg.target, AugmentedOp::F64Store);
     };
     (augment $self:ident I32Store8 $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Store8);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Store8);
     };
     (augment $self:ident I32Store16 $memarg:ident) => {
-        $self.0.augment_op($memarg.memory, AugmentedOp::I32Store16);
+        $self.0.augment_memop($memarg.target, AugmentedOp::I32Store16);
     };
 
     (augment $self:ident MemorySize $mem:ident) => {
@@ -777,46 +783,46 @@ impl MultiMemoryCoreReencoder<'_, '_> {
         use wasmparser::Operator::*;
 
         match operator {
-            I32Load { memarg } if memarg.memory > 0 => {
+            I32Load { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Load, memarg)
             }
-            I32Load8U { memarg } if memarg.memory > 0 => {
+            I32Load8U { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Load8U, memarg)
             }
-            I32Load8S { memarg } if memarg.memory > 0 => {
+            I32Load8S { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Load8S, memarg)
             }
-            I32Load16U { memarg } if memarg.memory > 0 => {
+            I32Load16U { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Load16U, memarg)
             }
-            I32Load16S { memarg } if memarg.memory > 0 => {
+            I32Load16S { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Load16S, memarg)
             }
-            I64Load { memarg } if memarg.memory > 0 => {
+            I64Load { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I64Load, memarg)
             }
-            F32Load { memarg } if memarg.memory > 0 => {
+            F32Load { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::F32Load, memarg)
             }
-            F64Load { memarg } if memarg.memory > 0 => {
+            F64Load { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::F64Load, memarg)
             }
-            I32Store { memarg } if memarg.memory > 0 => {
+            I32Store { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Store, memarg)
             }
-            I32Store8 { memarg } if memarg.memory > 0 => {
+            I32Store8 { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Store8, memarg)
             }
-            I32Store16 { memarg } if memarg.memory > 0 => {
+            I32Store16 { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I32Store16, memarg)
             }
-            I64Store { memarg } if memarg.memory > 0 => {
+            I64Store { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::I64Store, memarg)
             }
-            F32Store { memarg } if memarg.memory > 0 => {
+            F32Store { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::F32Store, memarg)
             }
-            F64Store { memarg } if memarg.memory > 0 => {
+            F64Store { memarg } if matches!(memarg.target, wasmparser::MemArgTarget::Memory(index) if index > 0) => {
                 self.augment(func, AugmentedOp::F64Store, memarg)
             }
             MemorySize { mem } if mem > 0 => {
@@ -834,7 +840,10 @@ impl MultiMemoryCoreReencoder<'_, '_> {
     fn augment(&self, func: &mut Function, op: AugmentedOp, memarg: wasmparser::MemArg) {
         use wasm_encoder::Instruction::{Call, I32Const};
 
-        let memory = MemoryIndex::from_u32(memarg.memory - 1);
+        let wasmparser::MemArgTarget::Memory(memory) = memarg.target else {
+            unreachable!("only linear-memory operations are augmented");
+        };
+        let memory = MemoryIndex::from_u32(memory - 1);
         let function = self.augmenter.augments[&(memory, op)];
         func.instruction(&I32Const(memarg.offset as i32));
         func.instruction(&Call(function));
