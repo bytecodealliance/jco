@@ -1651,6 +1651,7 @@ dependencies = [
  "serde",
  "serde_json",
  "structopt",
+ "wasm-encoder 0.263.0",
  "wasmparser 0.263.0",
  "wast",
  "webidl2wit",

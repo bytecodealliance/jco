@@ -186,15 +186,19 @@ fn convert_wast_file(
                             artifact_idx,
                             kind,
                         )?);
-                        writeln!(
-                            output_js,
-                            "await expect(() => validate(wastTestArtifacts[{artifact_idx}])).rejects.toThrow({});",
-                            if message.is_empty() {
-                                String::new()
-                            } else {
+                        match decode_binary(&encoded, kind) {
+                            Ok(Some(error)) => writeln!(
+                                output_js,
+                                "assert.include({}, {}, 'assert_malformed binary diagnostic');",
+                                js_string(&error.to_string())?,
                                 js_string(message)?
-                            },
-                        )?;
+                            )?,
+                            Ok(None) => writeln!(
+                                output_js,
+                                "assert.fail('assert_malformed accepted a well-formed binary');"
+                            )?,
+                            Err(error) => return Err(error),
+                        }
                     }
                     Err(error) => {
                         // Only a WAT parser/encoder error satisfies a malformed
@@ -381,6 +385,111 @@ fn quote_wat_kind(quote_wat: &wast::QuoteWat<'_>) -> &'static str {
         wast::QuoteWat::Wat(wast::Wat::Component(_)) | wast::QuoteWat::QuoteComponent(..) => {
             "component"
         }
+    }
+}
+
+/// Decode binary grammar without semantic validation. A module with an invalid
+/// function stack is `assert_invalid`, never evidence for `assert_malformed`.
+fn decode_binary(bytes: &[u8], kind: &str) -> Result<Option<String>> {
+    use wasm_encoder::reencode::{Error, Reencode, ReencodeComponent};
+    struct SyntaxDecoder;
+    impl Reencode for SyntaxDecoder {
+        type Error = std::io::Error;
+
+        fn parse_function_body(
+            &mut self,
+            code: &mut wasm_encoder::CodeSection,
+            body: wasmparser::FunctionBody<'_>,
+        ) -> std::result::Result<(), Error<Self::Error>> {
+            let mut reader = body.get_operators_reader()?;
+            while !reader.eof() {
+                reader.read()?;
+            }
+            reader.finish()?;
+            wasm_encoder::reencode::utils::parse_function_body(self, code, body)
+        }
+
+        fn const_expr(
+            &mut self,
+            expr: wasmparser::ConstExpr<'_>,
+        ) -> std::result::Result<wasm_encoder::ConstExpr, Error<Self::Error>> {
+            let mut reader = expr.get_operators_reader();
+            while !reader.eof() {
+                reader.read()?;
+            }
+            reader.finish()?;
+            wasm_encoder::reencode::utils::const_expr(self, expr)
+        }
+
+        // The custom section payload is opaque; even a corrupt name metadata
+        // section must not make an otherwise well-formed module malformed.
+        fn parse_custom_section(
+            &mut self,
+            _module: &mut wasm_encoder::Module,
+            _section: wasmparser::CustomSectionReader<'_>,
+        ) -> std::result::Result<(), Error<Self::Error>> {
+            Ok(())
+        }
+
+        fn parse_unknown_section(
+            &mut self,
+            _module: &mut wasm_encoder::Module,
+            id: u8,
+            _contents: &[u8],
+        ) -> std::result::Result<(), Error<Self::Error>> {
+            Err(Error::UserError(std::io::Error::other(format!(
+                "malformed section id: {id}"
+            ))))
+        }
+    }
+    impl ReencodeComponent for SyntaxDecoder {
+        fn parse_unknown_component_section(
+            &mut self,
+            _component: &mut wasm_encoder::Component,
+            id: u8,
+            _contents: &[u8],
+        ) -> std::result::Result<(), Error<Self::Error>> {
+            Err(Error::UserError(std::io::Error::other(format!(
+                "malformed section id: {id}"
+            ))))
+        }
+        fn parse_component_custom_section(
+            &mut self,
+            _component: &mut wasm_encoder::Component,
+            _section: wasmparser::CustomSectionReader<'_>,
+        ) -> std::result::Result<(), Error<Self::Error>> {
+            Ok(())
+        }
+    }
+    let mut decoder = SyntaxDecoder;
+    let header = match wasmparser::Parser::new(0).parse(bytes, true) {
+        Ok(header) => header,
+        Err(error) => return Ok(Some(error.to_string())),
+    };
+    let expected_encoding = if kind == "component" {
+        wasmparser::Encoding::Component
+    } else {
+        wasmparser::Encoding::Module
+    };
+    if !matches!(header, wasmparser::Chunk::Parsed { payload: wasmparser::Payload::Version { encoding, .. }, .. } if encoding == expected_encoding)
+    {
+        return Ok(Some(format!("unknown binary version for declared {kind}")));
+    }
+    let mut parser = wasmparser::Parser::new(0);
+    parser.set_features(wasmparser::WasmFeatures::all());
+    let result = if kind == "component" {
+        decoder.parse_component(&mut wasm_encoder::Component::new(), parser, bytes)
+    } else {
+        decoder.parse_core_module(&mut wasm_encoder::Module::new(), parser, bytes)
+    };
+    match result {
+        Ok(()) => Ok(None),
+        Err(Error::ParseError(error)) => Ok(Some(error.to_string())),
+        Err(Error::UserError(error)) => Ok(Some(error.to_string())),
+        Err(Error::InvalidCodeSectionSize) => Ok(Some("invalid code section size".into())),
+        // Re-encoding limitations are harness errors, never proof of malformed
+        // grammar. In particular, unsupported core types must not pass a test.
+        Err(error) => bail!("binary syntax decoder failed: {error}"),
     }
 }
 
@@ -1267,7 +1376,7 @@ mod tests {
                 assert_eq!(fs::read(path.with_extension("wast.0.wasm"))?, b"\0as");
                 let script = fs::read_to_string(path.with_extension("wast.js"))?;
                 ensure!(script.contains("kind: \"component\""));
-                ensure!(script.contains("rejects.toThrow(\"unexpected end\")"));
+                ensure!(script.contains("assert_malformed binary diagnostic"));
                 Ok(())
             },
         )
@@ -1296,7 +1405,9 @@ mod tests {
                 b"\0asm\x0d\0\x01\0"
             );
             let script = fs::read_to_string(path.with_extension("wast.js"))?;
-            ensure!(script.contains("validate(wastTestArtifacts[0])).rejects.toThrow()"));
+            ensure!(
+                script.contains("assert.fail('assert_malformed accepted a well-formed binary')")
+            );
             ensure!(!script.contains("assert_malformed text diagnostic"));
             Ok(())
         })

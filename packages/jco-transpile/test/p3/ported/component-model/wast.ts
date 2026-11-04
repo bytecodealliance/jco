@@ -11,7 +11,6 @@ import { resetTableGetCallCount, tableGetCallCount } from '../../../fixtures/cus
 import upstreamManifest from '../../../fixtures/wast/upstream-manifest.json' with { type: 'json' };
 import { validate as validateWasm, $init as initBindgen } from '../../../../vendor/js-component-bindgen-component.js';
 import type { TranspilationOptions } from '../../../../src/transpile.js';
-import { validate as validateWasm, $init as initBindgen } from '../../../../vendor/js-component-bindgen-component.js';
 
 // Relative paths to component-model WAST tests
 interface WastTest {
