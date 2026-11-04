@@ -55,6 +55,10 @@ use bindings::{
 struct JsComponentBindgenComponent;
 
 impl bindings::Guest for JsComponentBindgenComponent {
+    fn validate(component: Vec<u8>) -> Result<(), String> {
+        js_component_bindgen::validate_component(&component).map_err(|error| format!("{error:#}"))
+    }
+
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         let component = wat::parse_bytes(&component).map_err(|e| format!("{e}"))?;
         let opts = js_component_bindgen::TranspileOpts::builder()
