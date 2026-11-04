@@ -20,10 +20,13 @@ const IMPORTS = {
     },
 };
 
-async function assertTraps(call: (wasm: any) => unknown) {
+async function assertTraps(
+    call: (wasm: any) => unknown,
+    expected: RegExp | { constructor: typeof WebAssembly.RuntimeError; message: RegExp } = /bounds/,
+) {
     // A trap makes an instance unusable, so use a fresh instance for each case.
     const wasm = await instantiate(loadWasm, IMPORTS);
-    assert.throws(() => call(wasm), /bounds/);
+    assert.throws(() => call(wasm), expected);
 }
 
 const wasm = await instantiate(loadWasm, IMPORTS);
@@ -44,7 +47,10 @@ assert.strictEqual(wasm.callSigned(), -7);
 await assertTraps((wasm) => wasm.readMap(0xfffffff8, 2));
 // Invalid allocations used to write the second entry at address zero.
 await assertTraps((wasm) => wasm.writeMap(new Map(PAIRS)));
-await assertTraps((wasm) => wasm.writeList(PAIRS));
+await assertTraps((wasm) => wasm.writeList(PAIRS), {
+    constructor: WebAssembly.RuntimeError,
+    message: /realloc return: beyond end of memory/,
+});
 // Fixed-length list iteration must also preserve computed addresses.
 await assertTraps((wasm) => wasm.readFixed(0xfffffff8));
 await assertTraps((wasm) => wasm.writeFixed(0xfffffff8));
