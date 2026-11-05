@@ -69,28 +69,28 @@ export async function run(componentPath: string, args: string[], opts: RunOption
       console.error('Not a valid command component to execute.');
       process.exit(1);
     }
-    let p3CliURL;
+    let P3_CLI_URL;
     try {
-      p3CliURL = import.meta.resolve('@bytecodealliance/preview3-shim/cli');
+      P3_CLI_URL = import.meta.resolve('@bytecodealliance/preview3-shim/cli');
     } catch (e) {
       if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
     }
-    const p3Cli = p3CliURL ? await import(p3CliURL) : undefined;
-    let code = 0;
+    const P3_CLI = P3_CLI_URL ? await import(P3_CLI_URL) : undefined;
+    let EXIT_CODE = 0;
     try {
       await mod.run.run();
     }
     catch (e) {
       console.error(e);
-      code = 1;
+      EXIT_CODE = 1;
     }
-    if (p3Cli?._shutdown) {
-      await p3Cli._shutdown();
+    if (P3_CLI?._shutdown) {
+      await P3_CLI._shutdown();
     } else {
       await Promise.all([process.stdout, process.stderr].map(output =>
         new Promise((resolve, reject) => output.write('', error => error ? reject(error) : resolve()))));
     }
-    process.exit(code);
+    process.exit(EXIT_CODE);
   `,
     );
 }

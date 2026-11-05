@@ -1,4 +1,4 @@
-import { describe, test, expect, vi } from "vitest";
+import { suite, test, expect, vi } from "vitest";
 import { Writable } from "node:stream";
 
 import { executeNodeScript } from "../../../test/helpers/node.mjs";
@@ -6,7 +6,7 @@ import { StreamReader, stream } from "@bytecodealliance/preview3-shim/stream";
 
 // A separate CLI module gives each test its own set of active transfers. The
 // process proxy selects that test's destinations without changing global stdout.
-const outputContext = await vi.hoisted(async () => {
+const OUTPUT_CONTEXT = await vi.hoisted(async () => {
   const { AsyncLocalStorage } = await import("node:async_hooks");
   return new AsyncLocalStorage();
 });
@@ -16,23 +16,25 @@ vi.mock("node:process", async (importOriginal) => {
     ...actual,
     default: new Proxy(actual.default, {
       get(target, key) {
-        return outputContext.getStore()?.[key] ?? Reflect.get(target, key);
+        return OUTPUT_CONTEXT.getStore()?.[key] ?? Reflect.get(target, key);
       },
     }),
   };
 });
 
-let moduleId = 0;
+let MODULE_ID = 0;
+/** Run against an isolated CLI instance and test-local output destinations. */
 async function withOutput(name, writable, run) {
-  const context = outputContext.getStore();
+  const context = OUTPUT_CONTEXT.getStore();
   const cli =
     context?.cli ??
     (await import(
-      new URL(`../dist/nodejs/cli.js?output-test=${moduleId++}`, import.meta.url).href
+      new URL(`../dist/nodejs/cli.js?output-test=${MODULE_ID++}`, import.meta.url).href
     ));
-  return outputContext.run({ ...context, [name]: writable, cli }, () => run(cli));
+  return OUTPUT_CONTEXT.run({ ...context, [name]: writable, cli }, () => run(cli));
 }
 
+/** Create a reader and sink whose EOF and write acknowledgement are controlled by the test. */
 function pendingOutput(highWaterMark = 1) {
   const written = Promise.withResolvers();
   const ended = Promise.withResolvers();
@@ -50,6 +52,7 @@ function pendingOutput(highWaterMark = 1) {
     },
   });
   const reader = {
+    /** Supply one byte chunk, then remain open until the test disposes the reader. */
     read() {
       if (reads++ === 0) {
         return Promise.resolve({ value: [65, 66], done: false });
@@ -62,6 +65,7 @@ function pendingOutput(highWaterMark = 1) {
     writable,
     reader,
     written: written.promise,
+    /** Acknowledge the destination's currently blocked write. */
     release() {
       const callback = finishWrite;
       finishWrite = undefined;
@@ -70,15 +74,15 @@ function pendingOutput(highWaterMark = 1) {
   };
 }
 
-const waterMarks = [
+const WATER_MARKS = [
   ["stdout", 1],
   ["stdout", 65536],
   ["stderr", 1],
   ["stderr", 65536],
 ];
 
-describe("Preview 3 output lifecycle", () => {
-  test.concurrent.each(waterMarks)(
+suite("Preview 3 output lifecycle", () => {
+  test.concurrent.each(WATER_MARKS)(
     "flush waits for %s callbacks (highWaterMark=%s) without closing the reader",
     async (name, highWaterMark) => {
       const pending = pendingOutput(highWaterMark);
@@ -105,7 +109,7 @@ describe("Preview 3 output lifecycle", () => {
     },
   );
 
-  test.concurrent.each(waterMarks)(
+  test.concurrent.each(WATER_MARKS)(
     "shutdown drains %s (highWaterMark=%s) without guest EOF",
     async (name, highWaterMark) => {
       const pending = pendingOutput(highWaterMark);
@@ -148,7 +152,7 @@ describe("Preview 3 output lifecycle", () => {
     );
   });
 
-  test.concurrent.each(waterMarks)(
+  test.concurrent.each(WATER_MARKS)(
     "shutdown interrupts a real %s reader (highWaterMark=%s) without producer EOF",
     async (name, highWaterMark) => {
       const pending = pendingOutput(highWaterMark);
@@ -240,7 +244,7 @@ describe("Preview 3 output lifecycle", () => {
   });
 });
 
-describe("Preview 3 exit", () => {
+suite("Preview 3 exit", () => {
   test.concurrent.each([
     ["success", 'exit.exit({ tag: "ok" })', 0],
     ["failure", 'exit.exit({ tag: "err" })', 1],
@@ -265,18 +269,18 @@ describe("Preview 3 exit", () => {
       `
       import { stdout, exit } from ${JSON.stringify(new URL("../dist/nodejs/cli.js", import.meta.url).href)};
       process.stdout.write = (_chunk, _encoding, _callback) => false;
-      const written = Promise.withResolvers();
-      const reader = {
+      const WRITTEN = Promise.withResolvers();
+      const READER = {
         read() {
-          written.resolve();
+          WRITTEN.resolve();
           return new Promise(() => {});
         },
         [Symbol.dispose]() {
           throw new Error('exit disposed a pending output reader');
         },
       };
-      stdout.writeViaStream(reader);
-      await written.promise;
+      stdout.writeViaStream(READER);
+      await WRITTEN.promise;
       stdout._shutdown = () => { throw new Error('exit invoked output shutdown'); };
       exit.exitWithCode(3);
     `,

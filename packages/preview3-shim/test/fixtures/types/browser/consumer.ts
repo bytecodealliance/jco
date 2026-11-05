@@ -9,15 +9,15 @@ import {
 } from "@bytecodealliance/preview3-shim/cli";
 import type { ErrorCode } from "@bytecodealliance/preview3-shim/interfaces/wasi-cli-types";
 
-const data = new ReadableStream<number>();
-const pending: Promise<{ tag: "ok"; val: void } | { tag: "err"; val: ErrorCode }>[] = [
-  cli.stdout.writeViaStream(data),
-  stdout.writeViaStream(data),
-  stderr.writeViaStream(data),
+const DATA = new ReadableStream<number>();
+const PENDING: Promise<{ tag: "ok"; val: void } | { tag: "err"; val: ErrorCode }>[] = [
+  cli.stdout.writeViaStream(DATA),
+  stdout.writeViaStream(DATA),
+  stderr.writeViaStream(DATA),
 ];
-void pending;
+void PENDING;
 
-const lifecycle: Promise<void>[] = [
+const LIFECYCLE: Promise<void>[] = [
   cli._flush(),
   cli._shutdown(),
   _flush(),
@@ -27,7 +27,7 @@ const lifecycle: Promise<void>[] = [
   stderr._flush(),
   stderr._shutdown(),
 ];
-void lifecycle;
+void LIFECYCLE;
 
 // Existing handlers remain valid; buffered sinks can optionally acknowledge a drain.
 _setStdout({ write(_bytes) {} });

@@ -1,10 +1,10 @@
-import { describe, test, expect } from "vitest";
+import { suite, test, expect } from "vitest";
 
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { Readable } from "node:stream";
 
-describe("Node.js Preview3 wasi-cli", () => {
+suite("Node.js Preview3 wasi-cli", () => {
   test("writeViaStream writes to stdout", async () => {
     const { cli } = await import("@bytecodealliance/preview3-shim");
     const { stream } = await import("@bytecodealliance/preview3-shim/stream");

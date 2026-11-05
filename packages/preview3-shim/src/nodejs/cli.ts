@@ -43,12 +43,14 @@ export const environment = {
 
 type OutputWrite = { close: () => void; finished: Promise<unknown> };
 
+/** Wait for the Node destination to acknowledge writes queued before this barrier. */
 function flush(writable: Writable) {
   return new Promise<void>((resolve, reject) => {
     writable.write(new Uint8Array(0), (err) => (err ? reject(err) : resolve()));
   });
 }
 
+/** Track active transfers and expose lifecycle helpers for one Node output destination. */
 function output(name: "stdout" | "stderr") {
   const writes = new Set<OutputWrite>();
   return {
@@ -82,9 +84,11 @@ export async function _shutdown() {
   await Promise.all([stdout._shutdown(), stderr._shutdown()]);
 }
 
+/** Pipe an accepted stream to its destination while tracking host-owned reader shutdown. */
 function writeViaStream(streamReader, writable: Writable, name: string, writes: Set<OutputWrite>) {
   let ended = false;
   const readable = readableByteStreamFromReader(streamReader, { name });
+  /** Forward byte chunks and record when the source reaches EOF. */
   async function* chunks() {
     for await (const chunk of readable) {
       yield chunk;
@@ -92,6 +96,7 @@ function writeViaStream(streamReader, writable: Writable, name: string, writes: 
     ended = true;
   }
   const write = {
+    /** Dispose the host-owned reader once when shutdown starts. */
     close() {
       if (!ended) {
         ended = true;
