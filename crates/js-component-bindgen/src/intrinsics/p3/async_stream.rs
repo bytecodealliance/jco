@@ -1841,6 +1841,13 @@ impl AsyncStreamIntrinsic {
 
                         readEnd() {{ return this.#readEnd; }}
                         writeEnd() {{ return this.#writeEnd; }}
+
+                        // The instance stopped. Dropping an end settles a copy pending on either,
+                        // whose event the host's polling read or write is yet to consume.
+                        end() {{
+                            this.#readEnd.drop({{ allowPendingEvent: true }});
+                            this.#writeEnd.drop({{ allowPendingEvent: true }});
+                        }}
                     }}
                     "#
                 ));
