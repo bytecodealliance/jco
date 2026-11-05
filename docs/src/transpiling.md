@@ -332,6 +332,11 @@ calls into any component in the instance. Host resources still owned by the gues
 have their `Symbol.dispose` method called. Resources borrowed from the host or
 already returned to it are not disposed. Guest Wasm destructors are not run.
 
+Its streams and futures are closed, whichever side holds each end: a read the host has
+pending settles, as the end of the stream or as a rejection of the future, a writer's next
+write fails, and an iterator or promise the host gave a guest is disposed of as when a guest
+drops it.
+
 Repeated calls to `stop()` do nothing. If a host resource's disposal throws, cleanup
 continues for the other resources, then `stop()` throws an `AggregateError`; the
 instance remains stopped. Resources can also be released this way after a guest trap.
