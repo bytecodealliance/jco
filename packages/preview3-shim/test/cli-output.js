@@ -131,6 +131,40 @@ describe("Preview 3 output lifecycle", () => {
     );
   });
 
+  test.each(waterMarks)(
+    "shutdown interrupts a real %s reader (highWaterMark=%s) without producer EOF",
+    async (name, highWaterMark) => {
+      const pending = pendingOutput(highWaterMark);
+      const { tx, rx } = stream();
+      const readingNext = Promise.withResolvers();
+      const read = rx.read.bind(rx);
+      let reads = 0;
+      vi.spyOn(rx, "read").mockImplementation(() => {
+        if (++reads === 2) {
+          readingNext.resolve();
+        }
+        return read();
+      });
+      await withOutput(name, pending.writable, async () => {
+        const result = outputs[name].writeViaStream(rx);
+        try {
+          await tx.write(new Uint8Array([65, 66]));
+          expect(await pending.written).toBe("AB");
+          await readingNext.promise;
+          const stopping = outputs[name]._shutdown();
+          pending.release();
+          await stopping;
+          expect(await result).toEqual({ tag: "ok", val: undefined });
+          expect(pending.writable.writableEnded).toBe(false);
+        } finally {
+          pending.release();
+          await tx.close();
+          await result;
+        }
+      });
+    },
+  );
+
   test("combined shutdown waits for both destinations", async () => {
     const out = pendingOutput();
     const err = pendingOutput();
