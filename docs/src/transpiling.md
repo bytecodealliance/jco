@@ -301,6 +301,14 @@ export function instantiate(
 
 Where instead of promises, all functions are synchronous.
 
+### Dropping a received future
+
+A future received from a guest is lazy: receiving it does not consume its value. Read it with
+`await future`, or call `future[Symbol.dispose]?.()` to release its readable end. Disposal is
+idempotent, rejects a pending read, and notifies a waiting or subsequent writer that the reader
+has gone. Further reads reject. If the future has already read a disposable value, disposal
+also releases that value; do not continue using it afterward. Host-supplied promises need not
+implement disposal, so generated future types make the method optional.
 ### Stopping an instance
 
 Call `instance._util.stop()` when the host is done with an instance:

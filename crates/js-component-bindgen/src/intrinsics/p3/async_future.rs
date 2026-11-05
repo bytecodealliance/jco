@@ -319,19 +319,25 @@ impl AsyncFutureIntrinsic {
 
             Self::FutureValueClass => {
                 let future_value_class = self.name();
+                let symbol_dispose = render_args.require_intrinsic(Intrinsic::SymbolDispose);
+                let dispose_host_value =
+                    render_args.intrinsic_call_prefix(Intrinsic::DisposeHostValue);
                 output.push_str(&format!(
                     r#"
                     class {future_value_class} {{
                         #start;
+                        #dropFn;
+                        #dropped = false;
                         #settled;
                         #hideThen = 0;
                         #thenFn;
 
-                        constructor(start) {{
+                        constructor(start, dropFn) {{
                             if (typeof start !== 'function') {{
                                 throw new TypeError('future start operation must be a function');
                             }}
                             this.#start = start;
+                            this.#dropFn = dropFn;
                             this.#thenFn = this.#then.bind(this);
                         }}
 
@@ -369,10 +375,26 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         #then(resolve, reject) {{
-                            return this.#read().then(
+                            const droppedErr = () => new Error('future was dropped');
+                            const read = this.#dropped
+                                ? Promise.reject(droppedErr())
+                                : this.#read().then(box => {{
+                                    if (this.#dropped) {{ throw droppedErr(); }}
+                                    return box;
+                                }});
+                            return read.then(
                                 box => this.#deliver(resolve, box.value),
                                 reject,
                             );
+                        }}
+
+                        // Drops the readable end. A write waiting on it, or made later, ends as
+                        // the canonical ABI says, and a value already read is nobody's now.
+                        [{symbol_dispose}]() {{
+                            if (this.#dropped) {{ return; }}
+                            this.#dropped = true;
+                            this.#dropFn?.();
+                            this.#settled?.then(box => {dispose_host_value}box.value), () => {{}});
                         }}
                     }}
                     "#
@@ -1157,17 +1179,17 @@ impl AsyncFutureIntrinsic {
                                   if (!this.hasPendingEvent()) {{
                                       this.setCopyState({future_end_class}.CopyState.ASYNC_COPYING);
 
-                                       // Wait for the write to complete
+                                       // Wait for the write to complete, or for the host to drop this end
                                        await new Promise((resolve) => {{
                                            let waitInterval = setInterval(() => {{
-                                               if (!this.hasPendingEvent()) {{ return; }}
+                                               if (!this.hasPendingEvent() && !this.isDropped()) {{ return; }}
                                                clearInterval(waitInterval);
                                                resolve();
                                            }});
                                        }});
 
                                        if (!this.hasPendingEvent()) {{
-                                           throw new Error("missing pending event after blocked future read");
+                                           throw new Error('future dropped while being read');
                                        }}
                                   }}
 
@@ -1259,6 +1281,23 @@ impl AsyncFutureIntrinsic {
                     _ => unreachable!(),
                 };
 
+                let host_drop_fn = match self {
+                    // A host read still waiting for its write ends with the drop, rather than
+                    // being a reader blocked in it, which only a guest can trap on.
+                    Self::FutureReadableEndClass => {
+                        r#"
+                          hostDrop() {
+                              if (this.isDropped()) { return; }
+                              const meta = this.getPendingBufferMeta();
+                              if (meta.buffer && !meta.isWrite) { this.resetPendingBufferMeta(); }
+                              this.drop();
+                          }
+                        "#
+                    }
+                    Self::FutureWritableEndClass => "",
+                    _ => unreachable!(),
+                };
+
                 let drop_check = match self {
                     Self::FutureReadableEndClass => "".into(),
                     Self::FutureWritableEndClass => {
@@ -1333,7 +1372,8 @@ impl AsyncFutureIntrinsic {
                             // not trigger a host read.
 
                             this.#promise = new {future_value_class}(
-                                () => this.hostRead({{ stringEncoding: 'utf8' }})
+                                () => this.hostRead({{ stringEncoding: 'utf8' }}),
+                                () => this.hostDrop(),
                             );
                             return this.#promise;
                         }}
@@ -1346,6 +1386,7 @@ impl AsyncFutureIntrinsic {
                         {inner_rw_fn}
                         {guest_rw_fn}
                         {host_rw_fn}
+                        {host_drop_fn}
 
                         drop() {{
                             {drop_check}
