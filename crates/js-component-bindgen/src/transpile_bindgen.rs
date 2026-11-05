@@ -606,7 +606,7 @@ impl JsBindgen<'_> {
         if matches!(self.opts.instantiation_mode, Some(InstantiationMode::Async)) {
             uwriteln!(
                 compilation_promises,
-                "if (!getCoreModule) getCoreModule = (name) => {}new URL(`./${{name}}`, import.meta.url));",
+                "if (!getCoreModule) getCoreModule = (name) => {}new URL('./' + name, import.meta.url));",
                 self.intrinsic_call_prefix(Intrinsic::FetchCompile)
             );
         }
