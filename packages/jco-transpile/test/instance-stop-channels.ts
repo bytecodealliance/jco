@@ -331,6 +331,84 @@ suite.skipIf(!HAS_JSPI)('stopping an instance closes its streams and futures', (
         assert.strictEqual(reads, 1);
     });
 
+    test.concurrent('what a host stream yields after the stop is disposed', async () => {
+        const instantiate = await transpiled(READS_FROM_HOST);
+        const instance = await instantiate({});
+        let release;
+        let reading = false;
+        let disposed = 0;
+        const late = {
+            [Symbol.dispose]() {
+                disposed += 1;
+            },
+        };
+        await instance.feed({
+            [Symbol.asyncIterator]() {
+                return this;
+            },
+            next() {
+                reading = true;
+                return new Promise((resolve) => {
+                    release = () => resolve({ done: false, value: late });
+                });
+            },
+            async return() {
+                return { done: true };
+            },
+        });
+        while (!reading) {
+            await sleep(1);
+        }
+        instance._util.stop();
+        release();
+        await sleep(1);
+        assert.strictEqual(disposed, 1);
+    });
+
+    test.concurrent('late host stream values are disposed after reader return without stopping', async ({ expect }) => {
+        const instantiate = await transpiled(READS_FROM_HOST);
+        const instance = await instantiate({});
+        let release;
+        let reading;
+        const started = new Promise((resolve) => {
+            reading = resolve;
+        });
+        let disposed = 0;
+        const source = {
+            [Symbol.asyncIterator]() {
+                return this;
+            },
+            next() {
+                reading();
+                return new Promise((resolve) => {
+                    release = () =>
+                        resolve({
+                            done: false,
+                            value: {
+                                [Symbol.dispose]() {
+                                    disposed += 1;
+                                },
+                            },
+                        });
+                });
+            },
+            async return() {
+                return { done: true };
+            },
+        };
+        try {
+            const reader = instance.pass(source)[Symbol.asyncIterator]();
+            const pending = reader.next();
+            await started;
+            await reader.return();
+            release();
+            assert.isTrue((await pending).done);
+            await expect.poll(() => disposed).toBe(1);
+        } finally {
+            instance._util.stop();
+        }
+    });
+
     test.concurrent("another instance's stream is unaffected", async () => {
         const instantiate = await transpiled(WRITES_FOREVER);
         const imports = { 'test:host/api': { tick() {} } };
