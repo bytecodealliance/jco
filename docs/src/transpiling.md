@@ -301,6 +301,14 @@ export function instantiate(
 
 Where instead of promises, all functions are synchronous.
 
+`options.onTrap` is called with each trap of the instance, once, as soon as it happens. That includes
+a trap in a task a guest left running, after the calls of the host's that started it have returned,
+which no promise would otherwise report; a trap that also fails a call does that as well. A deadlock
+is reported too. A host import throwing something other than a `WebAssembly.RuntimeError` isn't a
+trap, and isn't reported: the host knows it threw.
+`onTrap` is called from the middle of the runtime's unwinding: it may call `_util.stop()`, but it
+shouldn't use the instance otherwise. An exception it throws is left uncaught.
+
 ### Dropping a received future
 
 A future received from a guest is lazy: receiving it does not consume its value. Read it with
@@ -309,6 +317,7 @@ idempotent, rejects a pending read, and notifies a waiting or subsequent writer 
 has gone. Further reads reject. If the future has already read a disposable value, disposal
 also releases that value; do not continue using it afterward. Host-supplied promises need not
 implement disposal, so generated future types make the method optional.
+
 ### Stopping an instance
 
 Call `instance._util.stop()` when the host is done with an instance:
@@ -353,6 +362,7 @@ from the generated bindings as `InstantiateOptions`:
 
 ```ts
 export interface InstantiateOptions {
+  onTrap?: (error: WebAssembly.RuntimeError) => void;
   shim?: {
     globals?: {
       WebAssembly?: typeof WebAssembly;

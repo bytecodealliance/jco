@@ -298,6 +298,8 @@ impl HostIntrinsic {
             // CallWasm/CallInterface, rather than here.
             //
             Self::AsyncStartCall => {
+                let report_trap_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::ReportTrap));
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let async_start_call_fn = render_args.require_intrinsic(Self::AsyncStartCall);
                 let get_or_create_async_state_fn = render_args.require_intrinsic(
@@ -521,6 +523,7 @@ impl HostIntrinsic {
                         const handleCalleeError = (err) => {{
                             preparedTask.endFirstSlice();
                             {debug_log_fn}("[{async_start_call_fn}()] initial subtask callee run failed", err);
+                            {report_trap_fn}(err);
                             // NOTE: a good place to reject the parent task, if rejection API is enabled
                             // subtask.reject(err);
                             // subtask.getParentTask().reject(err);

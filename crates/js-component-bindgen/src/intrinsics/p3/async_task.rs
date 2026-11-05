@@ -3257,6 +3257,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let report_trap_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::ReportTrap));
 
                 output.push_str(&format!(r#"
                     function {driver_loop_fn}(args) {{
@@ -3319,6 +3321,8 @@ impl AsyncTaskIntrinsic {
                                 }},
                                 err,
                             }});
+                            // (a trap here ends only its task, and may fail no call of the host's)
+                            {report_trap_fn}(err);
                             task.setErrored(err);
                             task.reject(err);
                             if (!task.isExited()) {{
