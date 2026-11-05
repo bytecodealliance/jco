@@ -1172,6 +1172,9 @@ jobs:
       - name: Build workspace jco-std
         run: pnpm --filter '@bytecodealliance/jco-std' run build:ts
 
+      - name: Build workspace Preview 3 shim
+        run: pnpm --filter '@bytecodealliance/preview3-shim' --fail-if-no-match run build
+
       - name: Run extended component tests
         run: |
           pnpm --filter '@bytecodealliance/jco' run test:extended
