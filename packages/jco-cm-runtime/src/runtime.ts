@@ -773,6 +773,7 @@ export interface ComponentAsyncStateConstructor {
     };
 }
 export interface ComponentStoreAsyncState {
+    readonly idleWaiters: Set<() => void>;
     // Opaque host timer handle, kept portable between Node and browsers.
     deadlockCheck: unknown | null;
     pendingHostOperations: number;
@@ -839,6 +840,8 @@ export interface ComponentAsyncStateContext extends TrapContext {
     readonly Waitable: new (args: { target?: unknown }) => ComponentWaitable;
     /** Generated instantiation's trap notifier, shared with its inline task code. */
     readonly reportTrap?: (error: Error) => void;
+    /** Settle guest-task idle waiters after the store traps or stops. */
+    readonly checkIdle?: () => void;
 }
 export interface ComponentModule {
     readonly initializeInstanceFlags: () => ComponentInstanceFlags;
