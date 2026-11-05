@@ -664,6 +664,93 @@ suite("knowing when an instance is idle", () => {
         await instance._util.whenIdle();
     });
 
+    test.concurrent("a task group can be waited on beside another that goes on", async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        const [one, other] = [oneByte(), oneByte()];
+        await instance.feed(one.stream);
+        const first = instance._util.lastTaskGroup();
+        await instance.feed(other.stream);
+        const second = instance._util.lastTaskGroup();
+        assert.notStrictEqual(first, second);
+
+        const firstIdle = instance._util.whenIdle([first]);
+        assert.isFalse(await settled(firstIdle));
+        one.release();
+        assert.isTrue(await settled(firstIdle), "the other's work is not this one's");
+        assert.isFalse(await settled(instance._util.whenIdle()), "it is still everything's");
+        const secondIdle = instance._util.whenIdle([second]);
+        assert.isFalse(await settled(secondIdle));
+        assert.isTrue(await settled(instance._util.whenIdle([first])));
+        other.release();
+        assert.isTrue(await settled(secondIdle));
+        assert.isTrue(await settled(instance._util.whenIdle()));
+        assert.isTrue(await settled(instance._util.whenIdle([])));
+    });
+
+    test.concurrent("a task group includes a composed callee after its caller exits", async () => {
+        let idleSettled = false;
+        let reportTrap;
+        const trapped = new Promise((resolve) => {
+            reportTrap = resolve;
+        });
+        const instance = await (
+            await transpiled(TRAPS_IN_THE_BACKGROUND)
+        )(
+            {},
+            {
+                onTrap(error) {
+                    assert.isFalse(idleSettled, "the callee still belongs to its caller's group");
+                    reportTrap(error);
+                },
+            },
+        );
+        const call = instance.startLater();
+        const group = instance._util.lastTaskGroup();
+        const idle = instance._util.whenIdle([group]).then(() => {
+            idleSettled = true;
+        });
+        await call;
+        assert.match((await trapped).message, /unreachable/);
+        await idle;
+        assert.isTrue(idleSettled);
+    });
+
+    test.concurrent("task groups are opaque and reject foreign or invalid tokens", async () => {
+        const instantiate = await transpiled(LINGERS);
+        const first = await instantiate({});
+        const other = await instantiate({});
+        try {
+            await first.feed(oneByte().stream);
+            const group = first._util.lastTaskGroup();
+            assert.isTrue(Object.isFrozen(group));
+            assert.deepStrictEqual(Object.keys(group), []);
+            assert.throws(() => other._util.whenIdle([group]), TypeError);
+            assert.throws(() => first._util.whenIdle([{}]), TypeError);
+            assert.throws(() => first._util.whenIdle([undefined]), TypeError);
+        } finally {
+            first._util.stop();
+            other._util.stop();
+        }
+    });
+
+    test.concurrent("a wait snapshots its selected task groups", async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        const first = oneByte();
+        const other = oneByte();
+        try {
+            await instance.feed(first.stream);
+            const selected = [instance._util.lastTaskGroup()];
+            await instance.feed(other.stream);
+            const idle = instance._util.whenIdle(selected);
+            selected.push(instance._util.lastTaskGroup());
+            first.release();
+            assert.isTrue(await settled(idle));
+            assert.isFalse(await settled(instance._util.whenIdle()));
+        } finally {
+            instance._util.stop();
+        }
+    });
+
     test.concurrent("another instance of the same module is its own", async () => {
         const instantiate = await transpiled(LINGERS);
         const [first, second] = [await instantiate({}), await instantiate({})];
