@@ -207,8 +207,10 @@ export class StreamReader {
   #source = null;
   /** Active async iterator obtained from the source */
   #iterator = null;
-  /** Whether the iterator completed on next() call */
+  /** Whether the reader completed or was closed */
   #done = false;
+  /** Pending reads that must finish even if the source never produces another value. */
+  #pendingReads = new Set<() => void>();
 
   /**
    * Constructs a StreamReader.
@@ -260,13 +262,20 @@ export class StreamReader {
     }
     this.#ensureIterator();
 
-    const { done, value } = await this.#iterator.next();
-    if (done) {
-      this.#done = true;
-      this.#iterator = null;
-      return value !== undefined ? value : null;
+    const closed = Promise.withResolvers<IteratorResult<unknown>>();
+    const finishRead = () => closed.resolve({ done: true, value: undefined });
+    this.#pendingReads.add(finishRead);
+    try {
+      const { done, value } = await Promise.race([this.#iterator.next(), closed.promise]);
+      if (done) {
+        this.#done = true;
+        this.#iterator = null;
+        return value !== undefined ? value : null;
+      }
+      return value;
+    } finally {
+      this.#pendingReads.delete(finishRead);
     }
-    return value;
   }
 
   /**
@@ -304,7 +313,7 @@ export class StreamReader {
   }
 
   /**
-   * Closes the reader and releases the iterator.
+   * Closes the reader, finishes pending reads, and releases the iterator.
    * Only calls return() if the iterator hasn't completed naturally,
    * since return() is meant for premature exits only.
    */
@@ -312,10 +321,19 @@ export class StreamReader {
     if (!this.#iterator) {
       return;
     }
-    if (!this.#done && typeof this.#iterator.return === "function") {
-      this.#iterator.return();
-    }
+    const iterator = this.#iterator;
     this.#iterator = null;
+    this.#done = true;
+    for (const finishRead of this.#pendingReads) {
+      finishRead();
+    }
+    this.#pendingReads.clear();
+    // An iterator's return() may itself wait for an outstanding next(). Do not
+    // make the host's pending reads depend on that source cleanup completing.
+    if (typeof iterator.return === "function") {
+      // Late source failures cannot be delivered to an already-closed reader.
+      Promise.resolve(iterator.return()).catch(() => {});
+    }
   }
 
   [symbolDispose]() {

@@ -206,6 +206,36 @@ describe("Node.js Preview3 canon stream reader", () => {
     reader.close();
     expect(returnCalled).toBe(true);
   });
+
+  test.concurrent.each(["resolve", "reject"])(
+    "close() finishes pending reads before the source can %s",
+    async (settle) => {
+      const next = Promise.withResolvers();
+      const cleanedUp = Promise.withResolvers();
+      async function* source() {
+        try {
+          await next.promise;
+          yield new Uint8Array([65]);
+        } finally {
+          cleanedUp.resolve();
+        }
+      }
+      const reader = new StreamReader(source());
+      const reading = reader.read();
+      try {
+        reader.close();
+        expect(await reading).toBeNull();
+        expect(await reader.read()).toBeNull();
+      } finally {
+        if (settle === "reject") {
+          next.reject(new Error("late source failure"));
+        } else {
+          next.resolve();
+        }
+        await cleanedUp.promise;
+      }
+    },
+  );
 });
 
 describe("Node.js Preview3 canon stream writer", () => {
