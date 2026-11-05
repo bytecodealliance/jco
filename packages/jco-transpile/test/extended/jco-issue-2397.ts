@@ -31,6 +31,8 @@ function expectedLargeOutput(prefix: string) {
     return Array.from({ length: 16 }, (_, index) => `${prefix} ${index}:${'x'.repeat(64 * 1024)}\n`).join('');
 }
 
+// TODO(fix): Switch to withInstalledPreview3Shim after the next preview3-shim release
+// includes the output lifecycle helpers and jco-transpile consumes that published version.
 suite('jco issue 2397', () => {
     test.concurrent.each(['return', 'large-return'])('drains both output streams after %s', async (mode) => {
         await withWorkspacePreview3Shim(async (dir) => {
