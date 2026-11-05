@@ -1,0 +1,20 @@
+package jco:test-components;
+
+interface future-drop-host {
+  resource thing { constructor(); }
+}
+
+world future-drop {
+  import future-drop-host;
+  use future-drop-host.{thing};
+  export open-future: async func(write-now: bool) -> future<thing>;
+  export prepare: async func(write-now: bool);
+  export take-future: func() -> future<thing>;
+  export write-future: async func();
+  export discard: async func(value: future<thing>);
+  export open-stream: async func() -> stream<thing>;
+  export open-stream-idle: async func() -> stream<thing>;
+  export write-stream: async func();
+  export write-result: func() -> s32;
+  export drop-written: func();
+}
