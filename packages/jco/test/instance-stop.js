@@ -241,6 +241,98 @@ const WRITES_ACROSS_THE_END = `
 /** `feed` takes a stream from the host, reads it, and waits for the read. */
 const READS_FROM_HOST = rustComponent("instance-stop-reader");
 
+/**
+ * Each `start` makes a call of a composed component, and returns before it ends.
+ * `later`'s task then traps in a callback, by when no call of the host's is left to
+ * fail. `first` traps as it starts.
+ */
+// Exact callback traps and nested task-return ordering require direct canonical ABI control.
+const TRAPS_IN_THE_BACKGROUND = `
+(component
+  (component $callee
+    (core module $m
+      (func (export "first") (result i32) (unreachable))
+      (func (export "later") (result i32) (i32.const 1))
+      (func (export "cb") (param i32 i32 i32) (result i32) (unreachable))
+    )
+    (core instance $i (instantiate $m))
+    (type $t (func async))
+    (func (export "first") (type $t) (canon lift (core func $i "first") async (callback (core func $i "cb"))))
+    (func (export "later") (type $t) (canon lift (core func $i "later") async (callback (core func $i "cb"))))
+  )
+  (instance $c (instantiate $callee))
+  (core func $first (canon lower (func $c "first") async))
+  (core func $later (canon lower (func $c "later") async))
+  (core func $task_return (canon task.return))
+  (core module $m
+    (import "" "first" (func $first (result i32)))
+    (import "" "later" (func $later (result i32)))
+    (import "" "task.return" (func $ret))
+    (func (export "start-first") (result i32)
+      (drop (call $first))
+      (call $ret)
+      (i32.const 0)
+    )
+    (func (export "start-later") (result i32)
+      (drop (call $later))
+      (call $ret)
+      (i32.const 0)
+    )
+    (func (export "cb") (param i32 i32 i32) (result i32) (i32.const 0))
+  )
+  (core instance $i (instantiate $m (with "" (instance
+    (export "first" (func $first))
+    (export "later" (func $later))
+    (export "task.return" (func $task_return))
+  ))))
+  (type $t (func async))
+  (func (export "start-first") (type $t)
+    (canon lift (core func $i "start-first") async (callback (core func $i "cb"))))
+  (func (export "start-later") (type $t)
+    (canon lift (core func $i "start-later") async (callback (core func $i "cb"))))
+)`;
+
+/** `start` returns, and its own task traps in a callback. `stuck` waits on nothing that can happen. */
+// Exercise the raw callback/deadlock protocol independently of a language executor.
+const TRAPS_AFTER_RETURNING = `
+(component
+  (type $s (stream u8))
+  (core func $stream_new (canon stream.new $s))
+  (core func $task_return (canon task.return))
+  (core func $set_new (canon waitable-set.new))
+  (core func $join (canon waitable.join))
+  (core module $m
+    (import "" "stream.new" (func $stream_new (result i64)))
+    (import "" "task.return" (func $ret))
+    (import "" "waitable-set.new" (func $set_new (result i32)))
+    (import "" "waitable.join" (func $join (param i32 i32)))
+    (func (export "start") (result i32)
+      (call $ret)
+      (i32.const 1)
+    )
+    (func (export "stuck") (result i32)
+      (local $set i32)
+      (local.set $set (call $set_new))
+      (call $join (i32.wrap_i64 (call $stream_new)) (local.get $set))
+      (i32.or (i32.const 2) (i32.shl (local.get $set) (i32.const 4)))
+    )
+    (func (export "cb") (param i32 i32 i32) (result i32) (unreachable))
+    (func (export "sync-trap") (unreachable))
+  )
+  (core instance $i (instantiate $m (with "" (instance
+    (export "stream.new" (func $stream_new))
+    (export "task.return" (func $task_return))
+    (export "waitable-set.new" (func $set_new))
+    (export "waitable.join" (func $join))
+  ))))
+  (type $t (func async))
+  (func (export "start") (type $t)
+    (canon lift (core func $i "start") async (callback (core func $i "cb"))))
+  (func (export "stuck") (type $t)
+    (canon lift (core func $i "stuck") async (callback (core func $i "cb"))))
+  (func (export "sync-trap") (canon lift (core func $i "sync-trap")))
+)`;
+
 suite("stopping an instance", () => {
     test.concurrent("each host object is disposed once, and what was only lent is not", async () => {
         const instantiate = await transpiled(SYNC_THINGS);
@@ -414,5 +506,158 @@ suite("stopping an instance closes its streams and futures", () => {
         assert.strictEqual(err, "");
         assert.deepStrictEqual({ code, signal }, { code: 0, signal: null });
         assert.strictEqual(out, "finished true\n");
+    });
+});
+
+suite("hearing of traps", () => {
+    /** Resolves with the first trap `onTrap` is given, with every one kept in `traps`. */
+    function hear() {
+        const traps = [];
+        let heard;
+        const first = new Promise((resolve) => (heard = resolve));
+        const onTrap = (err) => {
+            traps.push(err);
+            heard(err);
+        };
+        return { traps, first, onTrap };
+    }
+
+    test.concurrent("a trap in a task that has returned, which no call can report", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const { traps, first, onTrap } = hear();
+        const instance = await instantiate({}, { onTrap });
+        await instance.start();
+        const err = await first;
+        assert.instanceOf(err, WebAssembly.RuntimeError);
+        assert.match(err.message, /unreachable/);
+        await sleep(20);
+        assert.strictEqual(traps.length, 1);
+    });
+
+    test.concurrent("a trap in a composed component's call, once the call of the host's has returned", async () => {
+        const instantiate = await transpiled(TRAPS_IN_THE_BACKGROUND);
+        const { traps, first, onTrap } = hear();
+        const instance = await instantiate({}, { onTrap });
+        await instance.startLater();
+        const err = await first;
+        assert.match(err.message, /unreachable/);
+        await sleep(20);
+        assert.strictEqual(traps.length, 1);
+    });
+
+    test.concurrent("a trap as a composed component's call starts", async () => {
+        const instantiate = await transpiled(TRAPS_IN_THE_BACKGROUND);
+        const { first, onTrap } = hear();
+        const instance = await instantiate({}, { onTrap });
+        await expect(instance.startFirst()).rejects.toThrow(/unreachable/);
+        assert.match((await first).message, /unreachable/);
+    });
+
+    test.concurrent("a trap that fails a call is heard too, by the time the call has failed", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const { traps, onTrap } = hear();
+        const instance = await instantiate({}, { onTrap });
+        assert.throws(() => instance.syncTrap(), /unreachable/);
+        assert.strictEqual(traps.length, 1);
+    });
+
+    test.concurrent("each trap is heard once", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const { traps, first, onTrap } = hear();
+        const instance = await instantiate({}, { onTrap });
+        await instance.start();
+        await first;
+        // That ended only its task: it can happen again.
+        await instance.start();
+        while (traps.length < 2) {
+            await sleep(1);
+        }
+        assert.notStrictEqual(traps[0], traps[1]);
+        // A trap of the instance's: it can't be entered again, which is not another trap.
+        assert.throws(() => instance.syncTrap());
+        assert.throws(() => instance.syncTrap());
+        assert.strictEqual(traps.length, 3);
+    });
+
+    test.concurrent("a deadlock is a trap", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const { first, onTrap } = hear();
+        const instance = await instantiate({}, { onTrap });
+        await expect(instance.stuck()).rejects.toThrow(/deadlock/);
+        assert.match((await first).message, /deadlock/);
+    });
+
+    test.concurrent("no trap is heard of for stopping an instance, and none after", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const { traps, onTrap } = hear();
+        const ended = await instantiate({}, { onTrap });
+        const stuck = ended.stuck().catch(() => {});
+        ended._util.stop();
+        await stuck;
+        await sleep(20);
+        assert.deepStrictEqual(traps, []);
+    });
+
+    test.concurrent("it may stop the instance", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        let instance;
+        let ended;
+        const heard = new Promise((resolve) => (ended = resolve));
+        instance = await instantiate(
+            {},
+            {
+                onTrap: (err) => {
+                    instance._util.stop();
+                    ended(err);
+                },
+            },
+        );
+        await instance.start();
+        assert.match((await heard).message, /unreachable/);
+        await sleep(20);
+        await expect(instance.start()).rejects.toThrow(/component instance has been stopped/);
+    });
+
+    test.concurrent("another instance of the same module hears only its own", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const mine = hear();
+        const yours = hear();
+        const trapping = await instantiate({}, { onTrap: mine.onTrap });
+        const other = await instantiate({}, { onTrap: yours.onTrap });
+        await trapping.start();
+        await mine.first;
+        await sleep(20);
+        assert.deepStrictEqual(yours.traps, []);
+        other._util.stop();
+    });
+
+    test.concurrent("an instance without the option traps as before, and its process exits", async () => {
+        const { code, signal, out, err } = await ownProcess(
+            TRAPS_AFTER_RETURNING,
+            `
+            const instance = await instantiate({});
+            await instance.start();
+            await sleep(20);
+            print("finished");
+            `,
+        );
+        assert.strictEqual(err, "");
+        assert.deepStrictEqual({ code, signal }, { code: 0, signal: null });
+        assert.strictEqual(out, "finished\n");
+    });
+
+    test.concurrent("what onTrap throws is left uncaught", async () => {
+        const { code, signal, err } = await ownProcess(
+            TRAPS_AFTER_RETURNING,
+            `
+            const instance = await instantiate({}, { onTrap: () => { throw new Error("from onTrap"); } });
+            await instance.start();
+            await sleep(100);
+            print("not reached");
+            `,
+        );
+        assert.notStrictEqual(code, 0);
+        assert.isNull(signal);
+        assert.include(err, "from onTrap");
     });
 });
