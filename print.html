@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1be0b4b6.js";
+            window.path_to_searchindex_js = "searchindex-1889d7af.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-7cd18f1d.js"></script>
+        <script src="toc-5f84a43a.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -4748,6 +4748,8 @@ instantiating a transpiled component yourself and replacing individual WASI inte
 <li><a href="#detecting-traps">Detecting traps</a>: telling a component trap apart from an ordinary error.</li>
 <li><a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>: how WASI 0.3
 streams flow between host and guest.</li>
+<li><a href="#preview-3-output-flush-and-shutdown">Preview 3 output flush and shutdown</a>: draining
+stdout and stderr in Node.js and browser hosts.</li>
 <li><a href="#preview-3-host-value-disposal">Preview 3 host value disposal</a>: what happens to host-provided
 values a guest discards.</li>
 <li><a href="#script-only-components">Script-only components</a>: building one engine component for many
@@ -5823,6 +5825,78 @@ when assuming the component received it.</li>
 </ul>
 <p>Timing-only assertions are not a good idea, and you should generally make sure to
 interact with the stream directly.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="preview-3-output-flush-and-shutdown"><a class="header" href="#preview-3-output-flush-and-shutdown">Preview 3 output flush and shutdown</a></h1>
+<p>The Preview 3 shim provides host helpers for draining stdout and stderr in
+Node.js and browser environments. These helpers are useful when a custom host
+needs to preserve output before exiting or disposing its component.</p>
+<h2 id="flush-queued-destination-writes"><a class="header" href="#flush-queued-destination-writes">Flush queued destination writes</a></h2>
+<p>Await <code>stdout._flush()</code> or <code>stderr._flush()</code> to wait for writes currently queued
+on that output destination. <code>cli._flush()</code> waits for both destinations:</p>
+<pre><code class="language-js">import * as cli from '@bytecodealliance/preview3-shim/cli';
+
+await cli._flush();
+</code></pre>
+<p>Flushing leaves the component’s stream readers open and does not wait for guest
+EOF. It covers writes already queued on stdout or stderr; it does not wait
+for bytes that have yet to reach those destinations.</p>
+<h2 id="shut-down-output-after-production-stops"><a class="header" href="#shut-down-output-after-production-stops">Shut down output after production stops</a></h2>
+<p>Once a component has stopped producing output, await <code>stdout._shutdown()</code> or
+<code>stderr._shutdown()</code> to close that output’s host-owned readers, finish its active
+transfers, and await destination completion. <code>cli._shutdown()</code> does this for both
+streams. The shared output destinations remain open.</p>
+<p><code>jco run</code> calls this helper after a command returns. A custom host can use the
+same sequence:</p>
+<pre><code class="language-js">import { run } from './command.js';
+import * as cli from '@bytecodealliance/preview3-shim/cli';
+
+await run.run();
+await cli._shutdown();
+</code></pre>
+<p>Producers must stop writing before shutdown begins. New transfers started
+afterward are not covered by that shutdown call. Shutdown does not require the
+producer to send EOF.</p>
+<h2 id="destination-acknowledgements"><a class="header" href="#destination-acknowledgements">Destination acknowledgements</a></h2>
+<p>On Node.js, the helpers wait for the stdout and stderr writables’ callbacks. In
+the browser, they call the existing output handlers’ flush operations. The
+default browser handlers write to the console.</p>
+<p>For buffered or asynchronous browser destinations, pass an optional drain
+callback to <code>_setStdout(handler, drain)</code> or <code>_setStderr(handler, drain)</code>. The
+callback must finish after previously queued writes reach the destination’s
+acknowledgement boundary, and reject if delivery fails:</p>
+<pre><code class="language-js">import * as cli from '@bytecodealliance/preview3-shim/cli';
+
+/** Route stdout to a host sink and register its delivery acknowledgement. */
+function connectBufferedStdout(sink) {
+    cli._setStdout({ write: (bytes) =&gt; sink.enqueue(bytes.slice()) }, () =&gt; sink.drain());
+}
+
+// After configuring the sink, await cli.stdout._flush() or cli._shutdown().
+</code></pre>
+<p>The copy allows the sink to retain bytes after the synchronous write handler
+returns. Existing one-argument setters and stream-write completion behavior are
+unchanged. The drain callback is used only by the new lifecycle helpers.</p>
+<p>Without a drain callback, browser flushing retains the synchronous handler’s
+guarantees. The shim cannot infer completion of asynchronous work hidden inside
+a handler. A successful flush does not guarantee that the browser rendered the
+output, or that a downstream consumer processed it.</p>
+<h2 id="exiting-immediately"><a class="header" href="#exiting-immediately">Exiting immediately</a></h2>
+<p>WASI <code>exit</code> and <code>exitWithCode</code> signal exit immediately. Node.js terminates the
+process; the browser shim throws its component-exit signal for the host to
+handle. Neither path flushes or shuts down output. A custom host can explicitly
+shut down output first:</p>
+<pre><code class="language-js">import * as cli from '@bytecodealliance/preview3-shim/cli';
+
+// Stop output production before shutting down the host-owned readers.
+await cli._shutdown();
+cli.exit.exitWithCode(3);
+</code></pre>
+<p>A completed component-model stream write acknowledges a copy to the receiving
+side, not a flush to the final output destination. These helpers drain data the
+host has accepted; they do not guarantee delivery of all guest output on an
+abrupt exit or implement a guest stream-completion protocol. See
+<a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a> for
+more on stream acknowledgements.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="preview-3-host-value-disposal"><a class="header" href="#preview-3-host-value-disposal">Preview 3 Host Value Disposal</a></h1>
 <p>A guest can discard asynchronous values that JavaScript provided before it ever receives
