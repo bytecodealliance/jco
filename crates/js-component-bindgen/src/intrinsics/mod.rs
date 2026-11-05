@@ -2271,7 +2271,7 @@ mod tests {
         let stream = render_intrinsic_body(Intrinsic::AsyncStream(
             AsyncStreamIntrinsic::PendingValueQueueClass,
         ));
-        assert!(stream.contains("await _trackHostOperation(() => this.#readFn());"));
+        assert!(stream.contains("await _trackHostOperation(() => (hostRead = this.#readFn()));"));
     }
 
     #[test]
