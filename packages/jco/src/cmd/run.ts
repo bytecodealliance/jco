@@ -81,15 +81,11 @@ export async function run(componentPath: string, args: string[], opts: RunOption
       await mod.run.run();
     }
     catch (e) {
-      if (typeof p3Cli?._Exit === 'function' && e instanceof p3Cli._Exit) {
-        code = e.code;
-      } else {
-        console.error(e);
-        code = 1;
-      }
+      console.error(e);
+      code = 1;
     }
-    if (p3Cli?._flush) {
-      await p3Cli._flush();
+    if (p3Cli?._shutdown) {
+      await p3Cli._shutdown();
     } else {
       await Promise.all([process.stdout, process.stderr].map(output =>
         new Promise((resolve, reject) => output.write('', error => error ? reject(error) : resolve()))));
