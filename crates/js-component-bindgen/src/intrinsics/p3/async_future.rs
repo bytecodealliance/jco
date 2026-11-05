@@ -851,6 +851,17 @@ impl AsyncFutureIntrinsic {
                             }});
                         }}
 
+                        // The instance stopped, so this end goes without the checks that hold a
+                        // running guest to the protocol. What waits on it is told it is gone.
+                        end() {{
+                            if (this.#dropped) {{ return; }}
+                            this.resetPendingBufferMeta();
+                            this.notifyDropped();
+                            this.#dropped = true;
+                            this.#notifyPeerDroppedFn();
+                            this.#waitable.drop();
+                        }}
+
                         drop() {{
                             if (this.isDropped()) {{ throw new Error('future already dropped'); }}
 
@@ -883,6 +894,8 @@ impl AsyncFutureIntrinsic {
                 let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
                 let future_value_class =
                     render_args.require_intrinsic(AsyncFutureIntrinsic::FutureValueClass);
+                let store = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
                 let global_buffer_mgr =
                     render_args.require_intrinsic(Intrinsic::GlobalBufferManager);
                 let async_event_code_enum =
@@ -1167,6 +1180,7 @@ impl AsyncFutureIntrinsic {
                         format!(
                             r#"
                               async hostRead(args) {{
+                                  if ({store}.stopped) {{ throw {store}.error; }}
                                   const {{ stringEncoding }} = args;
 
                                   const {{ buffer }} = await this.guestRead({{
@@ -1198,6 +1212,10 @@ impl AsyncFutureIntrinsic {
                                       throw new Error(`mismatched event code [${{code}}] for host future read`);
                                   }}
                                   if (index !== this.waitableIdx()) {{ throw new Error('mismatched future end index'); }}
+                                  // A future's read has no way to say it ended without a value
+                                  if (payload === {future_end_class}.CopyResult.DROPPED && {store}.stopped) {{
+                                      throw {store}.error;
+                                  }}
 
                                   const vs = buffer.read(1);
                                   if (vs.length !== 1) {{ throw new Error('multiple results from future'); }}
@@ -1394,6 +1412,11 @@ impl AsyncFutureIntrinsic {
                             // Let a host-provided future know if its value was discarded
                             this.#hostInjectFn?.drop?.();
                         }}
+
+                        end() {{
+                            super.end();
+                            this.#hostInjectFn?.drop?.();
+                        }}
                     }}
                 "#
                 );
@@ -1456,6 +1479,12 @@ impl AsyncFutureIntrinsic {
                                 isPeerDroppedFn: () => this.#readEnd.isDropped(),
                                 notifyPeerDroppedFn: () => this.#readEnd.notifyDropped(),
                             }});
+                        }}
+
+                        // The instance stopped: see `FutureEnd#end()`.
+                        end() {{
+                            this.#readEnd.end();
+                            this.#writeEnd.end();
                         }}
 
                         elemMeta() {{ return this.#elemMeta; }}
