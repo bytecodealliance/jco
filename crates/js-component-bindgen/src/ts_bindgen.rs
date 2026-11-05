@@ -473,6 +473,13 @@ pub fn ts_bindgen(
                  * Options accepted by `instantiate`.
                  */
                 export interface InstantiateOptions {{
+                    /**
+                     * Called with each trap of this instance as it happens, in whichever
+                     * task: including one a guest left running, which no call of the host's
+                     * would otherwise fail for. Not called for stopping the instance, which
+                     * it may do itself.
+                     */
+                    onTrap?: (error: WebAssembly.RuntimeError) => void;
                     /** Runtime overrides for this instance. */
                     shim?: {{
                         /** Platform globals used instead of those on `globalThis`. */

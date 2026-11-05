@@ -24,6 +24,13 @@ pub enum ComponentIntrinsic {
     /// Permanently stop this generated store and release its host resources.
     StopInstance,
 
+    /// Tells the host of a trap, once however many paths it unwinds through
+    ///
+    /// ```ts
+    /// function _reportTrap(err: Error);
+    /// ```
+    ReportTrap,
+
     /// Shared scheduling state for all component instances in this generated store.
     GlobalStoreAsyncState,
 
@@ -103,7 +110,12 @@ pub enum ComponentIntrinsic {
 impl ComponentIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        ["_postReturnTrap", "_guardPostReturn", "_stopInstance"]
+        [
+            "_postReturnTrap",
+            "_guardPostReturn",
+            "_stopInstance",
+            "_reportTrap",
+        ]
     }
 
     /// Get the name for the intrinsic
@@ -112,6 +124,7 @@ impl ComponentIntrinsic {
             Self::GlobalInstanceFlagsMap => "INSTANCE_FLAGS",
             Self::GlobalStoreTrap => "STORE_TRAP",
             Self::StopInstance => "_stopInstance",
+            Self::ReportTrap => "_reportTrap",
             Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
             Self::CheckForDeadlock => "_checkForDeadlock",
             Self::TrackHostOperation => "_trackHostOperation",
@@ -141,10 +154,36 @@ impl ComponentIntrinsic {
 
             Self::GlobalStoreTrap => {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let on_trap = if render_args.instantiation_occurred {
+                    "options?.onTrap ?? null"
+                } else {
+                    "null"
+                };
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set(), disposed: new WeakSet() }};"#
+                    r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set(), disposed: new WeakSet(), onTrap: {on_trap}, trapsReported: new WeakSet() }};"#
                 );
+            }
+
+            Self::ReportTrap => {
+                let report_trap_fn = render_args.require_intrinsic(Self::ReportTrap);
+                let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let normalize_core_trap_fn = render_args.require_intrinsic(Self::NormalizeCoreTrap);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                output.push_str(&format!(
+                    r#"
+                    function {report_trap_fn}(err) {{
+                        // Stopping an instance goes through the same path as a trap
+                        if ({store}.onTrap === null || {store}.stopped) {{ return; }}
+                        if (!(err instanceof {runtime_error_class}) || {store}.trapsReported.has(err)) {{ return; }}
+                        {store}.trapsReported.add(err);
+                        err = {normalize_core_trap_fn}(err);
+                        // Not the runtime's to handle, whose own unwinding is under way
+                        try {{ {store}.onTrap(err); }} catch (e) {{ queueMicrotask(() => {{ throw e; }}); }}
+                    }}
+                    "#
+                ));
             }
 
             Self::StopInstance => {
@@ -558,6 +597,7 @@ impl ComponentIntrinsic {
                 let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
                 let cannot_enter_component = Trap::CannotEnterComponent.to_string();
+                let report_trap_fn = render_args.require_intrinsic(Self::ReportTrap);
 
                 output.push_str(&format!(
                     r#"
@@ -647,6 +687,7 @@ impl ComponentIntrinsic {
                             if (this.#trapError === null) {{ this.#trapError = err; }}
                             {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});
                             if ({store_trap}.error === null) {{ {store_trap}.error = err; }}
+                            {report_trap_fn}(err);
                             return true;
                         }}
 
