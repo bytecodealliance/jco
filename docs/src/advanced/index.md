@@ -12,6 +12,8 @@ the [Transpiling](../transpiling.md) chapter and the [WASI support](../wasi/inde
 - [Detecting traps](./detecting-traps.md): telling a component trap apart from an ordinary error.
 - [Preview 3 streams and backpressure](./preview3-streams-and-backpressure.md): how WASI 0.3
   streams flow between host and guest.
+- [Preview 3 output flush and shutdown](./preview3-output-flush-and-shutdown.md): draining
+  Node stdout and stderr before a host exits.
 - [Preview 3 host value disposal](./preview3-host-value-disposal.md): what happens to host-provided
   values a guest discards.
 - [Script-only components](./script-only-components.md): building one engine component for many
