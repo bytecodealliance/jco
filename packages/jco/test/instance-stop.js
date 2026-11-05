@@ -587,6 +587,96 @@ suite("stopping an instance closes its streams and futures", () => {
     });
 });
 
+// A structurally empty component checks that utilities need no core module or exports.
+const NO_EXPORTS = `(component)`;
+
+/** `feed` returns, and its task stays until the stream it reads gives it something. */
+const LINGERS = READS_FROM_HOST;
+
+suite("knowing when an instance is idle", () => {
+    /** A stream of one byte, which comes when `release` is called. */
+    function oneByte() {
+        let release;
+        const arrives = new Promise((resolve) => (release = resolve));
+        let sent = false;
+        return {
+            release,
+            stream: {
+                [Symbol.asyncIterator]() {
+                    return this;
+                },
+                async next() {
+                    if (sent) {
+                        return { done: true };
+                    }
+                    await arrives;
+                    sent = true;
+                    return { done: false, value: 1 };
+                },
+                async return() {
+                    return { done: true };
+                },
+            },
+        };
+    }
+
+    /** Whether `promise` has settled by the time things have had a chance to run. */
+    async function settled(promise) {
+        let done = false;
+        promise.then(() => (done = true));
+        await sleep(20);
+        return done;
+    }
+
+    test.concurrent("with nothing running it already is", async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        assert.isTrue(await settled(instance._util.whenIdle()));
+        const bare = await (await transpiled(NO_EXPORTS))({});
+        assert.isTrue(await settled(bare._util.whenIdle()));
+    });
+
+    test.concurrent("a task that has returned counts until it has exited", async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        const { stream, release } = oneByte();
+        await instance.feed(stream);
+        const idle = instance._util.whenIdle();
+        assert.isFalse(await settled(idle), "its task is still reading");
+        release();
+        assert.isTrue(await settled(idle));
+        assert.isTrue(await settled(instance._util.whenIdle()));
+    });
+
+    test.concurrent("stopping an instance ends the wait", async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        await instance.feed(oneByte().stream);
+        const idle = instance._util.whenIdle();
+        assert.isFalse(await settled(idle));
+        instance._util.stop();
+        assert.isTrue(await settled(idle));
+        assert.isTrue(await settled(instance._util.whenIdle()));
+    });
+
+    test.concurrent("a trap ends the wait", async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const instance = await instantiate({}, { onTrap() {} });
+        await instance.start();
+        // Wait for the notification itself; callback scheduling can exceed a short timer under load.
+        await instance._util.whenIdle();
+    });
+
+    test.concurrent("another instance of the same module is its own", async () => {
+        const instantiate = await transpiled(LINGERS);
+        const [first, second] = [await instantiate({}), await instantiate({})];
+        const { stream, release } = oneByte();
+        await first.feed(stream);
+        assert.isTrue(await settled(second._util.whenIdle()));
+        const idle = first._util.whenIdle();
+        assert.isFalse(await settled(idle));
+        release();
+        assert.isTrue(await settled(idle));
+    });
+});
+
 suite("hearing of traps", () => {
     /** Resolves with the first trap `onTrap` is given, with every one kept in `traps`. */
     function hear() {
