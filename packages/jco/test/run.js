@@ -1,12 +1,60 @@
 import { env } from "node:process";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { suite, test, assert } from "vitest";
+import { suite, test, assert, expect } from "vitest";
 
 import { createRequestIsolatedHandler, getSandboxSetup, run } from "../src/cmd/run.js";
 import { exec, getTmpDir, jcoPath } from "./helpers.js";
+
+suite("Run output lifecycle", () => {
+    test.concurrent("runs Preview 2 commands when the optional Preview 3 import is unmapped", async () => {
+        const directory = await getTmpDir();
+        try {
+            const component = fileURLToPath(
+                new URL("./fixtures/components/hello_stdout.component.wasm", import.meta.url),
+            );
+            const expected = await exec(jcoPath, "run", "--jco-dir", directory, component);
+            const runner = join(directory, "_run.js");
+            const source = await readFile(runner, "utf8");
+            const lookup = "import.meta.resolve('@bytecodealliance/preview3-shim/cli')";
+            assert.include(source, lookup);
+            await writeFile(
+                runner,
+                source.replace(lookup, "(() => { throw new TypeError('unmapped optional import'); })()"),
+            );
+            assert.deepEqual(await exec(runner), expected);
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    });
+
+    test.concurrent("reports initialization failures in a resolved Preview 3 provider", async () => {
+        const directory = await getTmpDir();
+        try {
+            const provider = join(directory, "node_modules/@bytecodealliance/preview3-shim");
+            await mkdir(provider, { recursive: true });
+            await writeFile(
+                join(provider, "package.json"),
+                JSON.stringify({
+                    name: "@bytecodealliance/preview3-shim",
+                    type: "module",
+                    exports: { "./cli": "./cli.js" },
+                }),
+            );
+            await writeFile(join(provider, "cli.js"), "throw new Error('provider initialization failed');");
+            const component = fileURLToPath(
+                new URL("./fixtures/components/hello_stdout.component.wasm", import.meta.url),
+            );
+            await expect(exec(jcoPath, "run", "--jco-dir", directory, component)).rejects.toThrow(
+                /provider initialization failed/,
+            );
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    });
+});
 
 suite("Run sandbox", () => {
     test("preserves legacy behavior unless sandboxing is requested", () => {
