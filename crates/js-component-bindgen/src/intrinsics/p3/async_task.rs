@@ -1175,6 +1175,9 @@ impl AsyncTaskIntrinsic {
                 let component_idx_globals =
                     render_args.require_intrinsic(Self::GlobalAsyncCurrentComponentIdxs);
 
+                let scheduler = render_args.require_intrinsic(Intrinsic::Component(
+                    ComponentIntrinsic::GlobalStoreAsyncState,
+                ));
                 output.push_str(&format!(
                     r#"
                     function {fn_name}(args) {{
@@ -1215,6 +1218,9 @@ impl AsyncTaskIntrinsic {
                             errHandling,
                             callingWasmExport,
                         }});
+
+                        {scheduler}.taskGroups.add(newTask.getTaskGroup());
+                        if (componentIdx !== -1) {{ {scheduler}.lastTask = newTask; }}
 
                         const newTaskID = newTask.id();
                         const newTaskMeta = {{ id: newTaskID, componentIdx, task: newTask }};
@@ -1501,6 +1507,7 @@ impl AsyncTaskIntrinsic {
                         #stringEncoding = null;
 
                         #parentSubtask = null;
+                        #taskGroup = Object.freeze({{}});
 
                         #errHandling;
 
@@ -1790,6 +1797,9 @@ impl AsyncTaskIntrinsic {
                             }}
                             return task;
                         }}
+
+                        // Expose an opaque token, never the mutable runtime task itself.
+                        getTaskGroup() {{ return this.getRootTask().#taskGroup; }}
 
                         setPostReturnFn(f) {{
                             if (!f) {{ return; }}

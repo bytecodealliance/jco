@@ -224,7 +224,7 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
     use ComponentIntrinsic::*;
     let (export, context, kind) = match intrinsic {
         // Trap reporting uses instantiation options; shutdown and idle checks use generated tables.
-        StopInstance | ReportTrap | WhenIdle | CheckIdle => return None,
+        StopInstance | ReportTrap | WhenIdle | LastTaskGroup | CheckIdle => return None,
         GlobalInstanceFlagsMap => (
             "initializeInstanceFlags",
             ComponentContextIntrinsic::InitializeInstanceFlags,
