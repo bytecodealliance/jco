@@ -1,5 +1,5 @@
 import process from "node:process";
-import { Readable } from "node:stream";
+import { Readable, type Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import { StreamReader, readableByteStreamFromReader } from "./stream.js";
@@ -24,6 +24,7 @@ export const {
   _setTerminalStdin,
   _setTerminalStdout,
   _setTerminalStderr,
+  exit,
   terminalInput,
   terminalOutput,
   terminalStdin,
@@ -40,34 +41,48 @@ export const environment = {
   getInitialCwd: cliV2.environment.initialCwd,
 };
 
-const outputWrites = new Set<{ close: () => void; finished: Promise<unknown> }>();
+type OutputWrite = { close: () => void; finished: Promise<unknown> };
 
-// A synchronous WASI exit unwinds the component; the command host drains output
-// before terminating the process with the requested status.
-export class _Exit extends Error {
-  constructor(public readonly code: number) {
-    super("WASI exit");
-  }
+function flush(writable: Writable) {
+  return new Promise<void>((resolve, reject) => {
+    writable.write(new Uint8Array(0), (err) => (err ? reject(err) : resolve()));
+  });
 }
 
-export const exit = {
-  exit(status: { tag: string }) {
-    throw new _Exit(status.tag === "err" ? 1 : 0);
-  },
-  exitWithCode(code: number) {
-    throw new _Exit(code);
-  },
-};
+function output(name: "stdout" | "stderr") {
+  const writes = new Set<OutputWrite>();
+  return {
+    /** Write a stream and report completion or an I/O error. */
+    async writeViaStream(streamReader) {
+      return writeViaStream(streamReader, process[name], `${name} stream`, writes);
+    },
+    /** Wait for writes queued on the Node destination without closing the reader. */
+    _flush() {
+      return flush(process[name]);
+    },
+    /** Close active host readers and drain output after the producer has stopped. */
+    async _shutdown() {
+      const pending = [...writes];
+      for (const write of pending) {
+        write.close();
+      }
+      await Promise.all(pending.map((write) => write.finished));
+      await flush(process[name]);
+    },
+  };
+}
 
+/** Wait for writes currently queued on both Node output destinations. */
 export async function _flush() {
-  const writes = [...outputWrites];
-  for (const write of writes) {
-    write.close();
-  }
-  await Promise.all(writes.map((write) => write.finished));
+  await Promise.all([stdout._flush(), stderr._flush()]);
 }
 
-function writeViaStream(streamReader, writable, name: string) {
+/** Shut down both output readers and drain their accepted writes. */
+export async function _shutdown() {
+  await Promise.all([stdout._shutdown(), stderr._shutdown()]);
+}
+
+function writeViaStream(streamReader, writable: Writable, name: string, writes: Set<OutputWrite>) {
   let ended = false;
   const readable = readableByteStreamFromReader(streamReader, { name });
   async function* chunks() {
@@ -79,24 +94,19 @@ function writeViaStream(streamReader, writable, name: string) {
   const write = {
     close() {
       if (!ended) {
+        ended = true;
         streamReader[Symbol.dispose]?.();
       }
     },
     finished: null as Promise<unknown>,
   };
-  outputWrites.add(write);
+  writes.add(write);
   write.finished = pipeline(Readable.from(chunks(), { objectMode: false }), writable, {
     end: false,
   })
-    .then(async () => {
-      // Wait for the destination's callbacks without ending shared stdout/stderr.
-      await new Promise<void>((resolve, reject) => {
-        writable.write(new Uint8Array(0), (err) => (err ? reject(err) : resolve()));
-      });
-      return { tag: "ok", val: undefined };
-    })
+    .then(() => ({ tag: "ok", val: undefined }))
     .catch((err) => ({ tag: "err", val: errorCode(err) }))
-    .finally(() => outputWrites.delete(write));
+    .finally(() => writes.delete(write));
   return write.finished;
 }
 
@@ -147,32 +157,5 @@ export const stdin = {
   },
 };
 
-export const stdout = {
-  /**
-   * Write the given stream to stdout.
-   *
-   * WIT:
-   * ```
-   * write-via-stream: func(data: stream<u8>) -> future<result<_, error-code>>;
-   * ```
-   * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
-   */
-  async writeViaStream(streamReader) {
-    return writeViaStream(streamReader, process.stdout, "stdout stream");
-  },
-};
-
-export const stderr = {
-  /**
-   * Write the given stream to stderr.
-   *
-   * WIT:
-   * ```
-   * write-via-stream: func(data: stream<u8>) -> future<result<_, error-code>>;
-   * ```
-   * @returns {Promise<{tag: string, val?: string}>} Result of the write operation.
-   */
-  async writeViaStream(streamReader) {
-    return writeViaStream(streamReader, process.stderr, "stderr stream");
-  },
-};
+export const stdout = output("stdout");
+export const stderr = output("stderr");

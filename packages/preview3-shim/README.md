@@ -9,17 +9,28 @@ interfaces for [WebAssembly Components][cm-book] that make use of them.
 [cm-book]: https://component-model.bytecodealliance.org/
 [p2-shim]: https://www.npmjs.com/package/@bytecodealliance/preview2-shim
 
-### Node command shutdown
+### Node output flush and shutdown
 
-`jco run` drains Preview 3 output before terminating. Custom command hosts must
-also await `cli._flush()` after `run` returns or throws `cli._Exit`, then use the
-exception's `code` as the exit status. `_Exit` unwinds the component without
-terminating Node while output is still pending.
+Node hosts can await `stdout._flush()` or `stderr._flush()` to wait for writes
+currently queued on that Node destination. `cli._flush()` waits for both. These
+helpers leave the component's stream readers open and do not wait for guest EOF.
 
-`_flush()` closes the host-owned output readers and waits for queued writes;
-call it only when the command has stopped producing output. The result from
-`writeViaStream` still reports stream completion or an I/O error. It alone is
-not a shutdown barrier when the guest keeps its writable end open.
+Once a component has stopped producing output, hosts can call
+`stdout._shutdown()` or `stderr._shutdown()` to close that output's host-owned
+readers, finish its active transfers and wait for queued destination callbacks.
+`cli._shutdown()` does this for both streams. The shared Node stdout/stderr
+writables remain open. `jco run` calls this helper after a command returns.
+
+WASI `exit` and `exitWithCode` still terminate immediately; they do not flush or
+shut down output. A custom host that wants to preserve accepted output before
+exiting with a nonzero code can explicitly await `cli._shutdown()` first.
+
+A completed component-model stream write acknowledges a copy to the receiving
+side, not a flush to the final output destination. These helpers drain data the
+host has accepted; they do not guarantee delivery of all guest output on an
+abrupt exit or implement a new guest stream-completion protocol. Producers must
+stop writing before shutdown begins; new transfers started afterward are not
+covered by that shutdown call.
 
 ### Contribution
 
