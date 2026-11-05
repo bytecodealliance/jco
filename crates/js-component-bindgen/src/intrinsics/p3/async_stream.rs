@@ -1954,6 +1954,10 @@ impl AsyncStreamIntrinsic {
                 let pending_value_queue_class = self.name();
                 let track_host_operation =
                     render_args.require_intrinsic(ComponentIntrinsic::TrackHostOperation);
+                let dispose_host_value =
+                    render_args.intrinsic_call_prefix(Intrinsic::DisposeHostValue);
+                let store = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
 
                 output.push_str(&format!(
                     r#"
@@ -1998,7 +2002,26 @@ impl AsyncStreamIntrinsic {
                           async readSource() {{
                               if (!this.#sourceReadPromise) {{
                                   this.#sourceReadPromise = (async () => {{
-                                      const res = await {track_host_operation}(() => this.#readFn());
+                                      let hostRead;
+                                      let res;
+                                      try {{
+                                          res = await {track_host_operation}(() => (hostRead = this.#readFn()));
+                                      }} catch (err) {{
+                                          if (!{store}.stopped) {{ throw err; }}
+                                          // Stopping settled this wait, but not the host's read.
+                                          Promise.resolve(hostRead).then(
+                                              (late) => {dispose_host_value}late?.value),
+                                              () => {{}},
+                                          );
+                                          this.#done = true;
+                                          return 0;
+                                      }}
+                                      // Nothing will take what arrives after the stream was dropped.
+                                      if (this.#readFn.dropped) {{
+                                          {dispose_host_value}res.value);
+                                          this.#done = true;
+                                          return 0;
+                                      }}
                                       const appended = this.appendReadValue(res.value);
                                       this.#done = res.done;
                                       return appended;
@@ -2681,6 +2704,11 @@ impl AsyncStreamIntrinsic {
                               throw new Error("invalid stream object, cannot generate read fn");
                           }}
 
+                          const drop = readFn.drop;
+                          readFn.drop = (reason) => {{
+                              readFn.dropped = true;
+                              return drop(reason);
+                          }};
                           return readFn;
                       }}
                     "#
