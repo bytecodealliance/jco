@@ -1558,8 +1558,9 @@ impl AsyncTaskIntrinsic {
                            // A nested rejection can reach the root task while its Wasm
                            // entrypoint is still suspended, before the export wrapper awaits
                            // this promise. Mark it handled immediately while preserving the
-                           // original rejected promise for the eventual caller.
-                           completionPromise.catch(() => {{}});
+                           // original rejected promise for the eventual caller. (`catch` would pass
+                           // the result on, and passing on a returned future reads it.)
+                           completionPromise.then(() => {{}}, () => {{}});
 
                            let completionSettled = false;
                            const settleCompletionPromise = () => {{
