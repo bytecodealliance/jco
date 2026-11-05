@@ -420,7 +420,7 @@ pub fn ts_bindgen(
         );
         uwriteln!(
             bindgen.src,
-            "readonly _util: {{ stop(): void; {component_error} }};"
+            "readonly _util: {{ stop(): void; whenIdle(): Promise<void>; {component_error} }};"
         );
         uwriteln!(bindgen.src, "}}");
     } else {
@@ -432,7 +432,7 @@ pub fn ts_bindgen(
             );
             uwriteln!(
                 bindgen.src,
-                "export const _util: {{ stop(): void; {component_error} }};"
+                "export const _util: {{ stop(): void; whenIdle(): Promise<void>; {component_error} }};"
             );
         }
     }
