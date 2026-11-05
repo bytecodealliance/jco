@@ -1,18 +1,36 @@
 import { describe, test, expect, vi } from "vitest";
-import process from "node:process";
 import { Writable } from "node:stream";
 
-import { stdout, stderr, _flush, _shutdown, exit } from "@bytecodealliance/preview3-shim/cli";
+import { executeNodeScript } from "../../../test/helpers/node.mjs";
 import { StreamReader, stream } from "@bytecodealliance/preview3-shim/stream";
 
+// A separate CLI module gives each test its own set of active transfers. The
+// process proxy selects that test's destinations without changing global stdout.
+const outputContext = await vi.hoisted(async () => {
+  const { AsyncLocalStorage } = await import("node:async_hooks");
+  return new AsyncLocalStorage();
+});
+vi.mock("node:process", async (importOriginal) => {
+  const actual = await importOriginal();
+  return {
+    ...actual,
+    default: new Proxy(actual.default, {
+      get(target, key) {
+        return outputContext.getStore()?.[key] ?? Reflect.get(target, key);
+      },
+    }),
+  };
+});
+
+let moduleId = 0;
 async function withOutput(name, writable, run) {
-  const descriptor = Object.getOwnPropertyDescriptor(process, name);
-  Object.defineProperty(process, name, { value: writable, configurable: true });
-  try {
-    await run();
-  } finally {
-    Object.defineProperty(process, name, descriptor);
-  }
+  const context = outputContext.getStore();
+  const cli =
+    context?.cli ??
+    (await import(
+      new URL(`../dist/nodejs/cli.js?output-test=${moduleId++}`, import.meta.url).href
+    ));
+  return outputContext.run({ ...context, [name]: writable, cli }, () => run(cli));
 }
 
 function pendingOutput(highWaterMark = 1) {
@@ -52,7 +70,6 @@ function pendingOutput(highWaterMark = 1) {
   };
 }
 
-const outputs = { stdout, stderr };
 const waterMarks = [
   ["stdout", 1],
   ["stdout", 65536],
@@ -61,19 +78,19 @@ const waterMarks = [
 ];
 
 describe("Preview 3 output lifecycle", () => {
-  test.each(waterMarks)(
+  test.concurrent.each(waterMarks)(
     "flush waits for %s callbacks (highWaterMark=%s) without closing the reader",
     async (name, highWaterMark) => {
       const pending = pendingOutput(highWaterMark);
-      await withOutput(name, pending.writable, async () => {
+      await withOutput(name, pending.writable, async (cli) => {
         let completed = false;
-        const result = outputs[name].writeViaStream(pending.reader).then((value) => {
+        const result = cli[name].writeViaStream(pending.reader).then((value) => {
           completed = true;
           return value;
         });
         expect(await pending.written).toBe("AB");
         let flushed = false;
-        const flushing = outputs[name]._flush().then(() => (flushed = true));
+        const flushing = cli[name]._flush().then(() => (flushed = true));
         await Promise.resolve();
         expect(flushed).toBe(false);
         expect(pending.reader[Symbol.dispose]).not.toHaveBeenCalled();
@@ -81,28 +98,28 @@ describe("Preview 3 output lifecycle", () => {
         await flushing;
         expect(completed).toBe(false);
         expect(pending.reader[Symbol.dispose]).not.toHaveBeenCalled();
-        await outputs[name]._shutdown();
+        await cli[name]._shutdown();
         expect(await result).toEqual({ tag: "ok", val: undefined });
         expect(pending.writable.writableEnded).toBe(false);
       });
     },
   );
 
-  test.each(waterMarks)(
+  test.concurrent.each(waterMarks)(
     "shutdown drains %s (highWaterMark=%s) without guest EOF",
     async (name, highWaterMark) => {
       const pending = pendingOutput(highWaterMark);
-      await withOutput(name, pending.writable, async () => {
-        const result = outputs[name].writeViaStream(pending.reader);
+      await withOutput(name, pending.writable, async (cli) => {
+        const result = cli[name].writeViaStream(pending.reader);
         await pending.written;
         let stopped = false;
-        const stopping = outputs[name]._shutdown().then(() => (stopped = true));
+        const stopping = cli[name]._shutdown().then(() => (stopped = true));
         expect(pending.reader[Symbol.dispose]).toHaveBeenCalledTimes(1);
         await Promise.resolve();
         expect(stopped).toBe(false);
         pending.release();
         await stopping;
-        await outputs[name]._shutdown();
+        await cli[name]._shutdown();
         expect(pending.reader[Symbol.dispose]).toHaveBeenCalledTimes(1);
         expect(await result).toEqual({ tag: "ok", val: undefined });
         expect(pending.writable.writableEnded).toBe(false);
@@ -110,28 +127,28 @@ describe("Preview 3 output lifecycle", () => {
     },
   );
 
-  test("stdout shutdown does not close or await stderr", async () => {
+  test.concurrent("stdout shutdown does not close or await stderr", async () => {
     const out = pendingOutput();
     const err = pendingOutput();
     await withOutput("stdout", out.writable, () =>
-      withOutput("stderr", err.writable, async () => {
-        const outResult = stdout.writeViaStream(out.reader);
-        const errResult = stderr.writeViaStream(err.reader);
+      withOutput("stderr", err.writable, async (cli) => {
+        const outResult = cli.stdout.writeViaStream(out.reader);
+        const errResult = cli.stderr.writeViaStream(err.reader);
         await Promise.all([out.written, err.written]);
-        const stopping = stdout._shutdown();
+        const stopping = cli.stdout._shutdown();
         expect(err.reader[Symbol.dispose]).not.toHaveBeenCalled();
         out.release();
         await stopping;
         expect(err.reader[Symbol.dispose]).not.toHaveBeenCalled();
         err.release();
-        await stderr._shutdown();
+        await cli.stderr._shutdown();
         expect((await outResult).tag).toBe("ok");
         expect((await errResult).tag).toBe("ok");
       }),
     );
   });
 
-  test.each(waterMarks)(
+  test.concurrent.each(waterMarks)(
     "shutdown interrupts a real %s reader (highWaterMark=%s) without producer EOF",
     async (name, highWaterMark) => {
       const pending = pendingOutput(highWaterMark);
@@ -145,13 +162,13 @@ describe("Preview 3 output lifecycle", () => {
         }
         return read();
       });
-      await withOutput(name, pending.writable, async () => {
-        const result = outputs[name].writeViaStream(rx);
+      await withOutput(name, pending.writable, async (cli) => {
+        const result = cli[name].writeViaStream(rx);
         try {
           await tx.write(new Uint8Array([65, 66]));
           expect(await pending.written).toBe("AB");
           await readingNext.promise;
-          const stopping = outputs[name]._shutdown();
+          const stopping = cli[name]._shutdown();
           pending.release();
           await stopping;
           expect(await result).toEqual({ tag: "ok", val: undefined });
@@ -165,44 +182,47 @@ describe("Preview 3 output lifecycle", () => {
     },
   );
 
-  test("combined shutdown waits for both destinations", async () => {
+  test.concurrent("combined shutdown waits for both destinations", async () => {
     const out = pendingOutput();
     const err = pendingOutput();
     await withOutput("stdout", out.writable, () =>
-      withOutput("stderr", err.writable, async () => {
-        const writes = [stdout.writeViaStream(out.reader), stderr.writeViaStream(err.reader)];
+      withOutput("stderr", err.writable, async (cli) => {
+        const writes = [
+          cli.stdout.writeViaStream(out.reader),
+          cli.stderr.writeViaStream(err.reader),
+        ];
         await Promise.all([out.written, err.written]);
         let stopped = false;
-        const stopping = _shutdown().then(() => (stopped = true));
+        const stopping = cli._shutdown().then(() => (stopped = true));
         expect(out.reader[Symbol.dispose]).toHaveBeenCalledTimes(1);
         expect(err.reader[Symbol.dispose]).toHaveBeenCalledTimes(1);
         out.release();
-        await stdout._flush();
+        await cli.stdout._flush();
         expect(stopped).toBe(false);
         err.release();
         await stopping;
         expect((await Promise.all(writes)).every((result) => result.tag === "ok")).toBe(true);
-        await _flush();
+        await cli._flush();
       }),
     );
   });
 
-  test("accepting stream bytes does not wait for a destination flush", async () => {
+  test.concurrent("accepting stream bytes does not wait for a destination flush", async () => {
     const pending = pendingOutput();
-    await withOutput("stdout", pending.writable, async () => {
+    await withOutput("stdout", pending.writable, async (cli) => {
       const { tx, rx } = stream();
-      const result = stdout.writeViaStream(rx);
+      const result = cli.stdout.writeViaStream(rx);
       const copied = tx.write(new Uint8Array([65, 66]));
       expect(await pending.written).toBe("AB");
       await copied;
       await tx.close();
       pending.release();
       expect(await result).toEqual({ tag: "ok", val: undefined });
-      await stdout._flush();
+      await cli.stdout._flush();
     });
   });
 
-  test.each([
+  test.concurrent.each([
     ["EPIPE", "pipe"],
     ["ERR_STREAM_PREMATURE_CLOSE", "pipe"],
     ["EAGAIN", "io"],
@@ -213,44 +233,56 @@ describe("Preview 3 output lifecycle", () => {
         callback(Object.assign(new Error(code), { code }));
       },
     });
-    await withOutput("stdout", output, async () => {
-      const result = await stdout.writeViaStream(new StreamReader([[65]]));
+    await withOutput("stdout", output, async (cli) => {
+      const result = await cli.stdout.writeViaStream(new StreamReader([[65]]));
       expect(result).toEqual({ tag: "err", val: expected });
     });
   });
 });
 
 describe("Preview 3 exit", () => {
-  test.each([
-    ["success", () => exit.exit({ tag: "ok" }), 0],
-    ["failure", () => exit.exit({ tag: "err" }), 1],
-    ["code", () => exit.exitWithCode(3), 3],
-  ])("%s exit remains immediate", (_name, invoke, code) => {
-    const terminate = vi.spyOn(process, "exit").mockImplementation(() => undefined);
-    try {
-      expect(invoke).not.toThrow();
-      expect(terminate).toHaveBeenCalledExactlyOnceWith(code);
-    } finally {
-      terminate.mockRestore();
-    }
+  test.concurrent.each([
+    ["success", 'exit.exit({ tag: "ok" })', 0],
+    ["failure", 'exit.exit({ tag: "err" })', 1],
+    ["code", "exit.exitWithCode(3)", 3],
+  ])("%s exit remains immediate", async (_name, invoke, expectedExitCode) => {
+    await executeNodeScript(
+      "--input-type=module",
+      "-e",
+      `
+      import { exit } from ${JSON.stringify(new URL("../dist/nodejs/cli.js", import.meta.url).href)};
+      ${invoke};
+      throw new Error('exit returned without terminating');
+    `,
+      { expectedExitCode },
+    );
   });
 
-  test("exit does not shut down or drain a pending output", async () => {
-    const pending = pendingOutput();
-    await withOutput("stdout", pending.writable, async () => {
-      const result = stdout.writeViaStream(pending.reader);
-      await pending.written;
-      const terminate = vi.spyOn(process, "exit").mockImplementation(() => undefined);
-      try {
-        exit.exitWithCode(3);
-        expect(terminate).toHaveBeenCalledExactlyOnceWith(3);
-        expect(pending.reader[Symbol.dispose]).not.toHaveBeenCalled();
-      } finally {
-        terminate.mockRestore();
-        pending.release();
-        await stdout._shutdown();
-        await result;
-      }
-    });
+  test.concurrent("exit does not shut down or drain a pending output", async () => {
+    const result = await executeNodeScript(
+      "--input-type=module",
+      "-e",
+      `
+      import { stdout, exit } from ${JSON.stringify(new URL("../dist/nodejs/cli.js", import.meta.url).href)};
+      process.stdout.write = (_chunk, _encoding, _callback) => false;
+      const written = Promise.withResolvers();
+      const reader = {
+        read() {
+          written.resolve();
+          return new Promise(() => {});
+        },
+        [Symbol.dispose]() {
+          throw new Error('exit disposed a pending output reader');
+        },
+      };
+      stdout.writeViaStream(reader);
+      await written.promise;
+      stdout._shutdown = () => { throw new Error('exit invoked output shutdown'); };
+      exit.exitWithCode(3);
+    `,
+      { expectedExitCode: 3 },
+    );
+    expect(result.stdout).toBe("");
+    expect(result.stderr).toBe("");
   });
 });

@@ -1,8 +1,7 @@
-import { version, env, argv, execArgv, platform } from "node:process";
+import { version, env, platform } from "node:process";
 import { createServer as createHttpServer } from "node:http";
 import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from "node:path";
 import { cp, mkdtemp, writeFile, stat, mkdir, readFile, realpath, rm, symlink } from "node:fs/promises";
-import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
@@ -44,57 +43,7 @@ export function log(args, ..._rest) {
     }
 }
 
-// Execute a NodeJS script
-//
-// Note: argv[0] is expected to be `node` (or some incantation that spawned this process)
-export async function exec(cmd, ...args) {
-    if (!cmd) {
-        throw new Error("cmd not specified");
-    }
-    const options = typeof args.at(-1) === "object" && args.at(-1)?.closeStdin !== undefined ? args.pop() : {};
-    let stdout = "",
-        stderr = "";
-    await new Promise((resolve, reject) => {
-        let processCmd = argv[0];
-        const cmdArgs = ["--no-warnings", ...execArgv, cmd, ...args];
-        const cp = spawn(processCmd, cmdArgs, {
-            stdio: "pipe",
-        });
-        if (options.closeStdin) {
-            cp.stdin.end();
-        }
-        cp.stdout.on("data", (chunk) => {
-            stdout += chunk;
-            if (env.JCO_DEBUG) {
-                console.error(`[exec] [cmd=${cmd}] [stdout] ${chunk}`);
-            }
-        });
-        cp.stderr.on("data", (chunk) => {
-            stderr += chunk;
-            if (env.JCO_DEBUG) {
-                console.error(`[exec] [cmd=${cmd}] [stderr] ${chunk}`);
-            }
-        });
-        cp.on("error", reject);
-        // Wait for the output pipes to close before returning captured output.
-        cp.on("close", (code) => {
-            if (code === 0) {
-                resolve();
-                return;
-            }
-
-            const msg = [
-                `error code [${code}] while executing [${processCmd} ${cmdArgs.join(" ")}]:`,
-                "STDOUT:",
-                stdout.toString(),
-                "STDERR:",
-                stderr.toString(),
-            ].join("\n");
-            reject(new Error(msg));
-        });
-    });
-    return { stdout, stderr };
-}
+export { executeNodeScript as exec } from "../../../test/helpers/node.mjs";
 
 /**
  * Securely creates a temporary directory and returns its path.
