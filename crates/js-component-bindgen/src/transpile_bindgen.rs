@@ -3610,6 +3610,10 @@ impl<'a> Instantiator<'a, '_> {
                     let symbol_dispose = self.bindgen.intrinsic(Intrinsic::SymbolDispose);
                     let symbol_cabi_dispose = self.bindgen.intrinsic(Intrinsic::SymbolCabiDispose);
 
+                    let store = self
+                        .bindgen
+                        .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+
                     // previous imports walk should define all imported resources which are accessible
                     if let Some(imported_resource_local_name) =
                         self.bindgen.local_names.try_get(resource_ty)
@@ -3619,6 +3623,7 @@ impl<'a> Instantiator<'a, '_> {
                             const rsc = captureTable{rid}.get(handleEntry.rep);
                             if (rsc) {{
                                 captureTable{rid}.delete(handleEntry.rep);
+                                {store}.disposed.add(rsc);
                                 if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
                             }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
                                 {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
