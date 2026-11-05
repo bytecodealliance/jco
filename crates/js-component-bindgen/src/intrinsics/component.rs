@@ -141,7 +141,7 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set() }};"#
+                    r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set(), disposed: new WeakSet() }};"#
                 );
             }
 
@@ -192,6 +192,8 @@ impl ComponentIntrinsic {
                         {store}.resourceTables.length = 0;
                         const errors = [];
                         for (const resource of resources) {{
+                            // A guest holding it twice may have dropped the other handle.
+                            if ({store}.disposed.has(resource)) {{ continue; }}
                             try {{ resource[{dispose}]?.(); }}
                             catch (error) {{ errors.push(error); }}
                         }}
