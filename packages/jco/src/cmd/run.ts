@@ -72,8 +72,8 @@ export async function run(componentPath: string, args: string[], opts: RunOption
     let P3_CLI_URL;
     try {
       P3_CLI_URL = import.meta.resolve('@bytecodealliance/preview3-shim/cli');
-    } catch (e) {
-      if (e.code !== 'ERR_MODULE_NOT_FOUND') throw e;
+    } catch {
+      // The optional provider may be absent from a package tree or import map.
     }
     const P3_CLI = P3_CLI_URL ? await import(P3_CLI_URL) : undefined;
     let EXIT_CODE = 0;
