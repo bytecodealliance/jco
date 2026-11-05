@@ -1117,7 +1117,7 @@ impl<'a> TsInterface<'a> {
                     TypeDefKind::Future(maybe_ty) => {
                         self.src.push_str("PromiseLike<");
                         self.print_optional_ty(maybe_ty.as_ref());
-                        self.src.push_str(">");
+                        self.src.push_str("> & { [Symbol.dispose]?(): void }");
                     }
                     TypeDefKind::Stream(maybe_ty) => {
                         self.src.push_str("AsyncIterable<");
@@ -1661,7 +1661,7 @@ impl<'a> TsInterface<'a> {
             name.to_upper_camel_case()
         ));
         self.print_optional_ty(element_ty.as_ref());
-        self.src.push_str(">;\n");
+        self.src.push_str("> & { [Symbol.dispose]?(): void };\n");
     }
 
     fn type_stream(&mut self, name: &str, element_ty: &Option<Type>, docs: &Docs) {
