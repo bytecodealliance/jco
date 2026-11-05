@@ -1,0 +1,17 @@
+package jco:test-components;
+
+world list-lift-copy {
+  export get-u8: func() -> list<u8>;
+  export get-s8: func() -> list<s8>;
+  export get-u16: func() -> list<u16>;
+  export get-s16: func() -> list<s16>;
+  export get-u32: func() -> list<u32>;
+  export get-s32: func() -> list<s32>;
+  export get-u64: func() -> list<u64>;
+  export get-s64: func() -> list<s64>;
+  export get-f32: func() -> list<f32>;
+  export get-f64: func() -> list<f64>;
+  export open-lists: async func(count: u32) -> stream<list<u8>>;
+  export open-tuples: async func() -> stream<tuple<list<u8>, u32>>;
+  export open-nested: async func() -> stream<list<list<u16>>>;
+}
