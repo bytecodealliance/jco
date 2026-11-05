@@ -15,6 +15,7 @@ import { nodeBuiltinPlugin } from "../src/node-builtins/index.js";
 import { COMPONENT_JS_FIXTURES_DIR, JCO_JS_PATH } from "./common.js";
 import { getRandomPort } from "./bench/server-helpers.js";
 import { withDefaultNodeImports } from "./fixtures/componentize/helpers/node-imports.js";
+import { executeNodeScript as exec } from "../../../test/helpers/node.mjs";
 
 export { getRandomPort, terminateServer, waitForServer } from "./bench/server-helpers.js";
 
@@ -43,7 +44,7 @@ export function log(args, ..._rest) {
     }
 }
 
-export { executeNodeScript as exec } from "../../../test/helpers/node.mjs";
+export { exec };
 
 /**
  * Securely creates a temporary directory and returns its path.
