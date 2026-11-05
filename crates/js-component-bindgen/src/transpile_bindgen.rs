@@ -581,11 +581,15 @@ impl JsBindgen<'_> {
     ) {
         // An empty component has no runtime state to stop. Keep its utility a
         // no-op so it does not acquire an otherwise-unused external runtime.
-        let stop_instance = if self.all_intrinsics.is_empty() {
-            "() => {}".to_string()
+        let (stop_instance, when_idle) = if self.all_intrinsics.is_empty() {
+            ("() => {}".to_string(), "async () => {}".to_string())
         } else {
-            self.intrinsic(Intrinsic::Component(ComponentIntrinsic::StopInstance))
+            (
+                self.intrinsic(Intrinsic::Component(ComponentIntrinsic::StopInstance)),
+                self.intrinsic(Intrinsic::Component(ComponentIntrinsic::WhenIdle)),
+            )
         };
+        let stop_instance = format!("stop: {stop_instance}, whenIdle: {when_idle}");
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
         let mut core_exported_funcs = source::Source::default();
@@ -981,7 +985,7 @@ impl JsBindgen<'_> {
         };
 
         let stop = if self.opts.instantiation_mode.is_none() {
-            format!("stop: {stop_instance},")
+            format!("{stop_instance},")
         } else {
             String::new()
         };

@@ -355,6 +355,12 @@ cannot resume guest execution. The host remains responsible for cancelling its o
 I/O and timers. Like other JavaScript APIs, `stop()` cannot interrupt synchronous
 Wasm that never yields control back to JavaScript.
 
+### Knowing when an instance is idle
+
+`instance._util.whenIdle()` returns a promise that resolves once no guest task is left in the
+instance. A task counts until it has exited, however long after returning, so this covers what a
+guest goes on doing in the background. It also resolves once the instance has stopped or trapped.
+
 ### Runtime overrides
 
 The optional fourth argument, `options`, configures the instantiation. Its type is exported

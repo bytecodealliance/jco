@@ -406,7 +406,10 @@ pub fn ts_bindgen(
             bindgen.src,
             "/** Permanently stop this instance and dispose guest-owned host resources. */"
         );
-        uwriteln!(bindgen.src, "readonly _util: {{ stop(): void }};");
+        uwriteln!(
+            bindgen.src,
+            "readonly _util: {{ stop(): void; whenIdle(): Promise<void> }};"
+        );
         uwriteln!(bindgen.src, "}}");
     } else {
         bindgen.src.push_str(&bindgen.export_object);
@@ -415,7 +418,10 @@ pub fn ts_bindgen(
                 bindgen.src,
                 "/** Permanently stop this instance and dispose guest-owned host resources. */"
             );
-            uwriteln!(bindgen.src, "export const _util: {{ stop(): void }};");
+            uwriteln!(
+                bindgen.src,
+                "export const _util: {{ stop(): void; whenIdle(): Promise<void> }};"
+            );
         }
     }
 

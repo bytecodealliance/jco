@@ -24,6 +24,18 @@ pub enum ComponentIntrinsic {
     /// Permanently stop this generated store and release its host resources.
     StopInstance,
 
+    /// A promise settled once no guest task is left in this generated store, counting
+    /// a task until it has exited, however long after returning; or once it has stopped
+    /// or trapped, as nothing more will run.
+    ///
+    /// ```ts
+    /// function _whenIdle(): Promise<void>;
+    /// ```
+    WhenIdle,
+
+    /// Settles what [`Self::WhenIdle`] gave out, if that time has come.
+    CheckIdle,
+
     /// Tells the host of a trap, once however many paths it unwinds through
     ///
     /// ```ts
@@ -115,6 +127,9 @@ impl ComponentIntrinsic {
             "_guardPostReturn",
             "_stopInstance",
             "_reportTrap",
+            "_whenIdle",
+            "_checkIdle",
+            "_isIdle",
         ]
     }
 
@@ -125,6 +140,8 @@ impl ComponentIntrinsic {
             Self::GlobalStoreTrap => "STORE_TRAP",
             Self::StopInstance => "_stopInstance",
             Self::ReportTrap => "_reportTrap",
+            Self::WhenIdle => "_whenIdle",
+            Self::CheckIdle => "_checkIdle",
             Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
             Self::CheckForDeadlock => "_checkForDeadlock",
             Self::TrackHostOperation => "_trackHostOperation",
@@ -163,6 +180,46 @@ impl ComponentIntrinsic {
                     output,
                     r#"const {var_name} = {{ error: null, stopped: false, resourceTables: [], stopWaiters: new Set(), disposed: new WeakSet(), onTrap: {on_trap}, trapsReported: new WeakSet() }};"#
                 );
+            }
+
+            Self::WhenIdle => {
+                let when_idle_fn = render_args.require_intrinsic(Self::WhenIdle);
+                render_args.require_intrinsic(Self::CheckIdle);
+                let scheduler = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                output.push_str(&format!(
+                    r#"
+                    function {when_idle_fn}() {{
+                        if (_isIdle()) {{ return Promise.resolve(); }}
+                        return new Promise((resolve) => {{ {scheduler}.idleWaiters.add(resolve); }});
+                    }}
+                    "#
+                ));
+            }
+
+            Self::CheckIdle => {
+                let check_idle_fn = render_args.require_intrinsic(Self::CheckIdle);
+                let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let scheduler = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                let tasks =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
+                // (host tasks, under -1, stand for a host's own work, not a guest's)
+                output.push_str(&format!(
+                    r#"
+                    function _isIdle() {{
+                        if ({store}.error !== null) {{ return true; }}
+                        for (const [componentIdx, metas] of {tasks}) {{
+                            if (componentIdx !== -1 && metas.length > 0) {{ return false; }}
+                        }}
+                        return true;
+                    }}
+                    function {check_idle_fn}() {{
+                        if ({scheduler}.idleWaiters.size === 0 || !_isIdle()) {{ return; }}
+                        const waiters = [...{scheduler}.idleWaiters];
+                        {scheduler}.idleWaiters.clear();
+                        for (const resolve of waiters) {{ resolve(); }}
+                    }}
+                    "#
+                ));
             }
 
             Self::ReportTrap => {
@@ -262,7 +319,7 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0 }};"#
+                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set() }};"#
                 );
             }
 
@@ -598,6 +655,7 @@ impl ComponentIntrinsic {
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
                 let cannot_enter_component = Trap::CannotEnterComponent.to_string();
                 let report_trap_fn = render_args.require_intrinsic(Self::ReportTrap);
+                let check_idle_fn = render_args.require_intrinsic(Self::CheckIdle);
 
                 output.push_str(&format!(
                     r#"
@@ -688,6 +746,7 @@ impl ComponentIntrinsic {
                             {debug_log_fn}('[{component_async_state_class}#markTrapped()] component trapped', {{ err, componentIdx: this.#componentIdx }});
                             if ({store_trap}.error === null) {{ {store_trap}.error = err; }}
                             {report_trap_fn}(err);
+                            {check_idle_fn}();
                             return true;
                         }}
 

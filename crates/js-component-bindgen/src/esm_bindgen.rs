@@ -240,7 +240,7 @@ impl EsmBindgen {
             if instantiation { "return" } else { "export" }
         );
         if let Some(stop) = stop_instance {
-            uwrite!(output, "_util: {{ stop: {stop} }}, ");
+            uwrite!(output, "_util: {{ {stop} }}, ");
         }
         let mut first = true;
         for (alias, export_name) in &self.export_aliases {
