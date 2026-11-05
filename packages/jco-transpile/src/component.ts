@@ -13,8 +13,31 @@ const modules = new Map<string, WebAssembly.Module | Promise<WebAssembly.Module>
 const imports = new WASIShim().getImportObject() as unknown as ImportObject;
 let component: Component | undefined;
 
+// Written out, as a bundler only follows a URL that is one literal.
+const CORE_MODULES = new Map([
+    [
+        'js-component-bindgen-component.core.wasm',
+        new URL('../vendor/js-component-bindgen-component.core.wasm', import.meta.url),
+    ],
+    [
+        'js-component-bindgen-component.core2.wasm',
+        new URL('../vendor/js-component-bindgen-component.core2.wasm', import.meta.url),
+    ],
+    [
+        'js-component-bindgen-component.core3.wasm',
+        new URL('../vendor/js-component-bindgen-component.core3.wasm', import.meta.url),
+    ],
+    [
+        'js-component-bindgen-component.core4.wasm',
+        new URL('../vendor/js-component-bindgen-component.core4.wasm', import.meta.url),
+    ],
+]);
+
 async function compileCoreModule(path: string): Promise<WebAssembly.Module> {
-    const url = new URL(`../vendor/${path}`, import.meta.url);
+    const url = CORE_MODULES.get(path);
+    if (!url) {
+        throw new Error(`unknown core module [${path}]`);
+    }
     if (typeof process !== 'undefined' && process.versions?.node) {
         const { readFile } = await import('node:fs/promises');
         return WebAssembly.compile(await readFile(url));
