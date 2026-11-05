@@ -8,6 +8,7 @@ import { EXTENDED_TEST_COMPONENTS_DIR } from '../common.js';
 import { executeNodeScript } from '../../../../test/helpers/node.mjs';
 import { withWorkspacePreview3Shim } from '../../../../test/helpers/shims.mjs';
 
+/** Execute the native output fixture with an isolated runner and expected exit status. */
 function runOutputFixture(
     dir: string,
     mode: string,
@@ -25,6 +26,7 @@ function runOutputFixture(
     );
 }
 
+/** Reconstruct the fixture's ordered payload for one output destination. */
 function expectedLargeOutput(prefix: string) {
     return Array.from({ length: 16 }, (_, index) => `${prefix} ${index}:${'x'.repeat(64 * 1024)}\n`).join('');
 }

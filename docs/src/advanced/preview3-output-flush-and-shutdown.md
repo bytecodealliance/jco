@@ -55,6 +55,7 @@ acknowledgement boundary, and reject if delivery fails:
 ```js
 import * as cli from '@bytecodealliance/preview3-shim/cli';
 
+/** Route stdout to a host sink and register its delivery acknowledgement. */
 function connectBufferedStdout(sink) {
     cli._setStdout({ write: (bytes) => sink.enqueue(bytes.slice()) }, () => sink.drain());
 }

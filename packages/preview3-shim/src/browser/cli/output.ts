@@ -7,7 +7,7 @@ import {
   type StreamReaderLike,
 } from "../streams.js";
 
-const symbolDispose = Symbol.dispose ?? Symbol.for("dispose");
+const SYMBOL_DISPOSE = Symbol.dispose ?? Symbol.for("dispose");
 
 /** A host acknowledgement for output queued on a buffered or asynchronous sink. */
 export type OutputDrain = () => void | Promise<void>;
@@ -20,7 +20,7 @@ function outputReader(data: ByteStream) {
   if (typeof (data as StreamReaderLike).read === "function") {
     const reader = data as StreamReaderLike;
     next = (options) => reader.read(options);
-    const close = reader[symbolDispose] ?? reader.close ?? reader.cancel;
+    const close = reader[SYMBOL_DISPOSE] ?? reader.close ?? reader.cancel;
     dispose = () => close?.call(reader);
     // Generated stream disposal finishes its pending copy, which may contain
     // accepted bytes that must be drained before stopping the transfer.
@@ -54,6 +54,7 @@ function outputReader(data: ByteStream) {
   let ended = false;
   let finishRead: (() => void) | undefined;
   return {
+    /** Read one chunk, allowing shutdown to interrupt a suspended async iterator. */
     async read(options: { count: number }) {
       if (ended) {
         return null;
@@ -75,6 +76,7 @@ function outputReader(data: ByteStream) {
         finishRead = undefined;
       }
     },
+    /** Stop further reads while preserving an in-flight generated stream copy. */
     close() {
       if (ended) {
         return;
@@ -98,12 +100,14 @@ export function createOutput(
   const transfers = new Set<{ close(): void; finished: Promise<unknown> }>();
   let drain: OutputDrain | undefined;
 
+  /** Preserve the existing setter and optionally register a destination drain acknowledgement. */
   function setHandler(handler: OutputStreamHandler, acknowledge?: OutputDrain) {
     setOutput(handler);
     drain = acknowledge;
   }
 
   const output = {
+    /** Transfer stream bytes using the existing synchronous output handler contract. */
     async writeViaStream(data: ByteStream) {
       try {
         const reader = outputReader(data);

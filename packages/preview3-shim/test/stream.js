@@ -1,9 +1,9 @@
-import { describe, test, expect } from "vitest";
+import { suite, test, expect } from "vitest";
 
 const { StreamReader, StreamWriter, stream, readableByteStreamFromReader } =
   await import("@bytecodealliance/preview3-shim/stream");
 
-describe("Node.js Preview3 canon stream reader", () => {
+suite("Node.js Preview3 canon stream reader", () => {
   test("read() yields chunks and null at end", async () => {
     const rs = new ReadableStream({
       start(ctrl) {
@@ -212,6 +212,7 @@ describe("Node.js Preview3 canon stream reader", () => {
     async (settle) => {
       const next = Promise.withResolvers();
       const cleanedUp = Promise.withResolvers();
+      /** Suspend source completion so disposal can be tested independently of EOF. */
       async function* source() {
         try {
           await next.promise;
@@ -238,7 +239,7 @@ describe("Node.js Preview3 canon stream reader", () => {
   );
 });
 
-describe("Node.js Preview3 canon stream writer", () => {
+suite("Node.js Preview3 canon stream writer", () => {
   test("write() enqueues chunks into underlying WritableStream", async () => {
     const received = [];
     const ws = new WritableStream({
@@ -293,7 +294,7 @@ describe("Node.js Preview3 canon stream writer", () => {
   });
 });
 
-describe("stream() helper", () => {
+suite("stream() helper", () => {
   test("round-trip write then read", async () => {
     const { tx, rx } = stream();
     const payload = Buffer.from("roundtrip");
@@ -309,7 +310,7 @@ describe("stream() helper", () => {
   });
 });
 
-describe("readableByteStreamFromReader()", () => {
+suite("readableByteStreamFromReader()", () => {
   test("uses read options and normalizes byte arrays", async () => {
     const calls = [];
     const source = {
