@@ -408,7 +408,7 @@ pub fn ts_bindgen(
         );
         uwriteln!(
             bindgen.src,
-            "readonly _util: {{ stop(): void; whenIdle(): Promise<void> }};"
+            "readonly _util: {{ stop(): void; whenIdle(groups?: readonly object[]): Promise<void>; lastTaskGroup(): object | undefined }};"
         );
         uwriteln!(bindgen.src, "}}");
     } else {
@@ -420,7 +420,7 @@ pub fn ts_bindgen(
             );
             uwriteln!(
                 bindgen.src,
-                "export const _util: {{ stop(): void; whenIdle(): Promise<void> }};"
+                "export const _util: {{ stop(): void; whenIdle(groups?: readonly object[]): Promise<void>; lastTaskGroup(): object | undefined }};"
             );
         }
     }
