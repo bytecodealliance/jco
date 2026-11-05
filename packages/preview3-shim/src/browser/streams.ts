@@ -7,17 +7,19 @@ interface Preview2InputStream {
   subscribe(): { block(): void | Promise<void> };
 }
 
-interface Preview2OutputStream {
+export interface Preview2OutputStream {
   blockingWriteAndFlush(contents: Uint8Array): void;
   blockingFlush(): void;
 }
 
-type StreamReaderLike = {
+export type StreamReaderLike = {
   read(options?: { count: number }): Promise<unknown> | unknown;
   cancel?(reason?: unknown): Promise<void> | void;
   close?(): void;
   [symbolDispose]?: () => void;
 };
+
+export type ByteStream = ReadableStream<number> | AsyncIterable<unknown> | StreamReaderLike;
 
 function byteChunk(value: unknown): Uint8Array {
   if (value instanceof Uint8Array) {
@@ -45,7 +47,7 @@ function isIteratorResult(value: unknown): value is IteratorResult<unknown> {
   return value !== null && typeof value === "object" && "done" in value;
 }
 
-async function* byteChunks(data: ReadableStream<number>): AsyncGenerator<Uint8Array> {
+async function* byteChunks(data: ByteStream): AsyncGenerator<Uint8Array> {
   const stream = data as ReadableStream<number> &
     Partial<StreamReaderLike> &
     Partial<AsyncIterable<unknown>>;
@@ -77,7 +79,7 @@ async function* byteChunks(data: ReadableStream<number>): AsyncGenerator<Uint8Ar
 }
 
 export async function writeToPreview2Output(
-  data: ReadableStream<number>,
+  data: ByteStream,
   output: Preview2OutputStream,
 ): Promise<void> {
   for await (const bytes of byteChunks(data)) {
