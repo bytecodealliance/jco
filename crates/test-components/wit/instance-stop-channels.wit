@@ -1,0 +1,10 @@
+package jco:test-components;
+
+world instance-stop-unwritten {
+  export start: async func() -> tuple<stream<u8>, future<u8>>;
+}
+
+world instance-stop-reader {
+  export feed: async func(value: stream<u8>);
+  export pass: func(value: stream<u8>) -> stream<u8>;
+}
