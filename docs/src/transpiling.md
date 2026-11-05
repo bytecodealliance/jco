@@ -361,6 +361,13 @@ Wasm that never yields control back to JavaScript.
 instance. A task counts until it has exited, however long after returning, so this covers what a
 guest goes on doing in the background. It also resolves once the instance has stopped or trapped.
 
+To wait on some calls and not the rest, say beside a task that never ends, take
+`instance._util.lastTaskGroup()` straight after calling an export, in the same turn, and pass those to
+`whenIdle(groups)`. A task group is a call's task and those of everything it called, transitively.
+Group tokens are opaque and belong to the instance that produced them. Passing an invalid or
+foreign token throws `TypeError`. The group list is copied when `whenIdle(groups)` is called,
+so later changes to the caller's array do not change the wait.
+
 ### Runtime overrides
 
 The optional fourth argument, `options`, configures the instantiation. Its type is exported
