@@ -190,7 +190,7 @@ impl ComponentIntrinsic {
                                 const channel = data[i];
                                 if (channel === undefined || channel === {rep_table}.FREE) {{ continue; }}
                                 // (what a host has lifted is only a view of one of these)
-                                try {{ channel.end?.(); }} catch (e) {{ errors.push(e); }}
+                                try {{ channel.onInstanceStop?.(); }} catch (e) {{ errors.push(e); }}
                             }}
                         }}
 

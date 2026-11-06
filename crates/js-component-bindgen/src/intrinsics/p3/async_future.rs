@@ -853,7 +853,7 @@ impl AsyncFutureIntrinsic {
 
                         // The instance stopped, so this end goes without the checks that hold a
                         // running guest to the protocol. What waits on it is told it is gone.
-                        end() {{
+                        onInstanceStop() {{
                             if (this.#dropped) {{ return; }}
                             this.resetPendingBufferMeta();
                             this.notifyDropped();
@@ -1413,8 +1413,8 @@ impl AsyncFutureIntrinsic {
                             this.#hostInjectFn?.drop?.();
                         }}
 
-                        end() {{
-                            super.end();
+                        onInstanceStop() {{
+                            super.onInstanceStop();
                             this.#hostInjectFn?.drop?.();
                         }}
                     }}
@@ -1481,10 +1481,10 @@ impl AsyncFutureIntrinsic {
                             }});
                         }}
 
-                        // The instance stopped: see `FutureEnd#end()`.
-                        end() {{
-                            this.#readEnd.end();
-                            this.#writeEnd.end();
+                        // The instance stopped: see `FutureEnd#onInstanceStop()`.
+                        onInstanceStop() {{
+                            this.#readEnd.onInstanceStop();
+                            this.#writeEnd.onInstanceStop();
                         }}
 
                         elemMeta() {{ return this.#elemMeta; }}
