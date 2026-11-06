@@ -1,6 +1,6 @@
 {
     "extends": "../../tsconfig.json",
-    "include": ["./**/*.ts", "./**/*.mjs"],
+    "include": ["./**/*.ts", "./**/*.mjs", "../../test/performance/*.ts", "../../test/performance/*.mjs"],
     "compilerOptions": {
         "target": "es2022",
         "rootDir": "../..",

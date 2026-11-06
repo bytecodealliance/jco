@@ -83,6 +83,7 @@ pub(crate) enum RuntimeContext {
     Bitcast32,
     Bitcast64,
     DataViewCache,
+    ConditionalHostImport,
     Utf8Decoder,
     Utf16Decoder,
     Utf8Encoder,
@@ -118,6 +119,7 @@ impl RuntimeContext {
             "_jcoInitializeBitcast32",
             "_jcoInitializeBitcast64",
             "_jcoDataViewCacheContext",
+            "_jcoConditionalHostImportContext",
             "_jcoInitializeDataViewCache",
             "_jcoInitializeUtf8Decoder",
             "_jcoInitializeUtf16Decoder",
@@ -168,6 +170,7 @@ impl RuntimeContext {
             Self::Bitcast32 => "_jcoBitcast32Context",
             Self::Bitcast64 => "_jcoBitcast64Context",
             Self::DataViewCache => "_jcoDataViewCacheContext",
+            Self::ConditionalHostImport => "_jcoConditionalHostImportContext",
             Self::Utf8Decoder => "TEXT_DECODER_UTF8",
             Self::Utf16Decoder => "utf16Decoder",
             Self::Utf8Encoder => "TEXT_ENCODER_UTF8",
@@ -275,6 +278,10 @@ impl RuntimeContext {
 
     pub(crate) fn dependencies(self) -> &'static [Self] {
         match self {
+            Self::ConditionalHostImport => &[
+                Self::Task(TaskContext::ThreadLookup),
+                Self::Core(CoreContext::SelectedWebAssembly),
+            ],
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
@@ -320,6 +327,10 @@ impl RuntimeContext {
         let strict = args.transpile_opts.strict;
         let local = self.local_name();
         match self {
+            Self::ConditionalHostImport => uwriteln!(
+                output,
+                "const {local} = {{ threads: _jcoThreadLookupContext, WebAssembly }};"
+            ),
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),

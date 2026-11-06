@@ -455,33 +455,37 @@ test.concurrent('symmetric guest calls preserve synchronous entry and restore th
     }
 });
 
-test.concurrent('backwards-compatible import lowering creates and retires an initialization task', () => {
-    const s = setup();
-    try {
-        s.component.instanceFlags.set(0, { value: 1 });
-        const result = s.asyncTask.lowerImportBackwardsCompat(
-            {
-                componentIdx: 0,
-                isAsync: false,
-                funcTypeIsAsync: false,
-                getMemoryFn: () => undefined,
-                importFn(value) {
-                    const task = s.asyncTask.getCurrentTask(0)!.task;
-                    expect(s.core.getCurrentTaskMeta(0)?.taskID).toBe(task.id());
-                    task.currentSubtask()!.onResolve(value);
-                    return value;
+test.concurrent.each([false, true])(
+    'backwards-compatible import retires its initialization task (manual async=%s)',
+    (isManualAsync) => {
+        const s = setup();
+        try {
+            s.component.instanceFlags.set(0, { value: 1 });
+            const result = s.asyncTask.lowerImportBackwardsCompat(
+                {
+                    componentIdx: 0,
+                    isAsync: false,
+                    isManualAsync,
+                    funcTypeIsAsync: false,
+                    getMemoryFn: () => undefined,
+                    importFn(value) {
+                        const task = s.asyncTask.getCurrentTask(0)!.task;
+                        expect(s.core.getCurrentTaskMeta(0)?.taskID).toBe(task.id());
+                        task.currentSubtask()!.onResolve(value);
+                        return value;
+                    },
                 },
-            },
-            23,
-        );
-        expect(result).toBe(23);
-        expect(s.asyncTask.getCurrentTask(0)).toBeUndefined();
-        expect(s.core.getCurrentTaskMeta(0)).toBeUndefined();
-        expect(Array.from(s.resource.state.scopeTasks.keys()).length).toBe(0);
-    } finally {
-        s.cleanup();
-    }
-});
+                23,
+            );
+            expect(result).toBe(23);
+            expect(s.asyncTask.getCurrentTask(0)).toBeUndefined();
+            expect(s.core.getCurrentTaskMeta(0)).toBeUndefined();
+            expect(Array.from(s.resource.state.scopeTasks.keys()).length).toBe(0);
+        } finally {
+            s.cleanup();
+        }
+    },
+);
 
 test.concurrent('async import lowering resolves through the current task subtask', async () => {
     const s = setup();

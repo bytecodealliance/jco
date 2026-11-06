@@ -3152,9 +3152,9 @@ impl<'a> Instantiator<'a, '_> {
                     .suspending_trampolines
                     .contains(&TrampolineIndex::from_u32(i))
                 {
-                    let conditional_host_import = self.bindgen.intrinsic(Intrinsic::JsHelper(
-                        JsHelperIntrinsic::ConditionalSuspendingHostImportFn,
-                    ));
+                    let conditional_host_import = self.bindgen.intrinsic_call_prefix(
+                        Intrinsic::JsHelper(JsHelperIntrinsic::ConditionalSuspendingHostImportFn),
+                    );
                     let module = self
                         .bindgen
                         .generate_host_import_module(canon_opts.core_type, self.types);
@@ -3162,7 +3162,7 @@ impl<'a> Instantiator<'a, '_> {
                     // we can avoid the second check below.
                     uwriteln!(
                         self.src.js,
-                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? {conditional_host_import}({module}, {component_idx}, {suspending_wrap_fn}{component_idx}, {call}, false, false, false, true)) : {call};"
+                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? {conditional_host_import}{module}, {component_idx}, {suspending_wrap_fn}{component_idx}, {call}, false, false, false, true)) : {call};"
                     );
                 } else {
                     uwriteln!(self.src.js, "let trampoline{i} = {call};");

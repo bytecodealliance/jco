@@ -7,11 +7,11 @@ pub(crate) fn import(intrinsic: JsHelperIntrinsic) -> Option<RuntimeImport> {
     Some(RuntimeImport {
         kind: super::RuntimeImportKind::Call,
         suffix: "intrinsics/js-helper",
-        export: intrinsic.name(),
+        export: intrinsic.name().trim_start_matches('_'),
         context: match intrinsic {
-            JsHelperIntrinsic::MaybeSyncGeneratorFn
-            | JsHelperIntrinsic::ConditionalSuspendingHostImportFn => {
-                return None;
+            JsHelperIntrinsic::MaybeSyncGeneratorFn => None,
+            JsHelperIntrinsic::ConditionalSuspendingHostImportFn => {
+                Some(RuntimeContext::ConditionalHostImport)
             }
             JsHelperIntrinsic::EmptyFunc => None,
             JsHelperIntrinsic::DataView => Some(RuntimeContext::DataViewCache),
