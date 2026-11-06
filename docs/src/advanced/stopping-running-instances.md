@@ -136,6 +136,28 @@ Use a host timeout or other application policy if waiting indefinitely is inappr
 Calling `stop()` abandons outstanding guest work and releases idle waiters; it does not wait
 for normal task exit first. Keep waiting and forced teardown as separate choices.
 
+## Wait for selected calls
+
+When unrelated work should keep running, use `whenIdle(groups)` to wait for selected exported
+calls and their descendant tasks. Capture each call's token with `_util.lastTaskGroup()`
+immediately after invoking the export, in the same JavaScript turn and before awaiting it:
+
+```js
+const result = instance.processRequest(request);
+const group = instance._util.lastTaskGroup();
+await result;
+await instance._util.whenIdle([group]);
+```
+
+A group includes the call's task and the tasks it invokes transitively. Unrelated long-lived
+tasks do not keep this wait pending. Group tokens are opaque and belong to their originating
+instance; invalid or foreign tokens cause `TypeError`. The group array is copied when the wait
+begins, so changing the array later does not change the selected work.
+
+Like the whole-instance wait, a group wait also resolves when the instance stops or traps.
+Waiting for one group does not stop it or the rest of the instance. Only call `stop()` afterward
+if you intend to end the unrelated work as well.
+
 ## Finish work and drain output
 
 For orderly shutdown, first stop accepting new application work and ask any long-lived guest
