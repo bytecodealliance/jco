@@ -122,56 +122,73 @@ suite('resources', () => {
         },
     );
 
-    test('host resource reps preserve captured identity and disposal', async () => {
-        class Thing {
-            #value: number;
-            disposed = 0;
+    test.each(['inline', 'external', 'custom'] as const)(
+        'host resource reps preserve captured identity and disposal (%s runtime)',
+        async (runtime) => {
+            const providerDir = await getTmpDir();
+            let cleanup: (() => Promise<void>) | undefined;
+            try {
+                const cmRuntimeEsModule =
+                    runtime === 'custom'
+                        ? (await writeCustomRuntime(providerDir)).href
+                        : runtime === 'external'
+                          ? new URL('../../jco-cm-runtime/dist/', import.meta.url).href
+                          : undefined;
+                class Thing {
+                    #value: number;
+                    disposed = 0;
 
-            constructor(rep: number, value: number) {
-                this[Symbol.for('cabiRep')] = rep;
-                this.#value = value;
+                    constructor(rep: number, value: number) {
+                        this[Symbol.for('cabiRep')] = rep;
+                        this.#value = value;
+                    }
+
+                    getValue() {
+                        return this.#value;
+                    }
+
+                    [Symbol.dispose]() {
+                        this.disposed++;
+                    }
+                }
+
+                const setup = await setupAsyncTest({
+                    component: {
+                        name: 'zero-host-resource-rep',
+                        path: fileURLToPath(
+                            new URL(
+                                './fixtures/components/runtime/zero-host-resource-rep.component.wat',
+                                import.meta.url,
+                            ),
+                        ),
+                        imports: {
+                            'test:zero-rep/api': { Thing },
+                            observe: { default: (thing: Thing) => thing.getValue() },
+                        },
+                    },
+                    jco: { transpile: { extraArgs: { cmRuntimeEsModule } } },
+                });
+                cleanup = setup.cleanup;
+                const { instance } = setup;
+                // Core Wasm returns i32s as signed JS numbers. Both spellings of a rep
+                // must find the captured object when lifting a borrow, an own, or a drop.
+                for (const rep of [0, 0x40000000, 0x80000010, -0x7ffffff0, 0xc0000010, -0x3ffffff0, 0xffffffff, -1]) {
+                    const first = new Thing(rep, 42);
+                    const second = new Thing(1, 99);
+                    assert.strictEqual(instance.inspect(first, second), 42);
+                    assert.strictEqual(instance.roundtrip(first, second), first);
+                    assert.strictEqual(first.getValue(), 42);
+                    assert.strictEqual(second.disposed, 1);
+                    assert.strictEqual(first.disposed, 0);
+                    instance.drop(first);
+                    assert.strictEqual(first.disposed, 1);
+                }
+            } finally {
+                await cleanup?.();
+                await rm(providerDir, { recursive: true, force: true });
             }
-
-            getValue() {
-                return this.#value;
-            }
-
-            [Symbol.dispose]() {
-                this.disposed++;
-            }
-        }
-
-        const { instance, cleanup } = await setupAsyncTest({
-            component: {
-                name: 'zero-host-resource-rep',
-                path: fileURLToPath(
-                    new URL('./fixtures/components/runtime/zero-host-resource-rep.component.wat', import.meta.url),
-                ),
-                imports: {
-                    'test:zero-rep/api': { Thing },
-                    observe: { default: (thing: Thing) => thing.getValue() },
-                },
-            },
-        });
-
-        try {
-            // Core Wasm returns i32s as signed JS numbers. Both spellings of a rep
-            // must find the captured object when lifting a borrow, an own, or a drop.
-            for (const rep of [0, 0x40000000, 0x80000010, -0x7ffffff0, 0xc0000010, -0x3ffffff0, 0xffffffff, -1]) {
-                const first = new Thing(rep, 42);
-                const second = new Thing(1, 99);
-                assert.strictEqual(instance.inspect(first, second), 42);
-                assert.strictEqual(instance.roundtrip(first, second), first);
-                assert.strictEqual(first.getValue(), 42);
-                assert.strictEqual(second.disposed, 1);
-                assert.strictEqual(first.disposed, 0);
-                instance.drop(first);
-                assert.strictEqual(first.disposed, 1);
-            }
-        } finally {
-            await cleanup();
-        }
-    });
+        },
+    );
 
     // Ensure trampoline code is called on external object with relevant `this`.
     // see: https://github.com/bytecodealliance/jco/issues/1313
