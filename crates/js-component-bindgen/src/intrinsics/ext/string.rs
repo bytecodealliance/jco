@@ -92,25 +92,24 @@ mod tests {
                     .external_runtime(external)
                     .build(),
             );
-            let utf8_context = if external { "TEXT_ENCODER_UTF8, " } else { "" };
-            let utf16_context = if external {
-                "_jcoUtf16EncodingContext, "
-            } else {
-                ""
-            };
-            assert!(source.contains(&format!(
-                "_utf8AllocateAndEncode({utf8_context}ctx.vals[0], ctx.realloc, ctx.memory)"
-            )));
-            assert!(source.contains(&format!(
-                "_utf16AllocateAndEncode({utf16_context}ctx.vals[0], ctx.realloc, ctx.memory)"
-            )));
-            assert!(source.contains(&format!(
-                "_compactUtf16AllocateAndEncode({utf16_context}ctx.vals[0], ctx.realloc, ctx.memory)"
-            )));
             if external {
-                assert!(!source.contains("function _liftFlatStringAny("));
+                assert!(
+                    source.contains("utf8: TEXT_ENCODER_UTF8, utf16: _jcoUtf16EncodingContext")
+                );
                 assert!(source.contains("utf8: TEXT_DECODER_UTF8, utf16: utf16Decoder"));
+                assert!(!source.contains("function _lowerFlatStringAny("));
+                assert!(!source.contains("function _liftFlatStringAny("));
             } else {
+                assert!(
+                    source.contains("_utf8AllocateAndEncode(ctx.vals[0], ctx.realloc, ctx.memory)")
+                );
+                assert!(
+                    source
+                        .contains("_utf16AllocateAndEncode(ctx.vals[0], ctx.realloc, ctx.memory)")
+                );
+                assert!(source.contains(
+                    "_compactUtf16AllocateAndEncode(ctx.vals[0], ctx.realloc, ctx.memory)"
+                ));
                 assert!(source.contains("_compactUtf16Decode(ctx.memory, ptr, len)"));
             }
         }

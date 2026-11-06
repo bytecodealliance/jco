@@ -16,3 +16,4 @@ See the [runtime API](../runtime.md) for module resolution, versioning and provi
 - `intrinsics/async-task`: async-task.
 - `intrinsics/host`: host-call.
 - `intrinsics/lift`: lift.
+- `intrinsics/lower`: lower.
