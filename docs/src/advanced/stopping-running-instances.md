@@ -45,8 +45,9 @@ it again. Repeated calls to `stop()` do nothing.
 - Further calls into its components fail, and pending guest calls reject with a
   `WebAssembly.RuntimeError`. Guest execution cannot resume when pending host work completes.
 - Runtime scheduler timers are cleared.
-- Both ends of its streams and futures are closed. A host stream read waiting for data reaches
-  the end of the stream; a host future read still waiting for its value rejects. Discarded
+- Both ends of its streams and futures are closed. A host stream read interrupted while waiting
+  for data rejects with an error whose `code` is `"ERR_COMPONENT_STOPPED"`; a host future read
+  still waiting for its value also rejects. Discarded
   host-provided sources receive the disposal notification used when a guest discards their channel.
 - Host resources still owned by the guest have their `Symbol.dispose` method called.
   Borrowed resources and resources already returned to the host are not disposed.
@@ -67,6 +68,29 @@ Like other JavaScript APIs, `stop()` cannot interrupt synchronous Wasm that neve
 control back to JavaScript. It also does not promise immediate memory reclamation: release
 references to the generated instance, exports, and values so JavaScript garbage collection
 can reclaim them when they are no longer reachable.
+
+## Recognize an interrupted stream
+
+A host stream's `next()` or `read()` rejects with `code: "ERR_COMPONENT_STOPPED"` when
+instance shutdown interrupts it. Reads started after shutdown on that stream also reject.
+This is a JavaScript binding guarantee, not a new Canonical ABI copy result.
+
+```js
+try {
+  for await (const item of stream) {
+    consume(item);
+  }
+} catch (error) {
+  if (error?.code !== 'ERR_COMPONENT_STOPPED') throw error;
+  // The instance was stopped before the stream finished normally.
+}
+```
+
+A read that already copied data still delivers that data; a subsequent read reports the
+shutdown. A stream that ended normally or whose iterator was returned or disposed before
+shutdown still reports ordinary EOF (`done: true`). Calling `return()` to clean up an
+interrupted iterator remains safe. The error code above applies to host stream reads;
+other stopped operations, including future reads, retain their existing rejection behavior.
 
 ## Channel disposal and value ownership
 

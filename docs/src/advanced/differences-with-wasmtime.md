@@ -32,7 +32,7 @@ perform all the cleanup associated with destroying the store.
 | Concern | Jco `_util.stop()` | Wasmtime store destruction |
 | --- | --- | --- |
 | Pending execution | Explicitly rejects pending guest calls and prevents guest execution from resuming. | Disposes fibers and drops store-owned futures. |
-| Pending stream reads | Settles host reads still waiting for data as stream termination. | Drops channel state and associated host machinery; teardown does not promise a final EOF notification. |
+| Pending stream reads | Rejects interrupted host reads with `code: "ERR_COMPONENT_STOPPED"`. | Drops channel state and associated host machinery; teardown does not promise a final EOF notification. |
 | Pending future reads | Rejects host reads still waiting for a value. | Drops the relevant machinery; externally observed cancellation depends on the host implementation. |
 | Host sources | Explicitly invokes iterator return or disposal hooks for discarded sources. | Rust destruction releases stored producers, consumers, and their captured state. |
 | Host resources owned by the guest | Calls `Symbol.dispose` on captured owned objects. | Cleanup follows ownership of host data and resource tables; canonical resource-destructor callbacks are separate operations. |
@@ -73,18 +73,18 @@ delivered value. The recipient owns that value and its eventual cleanup.
 
 ### Interruption versus normal end of stream
 
-Currently, a Jco host stream read interrupted by instance stop observes end-of-stream.
-`done: true` alone does not distinguish normal completion from forced shutdown. An embedding
-that needs this distinction can communicate its stop request through an application-owned
-lifecycle signal, such as an `AbortSignal`, alongside the stream.
+A Jco host stream read interrupted by instance stop rejects with an error whose `code` is
+`"ERR_COMPONENT_STOPPED"`. Subsequent reads on the interrupted stream also reject. Ordinary
+EOF remains `done: true`: shutdown does not turn a stream that already ended or was explicitly
+closed into an error. Reads that already copied data still deliver it before a later read
+reports shutdown. See [Recognize an interrupted stream](./stopping-running-instances.md#recognize-an-interrupted-stream).
 
 The [Canonical ABI's copy results][abi-channel-state] distinguish `COMPLETED`, `DROPPED`, and
 `CANCELLED`, but do not carry a reason identifying instance shutdown. `CANCELLED` describes
 cancellation of a copy operation; it should not be repurposed as a shutdown reason.
-A host-facing interruption signal or JavaScript rejection can express additional lifecycle
-information without introducing a new canonical result code or changing ordinary guest drop
-validation. Such a rejection would be an additional Jco host-binding policy; it is not the
-current behavior of stopped stream reads.
+Jco's rejection is an additional host-binding policy. It leaves guest-visible copy result
+codes, transferred counts, and ordinary guest drop validation unchanged. It does not require
+a matching teardown notification in Wasmtime or other embeddings.
 
 ### Waiting and cleanup completion
 
