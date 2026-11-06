@@ -44,9 +44,9 @@ once per instantiation; importing the module creates no map or task.
 
 Borrow transfer receives `taskLookup`, containing the actual task Map and registers.
 Destructors receive `creation`, containing the selected task constructor, actual
-task Map and ID arrays, plus the actual `registers` owner, and the shared `storeTrap` state. They skip task creation and
-guest execution once `storeTrap.stopped` is set. Otherwise, each
-destructor creates a synchronous task with fresh context slots and restores the
+task Map and ID arrays, plus the actual `registers` owner, and the shared
+`storeTrap` state. They skip task creation and guest execution once
+`storeTrap.stopped` is set. Otherwise, each destructor creates a synchronous task with fresh context slots and restores the
 enclosing task after success or failure. Explicit disposal releases the handle
 before invoking a destructor and becomes a no-op on repeated disposal.
 `tableEnsureBorrowDrop`, `tableFlag` and `tableOwn` are context-free.
