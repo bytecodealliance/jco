@@ -1,4 +1,4 @@
-import { cp, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -8,9 +8,9 @@ import { transpile, writeFiles } from '../../transpilation.js';
 import { parse } from '../../../src/wasm-tools.js';
 import { runBrowserCase } from '../../helpers.js';
 import { withBrowser } from './helpers.js';
+import { writeCustomRuntime } from '../helpers.js';
 
 const CASE_MODULE = '/jco-transpile/test/external-runtime/browser/cases.js';
-const CUSTOM_RUNTIME = new URL('../../fixtures/custom-runtime/', import.meta.url);
 const RESOURCE_COMPONENT = new URL(
     '../../fixtures/components/runtime/external-runtime-resource.component.wat',
     import.meta.url,
@@ -39,7 +39,7 @@ suite('external runtime browser', () => {
                         });
                         await writeFiles(files, { baseDir: outDir });
                         if (provider === 'custom') {
-                            await cp(CUSTOM_RUNTIME, join(outDir, 'runtime'), { recursive: true });
+                            await writeCustomRuntime(join(outDir, 'runtime'));
                         }
                         const result = await runBrowserCase({
                             browser,
@@ -117,6 +117,9 @@ suite('external runtime browser', () => {
                     join(outDir, 'component.wasm'),
                     await parse(await readFile(RESOURCE_COMPONENT, 'utf8')),
                 );
+                if (provider === 'custom') {
+                    await writeCustomRuntime(join(outDir, 'runtime'));
+                }
                 const result = await runBrowserCase({
                     browser,
                     serverPort,
@@ -126,13 +129,8 @@ suite('external runtime browser', () => {
                         {
                             componentPath: '/tmpdir/component.wasm',
                             cmRuntimeEsModule:
-                                provider === 'default'
-                                    ? '@bytecodealliance/jco-cm-runtime'
-                                    : '/jco-transpile/test/fixtures/custom-runtime/',
-                            providerPath:
-                                provider === 'custom'
-                                    ? '/jco-transpile/test/fixtures/custom-runtime/intrinsics/resource.js'
-                                    : undefined,
+                                provider === 'default' ? '@bytecodealliance/jco-cm-runtime' : '/tmpdir/runtime/',
+                            providerPath: provider === 'custom' ? '/tmpdir/runtime/intrinsics/resource.js' : undefined,
                         },
                     ],
                 });
