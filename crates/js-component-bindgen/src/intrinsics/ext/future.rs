@@ -122,7 +122,7 @@ impl FutureContext {
         })
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component, Core, Future as F, Task};
+        use RuntimeContext::{Component, Core, Future, Task};
         match self {
             Self::Futures => &[Core(CoreContext::RepTableClass)],
             Self::Tables => &[],
@@ -130,75 +130,79 @@ impl FutureContext {
             Self::ValueClass => &[],
             Self::EndClass => &[Core(CoreContext::AsyncEventCodeEnum)],
             Self::ReadableClass => &[
-                F(Self::EndClass),
-                F(Self::ValueClass),
+                Future(Self::EndClass),
+                Future(Self::ValueClass),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Core(CoreContext::GlobalBufferManager),
                 Core(CoreContext::AsyncEventCodeEnum),
                 Component(ComponentContext::StateLookup),
             ],
             Self::WritableClass => &[
-                F(Self::EndClass),
-                F(Self::ValueClass),
+                Future(Self::EndClass),
+                Future(Self::ValueClass),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Core(CoreContext::GlobalBufferManager),
                 Core(CoreContext::AsyncEventCodeEnum),
             ],
-            Self::InternalClass => &[F(Self::ReadableClass), F(Self::WritableClass)],
+            Self::InternalClass => &[Future(Self::ReadableClass), Future(Self::WritableClass)],
             Self::HostClass => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                F(Self::Lookup),
+                Future(Self::Lookup),
             ],
-            Self::Creation => &[F(Self::InternalClass), F(Self::Futures), F(Self::Tables)],
+            Self::Creation => &[
+                Future(Self::InternalClass),
+                Future(Self::Futures),
+                Future(Self::Tables),
+            ],
             Self::Table => &[
-                F(Self::Tables),
-                F(Self::EndClass),
+                Future(Self::Tables),
+                Future(Self::EndClass),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
             ],
             Self::Lookup => &[
-                F(Self::EndClass),
-                F(Self::Tables),
+                Future(Self::EndClass),
+                Future(Self::Tables),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
             ],
             Self::New => &[
                 Task(TaskContext::Lookup),
                 Component(ComponentContext::StateLookup),
-                F(Self::Creation),
+                Future(Self::Creation),
             ],
-            Self::FromLift => &[F(Self::HostClass), F(Self::Futures)],
+            Self::FromLift => &[Future(Self::HostClass), Future(Self::Futures)],
             Self::Read => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
                 Task(TaskContext::Lookup),
-                F(Self::Lookup),
+                Future(Self::Lookup),
                 Core(CoreContext::AsyncEventCodeEnum),
-                F(Self::EndClass),
-                F(Self::ReadableClass),
+                Future(Self::EndClass),
+                Future(Self::ReadableClass),
             ],
             Self::Write => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
                 Task(TaskContext::Lookup),
-                F(Self::Lookup),
+                Future(Self::Lookup),
                 Core(CoreContext::AsyncEventCodeEnum),
-                F(Self::EndClass),
-                F(Self::WritableClass),
+                Future(Self::EndClass),
+                Future(Self::WritableClass),
             ],
             Self::DropRead => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
-                F(Self::Table),
-                F(Self::ReadableClass),
+                Future(Self::Table),
+                Future(Self::ReadableClass),
             ],
             Self::DropWrite => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
-                F(Self::Table),
-                F(Self::WritableClass),
+                Future(Self::Table),
+                Future(Self::WritableClass),
             ],
             Self::Inject => &[
-                F(Self::NestedSymbol),
+                Future(Self::NestedSymbol),
                 Core(CoreContext::HasOwnProperty),
                 Core(CoreContext::SymbolDispose),
                 Component(ComponentContext::HostOperation),
@@ -264,80 +268,124 @@ impl FutureContext {
 }
 pub(crate) fn import(intrinsic: AsyncFutureIntrinsic) -> RuntimeImport {
     use AsyncFutureIntrinsic::*;
-    use RuntimeImportKind as K;
+
     let (export, context, kind) = match intrinsic {
         GlobalFutureMap => (
             "initializeFutures",
             Some(FutureContext::Futures),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         GlobalFutureTableMap => (
             "initializeFutureTables",
             Some(FutureContext::Tables),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         NestedFutureSymbol => (
             "initializeNestedFutureSymbol",
             Some(FutureContext::NestedSymbol),
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         FutureValueClass => (
             "initializeFutureValueClass",
             Some(FutureContext::ValueClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         FutureEndClass => (
             "initializeFutureEndClass",
             Some(FutureContext::EndClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         FutureReadableEndClass => (
             "initializeFutureReadableEndClass",
             Some(FutureContext::ReadableClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         FutureWritableEndClass => (
             "initializeFutureWritableEndClass",
             Some(FutureContext::WritableClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         InternalFutureClass => (
             "initializeInternalFutureClass",
             Some(FutureContext::InternalClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         HostFutureClass => (
             "initializeHostFutureClass",
             Some(FutureContext::HostClass),
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
-        CreateFuture => ("createFuture", Some(FutureContext::Creation), K::Call),
-        GetFutureEnd => ("getFutureEnd", Some(FutureContext::Lookup), K::Call),
-        AddFutureEndToTable => ("addFutureEndToTable", Some(FutureContext::Table), K::Call),
+        CreateFuture => (
+            "createFuture",
+            Some(FutureContext::Creation),
+            RuntimeImportKind::Call,
+        ),
+        GetFutureEnd => (
+            "getFutureEnd",
+            Some(FutureContext::Lookup),
+            RuntimeImportKind::Call,
+        ),
+        AddFutureEndToTable => (
+            "addFutureEndToTable",
+            Some(FutureContext::Table),
+            RuntimeImportKind::Call,
+        ),
         RemoveFutureEndFromTable => (
             "removeFutureEndFromTable",
             Some(FutureContext::Table),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
-        FutureNew => ("futureNew", Some(FutureContext::New), K::Call),
-        FutureNewFromLift => ("futureNewFromLift", Some(FutureContext::FromLift), K::Call),
-        FutureRead => ("futureRead", Some(FutureContext::Read), K::Call),
-        FutureWrite => ("futureWrite", Some(FutureContext::Write), K::Call),
-        FutureCancelRead => ("futureCancelRead", Some(FutureContext::Read), K::Call),
-        FutureCancelWrite => ("futureCancelWrite", Some(FutureContext::Write), K::Call),
-        FutureDropReadable => ("futureDropReadable", Some(FutureContext::DropRead), K::Call),
+        FutureNew => (
+            "futureNew",
+            Some(FutureContext::New),
+            RuntimeImportKind::Call,
+        ),
+        FutureNewFromLift => (
+            "futureNewFromLift",
+            Some(FutureContext::FromLift),
+            RuntimeImportKind::Call,
+        ),
+        FutureRead => (
+            "futureRead",
+            Some(FutureContext::Read),
+            RuntimeImportKind::Call,
+        ),
+        FutureWrite => (
+            "futureWrite",
+            Some(FutureContext::Write),
+            RuntimeImportKind::Call,
+        ),
+        FutureCancelRead => (
+            "futureCancelRead",
+            Some(FutureContext::Read),
+            RuntimeImportKind::Call,
+        ),
+        FutureCancelWrite => (
+            "futureCancelWrite",
+            Some(FutureContext::Write),
+            RuntimeImportKind::Call,
+        ),
+        FutureDropReadable => (
+            "futureDropReadable",
+            Some(FutureContext::DropRead),
+            RuntimeImportKind::Call,
+        ),
         FutureDropWritable => (
             "futureDropWritable",
             Some(FutureContext::DropWrite),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
-        FutureTransfer => ("futureTransfer", Some(FutureContext::Lookup), K::Call),
+        FutureTransfer => (
+            "futureTransfer",
+            Some(FutureContext::Lookup),
+            RuntimeImportKind::Call,
+        ),
         GenFutureHostInjectFn => (
             "genFutureHostInjectFn",
             Some(FutureContext::Inject),
-            K::Call,
+            RuntimeImportKind::Call,
         ),
-        IsFutureLowerableObject => ("isFutureLowerableObject", None, K::Call),
+        IsFutureLowerableObject => ("isFutureLowerableObject", None, RuntimeImportKind::Call),
     };
     RuntimeImport {
         suffix: "intrinsics/future",

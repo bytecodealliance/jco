@@ -33,28 +33,28 @@ impl HostContext {
         None
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component as C, Core as K, Task as T};
+        use RuntimeContext::{Component, Core, Task};
         match self {
             Self::Prepare => &[
-                T(TaskContext::Lookup),
-                T(TaskContext::Creation),
-                T(TaskContext::MayBlock),
-                K(CoreContext::WebAssemblyRuntimeError),
+                Task(TaskContext::Lookup),
+                Task(TaskContext::Creation),
+                Task(TaskContext::MayBlock),
+                Core(CoreContext::WebAssemblyRuntimeError),
             ],
             Self::AsyncStart => &[
-                T(TaskContext::Lookup),
-                T(TaskContext::ComponentIdxs),
-                T(TaskContext::BlockingDepth),
-                C(ComponentContext::StateLookup),
-                T(TaskContext::Driver),
-                K(CoreContext::GlobalComponentMemoryMap),
-                K(CoreContext::AsyncEventCodeEnum),
+                Task(TaskContext::Lookup),
+                Task(TaskContext::ComponentIdxs),
+                Task(TaskContext::BlockingDepth),
+                Component(ComponentContext::StateLookup),
+                Task(TaskContext::Driver),
+                Core(CoreContext::GlobalComponentMemoryMap),
+                Core(CoreContext::AsyncEventCodeEnum),
             ],
             Self::SyncStart => &[
-                T(TaskContext::Lookup),
-                T(TaskContext::ComponentIdxs),
-                C(ComponentContext::StateLookup),
-                T(TaskContext::Driver),
+                Task(TaskContext::Lookup),
+                Task(TaskContext::ComponentIdxs),
+                Component(ComponentContext::StateLookup),
+                Task(TaskContext::Driver),
             ],
         }
     }
