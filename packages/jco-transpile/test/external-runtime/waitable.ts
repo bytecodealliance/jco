@@ -13,6 +13,9 @@ const fixture = fileURLToPath(new URL('../fixtures/components/p3/waitable-set-po
 const waitableUrl = new URL('intrinsics/waitable.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
 
+// Async canonical exports require JSPI even when component instantiation is synchronous.
+const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
+
 async function writeProvider(dir: string, source: string) {
     await writeFile(join(dir, 'package.json'), '{"type":"module"}');
     await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
@@ -52,7 +55,7 @@ export function waitableSetDrop(context, componentIdx, rep) {
 }
 
 for (const instantiation of ['sync', 'async', undefined] as const) {
-    test.concurrent.each([false, true])(
+    test.concurrent.skipIf(!hasJspi).each([false, true])(
         `waitable named provider (${instantiation ?? 'direct'}, minify=%s)`,
         async (minify) => {
             const dir = await getTmpDir();
@@ -131,17 +134,19 @@ test.concurrent.each(['initializeWaitableClass', 'waitableSetPoll'])(
     },
 );
 
-test.concurrent.each([false, true])('generated waitable mismatch diagnostics (external=%s)', async (external) => {
-    const dir = await getTmpDir();
-    try {
-        const { files } = await transpile(fixture, {
-            name: 'diagnostic',
-            cmRuntimeEsModule: external ? defaultRuntimeUrl.href : undefined,
-        });
-        const context = external ? '_jcoWaitableSetPollContext, ' : '';
-        files['diagnostic.js'] = new TextEncoder().encode(
-            new TextDecoder().decode(files['diagnostic.js']) +
-                `
+test.concurrent.skipIf(!hasJspi).each([false, true])(
+    'generated waitable mismatch diagnostics (external=%s)',
+    async (external) => {
+        const dir = await getTmpDir();
+        try {
+            const { files } = await transpile(fixture, {
+                name: 'diagnostic',
+                cmRuntimeEsModule: external ? defaultRuntimeUrl.href : undefined,
+            });
+            const context = external ? '_jcoWaitableSetPollContext, ' : '';
+            files['diagnostic.js'] = new TextEncoder().encode(
+                new TextDecoder().decode(files['diagnostic.js']) +
+                    `
 export function testPollMismatch() {
  const previous = getCurrentTask;
  getCurrentTask = () => ({ componentIdx: 77 });
@@ -149,12 +154,13 @@ export function testPollMismatch() {
  finally { getCurrentTask = previous; }
 }
 `,
-        );
-        await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-        await writeFiles(files, { baseDir: dir });
-        const bindings = await import(pathToFileURL(join(dir, 'diagnostic.js')).href);
-        assert.throws(bindings.testPollMismatch, 'task component idx [77] != component instance ID [0]');
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-});
+            );
+            await writeFile(join(dir, 'package.json'), '{"type":"module"}');
+            await writeFiles(files, { baseDir: dir });
+            const bindings = await import(pathToFileURL(join(dir, 'diagnostic.js')).href);
+            assert.throws(bindings.testPollMismatch, 'task component idx [77] != component instance ID [0]');
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    },
+);
