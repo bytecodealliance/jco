@@ -7,6 +7,7 @@ Choose the operation that matches the work you want to finish:
 | Operation | What it finishes |
 | --- | --- |
 | Await an exported call | The call's result. Guest background work may continue after it returns. |
+| `instance._util.whenIdle()` | Guest task exit, including background work after a call returns. |
 | Dispose a received future or return a stream iterator | That readable channel end. Other guest work can continue. |
 | `instance._util.stop()` | Execution and runtime-managed cleanup for the entire generated instantiation. |
 | Preview 3 `cli._flush()` / `cli._shutdown()` | Queued output writes / host-owned stdout and stderr transfers. |
@@ -28,7 +29,7 @@ try {
 ```
 
 This example deliberately ends any background work left after `run()` returns. If that work
-must finish, wait for the application's completion signal before stopping.
+must finish, [wait for guest tasks to exit](#wait-for-guest-tasks-to-exit) before stopping.
 
 For direct ES module output, import `_util` from the generated module and call `_util.stop()`.
 For instantiation output, use the `_util` returned by `instantiate()`. Each instantiation has
@@ -102,6 +103,38 @@ the future is discarded. See [Dropping a received future](../transpiling.md#drop
 Stopping the instance is broader than disposing one channel. Host-owned resources already
 returned to the caller remain the caller's responsibility. A returned value that needs to
 call back into the stopped guest can no longer execute that guest code.
+
+## Wait for guest tasks to exit
+
+`instance._util.whenIdle()` resolves once no guest task remains in the generated instantiation.
+A task counts until it exits, including work it performs after returning its result. This lets
+hosts wait for background work that outlives an exported call.
+
+Waiting does not stop the instance or prevent new calls. A long-lived task can keep the wait
+pending indefinitely; ask such tasks to finish through the application's own protocol first.
+The promise also resolves if the instance stops or traps, so resolution alone is not evidence
+of successful completion. Observe exported-call failures and, for background traps,
+[`options.onTrap`](../transpiling.md#instantiation).
+
+`whenIdle()` tracks guest tasks. It does not wait for arbitrary host I/O, deferred disposal,
+or destination flushing. With a workload whose guest tasks are expected to exit, an orderly
+sequence is:
+
+```js
+import * as cli from '@bytecodealliance/preview3-shim/cli';
+
+try {
+  await instance.run();
+  await instance._util.whenIdle();
+  await cli._shutdown();
+} finally {
+  instance._util.stop();
+}
+```
+
+Use a host timeout or other application policy if waiting indefinitely is inappropriate.
+Calling `stop()` abandons outstanding guest work and releases idle waiters; it does not wait
+for normal task exit first. Keep waiting and forced teardown as separate choices.
 
 ## Finish work and drain output
 
