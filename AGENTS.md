@@ -33,9 +33,10 @@
 
 ### Naming
 
-- Never introduce single-letter aliases such as `use RuntimeContext as C;`.
-  They obscure meaning and make code harder to reason about locally. Use
-  descriptive names that are reasonably concise to begin with.
+- Never use single-letter aliases, including import aliases such as
+  `use something::Component as C;` or `use RuntimeContext as C;`. They obscure
+  meaning and make code harder to reason about locally. Use descriptive names
+  that are reasonably concise to begin with.
 
 ## TypeScript
 
