@@ -8,6 +8,7 @@ import { expect, suite, test } from "vitest";
 import { transpile } from "../src/api.js";
 import { transpileCmd } from "../src/cmd/transpile.js";
 import { exec, getTmpDir } from "./helpers.js";
+import { writeCustomRuntime } from "../../jco-transpile/test/external-runtime/helpers.js";
 
 const fixture = fileURLToPath(
     new URL(
@@ -16,12 +17,11 @@ const fixture = fileURLToPath(
     ),
 );
 const cmRuntimeEsModule = "test-runtime-provider";
-const runtimeFixture = new URL("../../jco-transpile/test/fixtures/custom-runtime/", import.meta.url);
 const jcoPackageDir = fileURLToPath(new URL("../", import.meta.url));
 
 async function installRuntimeInConsumer(dir) {
     const packageDir = join(dir, "node_modules", cmRuntimeEsModule);
-    await cp(runtimeFixture, packageDir, { recursive: true });
+    await writeCustomRuntime(packageDir);
     const provider = await import(pathToFileURL(join(packageDir, "intrinsics/resource.js")).href);
     provider.resetTableGetCallCount();
     return provider;
