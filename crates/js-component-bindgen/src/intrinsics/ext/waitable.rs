@@ -74,32 +74,35 @@ impl WaitableContext {
         })
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component as C, Core, Waitable as W};
+        use RuntimeContext::{Component, Core, Waitable};
         match self {
             Self::Class => &[],
             Self::SetClass => &[Core(CoreContext::AsyncEventCodeEnum)],
-            Self::New => &[C(ComponentContext::StateLookup), W(Self::SetClass)],
+            Self::New => &[
+                Component(ComponentContext::StateLookup),
+                Waitable(Self::SetClass),
+            ],
             Self::Wait => &[
-                C(ComponentContext::StateLookup),
-                W(Self::SetClass),
+                Component(ComponentContext::StateLookup),
+                Waitable(Self::SetClass),
                 RuntimeContext::Task(super::TaskContext::Lookup),
             ],
             Self::Poll => &[
                 RuntimeContext::Task(super::TaskContext::Lookup),
-                C(ComponentContext::StateLookup),
-                W(Self::SetClass),
+                Component(ComponentContext::StateLookup),
+                Waitable(Self::SetClass),
                 Core(CoreContext::AsyncEventCodeEnum),
             ],
-            Self::Remove => &[W(Self::SetClass)],
+            Self::Remove => &[Waitable(Self::SetClass)],
             Self::Drop => &[
-                C(ComponentContext::StateLookup),
-                W(Self::SetClass),
+                Component(ComponentContext::StateLookup),
+                Waitable(Self::SetClass),
                 RuntimeContext::Task(super::TaskContext::Lookup),
             ],
             Self::Join => &[
-                C(ComponentContext::StateLookup),
-                W(Self::Class),
-                W(Self::SetClass),
+                Component(ComponentContext::StateLookup),
+                Waitable(Self::Class),
+                Waitable(Self::SetClass),
             ],
         }
     }
@@ -138,42 +141,48 @@ impl WaitableContext {
 }
 
 pub(crate) fn import(intrinsic: WaitableIntrinsic) -> RuntimeImport {
-    use RuntimeImportKind as K;
-    use WaitableContext as C;
     use WaitableIntrinsic::*;
     let (export, context, kind) = match intrinsic {
         WaitableClass => (
             "initializeWaitableClass",
-            RuntimeContext::Waitable(C::Class),
-            K::InitializedConstructor,
+            RuntimeContext::Waitable(WaitableContext::Class),
+            RuntimeImportKind::InitializedConstructor,
         ),
         WaitableSetClass => (
             "initializeWaitableSetClass",
-            RuntimeContext::Waitable(C::SetClass),
-            K::InitializedConstructor,
+            RuntimeContext::Waitable(WaitableContext::SetClass),
+            RuntimeImportKind::InitializedConstructor,
         ),
-        WaitableSetNew => ("waitableSetNew", RuntimeContext::Waitable(C::New), K::Call),
+        WaitableSetNew => (
+            "waitableSetNew",
+            RuntimeContext::Waitable(WaitableContext::New),
+            RuntimeImportKind::Call,
+        ),
         WaitableSetWait => (
             "waitableSetWait",
-            RuntimeContext::Waitable(C::Wait),
-            K::Call,
+            RuntimeContext::Waitable(WaitableContext::Wait),
+            RuntimeImportKind::Call,
         ),
         WaitableSetPoll => (
             "waitableSetPoll",
-            RuntimeContext::Waitable(C::Poll),
-            K::Call,
+            RuntimeContext::Waitable(WaitableContext::Poll),
+            RuntimeImportKind::Call,
         ),
         WaitableSetDrop => (
             "waitableSetDrop",
-            RuntimeContext::Waitable(C::Drop),
-            K::Call,
+            RuntimeContext::Waitable(WaitableContext::Drop),
+            RuntimeImportKind::Call,
         ),
         RemoveWaitableSet => (
             "removeWaitableSet",
-            RuntimeContext::Waitable(C::Remove),
-            K::Call,
+            RuntimeContext::Waitable(WaitableContext::Remove),
+            RuntimeImportKind::Call,
         ),
-        WaitableJoin => ("waitableJoin", RuntimeContext::Waitable(C::Join), K::Call),
+        WaitableJoin => (
+            "waitableJoin",
+            RuntimeContext::Waitable(WaitableContext::Join),
+            RuntimeImportKind::Call,
+        ),
     };
     RuntimeImport {
         suffix: "intrinsics/waitable",
