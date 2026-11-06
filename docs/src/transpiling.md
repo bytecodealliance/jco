@@ -314,44 +314,11 @@ future types make the method optional.
 
 ### Stopping an instance
 
-Call `instance._util.stop()` when the host is done with an instance:
+Call `instance._util.stop()` to permanently stop a generated instantiation, including its
+background guest work. For direct ES module output, call the exported `_util.stop()`.
 
-```js
-const instance = await instantiate(getCoreModule, imports);
-try {
-  await instance.run();
-} finally {
-  instance._util.stop();
-}
-```
-
-For direct ES module output, import `_util` from the generated module and call
-`_util.stop()` instead. Each call to `instantiate()` has its own stop function;
-stopping one instance does not affect another.
-
-This is a host embedding convenience separate from canonical stream/future drop operations.
-Its shutdown hooks can close pending copies and unwritten future writers; ordinary guest
-operations retain their canonical drop checks.
-
-Stopping is permanent and synchronous. It stops the runtime's scheduler timers,
-rejects pending guest calls with a `WebAssembly.RuntimeError`, and prevents further
-calls into any component in the instance. Host resources still owned by the guest
-have their `Symbol.dispose` method called. Resources borrowed from the host or
-already returned to it are not disposed. Guest Wasm destructors are not run.
-
-Its streams and futures are closed, whichever side holds each end: a read the host has
-pending settles, as the end of the stream or as a rejection of the future, a writer's next
-write fails, and an iterator or promise the host gave a guest is disposed of as when a guest
-drops it.
-
-Repeated calls to `stop()` do nothing. If a host resource's disposal throws, cleanup
-continues for the other resources, then `stop()` throws an `AggregateError`; the
-instance remains stopped. Resources can also be released this way after a guest trap.
-
-Already-started host operations may continue independently, but their completion
-cannot resume guest execution. The host remains responsible for cancelling its own
-I/O and timers. Like other JavaScript APIs, `stop()` cannot interrupt synchronous
-Wasm that never yields control back to JavaScript.
+See [Stopping running instances](./advanced/stopping-running-instances.md) for the scope of
+shutdown, channel and resource ownership, host cleanup, and output draining.
 
 ### Runtime overrides
 
