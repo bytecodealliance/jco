@@ -6913,78 +6913,100 @@ pub fn gen_flat_lift_fn_js_expr(
     match ty {
         InterfaceType::Bool => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatBool).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatBool))
         }
 
         InterfaceType::S8 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatS8).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatS8))
         }
 
         InterfaceType::U8 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatU8).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatU8))
         }
 
         InterfaceType::S16 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatS16).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatS16))
         }
 
         InterfaceType::U16 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatU16).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatU16))
         }
 
         InterfaceType::S32 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatS32).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatS32))
         }
 
         InterfaceType::U32 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatU32).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatU32))
         }
 
         InterfaceType::S64 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatS64).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatS64))
         }
 
         InterfaceType::U64 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatU64).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatU64))
         }
 
         InterfaceType::Float32 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat32))
         }
 
         InterfaceType::Float64 => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64))
         }
 
         InterfaceType::Char => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatChar).name().into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatChar))
         }
 
         InterfaceType::String => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny));
-            Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny)
-                .name()
-                .into()
+            instantiator
+                .bindgen
+                .intrinsic_callback_reference(Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny))
         }
 
         InterfaceType::Record(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
-            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord).name();
+            let lift_fn = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatRecord));
             let record_ty = &component_types[*ty_idx];
             let size32 = record_ty.abi.size32;
             let align32 = record_ty.abi.align32;
@@ -7006,13 +7028,15 @@ pub fn gen_flat_lift_fn_js_expr(
             }
             keys_and_lifts_expr.push(']');
             format!(
-                "{lift_fn}({{ fieldMetas: {keys_and_lifts_expr}, size32: {size32}, align32: {align32} }})"
+                "{lift_fn}{{ fieldMetas: {keys_and_lifts_expr}, size32: {size32}, align32: {align32} }})"
             )
         }
 
         InterfaceType::Variant(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
-            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant).name();
+            let lift_fn = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant));
             let variant_ty = &component_types[*ty_idx];
             let variant_flat_count = flat_count_js_expr(&variant_ty.abi.flat_count);
             let variant_size32 = variant_ty.abi.size32;
@@ -7056,7 +7080,7 @@ pub fn gen_flat_lift_fn_js_expr(
             lift_metas_expr.push(']');
 
             format!(
-                "{lift_fn}({{
+                "{lift_fn}{{
                      caseMetas: {lift_metas_expr},
                      variantSize32: {variant_size32},
                      variantAlign32: {variant_align32},
@@ -7069,7 +7093,9 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::List(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let list_ty = &component_types[*ty_idx];
             let lift_fn_expr =
                 gen_flat_lift_fn_js_expr(instantiator, &list_ty.element, extra_resource_map);
@@ -7078,7 +7104,7 @@ pub fn gen_flat_lift_fn_js_expr(
             let elem_size32 = elem_cabi.size32;
             let typed_array = js_typed_array_ctor(&list_ty.element).unwrap_or("undefined");
             format!(
-                "{f}({{
+                "{f}{{
                      elemLiftFn: {lift_fn_expr},
                      elemAlign32: {elem_align32},
                      elemSize32: {elem_size32},
@@ -7089,7 +7115,9 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::FixedLengthList(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatList).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatList));
             let list_ty = &component_types[*ty_idx];
             let list_size32 = list_ty.abi.size32;
             let list_align32 = list_ty.abi.align32;
@@ -7100,7 +7128,7 @@ pub fn gen_flat_lift_fn_js_expr(
             let elem_align32 = elem_cabi.align32;
             let elem_size32 = elem_cabi.size32;
             format!(
-                "{f}({{
+                "{f}{{
                      elemLiftFn: {lift_fn_expr},
                      elemAlign32: {elem_align32},
                      elemSize32: {elem_size32},
@@ -7114,7 +7142,9 @@ pub fn gen_flat_lift_fn_js_expr(
         InterfaceType::Tuple(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
             let tuple_ty = &component_types[*ty_idx];
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatTuple));
             let size_u32 = tuple_ty.abi.size32;
             let align_u32 = tuple_ty.abi.align32;
 
@@ -7130,13 +7160,15 @@ pub fn gen_flat_lift_fn_js_expr(
             elem_lifts_expr.push(']');
 
             format!(
-                "{f}({{ elemLiftFns: {elem_lifts_expr}, size32: {size_u32}, align32: {align_u32} }})"
+                "{f}{{ elemLiftFns: {elem_lifts_expr}, size32: {size_u32}, align32: {align_u32} }})"
             )
         }
 
         InterfaceType::Flags(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatFlags));
             let flags_ty = &component_types[*ty_idx];
             let size_u32 = flags_ty.abi.size32;
             let align_u32 = flags_ty.abi.align32;
@@ -7159,13 +7191,15 @@ pub fn gen_flat_lift_fn_js_expr(
             };
 
             format!(
-                "{f}({{ names: {names_expr}, size32: {size_u32}, align32: {align_u32}, intSizeBytes: {elem_size} }})"
+                "{f}{{ names: {names_expr}, size32: {size_u32}, align32: {align_u32}, intSizeBytes: {elem_size} }})"
             )
         }
 
         InterfaceType::Enum(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum));
             let enum_ty = &component_types[*ty_idx];
             let enum_size32 = enum_ty.abi.size32;
             let enum_align32 = enum_ty.abi.align32;
@@ -7187,7 +7221,7 @@ pub fn gen_flat_lift_fn_js_expr(
 
             format!(
                 r#"
-                  {f}({{
+                  {f}{{
                       caseMetas: {elem_lifts_expr},
                       variantSize32: {enum_size32},
                       variantAlign32: {enum_align32},
@@ -7200,7 +7234,9 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::Option(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOption).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatOption));
             let option_ty = &component_types[*ty_idx];
             let option_payload_offset32 = option_ty.info.payload_offset32;
             let option_align32 = option_ty.abi.align32;
@@ -7222,7 +7258,7 @@ pub fn gen_flat_lift_fn_js_expr(
 
             format!(
                 r#"
-                {f}({{
+                {f}{{
                     caseMetas: [
                         ['none', null, 0, 0, 0, [] ],
                         ['some', {some_ty_lift_fn_js}, {some_ty_size32}, {some_ty_align32}, {some_ty_flat_count}, {some_ty_flat_types} ],
@@ -7240,7 +7276,9 @@ pub fn gen_flat_lift_fn_js_expr(
 
         InterfaceType::Result(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
-            let lift_fn = Intrinsic::Lift(LiftIntrinsic::LiftFlatResult).name();
+            let lift_fn = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatResult));
             let result_ty = &component_types[*ty_idx];
             let result_size32 = result_ty.abi.size32;
             let result_align32 = result_ty.abi.align32;
@@ -7286,7 +7324,7 @@ pub fn gen_flat_lift_fn_js_expr(
 
             format!(
                 r#"
-                  {lift_fn}({{
+                  {lift_fn}{{
                       caseMetas: {cases_and_lifts_expr},
                       variantSize32: {result_size32},
                       variantAlign32: {result_align32},
@@ -7307,7 +7345,9 @@ pub fn gen_flat_lift_fn_js_expr(
             instantiator.add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
             instantiator
                 .add_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableOwnFlag));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatOwn));
             let table_ty = &component_types[*ty_idx];
             let resource_component_idx = table_ty.unwrap_concrete_instance();
             let component_idx = resource_component_idx.as_u32();
@@ -7327,7 +7367,7 @@ pub fn gen_flat_lift_fn_js_expr(
             match instantiator.exports_resource_index_types.get(&resource_idx) {
                 // Type information not found for this resource index
                 None => format!(
-                    r#"{f}({{
+                    r#"{f}{{
                        componentIdx: {component_idx},
                        tableIdx: {table_idx},
                        classNameFn: () => null,
@@ -7452,7 +7492,7 @@ pub fn gen_flat_lift_fn_js_expr(
                     };
 
                     format!(
-                        r#"{f}({{
+                        r#"{f}{{
                        componentIdx: {component_idx},
                        tableIdx: {table_idx},
                        classNameFn: () => {resource_class_name},
@@ -7467,38 +7507,48 @@ pub fn gen_flat_lift_fn_js_expr(
         InterfaceType::Borrow(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow));
             let table_idx = ty_idx.as_u32();
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow).name();
-            format!("{f}.bind(null, {table_idx})")
+            instantiator.bindgen.intrinsic_bind_callback(
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatBorrow),
+                &table_idx.to_string(),
+            )
         }
 
         InterfaceType::Future(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture));
             let table_idx = ty_idx.as_u32();
             let table_ty = &component_types[*ty_idx];
             let component_idx = table_ty.instance.as_u32();
-            format!("{f}({{ futureTableIdx: {table_idx}, componentIdx: {component_idx} }})")
+            format!("{f}{{ futureTableIdx: {table_idx}, componentIdx: {component_idx} }})")
         }
 
         InterfaceType::Stream(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatStream).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatStream));
             let table_idx = ty_idx.as_u32();
             let table_ty = &component_types[*ty_idx];
             let component_idx = table_ty.instance.as_u32();
-            format!("{f}({{ streamTableIdx: {table_idx}, componentIdx: {component_idx} }})")
+            format!("{f}{{ streamTableIdx: {table_idx}, componentIdx: {component_idx} }})")
         }
 
         InterfaceType::ErrorContext(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext));
             let table_idx = ty_idx.as_u32();
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext).name();
-            format!("{f}.bind(null, {table_idx})")
+            instantiator.bindgen.intrinsic_bind_callback(
+                Intrinsic::Lift(LiftIntrinsic::LiftFlatErrorContext),
+                &table_idx.to_string(),
+            )
         }
 
         InterfaceType::Map(ty_idx) => {
             instantiator.add_intrinsic(Intrinsic::Lift(LiftIntrinsic::LiftFlatMap));
-            let f = Intrinsic::Lift(LiftIntrinsic::LiftFlatMap).name();
+            let f = instantiator
+                .bindgen
+                .intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::LiftFlatMap));
             let map_ty = &component_types[*ty_idx];
             let key_lift = gen_flat_lift_fn_js_expr(instantiator, &map_ty.key, extra_resource_map);
             let value_lift =
@@ -7507,7 +7557,7 @@ pub fn gen_flat_lift_fn_js_expr(
             let entry_align32 = map_ty.entry_abi.align32;
             let value_offset32 = map_ty.value_offset32;
             format!(
-                "{f}({{
+                "{f}{{
                      keyLiftFn: {key_lift},
                      valueLiftFn: {value_lift},
                      entrySize32: {entry_size32},

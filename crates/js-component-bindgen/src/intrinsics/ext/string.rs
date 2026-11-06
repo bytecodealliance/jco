@@ -107,10 +107,12 @@ mod tests {
             assert!(source.contains(&format!(
                 "_compactUtf16AllocateAndEncode({utf16_context}ctx.vals[0], ctx.realloc, ctx.memory)"
             )));
-            let decoder_context = if external { "utf16Decoder, " } else { "" };
-            assert!(source.contains(&format!(
-                "_compactUtf16Decode({decoder_context}ctx.memory, ptr, len)"
-            )));
+            if external {
+                assert!(!source.contains("function _liftFlatStringAny("));
+                assert!(source.contains("utf8: TEXT_DECODER_UTF8, utf16: utf16Decoder"));
+            } else {
+                assert!(source.contains("_compactUtf16Decode(ctx.memory, ptr, len)"));
+            }
         }
     }
 
