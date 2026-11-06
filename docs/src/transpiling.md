@@ -372,12 +372,8 @@ export returns. It also resolves when the instance stops or traps. See
 [Wait for guest tasks to exit](./advanced/stopping-running-instances.md#wait-for-guest-tasks-to-exit)
 for completion semantics and an orderly shutdown example.
 
-To wait on some calls and not the rest, say beside a task that never ends, take
-`instance._util.lastTaskGroup()` straight after calling an export, in the same turn, and pass those to
-`whenIdle(groups)`. A task group is a call's task and those of everything it called, transitively.
-Group tokens are opaque and belong to the instance that produced them. Passing an invalid or
-foreign token throws `TypeError`. The group list is copied when `whenIdle(groups)` is called,
-so later changes to the caller's array do not change the wait.
+Use `_util.lastTaskGroup()` and `whenIdle(groups)` to wait for selected calls alongside
+unrelated long-lived work. See [Wait for selected calls](./advanced/stopping-running-instances.md#wait-for-selected-calls).
 
 ### Runtime overrides
 
