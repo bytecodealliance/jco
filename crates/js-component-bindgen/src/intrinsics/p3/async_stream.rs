@@ -1475,6 +1475,7 @@ impl AsyncStreamIntrinsic {
                             if (this.#endOfStream) {{
                                 return {{ value: undefined, done: true }};
                             }}
+                            if (this.#stopError) {{ throw this.#stopError; }}
                             let {{ count, rejectLength, dropAfterCopy }} = this.#readOpts(opts);
 
                             // Wait for an existing read operation to end, if present,
@@ -1578,7 +1579,13 @@ impl AsyncStreamIntrinsic {
                                 }}
 
                                 if (resultKind === {stream_end_class}.CopyResult.DROPPED) {{
-                                    this.#endOfStream = true;
+                                    // Preserve data copied before stop, but distinguish an interrupted
+                                    // host read from ordinary EOF. Guest copy results stay unchanged.
+                                    if (this.#stopError) {{
+                                        if (transferred === 0) {{ throw this.#stopError; }}
+                                    }} else {{
+                                        this.#endOfStream = true;
+                                    }}
                                 }}
 
                                 if (transferred > 0) {{
@@ -1653,6 +1660,17 @@ impl AsyncStreamIntrinsic {
 
                         #endOfStream = false;
                         #rejectedLength = null;
+                        #stopError = null;
+
+                        onInstanceStop() {{
+                            // An ordinary close that precedes shutdown must still look like EOF.
+                            if (!this.isDropped() && !this.isPeerDropped() && !this.isDoneState()) {{
+                                this.#stopError = Object.assign(new Error('component instance has been stopped'), {{
+                                    code: 'ERR_COMPONENT_STOPPED',
+                                }});
+                            }}
+                            this.drop({{ allowPendingEvent: true }});
+                        }}
 
                         constructor(args) {{
                             {debug_log_fn}('[{end_class_name}#constructor()] args', args);
@@ -1846,7 +1864,7 @@ impl AsyncStreamIntrinsic {
                         // The instance stopped. Dropping an end settles a copy pending on either,
                         // whose event the host's polling read or write is yet to consume.
                         onInstanceStop() {{
-                            this.#readEnd.drop({{ allowPendingEvent: true }});
+                            this.#readEnd.onInstanceStop();
                             this.#writeEnd.drop({{ allowPendingEvent: true }});
                         }}
                     }}
