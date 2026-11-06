@@ -46,8 +46,8 @@ it again. Repeated calls to `stop()` do nothing.
   `WebAssembly.RuntimeError`. Guest execution cannot resume when pending host work completes.
 - Runtime scheduler timers are cleared.
 - Both ends of its streams and futures are closed. A host stream read waiting for data reaches
-  the end of the stream; a host future read still waiting for its value rejects. Discarded host-provided sources receive
-  the disposal notification used when a guest discards their channel.
+  the end of the stream; a host future read still waiting for its value rejects. Discarded
+  host-provided sources receive the disposal notification used when a guest discards their channel.
 - Host resources still owned by the guest have their `Symbol.dispose` method called.
   Borrowed resources and resources already returned to the host are not disposed.
 
@@ -107,9 +107,6 @@ ordinary canonical stream and future drop operations. Shutdown can close pending
 and unwritten future writers; ordinary guest operations retain the Canonical ABI's drop
 checks. Stopping an instance is not an additional canonical instruction.
 
-The scope is comparable to a Wasmtime store: Wasmtime owns component instances in a
-[`Store`](https://docs.wasmtime.dev/api/wasmtime/struct.Store.html), and dropping the store
-releases its instances. A generated Jco instantiation owns the runtime state of its component
-graph, so Jco exposes explicit teardown through that instantiation's `_util`. The two hosts
-have different cleanup mechanisms; this analogy does not promise identical disposal ordering
-or immediate memory reclamation.
+See [Differences with Wasmtime](./differences-with-wasmtime.md#stopping-and-shutting-down-instances)
+for a comparison of pending operations, host sources, resources, and memory during teardown,
+and why Jco provides explicit lifecycle control in browsers and Node.js.

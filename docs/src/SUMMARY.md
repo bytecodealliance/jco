@@ -69,6 +69,7 @@
     - [Optimized Host Bindings](./advanced/optimized-host-bindings.md)
     - [WIT Type representations](./advanced/wit-type-representations.md)
     - [Manual Wasm instantiation with WASI overrides](./advanced/manual-wasm-instantiation-with-wasi-overrides.md)
+    - [Differences with Wasmtime](./advanced/differences-with-wasmtime.md)
     - [Stopping running instances](./advanced/stopping-running-instances.md)
     - [Detecting traps](./advanced/detecting-traps.md)
     - [Preview 3 streams and backpressure](./advanced/preview3-streams-and-backpressure.md)
