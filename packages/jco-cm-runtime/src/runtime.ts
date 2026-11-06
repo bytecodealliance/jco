@@ -787,6 +787,8 @@ export interface ComponentDeadlockDetail {
 export type ComponentInstanceFlags = Map<number, { value: number }>;
 export interface ComponentStoreTrap {
     error: Error | null;
+    /** Host resources already disposed by a guest drop, skipped during store shutdown. */
+    disposed: WeakSet<object>;
 }
 export type ComponentAsyncStates = Map<number, ComponentAsyncState>;
 export interface ComponentNormalizeTrapContext extends TrapContext {
