@@ -1,6 +1,6 @@
 //! Named JS helpers and the selected per-instance DataView cache.
 
-use super::{RuntimeContext, RuntimeImport};
+use super::{RuntimeContextIntrinsic, RuntimeImport};
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
 
 pub(crate) fn import(intrinsic: JsHelperIntrinsic) -> Option<RuntimeImport> {
@@ -14,7 +14,7 @@ pub(crate) fn import(intrinsic: JsHelperIntrinsic) -> Option<RuntimeImport> {
                 return None;
             }
             JsHelperIntrinsic::EmptyFunc => None,
-            JsHelperIntrinsic::DataView => Some(RuntimeContext::DataViewCache),
+            JsHelperIntrinsic::DataView => Some(RuntimeContextIntrinsic::InitializeDataViewCache),
         },
     })
 }

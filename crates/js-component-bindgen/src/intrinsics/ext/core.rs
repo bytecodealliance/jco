@@ -1,75 +1,107 @@
 //! Central metadata for named core operations and selected state/constructor owners.
 use super::super::{Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic};
 use super::{
-    ComponentContext, RuntimeContext, RuntimeImport, RuntimeImportKind, RuntimeInitializer,
+    ComponentContextIntrinsic, RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind,
+    RuntimeInitializer,
 };
 use crate::intrinsics::runtime::IntrinsicRuntime;
 use crate::{source::Source, uwriteln};
 use std::fmt::Write;
 
+/// Initializers and capability contexts for external JS helpers and core Wasm operations.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum CoreContext {
-    GlobalAsyncDeterminism,
-    SymbolCabiDispose,
-    SymbolCabiLower,
-    SymbolResourceHandle,
-    SymbolResourceRep,
-    SymbolDispose,
-    SymbolAsyncIterator,
-    SymbolIterator,
-    AsyncFunctionCtor,
-    PlatformReadableStreamClass,
-    ComponentError,
-    WebAssemblyRuntimeError,
-    ManagedBufferClass,
-    BufferManagerClass,
-    RepTableClass,
-    HasOwnProperty,
-    FactTrapMessages,
-    GlobalBufferManager,
-    AsyncEventCodeEnum,
-    GlobalComponentMemoryMap,
-    GlobalCurrentTaskMeta,
-    ConditionalSuspendingWasm,
-    IsLE,
+pub(crate) enum CoreContextIntrinsic {
+    /// The configured async determinism profile returned by `initializeAsyncDeterminism`.
+    InitializeAsyncDeterminism,
+    /// The `cabiDispose` symbol returned by `initializeSymbolCabiDispose`.
+    InitializeSymbolCabiDispose,
+    /// The `cabiLower` symbol returned by `initializeSymbolCabiLower`.
+    InitializeSymbolCabiLower,
+    /// The resource-handle symbol returned by `initializeSymbolResourceHandle`.
+    InitializeSymbolResourceHandle,
+    /// The resource-representation symbol returned by `initializeSymbolResourceRep`.
+    InitializeSymbolResourceRep,
+    /// The disposal symbol returned by `initializeSymbolDispose`.
+    InitializeSymbolDispose,
+    /// The async-iterator symbol returned by `initializeSymbolAsyncIterator`.
+    InitializeSymbolAsyncIterator,
+    /// The iterator symbol returned by `initializeSymbolIterator`.
+    InitializeSymbolIterator,
+    /// The async-function constructor returned by `initializeAsyncFunctionConstructor`.
+    InitializeAsyncFunctionConstructor,
+    /// The platform readable-stream constructor returned by `initializeReadableStream`.
+    InitializeReadableStream,
+    /// The component-error constructor returned by `initializeComponentErrorClass`.
+    InitializeComponentErrorClass,
+    /// The selected Wasm runtime-error constructor returned by `initializeRuntimeErrorConstructor`.
+    InitializeRuntimeErrorConstructor,
+    /// The managed-buffer constructor returned by `initializeManagedBufferClass`.
+    InitializeManagedBufferClass,
+    /// The buffer-manager constructor returned by `initializeBufferManagerClass`.
+    InitializeBufferManagerClass,
+    /// The representation-table constructor returned by `initializeRepTableClass`.
+    InitializeRepTableClass,
+    /// The own-property predicate returned by `initializeHasOwnProperty`.
+    InitializeHasOwnProperty,
+    /// The fact-trap message table returned by `initializeFactTrapMessages`.
+    InitializeFactTrapMessages,
+    /// The shared buffer manager returned by `initializeBufferManager`.
+    InitializeBufferManager,
+    /// The async-event code constants returned by `initializeAsyncEventCodes`.
+    InitializeAsyncEventCodes,
+    /// The component-indexed memory map returned by `initializeComponentMemoryMap`.
+    InitializeComponentMemoryMap,
+    /// The current task registers returned by `initializeTaskRegisters`.
+    InitializeTaskRegisters,
+    /// The Wasm modules returned by `initializeConditionalSuspendingWasm`
+    /// for the `conditionalSuspending*` wrappers.
+    InitializeConditionalSuspendingWasm,
+    /// The platform endianness flag returned by `initializeEndianness`.
+    InitializeEndianness,
+    /// Capabilities for `base64Compile`, which compiles an embedded core Wasm module.
     Base64Compile,
+    /// Capabilities for `fetchCompile`, which loads and compiles a core Wasm module.
     FetchCompile,
-    SelectedWebAssembly,
+    /// The selected `WebAssembly` implementation passed to `instantiateCore`.
+    InstantiateCore,
+    /// Capabilities for `suspendingImport`, which wraps an import with task bookkeeping.
     SuspendingImport,
+    /// Shared capabilities for the `conditionalSuspending*` JSPI wrappers.
     ConditionalSuspending,
-    FileCompileCache,
+    /// The file compilation cache returned by `initializeFileCompileCache`.
+    InitializeFileCompileCache,
 }
-impl CoreContext {
+impl CoreContextIntrinsic {
     const ALL: &'static [Self] = &[
-        Self::GlobalAsyncDeterminism,
-        Self::SymbolCabiDispose,
-        Self::SymbolCabiLower,
-        Self::SymbolResourceHandle,
-        Self::SymbolResourceRep,
-        Self::SymbolDispose,
-        Self::SymbolAsyncIterator,
-        Self::SymbolIterator,
-        Self::AsyncFunctionCtor,
-        Self::PlatformReadableStreamClass,
-        Self::ComponentError,
-        Self::WebAssemblyRuntimeError,
-        Self::ManagedBufferClass,
-        Self::BufferManagerClass,
-        Self::RepTableClass,
-        Self::HasOwnProperty,
-        Self::FactTrapMessages,
-        Self::GlobalBufferManager,
-        Self::AsyncEventCodeEnum,
-        Self::GlobalComponentMemoryMap,
-        Self::GlobalCurrentTaskMeta,
-        Self::ConditionalSuspendingWasm,
-        Self::IsLE,
+        Self::InitializeAsyncDeterminism,
+        Self::InitializeSymbolCabiDispose,
+        Self::InitializeSymbolCabiLower,
+        Self::InitializeSymbolResourceHandle,
+        Self::InitializeSymbolResourceRep,
+        Self::InitializeSymbolDispose,
+        Self::InitializeSymbolAsyncIterator,
+        Self::InitializeSymbolIterator,
+        Self::InitializeAsyncFunctionConstructor,
+        Self::InitializeReadableStream,
+        Self::InitializeComponentErrorClass,
+        Self::InitializeRuntimeErrorConstructor,
+        Self::InitializeManagedBufferClass,
+        Self::InitializeBufferManagerClass,
+        Self::InitializeRepTableClass,
+        Self::InitializeHasOwnProperty,
+        Self::InitializeFactTrapMessages,
+        Self::InitializeBufferManager,
+        Self::InitializeAsyncEventCodes,
+        Self::InitializeComponentMemoryMap,
+        Self::InitializeTaskRegisters,
+        Self::InitializeConditionalSuspendingWasm,
+        Self::InitializeEndianness,
         Self::Base64Compile,
         Self::FetchCompile,
-        Self::SelectedWebAssembly,
+        Self::InstantiateCore,
         Self::SuspendingImport,
         Self::ConditionalSuspending,
-        Self::FileCompileCache,
+        Self::InitializeFileCompileCache,
     ];
     pub(crate) fn get_global_names() -> impl Iterator<Item = &'static str> {
         Self::ALL
@@ -84,108 +116,120 @@ impl CoreContext {
     }
     pub(crate) fn local_name(self) -> &'static str {
         match self {
-            Self::GlobalAsyncDeterminism => "ASYNC_DETERMINISM",
-            Self::SymbolCabiDispose => "symbolCabiDispose",
-            Self::SymbolCabiLower => "symbolCabiLower",
-            Self::SymbolResourceHandle => "symbolRscHandle",
-            Self::SymbolResourceRep => "symbolRscRep",
-            Self::SymbolDispose => "symbolDispose",
-            Self::SymbolAsyncIterator => "symbolAsyncIterator",
-            Self::SymbolIterator => "symbolIterator",
-            Self::AsyncFunctionCtor => "ASYNC_FN_CTOR",
-            Self::PlatformReadableStreamClass => "_PlatformReadableStream",
-            Self::ComponentError => "ComponentError",
-            Self::WebAssemblyRuntimeError => "WebAssemblyRuntimeError",
-            Self::ManagedBufferClass => "ManagedBuffer",
-            Self::BufferManagerClass => "BufferManager",
-            Self::RepTableClass => "RepTable",
-            Self::HasOwnProperty => "hasOwnProperty",
-            Self::FactTrapMessages => "FACT_TRAP_MESSAGES",
-            Self::GlobalBufferManager => "BUFFER_MGR",
-            Self::AsyncEventCodeEnum => "ASYNC_EVENT_CODE",
-            Self::GlobalComponentMemoryMap => "GLOBAL_COMPONENT_MEMORY_MAP",
-            Self::GlobalCurrentTaskMeta => "CURRENT_TASK_META",
-            Self::ConditionalSuspendingWasm => "CONDITIONAL_SUSPENDING_WASM",
-            Self::IsLE => "isLE",
+            Self::InitializeAsyncDeterminism => "ASYNC_DETERMINISM",
+            Self::InitializeSymbolCabiDispose => "symbolCabiDispose",
+            Self::InitializeSymbolCabiLower => "symbolCabiLower",
+            Self::InitializeSymbolResourceHandle => "symbolRscHandle",
+            Self::InitializeSymbolResourceRep => "symbolRscRep",
+            Self::InitializeSymbolDispose => "symbolDispose",
+            Self::InitializeSymbolAsyncIterator => "symbolAsyncIterator",
+            Self::InitializeSymbolIterator => "symbolIterator",
+            Self::InitializeAsyncFunctionConstructor => "ASYNC_FN_CTOR",
+            Self::InitializeReadableStream => "_PlatformReadableStream",
+            Self::InitializeComponentErrorClass => "ComponentError",
+            Self::InitializeRuntimeErrorConstructor => "WebAssemblyRuntimeError",
+            Self::InitializeManagedBufferClass => "ManagedBuffer",
+            Self::InitializeBufferManagerClass => "BufferManager",
+            Self::InitializeRepTableClass => "RepTable",
+            Self::InitializeHasOwnProperty => "hasOwnProperty",
+            Self::InitializeFactTrapMessages => "FACT_TRAP_MESSAGES",
+            Self::InitializeBufferManager => "BUFFER_MGR",
+            Self::InitializeAsyncEventCodes => "ASYNC_EVENT_CODE",
+            Self::InitializeComponentMemoryMap => "GLOBAL_COMPONENT_MEMORY_MAP",
+            Self::InitializeTaskRegisters => "CURRENT_TASK_META",
+            Self::InitializeConditionalSuspendingWasm => "CONDITIONAL_SUSPENDING_WASM",
+            Self::InitializeEndianness => "isLE",
             Self::Base64Compile => "_jcoBase64CompileContext",
             Self::FetchCompile => "_jcoFetchCompileContext",
-            Self::SelectedWebAssembly => "WebAssembly",
+            Self::InstantiateCore => "WebAssembly",
             Self::SuspendingImport => "_jcoSuspendingImportContext",
             Self::ConditionalSuspending => "_jcoConditionalSuspendingContext",
-            Self::FileCompileCache => "_jcoFileCompileCache",
+            Self::InitializeFileCompileCache => "_jcoFileCompileCache",
         }
     }
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (export, local_name) = match self {
-            Self::GlobalAsyncDeterminism => (
+            Self::InitializeAsyncDeterminism => (
                 "initializeAsyncDeterminism",
                 "_jcoInitializeAsyncDeterminism",
             ),
-            Self::SymbolCabiDispose => (
+            Self::InitializeSymbolCabiDispose => (
                 "initializeSymbolCabiDispose",
                 "_jcoInitializeSymbolCabiDispose",
             ),
-            Self::SymbolCabiLower => ("initializeSymbolCabiLower", "_jcoInitializeSymbolCabiLower"),
-            Self::SymbolResourceHandle => (
+            Self::InitializeSymbolCabiLower => {
+                ("initializeSymbolCabiLower", "_jcoInitializeSymbolCabiLower")
+            }
+            Self::InitializeSymbolResourceHandle => (
                 "initializeSymbolResourceHandle",
                 "_jcoInitializeSymbolResourceHandle",
             ),
-            Self::SymbolResourceRep => (
+            Self::InitializeSymbolResourceRep => (
                 "initializeSymbolResourceRep",
                 "_jcoInitializeSymbolResourceRep",
             ),
-            Self::SymbolDispose => ("initializeSymbolDispose", "_jcoInitializeSymbolDispose"),
-            Self::SymbolAsyncIterator => (
+            Self::InitializeSymbolDispose => {
+                ("initializeSymbolDispose", "_jcoInitializeSymbolDispose")
+            }
+            Self::InitializeSymbolAsyncIterator => (
                 "initializeSymbolAsyncIterator",
                 "_jcoInitializeSymbolAsyncIterator",
             ),
-            Self::SymbolIterator => ("initializeSymbolIterator", "_jcoInitializeSymbolIterator"),
-            Self::AsyncFunctionCtor => (
+            Self::InitializeSymbolIterator => {
+                ("initializeSymbolIterator", "_jcoInitializeSymbolIterator")
+            }
+            Self::InitializeAsyncFunctionConstructor => (
                 "initializeAsyncFunctionConstructor",
                 "_jcoInitializeAsyncFunctionConstructor",
             ),
-            Self::PlatformReadableStreamClass => {
+            Self::InitializeReadableStream => {
                 ("initializeReadableStream", "_jcoInitializeReadableStream")
             }
-            Self::ComponentError => (
+            Self::InitializeComponentErrorClass => (
                 "initializeComponentErrorClass",
                 "_jcoInitializeComponentErrorClass",
             ),
-            Self::WebAssemblyRuntimeError => (
+            Self::InitializeRuntimeErrorConstructor => (
                 "initializeRuntimeErrorConstructor",
                 "_jcoInitializeRuntimeErrorConstructor",
             ),
-            Self::ManagedBufferClass => (
+            Self::InitializeManagedBufferClass => (
                 "initializeManagedBufferClass",
                 "_jcoInitializeManagedBufferClass",
             ),
-            Self::BufferManagerClass => (
+            Self::InitializeBufferManagerClass => (
                 "initializeBufferManagerClass",
                 "_jcoInitializeBufferManagerClass",
             ),
-            Self::RepTableClass => ("initializeRepTableClass", "_jcoInitializeRepTableClass"),
-            Self::HasOwnProperty => ("initializeHasOwnProperty", "_jcoInitializeHasOwnProperty"),
-            Self::FactTrapMessages => (
+            Self::InitializeRepTableClass => {
+                ("initializeRepTableClass", "_jcoInitializeRepTableClass")
+            }
+            Self::InitializeHasOwnProperty => {
+                ("initializeHasOwnProperty", "_jcoInitializeHasOwnProperty")
+            }
+            Self::InitializeFactTrapMessages => (
                 "initializeFactTrapMessages",
                 "_jcoInitializeFactTrapMessages",
             ),
-            Self::GlobalBufferManager => ("initializeBufferManager", "_jcoInitializeBufferManager"),
-            Self::AsyncEventCodeEnum => {
+            Self::InitializeBufferManager => {
+                ("initializeBufferManager", "_jcoInitializeBufferManager")
+            }
+            Self::InitializeAsyncEventCodes => {
                 ("initializeAsyncEventCodes", "_jcoInitializeAsyncEventCodes")
             }
-            Self::GlobalComponentMemoryMap => (
+            Self::InitializeComponentMemoryMap => (
                 "initializeComponentMemoryMap",
                 "_jcoInitializeComponentMemoryMap",
             ),
-            Self::GlobalCurrentTaskMeta => {
+            Self::InitializeTaskRegisters => {
                 ("initializeTaskRegisters", "_jcoInitializeTaskRegisters")
             }
-            Self::ConditionalSuspendingWasm => (
+            Self::InitializeConditionalSuspendingWasm => (
                 "initializeConditionalSuspendingWasm",
                 "_jcoInitializeConditionalSuspendingWasm",
             ),
-            Self::IsLE => ("initializeEndianness", "_jcoInitializeEndianness"),
-            Self::FileCompileCache => (
+            Self::InitializeEndianness => ("initializeEndianness", "_jcoInitializeEndianness"),
+            Self::InitializeFileCompileCache => (
                 "initializeFileCompileCache",
                 "_jcoInitializeFileCompileCache",
             ),
@@ -197,20 +241,30 @@ impl CoreContext {
             local_name,
         })
     }
-    pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
+    pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
         match self {
-            Self::ManagedBufferClass => &[RuntimeContext::ResourceTransferOwn],
-            Self::BufferManagerClass => &[RuntimeContext::Core(Self::ManagedBufferClass)],
-            Self::RepTableClass => &[RuntimeContext::ResourceTableGet],
-            Self::GlobalBufferManager => &[RuntimeContext::Core(Self::BufferManagerClass)],
-            Self::FetchCompile => &[RuntimeContext::Core(Self::FileCompileCache)],
+            Self::InitializeManagedBufferClass => &[RuntimeContextIntrinsic::ResourceTransferOwn],
+            Self::InitializeBufferManagerClass => &[RuntimeContextIntrinsic::Core(
+                Self::InitializeManagedBufferClass,
+            )],
+            Self::InitializeRepTableClass => &[RuntimeContextIntrinsic::ResourceTableGet],
+            Self::InitializeBufferManager => &[RuntimeContextIntrinsic::Core(
+                Self::InitializeBufferManagerClass,
+            )],
+            Self::FetchCompile => &[RuntimeContextIntrinsic::Core(
+                Self::InitializeFileCompileCache,
+            )],
             Self::SuspendingImport => &[
-                RuntimeContext::Core(Self::GlobalCurrentTaskMeta),
-                RuntimeContext::Component(ComponentContext::MayLeave),
-                RuntimeContext::Component(ComponentContext::RecordTrap),
-                RuntimeContext::Component(ComponentContext::StateLookup),
+                RuntimeContextIntrinsic::Core(Self::InitializeTaskRegisters),
+                RuntimeContextIntrinsic::Component(ComponentContextIntrinsic::CheckMayLeave),
+                RuntimeContextIntrinsic::Component(ComponentContextIntrinsic::RecordTrap),
+                RuntimeContextIntrinsic::Component(
+                    ComponentContextIntrinsic::GetOrCreateAsyncState,
+                ),
             ],
-            Self::ConditionalSuspending => &[RuntimeContext::Core(Self::ConditionalSuspendingWasm)],
+            Self::ConditionalSuspending => &[RuntimeContextIntrinsic::Core(
+                Self::InitializeConditionalSuspendingWasm,
+            )],
             _ => &[],
         }
     }
@@ -219,15 +273,17 @@ impl CoreContext {
         if let Some(initializer) = self.initializer() {
             let initialize = initializer.local_name;
             let arguments: String = match self {
-                Self::GlobalAsyncDeterminism => format!("'{}'", args.determinism_profile),
-                Self::WebAssemblyRuntimeError => "WebAssembly".into(),
-                Self::PlatformReadableStreamClass => "ReadableStream".into(),
-                Self::ManagedBufferClass => "_jcoResourceTransferOwnContext".into(),
-                Self::BufferManagerClass => "ManagedBuffer".into(),
-                Self::RepTableClass => "_jcoResourceTableGetContext".into(),
-                Self::FactTrapMessages => super::super::fact_trap_messages_js(),
-                Self::GlobalBufferManager => "BufferManager".into(),
-                Self::FileCompileCache => (!args.transpile_opts.nodejs_compat_disabled).to_string(),
+                Self::InitializeAsyncDeterminism => format!("'{}'", args.determinism_profile),
+                Self::InitializeRuntimeErrorConstructor => "WebAssembly".into(),
+                Self::InitializeReadableStream => "ReadableStream".into(),
+                Self::InitializeManagedBufferClass => "_jcoResourceTransferOwnContext".into(),
+                Self::InitializeBufferManagerClass => "ManagedBuffer".into(),
+                Self::InitializeRepTableClass => "_jcoResourceTableGetContext".into(),
+                Self::InitializeFactTrapMessages => super::super::fact_trap_messages_js(),
+                Self::InitializeBufferManager => "BufferManager".into(),
+                Self::InitializeFileCompileCache => {
+                    (!args.transpile_opts.nodejs_compat_disabled).to_string()
+                }
                 _ => String::new(),
             };
             uwriteln!(output, "const {local} = {initialize}({arguments});");
@@ -235,7 +291,7 @@ impl CoreContext {
         }
         let nodejs_compat = !args.transpile_opts.nodejs_compat_disabled;
         match self {
-            Self::SelectedWebAssembly => {}
+            Self::InstantiateCore => {}
             Self::Base64Compile => uwriteln!(
                 output,
                 "const {local} = {{ WebAssembly, nodejsCompat: {nodejs_compat} }};"
@@ -279,23 +335,23 @@ pub(crate) fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
         Intrinsic::TypeCheckValidI32 => ("typeCheckValidI32", None, RuntimeImportKind::Call),
         Intrinsic::TypeCheckAsyncFn => (
             "typeCheckAsyncFn",
-            Some(CoreContext::AsyncFunctionCtor),
+            Some(CoreContextIntrinsic::InitializeAsyncFunctionConstructor),
             RuntimeImportKind::Call,
         ),
         Intrinsic::Base64Compile => (
             "base64Compile",
-            Some(CoreContext::Base64Compile),
+            Some(CoreContextIntrinsic::Base64Compile),
             RuntimeImportKind::Call,
         ),
         Intrinsic::ClampGuest => ("clampGuest", None, RuntimeImportKind::Call),
         Intrinsic::FetchCompile => (
             "fetchCompile",
-            Some(CoreContext::FetchCompile),
+            Some(CoreContextIntrinsic::FetchCompile),
             RuntimeImportKind::Call,
         ),
         Intrinsic::DisposeHostValue => (
             "disposeHostValue",
-            Some(CoreContext::SymbolDispose),
+            Some(CoreContextIntrinsic::InitializeSymbolDispose),
             RuntimeImportKind::Call,
         ),
         Intrinsic::FinalizationRegistryCreate => {
@@ -303,196 +359,196 @@ pub(crate) fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
         }
         Intrinsic::GetErrorPayload => (
             "getErrorPayload",
-            Some(CoreContext::HasOwnProperty),
+            Some(CoreContextIntrinsic::InitializeHasOwnProperty),
             RuntimeImportKind::Call,
         ),
         Intrinsic::GetErrorPayloadString => (
             "getErrorPayloadString",
-            Some(CoreContext::HasOwnProperty),
+            Some(CoreContextIntrinsic::InitializeHasOwnProperty),
             RuntimeImportKind::Call,
         ),
         Intrinsic::ThrowInvalidBool => ("throwInvalidBool", None, RuntimeImportKind::Call),
         Intrinsic::ThrowUninitialized => ("throwUninitialized", None, RuntimeImportKind::Call),
         Intrinsic::InstantiateCore => (
             "instantiateCore",
-            Some(CoreContext::SelectedWebAssembly),
+            Some(CoreContextIntrinsic::InstantiateCore),
             RuntimeImportKind::Call,
         ),
         Intrinsic::RegisterGlobalMemoryForComponent => (
             "registerMemory",
-            Some(CoreContext::GlobalComponentMemoryMap),
+            Some(CoreContextIntrinsic::InitializeComponentMemoryMap),
             RuntimeImportKind::Call,
         ),
         Intrinsic::LookupMemoriesForComponent => (
             "lookupMemories",
-            Some(CoreContext::GlobalComponentMemoryMap),
+            Some(CoreContextIntrinsic::InitializeComponentMemoryMap),
             RuntimeImportKind::Call,
         ),
         Intrinsic::GetGlobalCurrentTaskMetaFn => (
             "getCurrentTaskMeta",
-            Some(CoreContext::GlobalCurrentTaskMeta),
+            Some(CoreContextIntrinsic::InitializeTaskRegisters),
             RuntimeImportKind::Call,
         ),
         Intrinsic::SetGlobalCurrentTaskMetaFn => (
             "setCurrentTaskMeta",
-            Some(CoreContext::GlobalCurrentTaskMeta),
+            Some(CoreContextIntrinsic::InitializeTaskRegisters),
             RuntimeImportKind::Call,
         ),
         Intrinsic::WithGlobalCurrentTaskMetaFn => (
             "withCurrentTaskMeta",
-            Some(CoreContext::GlobalCurrentTaskMeta),
+            Some(CoreContextIntrinsic::InitializeTaskRegisters),
             RuntimeImportKind::Call,
         ),
         Intrinsic::WithGlobalCurrentTaskMetaFnAsync => (
             "withCurrentTaskMetaAsync",
-            Some(CoreContext::GlobalCurrentTaskMeta),
+            Some(CoreContextIntrinsic::InitializeTaskRegisters),
             RuntimeImportKind::Call,
         ),
         Intrinsic::ClearGlobalCurrentTaskMetaFn => (
             "clearCurrentTaskMeta",
-            Some(CoreContext::GlobalCurrentTaskMeta),
+            Some(CoreContextIntrinsic::InitializeTaskRegisters),
             RuntimeImportKind::Call,
         ),
         Intrinsic::SuspendingImportWrapperFn => (
             "suspendingImport",
-            Some(CoreContext::SuspendingImport),
+            Some(CoreContextIntrinsic::SuspendingImport),
             RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending1I32ToI32Fn => (
             "conditionalSuspending1I32ToI32",
-            Some(CoreContext::ConditionalSuspending),
+            Some(CoreContextIntrinsic::ConditionalSuspending),
             RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending2I32ToI32Fn => (
             "conditionalSuspending2I32ToI32",
-            Some(CoreContext::ConditionalSuspending),
+            Some(CoreContextIntrinsic::ConditionalSuspending),
             RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending3I32ToI32Fn => (
             "conditionalSuspending3I32ToI32",
-            Some(CoreContext::ConditionalSuspending),
+            Some(CoreContextIntrinsic::ConditionalSuspending),
             RuntimeImportKind::Call,
         ),
         Intrinsic::ConditionalSuspending3I32ToVoidFn => (
             "conditionalSuspending3I32ToVoid",
-            Some(CoreContext::ConditionalSuspending),
+            Some(CoreContextIntrinsic::ConditionalSuspending),
             RuntimeImportKind::Call,
         ),
         Intrinsic::GlobalAsyncDeterminism => (
             "initializeAsyncDeterminism",
-            Some(CoreContext::GlobalAsyncDeterminism),
+            Some(CoreContextIntrinsic::InitializeAsyncDeterminism),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::ConstantI32Max => ("i32Max", None, RuntimeImportKind::Value),
         Intrinsic::ConstantI32Min => ("i32Min", None, RuntimeImportKind::Value),
         Intrinsic::SymbolCabiDispose => (
             "initializeSymbolCabiDispose",
-            Some(CoreContext::SymbolCabiDispose),
+            Some(CoreContextIntrinsic::InitializeSymbolCabiDispose),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolCabiLower => (
             "initializeSymbolCabiLower",
-            Some(CoreContext::SymbolCabiLower),
+            Some(CoreContextIntrinsic::InitializeSymbolCabiLower),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolResourceHandle => (
             "initializeSymbolResourceHandle",
-            Some(CoreContext::SymbolResourceHandle),
+            Some(CoreContextIntrinsic::InitializeSymbolResourceHandle),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolResourceRep => (
             "initializeSymbolResourceRep",
-            Some(CoreContext::SymbolResourceRep),
+            Some(CoreContextIntrinsic::InitializeSymbolResourceRep),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolDispose => (
             "initializeSymbolDispose",
-            Some(CoreContext::SymbolDispose),
+            Some(CoreContextIntrinsic::InitializeSymbolDispose),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolAsyncIterator => (
             "initializeSymbolAsyncIterator",
-            Some(CoreContext::SymbolAsyncIterator),
+            Some(CoreContextIntrinsic::InitializeSymbolAsyncIterator),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::SymbolIterator => (
             "initializeSymbolIterator",
-            Some(CoreContext::SymbolIterator),
+            Some(CoreContextIntrinsic::InitializeSymbolIterator),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::AsyncFunctionCtor => (
             "initializeAsyncFunctionConstructor",
-            Some(CoreContext::AsyncFunctionCtor),
+            Some(CoreContextIntrinsic::InitializeAsyncFunctionConstructor),
             RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::PlatformReadableStreamClass => (
             "initializeReadableStream",
-            Some(CoreContext::PlatformReadableStreamClass),
+            Some(CoreContextIntrinsic::InitializeReadableStream),
             RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::ComponentError => (
             "initializeComponentErrorClass",
-            Some(CoreContext::ComponentError),
+            Some(CoreContextIntrinsic::InitializeComponentErrorClass),
             RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::WebAssemblyRuntimeError => (
             "initializeRuntimeErrorConstructor",
-            Some(CoreContext::WebAssemblyRuntimeError),
+            Some(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
             RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::ManagedBufferClass => (
             "initializeManagedBufferClass",
-            Some(CoreContext::ManagedBufferClass),
+            Some(CoreContextIntrinsic::InitializeManagedBufferClass),
             RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::BufferManagerClass => (
             "initializeBufferManagerClass",
-            Some(CoreContext::BufferManagerClass),
+            Some(CoreContextIntrinsic::InitializeBufferManagerClass),
             RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::RepTableClass => (
             "initializeRepTableClass",
-            Some(CoreContext::RepTableClass),
+            Some(CoreContextIntrinsic::InitializeRepTableClass),
             RuntimeImportKind::InitializedConstructor,
         ),
         Intrinsic::HasOwnProperty => (
             "initializeHasOwnProperty",
-            Some(CoreContext::HasOwnProperty),
+            Some(CoreContextIntrinsic::InitializeHasOwnProperty),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::FactTrapMessages => (
             "initializeFactTrapMessages",
-            Some(CoreContext::FactTrapMessages),
+            Some(CoreContextIntrinsic::InitializeFactTrapMessages),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::GlobalBufferManager => (
             "initializeBufferManager",
-            Some(CoreContext::GlobalBufferManager),
+            Some(CoreContextIntrinsic::InitializeBufferManager),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::AsyncEventCodeEnum => (
             "initializeAsyncEventCodes",
-            Some(CoreContext::AsyncEventCodeEnum),
+            Some(CoreContextIntrinsic::InitializeAsyncEventCodes),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::GlobalComponentMemoryMap => (
             "initializeComponentMemoryMap",
-            Some(CoreContext::GlobalComponentMemoryMap),
+            Some(CoreContextIntrinsic::InitializeComponentMemoryMap),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::GlobalCurrentTaskMeta => (
             "initializeTaskRegisters",
-            Some(CoreContext::GlobalCurrentTaskMeta),
+            Some(CoreContextIntrinsic::InitializeTaskRegisters),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::ConditionalSuspendingWasm => (
             "initializeConditionalSuspendingWasm",
-            Some(CoreContext::ConditionalSuspendingWasm),
+            Some(CoreContextIntrinsic::InitializeConditionalSuspendingWasm),
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::IsLE => (
             "initializeEndianness",
-            Some(CoreContext::IsLE),
+            Some(CoreContextIntrinsic::InitializeEndianness),
             RuntimeImportKind::InitializedValue,
         ),
         _ => return None,
@@ -500,7 +556,7 @@ pub(crate) fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
     Some(RuntimeImport {
         suffix: "intrinsics/core",
         export,
-        context: context.map(RuntimeContext::Core),
+        context: context.map(RuntimeContextIntrinsic::Core),
         kind,
     })
 }

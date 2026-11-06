@@ -13,7 +13,7 @@ pub(crate) mod runtime;
 use runtime::IntrinsicRuntime;
 
 pub(crate) mod ext;
-use ext::{RuntimeContext, VERSION_LOCAL};
+use ext::{RuntimeContextIntrinsic, VERSION_LOCAL};
 
 pub(crate) mod inline;
 
@@ -3026,7 +3026,7 @@ impl Intrinsic {
         JsHelperIntrinsic::get_global_names()
             .into_iter()
             .chain(ConversionIntrinsic::get_global_names())
-            .chain(RuntimeContext::get_global_names())
+            .chain(RuntimeContextIntrinsic::get_global_names())
             .chain(WebIdlIntrinsic::get_global_names())
             .chain(StringIntrinsic::get_global_names())
             .chain(ResourceIntrinsic::get_global_names())

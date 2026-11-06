@@ -1,22 +1,48 @@
 //! Named conversion exports and their narrow capability requirements.
 
-use super::{RuntimeContext, RuntimeImport};
+use super::{RuntimeContextIntrinsic, RuntimeImport};
 use crate::intrinsics::conversion::ConversionIntrinsic;
 
 pub(crate) fn import(intrinsic: ConversionIntrinsic) -> RuntimeImport {
     let (export, context) = match intrinsic {
-        ConversionIntrinsic::I32ToF32 => ("i32ToF32", Some(RuntimeContext::Bitcast32)),
-        ConversionIntrinsic::F32ToI32 => ("f32ToI32", Some(RuntimeContext::Bitcast32)),
-        ConversionIntrinsic::I64ToF64 => ("i64ToF64", Some(RuntimeContext::Bitcast64)),
-        ConversionIntrinsic::F64ToI64 => ("f64ToI64", Some(RuntimeContext::Bitcast64)),
-        ConversionIntrinsic::ToInt8 => ("toInt8", Some(RuntimeContext::StrictNumeric)),
-        ConversionIntrinsic::ToUint8 => ("toUint8", Some(RuntimeContext::StrictNumeric)),
-        ConversionIntrinsic::ToInt16 => ("toInt16", Some(RuntimeContext::StrictNumeric)),
-        ConversionIntrinsic::ToUint16 => ("toUint16", Some(RuntimeContext::StrictNumeric)),
-        ConversionIntrinsic::ToInt32 => ("toInt32", Some(RuntimeContext::StrictNumeric)),
-        ConversionIntrinsic::ToUint32 => ("toUint32", Some(RuntimeContext::StrictNumeric)),
-        ConversionIntrinsic::ToBigInt64 => ("toInt64", Some(RuntimeContext::StrictNumeric)),
-        ConversionIntrinsic::ToBigUint64 => ("toUint64", Some(RuntimeContext::StrictNumeric)),
+        ConversionIntrinsic::I32ToF32 => (
+            "i32ToF32",
+            Some(RuntimeContextIntrinsic::InitializeBitcast32),
+        ),
+        ConversionIntrinsic::F32ToI32 => (
+            "f32ToI32",
+            Some(RuntimeContextIntrinsic::InitializeBitcast32),
+        ),
+        ConversionIntrinsic::I64ToF64 => (
+            "i64ToF64",
+            Some(RuntimeContextIntrinsic::InitializeBitcast64),
+        ),
+        ConversionIntrinsic::F64ToI64 => (
+            "f64ToI64",
+            Some(RuntimeContextIntrinsic::InitializeBitcast64),
+        ),
+        ConversionIntrinsic::ToInt8 => ("toInt8", Some(RuntimeContextIntrinsic::NumericConversion)),
+        ConversionIntrinsic::ToUint8 => {
+            ("toUint8", Some(RuntimeContextIntrinsic::NumericConversion))
+        }
+        ConversionIntrinsic::ToInt16 => {
+            ("toInt16", Some(RuntimeContextIntrinsic::NumericConversion))
+        }
+        ConversionIntrinsic::ToUint16 => {
+            ("toUint16", Some(RuntimeContextIntrinsic::NumericConversion))
+        }
+        ConversionIntrinsic::ToInt32 => {
+            ("toInt32", Some(RuntimeContextIntrinsic::NumericConversion))
+        }
+        ConversionIntrinsic::ToUint32 => {
+            ("toUint32", Some(RuntimeContextIntrinsic::NumericConversion))
+        }
+        ConversionIntrinsic::ToBigInt64 => {
+            ("toInt64", Some(RuntimeContextIntrinsic::NumericConversion))
+        }
+        ConversionIntrinsic::ToBigUint64 => {
+            ("toUint64", Some(RuntimeContextIntrinsic::NumericConversion))
+        }
         ConversionIntrinsic::I32ToChar => ("i32ToChar", None),
         ConversionIntrinsic::ToString => ("toString", None),
         ConversionIntrinsic::ToResultString => ("toResultString", None),

@@ -1,5 +1,5 @@
 //! Named resource operations, storage owners, and remaining inline capabilities.
-use super::{RuntimeContext, RuntimeImport, RuntimeImportKind};
+use super::{RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind};
 use crate::intrinsics::Intrinsic;
 
 pub(crate) fn resource_import(
@@ -11,79 +11,79 @@ pub(crate) fn resource_import(
         ResourceTableOwnFlag => ("tableOwn", None, RuntimeImportKind::Value),
         HandleIndexSpaces => (
             "initializeHandleIndexSpaces",
-            Some(RuntimeContext::HandleIndexSpaces),
+            Some(RuntimeContextIntrinsic::InitializeHandleIndexSpaces),
             RuntimeImportKind::InitializedValue,
         ),
         GetHandleIndexSpace => (
             "getHandleIndexSpace",
-            Some(RuntimeContext::HandleIndexSpaces),
+            Some(RuntimeContextIntrinsic::InitializeHandleIndexSpaces),
             RuntimeImportKind::Call,
         ),
         ResourceTableCreateBorrow => (
             "tableCreateBorrow",
-            Some(RuntimeContext::HandleIndexSpaces),
+            Some(RuntimeContextIntrinsic::InitializeHandleIndexSpaces),
             RuntimeImportKind::Call,
         ),
         ResourceTableCreateOwn => (
             "tableCreateOwn",
-            Some(RuntimeContext::HandleIndexSpaces),
+            Some(RuntimeContextIntrinsic::InitializeHandleIndexSpaces),
             RuntimeImportKind::Call,
         ),
         ResourceTableGet => (
             "tableGet",
-            Some(RuntimeContext::ResourceTableGet),
+            Some(RuntimeContextIntrinsic::ResourceTableGet),
             RuntimeImportKind::Call,
         ),
         ResourceTableEnsureBorrowDrop => ("tableEnsureBorrowDrop", None, RuntimeImportKind::Call),
         ResourceTableRemove => (
             "tableRemove",
-            Some(RuntimeContext::ResourceRemove),
+            Some(RuntimeContextIntrinsic::ResourceTableRemove),
             RuntimeImportKind::Call,
         ),
         ResourceCallBorrows => (
             "initializeCallBorrows",
-            Some(RuntimeContext::CallBorrows),
+            Some(RuntimeContextIntrinsic::InitializeCallBorrows),
             RuntimeImportKind::LiveReference {
                 expression: "_jcoCallBorrowContext.borrows",
             },
         ),
         ResourceScopeCounter => (
             "initializeResourceScopeCounter",
-            Some(RuntimeContext::ResourceScopeCounter),
+            Some(RuntimeContextIntrinsic::InitializeResourceScopeCounter),
             RuntimeImportKind::LiveReference {
                 expression: "_jcoResourceScopeCounterContext.value",
             },
         ),
         ResourceScopeTasks => (
             "initializeResourceScopeTasks",
-            Some(RuntimeContext::ResourceScopeTasks),
+            Some(RuntimeContextIntrinsic::InitializeResourceScopeTasks),
             RuntimeImportKind::InitializedValue,
         ),
         ResourceTransferBorrow => (
             "transferBorrow",
-            Some(RuntimeContext::ResourceTransferBorrow),
+            Some(RuntimeContextIntrinsic::ResourceTransferBorrow),
             RuntimeImportKind::Call,
         ),
         ResourceTransferBorrowValidLifting => (
             "transferBorrowValidLifting",
-            Some(RuntimeContext::ResourceTransferBorrow),
+            Some(RuntimeContextIntrinsic::ResourceTransferBorrow),
             RuntimeImportKind::Call,
         ),
         ResourceTransferOwn => (
             "transferOwn",
-            Some(RuntimeContext::ResourceTransferOwn),
+            Some(RuntimeContextIntrinsic::ResourceTransferOwn),
             RuntimeImportKind::Call,
         ),
         CurResourceBorrows => (
             "initializeCurrentBorrows",
-            Some(RuntimeContext::CurrentBorrows),
+            Some(RuntimeContextIntrinsic::InitializeCurrentBorrows),
             RuntimeImportKind::LiveReference {
                 expression: "_jcoCurrentBorrowContext.borrows",
             },
         ),
         ResourceDestructorCall => (
             "callDestructor",
-            Some(RuntimeContext::ResourceDestructor),
+            Some(RuntimeContextIntrinsic::ResourceDestructorCall),
             RuntimeImportKind::Call,
         ),
     };
@@ -99,12 +99,12 @@ pub(crate) fn resource_owner_import(intrinsic: Intrinsic) -> RuntimeImport {
     let (export, context, kind) = match intrinsic {
         Intrinsic::HandleTables => (
             "initializeHandleTables",
-            RuntimeContext::HandleTables,
+            RuntimeContextIntrinsic::InitializeHandleTables,
             RuntimeImportKind::InitializedValue,
         ),
         Intrinsic::ScopeId => (
             "initializeScopeId",
-            RuntimeContext::ScopeId,
+            RuntimeContextIntrinsic::InitializeScopeId,
             RuntimeImportKind::LiveReference {
                 expression: "_jcoScopeIdContext.value",
             },
