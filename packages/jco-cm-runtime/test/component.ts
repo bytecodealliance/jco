@@ -8,6 +8,10 @@ test.concurrent('component stores isolate state and share the resource handle in
     for (const key of ['instanceFlags', 'storeTrap', 'storeAsyncState', 'asyncState', 'ComponentAsyncState'] as const) {
         expect(component[key]).not.toBe(other[key]);
     }
+    const hostResource = {};
+    component.storeTrap.disposed.add(hostResource);
+    expect(component.storeTrap.disposed.has(hostResource)).toBe(true);
+    expect(other.storeTrap.disposed.has(hostResource)).toBe(false);
     const state = component.getOrCreateAsyncState(0);
     expect(component.getOrCreateAsyncState(0)).toBe(state);
     expect(component.asyncState.get(0)).toBe(state);
