@@ -1,5 +1,5 @@
 //! Web IDL proxy imports and per-instance cache ownership.
-use super::{RuntimeContext, RuntimeImport, RuntimeImportKind};
+use super::{RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind};
 use crate::intrinsics::webidl::WebIdlIntrinsic;
 #[cfg(test)]
 use crate::source::Source;
@@ -8,7 +8,7 @@ pub(crate) fn import(intrinsic: WebIdlIntrinsic) -> RuntimeImport {
         WebIdlIntrinsic::GlobalThisIdlProxy => RuntimeImport {
             suffix: "intrinsics/webidl",
             export: intrinsic.name(),
-            context: Some(RuntimeContext::WebIdlProxyCache),
+            context: Some(RuntimeContextIntrinsic::InitializeWebIdlProxyCache),
             kind: RuntimeImportKind::Call,
         },
     }

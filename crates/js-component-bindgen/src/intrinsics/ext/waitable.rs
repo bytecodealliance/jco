@@ -1,7 +1,7 @@
 //! Selected waitable constructors and the narrow contexts for their operations.
 use super::{
-    ComponentContext, CoreContext, RuntimeContext, RuntimeImport, RuntimeImportKind,
-    RuntimeInitializer,
+    ComponentContextIntrinsic, CoreContextIntrinsic, RuntimeContextIntrinsic, RuntimeImport,
+    RuntimeImportKind, RuntimeInitializer,
 };
 use crate::{
     intrinsics::{
@@ -13,27 +13,36 @@ use crate::{
 };
 use std::fmt::Write;
 
+/// Constructors and capability contexts for external waitable intrinsics.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum WaitableContext {
-    Class,
-    SetClass,
-    New,
-    Wait,
-    Poll,
-    Drop,
-    Remove,
-    Join,
+pub(crate) enum WaitableContextIntrinsic {
+    /// The `initializeWaitableClass` constructor factory; a JS helper, not a canonical operation.
+    InitializeWaitableClass,
+    /// The `initializeWaitableSetClass` constructor factory; a JS helper, not a canonical operation.
+    InitializeWaitableSetClass,
+    /// Capabilities for `waitableSetNew`, implementing `canon waitable-set.new`.
+    WaitableSetNew,
+    /// Capabilities for `waitableSetWait`, implementing `canon waitable-set.wait`.
+    WaitableSetWait,
+    /// Capabilities for `waitableSetPoll`, implementing `canon waitable-set.poll`.
+    WaitableSetPoll,
+    /// Capabilities for `waitableSetDrop`, implementing `canon waitable-set.drop`.
+    WaitableSetDrop,
+    /// Capabilities for the `removeWaitableSet` JS helper used by `canon waitable-set.drop`.
+    RemoveWaitableSet,
+    /// Capabilities for `waitableJoin`, implementing `canon waitable.join`.
+    WaitableJoin,
 }
-impl WaitableContext {
+impl WaitableContextIntrinsic {
     const ALL: [Self; 8] = [
-        Self::Class,
-        Self::SetClass,
-        Self::New,
-        Self::Wait,
-        Self::Poll,
-        Self::Drop,
-        Self::Remove,
-        Self::Join,
+        Self::InitializeWaitableClass,
+        Self::InitializeWaitableSetClass,
+        Self::WaitableSetNew,
+        Self::WaitableSetWait,
+        Self::WaitableSetPoll,
+        Self::WaitableSetDrop,
+        Self::RemoveWaitableSet,
+        Self::WaitableJoin,
     ];
     pub(crate) fn get_global_names() -> impl Iterator<Item = &'static str> {
         Self::ALL
@@ -48,20 +57,22 @@ impl WaitableContext {
     }
     pub(crate) fn local_name(self) -> &'static str {
         match self {
-            Self::Class => "Waitable",
-            Self::SetClass => "WaitableSet",
-            Self::New => "_jcoWaitableSetNewContext",
-            Self::Wait => "_jcoWaitableSetWaitContext",
-            Self::Poll => "_jcoWaitableSetPollContext",
-            Self::Drop => "_jcoWaitableSetDropContext",
-            Self::Remove => "_jcoWaitableSetRemoveContext",
-            Self::Join => "_jcoWaitableJoinContext",
+            Self::InitializeWaitableClass => "Waitable",
+            Self::InitializeWaitableSetClass => "WaitableSet",
+            Self::WaitableSetNew => "_jcoWaitableSetNewContext",
+            Self::WaitableSetWait => "_jcoWaitableSetWaitContext",
+            Self::WaitableSetPoll => "_jcoWaitableSetPollContext",
+            Self::WaitableSetDrop => "_jcoWaitableSetDropContext",
+            Self::RemoveWaitableSet => "_jcoWaitableSetRemoveContext",
+            Self::WaitableJoin => "_jcoWaitableJoinContext",
         }
     }
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (export, local_name) = match self {
-            Self::Class => ("initializeWaitableClass", "_jcoInitializeWaitableClass"),
-            Self::SetClass => (
+            Self::InitializeWaitableClass => {
+                ("initializeWaitableClass", "_jcoInitializeWaitableClass")
+            }
+            Self::InitializeWaitableSetClass => (
                 "initializeWaitableSetClass",
                 "_jcoInitializeWaitableSetClass",
             ),
@@ -73,29 +84,31 @@ impl WaitableContext {
             local_name,
         })
     }
-    pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component, Core, Waitable};
+    pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
+        use RuntimeContextIntrinsic::{Component, Core, Waitable};
         match self {
-            Self::Class => &[],
-            Self::SetClass => &[Core(CoreContext::AsyncEventCodeEnum)],
-            Self::New | Self::Wait => &[
-                Component(ComponentContext::StateLookup),
-                Waitable(Self::SetClass),
+            Self::InitializeWaitableClass => &[],
+            Self::InitializeWaitableSetClass => {
+                &[Core(CoreContextIntrinsic::InitializeAsyncEventCodes)]
+            }
+            Self::WaitableSetNew | Self::WaitableSetWait => &[
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
+                Waitable(Self::InitializeWaitableSetClass),
             ],
-            Self::Poll => &[
-                Component(ComponentContext::StateLookup),
-                Waitable(Self::SetClass),
-                Core(CoreContext::AsyncEventCodeEnum),
+            Self::WaitableSetPoll => &[
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
+                Waitable(Self::InitializeWaitableSetClass),
+                Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
             ],
-            Self::Remove => &[Waitable(Self::SetClass)],
-            Self::Drop => &[
-                Component(ComponentContext::StateLookup),
-                Waitable(Self::SetClass),
+            Self::RemoveWaitableSet => &[Waitable(Self::InitializeWaitableSetClass)],
+            Self::WaitableSetDrop => &[
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
+                Waitable(Self::InitializeWaitableSetClass),
             ],
-            Self::Join => &[
-                Component(ComponentContext::StateLookup),
-                Waitable(Self::Class),
-                Waitable(Self::SetClass),
+            Self::WaitableJoin => &[
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
+                Waitable(Self::InitializeWaitableClass),
+                Waitable(Self::InitializeWaitableSetClass),
             ],
         }
     }
@@ -103,7 +116,7 @@ impl WaitableContext {
         let local = self.local_name();
         if let Some(initializer) = self.initializer() {
             let initialize = initializer.local_name;
-            let args = if self == Self::SetClass {
+            let args = if self == Self::InitializeWaitableSetClass {
                 "ASYNC_EVENT_CODE"
             } else {
                 ""
@@ -113,18 +126,18 @@ impl WaitableContext {
         }
         // These lazy capabilities are removed when task (N11) and host (N12) migrate.
         let properties = match self {
-            Self::New => "lookup: _jcoComponentStateLookupContext, WaitableSet",
-            Self::Wait => {
+            Self::WaitableSetNew => "lookup: _jcoComponentStateLookupContext, WaitableSet",
+            Self::WaitableSetWait => {
                 "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, getCurrentTask: componentIdx => getCurrentTask(componentIdx), storeEventInComponentMemory: args => _storeEventInComponentMemory(args)"
             }
-            Self::Poll => {
+            Self::WaitableSetPoll => {
                 "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, getCurrentTask: componentIdx => getCurrentTask(componentIdx), storeEventInComponentMemory: args => _storeEventInComponentMemory(args), events: ASYNC_EVENT_CODE"
             }
-            Self::Remove => "RuntimeError: WebAssembly.RuntimeError, WaitableSet",
-            Self::Drop => {
+            Self::RemoveWaitableSet => "RuntimeError: WebAssembly.RuntimeError, WaitableSet",
+            Self::WaitableSetDrop => {
                 "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, getCurrentTask: componentIdx => getCurrentTask(componentIdx)"
             }
-            Self::Join => {
+            Self::WaitableJoin => {
                 "RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, Waitable, WaitableSet"
             }
             _ => unreachable!("constructors handled above"),
@@ -138,42 +151,42 @@ pub(crate) fn import(intrinsic: WaitableIntrinsic) -> RuntimeImport {
     let (export, context, kind) = match intrinsic {
         WaitableClass => (
             "initializeWaitableClass",
-            RuntimeContext::Waitable(WaitableContext::Class),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::InitializeWaitableClass),
             RuntimeImportKind::InitializedConstructor,
         ),
         WaitableSetClass => (
             "initializeWaitableSetClass",
-            RuntimeContext::Waitable(WaitableContext::SetClass),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::InitializeWaitableSetClass),
             RuntimeImportKind::InitializedConstructor,
         ),
         WaitableSetNew => (
             "waitableSetNew",
-            RuntimeContext::Waitable(WaitableContext::New),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::WaitableSetNew),
             RuntimeImportKind::Call,
         ),
         WaitableSetWait => (
             "waitableSetWait",
-            RuntimeContext::Waitable(WaitableContext::Wait),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::WaitableSetWait),
             RuntimeImportKind::Call,
         ),
         WaitableSetPoll => (
             "waitableSetPoll",
-            RuntimeContext::Waitable(WaitableContext::Poll),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::WaitableSetPoll),
             RuntimeImportKind::Call,
         ),
         WaitableSetDrop => (
             "waitableSetDrop",
-            RuntimeContext::Waitable(WaitableContext::Drop),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::WaitableSetDrop),
             RuntimeImportKind::Call,
         ),
         RemoveWaitableSet => (
             "removeWaitableSet",
-            RuntimeContext::Waitable(WaitableContext::Remove),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::RemoveWaitableSet),
             RuntimeImportKind::Call,
         ),
         WaitableJoin => (
             "waitableJoin",
-            RuntimeContext::Waitable(WaitableContext::Join),
+            RuntimeContextIntrinsic::Waitable(WaitableContextIntrinsic::WaitableJoin),
             RuntimeImportKind::Call,
         ),
     };

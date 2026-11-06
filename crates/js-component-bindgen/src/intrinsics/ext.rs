@@ -29,9 +29,9 @@ mod component;
 pub(crate) mod conversion;
 mod core;
 mod waitable;
-use component::ComponentContext;
-use core::CoreContext;
-use waitable::WaitableContext;
+use component::ComponentContextIntrinsic;
+use core::CoreContextIntrinsic;
+use waitable::WaitableContextIntrinsic;
 pub(crate) mod js_helper;
 pub(crate) mod resource;
 pub(crate) mod string;
@@ -41,35 +41,61 @@ pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
 pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 
+/// State initializers and capability contexts selected by external runtime intrinsics.
+/// Shared contexts name their initializer or operation; they are not additional canonical operations.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum RuntimeContext {
-    Core(CoreContext),
-    Component(ComponentContext),
-    Waitable(WaitableContext),
+pub(crate) enum RuntimeContextIntrinsic {
+    /// Context intrinsics for core Wasm operations and JS helpers.
+    Core(CoreContextIntrinsic),
+    /// Context intrinsics for component state and scheduling.
+    Component(ComponentContextIntrinsic),
+    /// Context intrinsics for waitables and waitable sets.
+    Waitable(WaitableContextIntrinsic),
+    /// Capabilities for the `tableGet` resource-table helper.
     ResourceTableGet,
-    HandleIndexSpaces,
-    HandleTables,
-    CallBorrows,
-    CurrentBorrows,
-    ResourceScopeCounter,
-    ResourceScopeTasks,
-    ScopeId,
-    ResourceRemove,
+    /// The per-component resource handle index spaces returned by `initializeHandleIndexSpaces`.
+    InitializeHandleIndexSpaces,
+    /// The resource handle tables returned by `initializeHandleTables`.
+    InitializeHandleTables,
+    /// The current call-borrow list returned by `initializeCallBorrows`.
+    InitializeCallBorrows,
+    /// The active resource-borrow list returned by `initializeCurrentBorrows`.
+    InitializeCurrentBorrows,
+    /// The resource-scope counter returned by `initializeResourceScopeCounter`.
+    InitializeResourceScopeCounter,
+    /// The resource-scope task map returned by `initializeResourceScopeTasks`.
+    InitializeResourceScopeTasks,
+    /// The current scope identifier returned by `initializeScopeId`.
+    InitializeScopeId,
+    /// Capabilities for the `tableRemove` resource-table helper.
+    ResourceTableRemove,
+    /// Capabilities for the `transferOwn` resource-handle helper.
     ResourceTransferOwn,
+    /// Shared capabilities for `transferBorrow` and `transferBorrowValidLifting`.
     ResourceTransferBorrow,
-    ResourceDestructor,
-    StrictNumeric,
-    Bitcast32,
-    Bitcast64,
-    DataViewCache,
-    Utf8Decoder,
-    Utf16Decoder,
-    Utf8Encoder,
-    Utf16Encoding,
-    WebIdlProxyCache,
+    /// Capabilities for `callDestructor`, which invokes a resource destructor.
+    ResourceDestructorCall,
+    /// The strictness setting shared by the `toInt*` and `toUint*` conversion helpers.
+    NumericConversion,
+    /// The shared 32-bit bitcast buffer views returned by `initializeBitcast32`.
+    InitializeBitcast32,
+    /// The shared 64-bit bitcast buffer views returned by `initializeBitcast64`.
+    InitializeBitcast64,
+    /// The memory data-view cache returned by `initializeDataViewCache`.
+    InitializeDataViewCache,
+    /// The UTF-8 decoder returned by `initializeUtf8Decoder`.
+    InitializeUtf8Decoder,
+    /// The UTF-16 decoder returned by `initializeUtf16Decoder`.
+    InitializeUtf16Decoder,
+    /// The UTF-8 encoder returned by `initializeUtf8Encoder`.
+    InitializeUtf8Encoder,
+    /// The UTF-16 encoding state returned by `initializeUtf16Encoding`.
+    InitializeUtf16Encoding,
+    /// The Web IDL proxy cache returned by `initializeWebIdlProxyCache`.
+    InitializeWebIdlProxyCache,
 }
 
-impl RuntimeContext {
+impl RuntimeContextIntrinsic {
     pub(crate) fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
             TABLE_GET_CONTEXT,
@@ -107,9 +133,9 @@ impl RuntimeContext {
             "_jcoInitializeWebIdlProxyCache",
         ]
         .into_iter()
-        .chain(CoreContext::get_global_names())
-        .chain(ComponentContext::get_global_names())
-        .chain(WaitableContext::get_global_names())
+        .chain(CoreContextIntrinsic::get_global_names())
+        .chain(ComponentContextIntrinsic::get_global_names())
+        .chain(WaitableContextIntrinsic::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -118,26 +144,26 @@ impl RuntimeContext {
             Self::Component(context) => context.local_name(),
             Self::Waitable(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
-            Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
-            Self::HandleTables => "HANDLE_TABLES",
-            Self::CallBorrows => "_jcoCallBorrowContext",
-            Self::CurrentBorrows => "_jcoCurrentBorrowContext",
-            Self::ResourceScopeCounter => "_jcoResourceScopeCounterContext",
-            Self::ResourceScopeTasks => "RESOURCE_SCOPE_TASKS",
-            Self::ScopeId => "_jcoScopeIdContext",
-            Self::ResourceRemove => "_jcoResourceRemoveContext",
+            Self::InitializeHandleIndexSpaces => "HANDLE_INDEX_SPACES",
+            Self::InitializeHandleTables => "HANDLE_TABLES",
+            Self::InitializeCallBorrows => "_jcoCallBorrowContext",
+            Self::InitializeCurrentBorrows => "_jcoCurrentBorrowContext",
+            Self::InitializeResourceScopeCounter => "_jcoResourceScopeCounterContext",
+            Self::InitializeResourceScopeTasks => "RESOURCE_SCOPE_TASKS",
+            Self::InitializeScopeId => "_jcoScopeIdContext",
+            Self::ResourceTableRemove => "_jcoResourceRemoveContext",
             Self::ResourceTransferOwn => "_jcoResourceTransferOwnContext",
             Self::ResourceTransferBorrow => "_jcoResourceTransferBorrowContext",
-            Self::ResourceDestructor => "_jcoResourceDestructorContext",
-            Self::StrictNumeric => "_jcoStrictNumericContext",
-            Self::Bitcast32 => "_jcoBitcast32Context",
-            Self::Bitcast64 => "_jcoBitcast64Context",
-            Self::DataViewCache => "_jcoDataViewCacheContext",
-            Self::Utf8Decoder => "TEXT_DECODER_UTF8",
-            Self::Utf16Decoder => "utf16Decoder",
-            Self::Utf8Encoder => "TEXT_ENCODER_UTF8",
-            Self::Utf16Encoding => "_jcoUtf16EncodingContext",
-            Self::WebIdlProxyCache => "_jcoWebIdlProxyCacheContext",
+            Self::ResourceDestructorCall => "_jcoResourceDestructorContext",
+            Self::NumericConversion => "_jcoStrictNumericContext",
+            Self::InitializeBitcast32 => "_jcoBitcast32Context",
+            Self::InitializeBitcast64 => "_jcoBitcast64Context",
+            Self::InitializeDataViewCache => "_jcoDataViewCacheContext",
+            Self::InitializeUtf8Decoder => "TEXT_DECODER_UTF8",
+            Self::InitializeUtf16Decoder => "utf16Decoder",
+            Self::InitializeUtf8Encoder => "TEXT_ENCODER_UTF8",
+            Self::InitializeUtf16Encoding => "_jcoUtf16EncodingContext",
+            Self::InitializeWebIdlProxyCache => "_jcoWebIdlProxyCacheContext",
         }
     }
 
@@ -147,77 +173,77 @@ impl RuntimeContext {
             Self::Core(context) => return context.initializer(),
             Self::Component(context) => return context.initializer(),
             Self::Waitable(context) => return context.initializer(),
-            Self::HandleIndexSpaces => (
+            Self::InitializeHandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
                 "_jcoInitializeHandleIndexSpaces",
             ),
-            Self::HandleTables => (
+            Self::InitializeHandleTables => (
                 "intrinsics/resource",
                 "initializeHandleTables",
                 "_jcoInitializeHandleTables",
             ),
-            Self::CallBorrows => (
+            Self::InitializeCallBorrows => (
                 "intrinsics/resource",
                 "initializeCallBorrows",
                 "_jcoInitializeCallBorrows",
             ),
-            Self::CurrentBorrows => (
+            Self::InitializeCurrentBorrows => (
                 "intrinsics/resource",
                 "initializeCurrentBorrows",
                 "_jcoInitializeCurrentBorrows",
             ),
-            Self::ResourceScopeCounter => (
+            Self::InitializeResourceScopeCounter => (
                 "intrinsics/resource",
                 "initializeResourceScopeCounter",
                 "_jcoInitializeResourceScopeCounter",
             ),
-            Self::ResourceScopeTasks => (
+            Self::InitializeResourceScopeTasks => (
                 "intrinsics/resource",
                 "initializeResourceScopeTasks",
                 "_jcoInitializeResourceScopeTasks",
             ),
-            Self::ScopeId => (
+            Self::InitializeScopeId => (
                 "intrinsics/resource",
                 "initializeScopeId",
                 "_jcoInitializeScopeId",
             ),
-            Self::Bitcast32 => (
+            Self::InitializeBitcast32 => (
                 "intrinsics/conversion",
                 "initializeBitcast32",
                 "_jcoInitializeBitcast32",
             ),
-            Self::Bitcast64 => (
+            Self::InitializeBitcast64 => (
                 "intrinsics/conversion",
                 "initializeBitcast64",
                 "_jcoInitializeBitcast64",
             ),
-            Self::DataViewCache => (
+            Self::InitializeDataViewCache => (
                 "intrinsics/js-helper",
                 "initializeDataViewCache",
                 "_jcoInitializeDataViewCache",
             ),
-            Self::Utf8Decoder => (
+            Self::InitializeUtf8Decoder => (
                 "intrinsics/string",
                 "initializeUtf8Decoder",
                 "_jcoInitializeUtf8Decoder",
             ),
-            Self::Utf16Decoder => (
+            Self::InitializeUtf16Decoder => (
                 "intrinsics/string",
                 "initializeUtf16Decoder",
                 "_jcoInitializeUtf16Decoder",
             ),
-            Self::Utf8Encoder => (
+            Self::InitializeUtf8Encoder => (
                 "intrinsics/string",
                 "initializeUtf8Encoder",
                 "_jcoInitializeUtf8Encoder",
             ),
-            Self::Utf16Encoding => (
+            Self::InitializeUtf16Encoding => (
                 "intrinsics/string",
                 "initializeUtf16Encoding",
                 "_jcoInitializeUtf16Encoding",
             ),
-            Self::WebIdlProxyCache => (
+            Self::InitializeWebIdlProxyCache => (
                 "intrinsics/webidl",
                 "initializeWebIdlProxyCache",
                 "_jcoInitializeWebIdlProxyCache",
@@ -236,22 +262,25 @@ impl RuntimeContext {
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
-            Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
+            Self::ResourceTableRemove => &[
+                Self::InitializeHandleIndexSpaces,
+                Self::InitializeResourceScopeTasks,
+            ],
             Self::ResourceTransferOwn => &[
-                Self::HandleIndexSpaces,
-                Self::ResourceScopeTasks,
-                Self::HandleTables,
+                Self::InitializeHandleIndexSpaces,
+                Self::InitializeResourceScopeTasks,
+                Self::InitializeHandleTables,
             ],
             Self::ResourceTransferBorrow => &[
-                Self::HandleIndexSpaces,
-                Self::HandleTables,
-                Self::ScopeId,
-                Self::CallBorrows,
-                Self::Core(CoreContext::GlobalCurrentTaskMeta),
+                Self::InitializeHandleIndexSpaces,
+                Self::InitializeHandleTables,
+                Self::InitializeScopeId,
+                Self::InitializeCallBorrows,
+                Self::Core(CoreContextIntrinsic::InitializeTaskRegisters),
             ],
-            Self::ResourceDestructor => &[
-                Self::Core(CoreContext::GlobalCurrentTaskMeta),
-                Self::Component(ComponentContext::StoreTrap),
+            Self::ResourceDestructorCall => &[
+                Self::Core(CoreContextIntrinsic::InitializeTaskRegisters),
+                Self::Component(ComponentContextIntrinsic::InitializeStoreTrap),
             ],
             _ => &[],
         }
@@ -274,7 +303,7 @@ impl RuntimeContext {
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),
-            Self::ResourceRemove => uwriteln!(
+            Self::ResourceTableRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
             ),
@@ -286,7 +315,7 @@ impl RuntimeContext {
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, tables: HANDLE_TABLES, scope: _jcoScopeIdContext, callBorrows: _jcoCallBorrowContext, registers: CURRENT_TASK_META, getTask: (componentIdx, taskID) => getCurrentTask(componentIdx, taskID)?.task }};"
             ),
-            Self::ResourceDestructor => uwriteln!(
+            Self::ResourceDestructorCall => uwriteln!(
                 output,
                 "const {local} = {{ storeTrap: STORE_TRAP, registers: CURRENT_TASK_META, createTask: args => createNewCurrentImplicitThread(args) }};"
             ),
@@ -294,24 +323,24 @@ impl RuntimeContext {
                 output,
                 "const {TABLE_GET_CONTEXT} = {{ RuntimeError: WebAssembly.RuntimeError }};"
             ),
-            Self::StrictNumeric => {
+            Self::NumericConversion => {
                 uwriteln!(output, "const {local} = {{ strict: {strict} }};")
             }
-            Self::HandleIndexSpaces
-            | Self::HandleTables
-            | Self::CallBorrows
-            | Self::CurrentBorrows
-            | Self::ResourceScopeCounter
-            | Self::ResourceScopeTasks
-            | Self::ScopeId
-            | Self::Bitcast32
-            | Self::Bitcast64
-            | Self::DataViewCache
-            | Self::Utf8Decoder
-            | Self::Utf16Decoder
-            | Self::Utf8Encoder
-            | Self::Utf16Encoding
-            | Self::WebIdlProxyCache => {
+            Self::InitializeHandleIndexSpaces
+            | Self::InitializeHandleTables
+            | Self::InitializeCallBorrows
+            | Self::InitializeCurrentBorrows
+            | Self::InitializeResourceScopeCounter
+            | Self::InitializeResourceScopeTasks
+            | Self::InitializeScopeId
+            | Self::InitializeBitcast32
+            | Self::InitializeBitcast64
+            | Self::InitializeDataViewCache
+            | Self::InitializeUtf8Decoder
+            | Self::InitializeUtf16Decoder
+            | Self::InitializeUtf8Encoder
+            | Self::InitializeUtf16Encoding
+            | Self::InitializeWebIdlProxyCache => {
                 let initialize = self.initializer().unwrap().local_name;
                 uwriteln!(output, "const {local} = {initialize}();")
             }
@@ -344,7 +373,7 @@ pub(crate) enum RuntimeImportKind {
 pub(crate) struct RuntimeImport {
     pub(crate) suffix: &'static str,
     pub(crate) export: &'static str,
-    pub(crate) context: Option<RuntimeContext>,
+    pub(crate) context: Option<RuntimeContextIntrinsic>,
     pub(crate) kind: RuntimeImportKind,
 }
 
@@ -406,7 +435,10 @@ impl ExternalRuntime {
             if let Some(context) = import.context {
                 context.collect(&mut contexts);
             }
-            for initializer in contexts.into_iter().filter_map(RuntimeContext::initializer) {
+            for initializer in contexts
+                .into_iter()
+                .filter_map(RuntimeContextIntrinsic::initializer)
+            {
                 modules
                     .entry(initializer.suffix)
                     .or_default()

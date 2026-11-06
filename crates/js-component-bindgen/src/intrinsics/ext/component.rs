@@ -1,44 +1,58 @@
 //! Central metadata for named component operations and their actual state owners.
 use super::super::{RenderIntrinsicsArgs, component::ComponentIntrinsic};
 use super::{
-    CoreContext, RuntimeContext, RuntimeImport, RuntimeImportKind, RuntimeInitializer,
-    WaitableContext,
+    CoreContextIntrinsic, RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind,
+    RuntimeInitializer, WaitableContextIntrinsic,
 };
 use crate::{source::Source, uwriteln};
 use std::fmt::Write;
 use wasmtime_environ::Trap;
 
+/// State initializers and shared capability contexts for external component intrinsics.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum ComponentContext {
-    InstanceFlags,
-    StoreTrap,
-    StoreAsyncState,
-    AsyncStates,
-    CoreTrapMessages,
-    NormalizeTrap,
-    Deadlock,
-    HostOperation,
-    MayLeave,
-    StateLookup,
+pub(crate) enum ComponentContextIntrinsic {
+    /// Per-component flags returned by `initializeInstanceFlags`.
+    InitializeInstanceFlags,
+    /// Store trap and resource-disposal state returned by `initializeStoreTrap`.
+    InitializeStoreTrap,
+    /// Store-wide pending host work and deadlock-check state returned by `initializeStoreAsyncState`.
+    InitializeStoreAsyncState,
+    /// The component-indexed async-state map returned by `initializeComponentAsyncStates`.
+    InitializeComponentAsyncStates,
+    /// The core Wasm trap-message normalization map returned by `initializeCoreTrapMessages`.
+    InitializeCoreTrapMessages,
+    /// Capabilities for `normalizeCoreTrap`, which maps JS engine traps to canonical trap messages.
+    NormalizeCoreTrap,
+    /// Capabilities for `checkForDeadlock`, the component scheduler deadlock check.
+    CheckForDeadlock,
+    /// Capabilities for `trackHostOperation`, which tracks pending host work.
+    TrackHostOperation,
+    /// Shared capabilities for `checkMayLeave` and `guardMayLeave`.
+    CheckMayLeave,
+    /// Shared capabilities for `getOrCreateAsyncState`, `backpressureInc`, and `backpressureDec`.
+    GetOrCreateAsyncState,
+    /// Shared capabilities for `recordTrap` and `guardTrap`.
     RecordTrap,
+    /// Shared capabilities for `postReturnTrap` and `guardPostReturn`.
     PostReturnTrap,
-    AsyncStateClass,
+    /// The component async-state constructor returned by `initializeComponentAsyncStateClass`.
+    InitializeComponentAsyncStateClass,
 }
-impl ComponentContext {
+impl ComponentContextIntrinsic {
     const ALL: [Self; 13] = [
-        Self::InstanceFlags,
-        Self::StoreTrap,
-        Self::StoreAsyncState,
-        Self::AsyncStates,
-        Self::CoreTrapMessages,
-        Self::NormalizeTrap,
-        Self::Deadlock,
-        Self::HostOperation,
-        Self::MayLeave,
-        Self::StateLookup,
+        Self::InitializeInstanceFlags,
+        Self::InitializeStoreTrap,
+        Self::InitializeStoreAsyncState,
+        Self::InitializeComponentAsyncStates,
+        Self::InitializeCoreTrapMessages,
+        Self::NormalizeCoreTrap,
+        Self::CheckForDeadlock,
+        Self::TrackHostOperation,
+        Self::CheckMayLeave,
+        Self::GetOrCreateAsyncState,
         Self::RecordTrap,
         Self::PostReturnTrap,
-        Self::AsyncStateClass,
+        Self::InitializeComponentAsyncStateClass,
     ];
     pub(crate) fn get_global_names() -> impl Iterator<Item = &'static str> {
         Self::ALL
@@ -53,35 +67,39 @@ impl ComponentContext {
     }
     pub(crate) fn local_name(self) -> &'static str {
         match self {
-            Self::InstanceFlags => "INSTANCE_FLAGS",
-            Self::StoreTrap => "STORE_TRAP",
-            Self::StoreAsyncState => "STORE_ASYNC_STATE",
-            Self::AsyncStates => "ASYNC_STATE",
-            Self::CoreTrapMessages => "CORE_TRAP_MESSAGES",
-            Self::NormalizeTrap => "_jcoComponentNormalizeTrapContext",
-            Self::Deadlock => "_jcoComponentDeadlockContext",
-            Self::HostOperation => "_jcoComponentHostOperationContext",
-            Self::MayLeave => "_jcoComponentMayLeaveContext",
-            Self::StateLookup => "_jcoComponentStateLookupContext",
+            Self::InitializeInstanceFlags => "INSTANCE_FLAGS",
+            Self::InitializeStoreTrap => "STORE_TRAP",
+            Self::InitializeStoreAsyncState => "STORE_ASYNC_STATE",
+            Self::InitializeComponentAsyncStates => "ASYNC_STATE",
+            Self::InitializeCoreTrapMessages => "CORE_TRAP_MESSAGES",
+            Self::NormalizeCoreTrap => "_jcoComponentNormalizeTrapContext",
+            Self::CheckForDeadlock => "_jcoComponentDeadlockContext",
+            Self::TrackHostOperation => "_jcoComponentHostOperationContext",
+            Self::CheckMayLeave => "_jcoComponentMayLeaveContext",
+            Self::GetOrCreateAsyncState => "_jcoComponentStateLookupContext",
             Self::RecordTrap => "_jcoComponentRecordTrapContext",
             Self::PostReturnTrap => "_jcoComponentPostReturnTrapContext",
-            Self::AsyncStateClass => "ComponentAsyncState",
+            Self::InitializeComponentAsyncStateClass => "ComponentAsyncState",
         }
     }
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (export, local_name) = match self {
-            Self::InstanceFlags => ("initializeInstanceFlags", "_jcoInitializeInstanceFlags"),
-            Self::StoreTrap => ("initializeStoreTrap", "_jcoInitializeStoreTrap"),
-            Self::StoreAsyncState => ("initializeStoreAsyncState", "_jcoInitializeStoreAsyncState"),
-            Self::AsyncStates => (
+            Self::InitializeInstanceFlags => {
+                ("initializeInstanceFlags", "_jcoInitializeInstanceFlags")
+            }
+            Self::InitializeStoreTrap => ("initializeStoreTrap", "_jcoInitializeStoreTrap"),
+            Self::InitializeStoreAsyncState => {
+                ("initializeStoreAsyncState", "_jcoInitializeStoreAsyncState")
+            }
+            Self::InitializeComponentAsyncStates => (
                 "initializeComponentAsyncStates",
                 "_jcoInitializeComponentAsyncStates",
             ),
-            Self::CoreTrapMessages => (
+            Self::InitializeCoreTrapMessages => (
                 "initializeCoreTrapMessages",
                 "_jcoInitializeCoreTrapMessages",
             ),
-            Self::AsyncStateClass => (
+            Self::InitializeComponentAsyncStateClass => (
                 "initializeComponentAsyncStateClass",
                 "_jcoInitializeComponentAsyncStateClass",
             ),
@@ -93,34 +111,39 @@ impl ComponentContext {
             local_name,
         })
     }
-    pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component, Core};
+    pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
+        use RuntimeContextIntrinsic::{Component, Core};
         match self {
-            Self::NormalizeTrap => &[Component(Self::CoreTrapMessages)],
-            Self::Deadlock => &[
-                Component(Self::StoreTrap),
-                Component(Self::StoreAsyncState),
-                Component(Self::AsyncStates),
+            Self::NormalizeCoreTrap => &[Component(Self::InitializeCoreTrapMessages)],
+            Self::CheckForDeadlock => &[
+                Component(Self::InitializeStoreTrap),
+                Component(Self::InitializeStoreAsyncState),
+                Component(Self::InitializeComponentAsyncStates),
             ],
-            Self::HostOperation => &[Component(Self::Deadlock), Core(CoreContext::SymbolDispose)],
-            Self::MayLeave => &[Component(Self::InstanceFlags)],
-            Self::StateLookup => &[
-                Component(Self::AsyncStates),
-                Component(Self::AsyncStateClass),
+            Self::TrackHostOperation => &[
+                Component(Self::CheckForDeadlock),
+                Core(CoreContextIntrinsic::InitializeSymbolDispose),
             ],
-            Self::PostReturnTrap => &[Component(Self::StateLookup)],
+            Self::CheckMayLeave => &[Component(Self::InitializeInstanceFlags)],
+            Self::GetOrCreateAsyncState => &[
+                Component(Self::InitializeComponentAsyncStates),
+                Component(Self::InitializeComponentAsyncStateClass),
+            ],
+            Self::PostReturnTrap => &[Component(Self::GetOrCreateAsyncState)],
             Self::RecordTrap => &[
-                Core(CoreContext::GlobalCurrentTaskMeta),
-                Component(Self::StateLookup),
+                Core(CoreContextIntrinsic::InitializeTaskRegisters),
+                Component(Self::GetOrCreateAsyncState),
             ],
-            Self::AsyncStateClass => &[
-                RuntimeContext::Waitable(WaitableContext::Class),
-                Core(CoreContext::RepTableClass),
-                RuntimeContext::HandleIndexSpaces,
-                Component(Self::InstanceFlags),
-                Component(Self::StoreTrap),
-                Component(Self::NormalizeTrap),
-                Component(Self::Deadlock),
+            Self::InitializeComponentAsyncStateClass => &[
+                RuntimeContextIntrinsic::Waitable(
+                    WaitableContextIntrinsic::InitializeWaitableClass,
+                ),
+                Core(CoreContextIntrinsic::InitializeRepTableClass),
+                RuntimeContextIntrinsic::InitializeHandleIndexSpaces,
+                Component(Self::InitializeInstanceFlags),
+                Component(Self::InitializeStoreTrap),
+                Component(Self::NormalizeCoreTrap),
+                Component(Self::CheckForDeadlock),
             ],
             _ => &[],
         }
@@ -130,8 +153,8 @@ impl ComponentContext {
         if let Some(initializer) = self.initializer() {
             let initialize = initializer.local_name;
             let arguments = match self {
-                Self::CoreTrapMessages => core_trap_messages_js(),
-                Self::AsyncStateClass => format!(
+                Self::InitializeCoreTrapMessages => core_trap_messages_js(),
+                Self::InitializeComponentAsyncStateClass => format!(
                     "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable }}",
                     Trap::CannotEnterComponent.to_string()
                 ),
@@ -141,23 +164,23 @@ impl ComponentContext {
             return;
         }
         match self {
-            Self::NormalizeTrap => uwriteln!(
+            Self::NormalizeCoreTrap => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, messages: CORE_TRAP_MESSAGES }};"
             ),
-            Self::Deadlock => uwriteln!(
+            Self::CheckForDeadlock => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, asyncState: ASYNC_STATE }};"
             ),
-            Self::HostOperation => uwriteln!(
+            Self::TrackHostOperation => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, asyncState: ASYNC_STATE, symbolDispose }};"
             ),
-            Self::MayLeave => uwriteln!(
+            Self::CheckMayLeave => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, instanceFlags: INSTANCE_FLAGS }};"
             ),
-            Self::StateLookup => uwriteln!(
+            Self::GetOrCreateAsyncState => uwriteln!(
                 output,
                 "const {local} = {{ asyncState: ASYNC_STATE, ComponentAsyncState }};"
             ),
@@ -201,99 +224,101 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
         StopInstance => return None,
         GlobalInstanceFlagsMap => (
             "initializeInstanceFlags",
-            ComponentContext::InstanceFlags,
+            ComponentContextIntrinsic::InitializeInstanceFlags,
             RuntimeImportKind::InitializedValue,
         ),
         GlobalStoreTrap => (
             "initializeStoreTrap",
-            ComponentContext::StoreTrap,
+            ComponentContextIntrinsic::InitializeStoreTrap,
             RuntimeImportKind::InitializedValue,
         ),
         GlobalStoreAsyncState => (
             "initializeStoreAsyncState",
-            ComponentContext::StoreAsyncState,
+            ComponentContextIntrinsic::InitializeStoreAsyncState,
             RuntimeImportKind::InitializedValue,
         ),
         GlobalAsyncStateMap => (
             "initializeComponentAsyncStates",
-            ComponentContext::AsyncStates,
+            ComponentContextIntrinsic::InitializeComponentAsyncStates,
             RuntimeImportKind::InitializedValue,
         ),
         ComponentAsyncStateClass => (
             "initializeComponentAsyncStateClass",
-            ComponentContext::AsyncStateClass,
+            ComponentContextIntrinsic::InitializeComponentAsyncStateClass,
             RuntimeImportKind::InitializedConstructor,
         ),
         CheckForDeadlock => (
             "checkForDeadlock",
-            ComponentContext::Deadlock,
+            ComponentContextIntrinsic::CheckForDeadlock,
             RuntimeImportKind::Call,
         ),
         TrackHostOperation => (
             "trackHostOperation",
-            ComponentContext::HostOperation,
+            ComponentContextIntrinsic::TrackHostOperation,
             RuntimeImportKind::Call,
         ),
         NormalizeCoreTrap => (
             "normalizeCoreTrap",
-            ComponentContext::NormalizeTrap,
+            ComponentContextIntrinsic::NormalizeCoreTrap,
             RuntimeImportKind::Call,
         ),
         CheckMayLeave => (
             "checkMayLeave",
-            ComponentContext::MayLeave,
+            ComponentContextIntrinsic::CheckMayLeave,
             RuntimeImportKind::Call,
         ),
         GuardMayLeave => (
             "guardMayLeave",
-            ComponentContext::MayLeave,
+            ComponentContextIntrinsic::CheckMayLeave,
             RuntimeImportKind::Call,
         ),
         RecordTrap => (
             "recordTrap",
-            ComponentContext::RecordTrap,
+            ComponentContextIntrinsic::RecordTrap,
             RuntimeImportKind::Call,
         ),
         PostReturnTrap => (
             "postReturnTrap",
-            ComponentContext::PostReturnTrap,
+            ComponentContextIntrinsic::PostReturnTrap,
             RuntimeImportKind::Call,
         ),
         GuardPostReturn => (
             "guardPostReturn",
-            ComponentContext::PostReturnTrap,
+            ComponentContextIntrinsic::PostReturnTrap,
             RuntimeImportKind::Call,
         ),
         GuardTrap => (
             "guardTrap",
-            ComponentContext::RecordTrap,
+            ComponentContextIntrinsic::RecordTrap,
             RuntimeImportKind::Call,
         ),
         GetOrCreateAsyncState => (
             "getOrCreateAsyncState",
-            ComponentContext::StateLookup,
+            ComponentContextIntrinsic::GetOrCreateAsyncState,
             RuntimeImportKind::Call,
         ),
+        // Implements `canon backpressure.inc` using the shared component state.
         BackpressureInc => (
             "backpressureInc",
-            ComponentContext::StateLookup,
+            ComponentContextIntrinsic::GetOrCreateAsyncState,
             RuntimeImportKind::Call,
         ),
+        // Implements `canon backpressure.dec` using the shared component state.
         BackpressureDec => (
             "backpressureDec",
-            ComponentContext::StateLookup,
+            ComponentContextIntrinsic::GetOrCreateAsyncState,
             RuntimeImportKind::Call,
         ),
         ComponentStateSetAllError => (
             "setAllError",
-            ComponentContext::AsyncStates,
+            ComponentContextIntrinsic::InitializeComponentAsyncStates,
             RuntimeImportKind::Call,
         ),
     };
     Some(RuntimeImport {
         suffix: "intrinsics/component",
         export,
-        context: Some(RuntimeContext::Component(context)),
+        context: Some(RuntimeContextIntrinsic::Component(context)),
         kind,
     })
 }

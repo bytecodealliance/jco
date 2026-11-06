@@ -1,53 +1,53 @@
 //! Named string operations and independently selected codec owners.
 
-use super::{RuntimeContext, RuntimeImport, RuntimeImportKind};
+use super::{RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind};
 use crate::intrinsics::string::StringIntrinsic;
 
 pub(crate) fn import(intrinsic: StringIntrinsic) -> RuntimeImport {
     let (export, context, kind) = match intrinsic {
         StringIntrinsic::Utf16Decoder => (
             "initializeUtf16Decoder",
-            Some(RuntimeContext::Utf16Decoder),
+            Some(RuntimeContextIntrinsic::InitializeUtf16Decoder),
             RuntimeImportKind::InitializedValue,
         ),
         StringIntrinsic::GlobalTextDecoderUtf8 => (
             "initializeUtf8Decoder",
-            Some(RuntimeContext::Utf8Decoder),
+            Some(RuntimeContextIntrinsic::InitializeUtf8Decoder),
             RuntimeImportKind::InitializedValue,
         ),
         StringIntrinsic::GlobalTextEncoderUtf8 => (
             "initializeUtf8Encoder",
-            Some(RuntimeContext::Utf8Encoder),
+            Some(RuntimeContextIntrinsic::InitializeUtf8Encoder),
             RuntimeImportKind::InitializedValue,
         ),
         StringIntrinsic::Utf16Encode => (
             "utf16Encode",
-            Some(RuntimeContext::Utf16Encoding),
+            Some(RuntimeContextIntrinsic::InitializeUtf16Encoding),
             RuntimeImportKind::Call,
         ),
         StringIntrinsic::Utf16EncodeAsync => (
             "utf16EncodeAsync",
-            Some(RuntimeContext::Utf16Encoding),
+            Some(RuntimeContextIntrinsic::InitializeUtf16Encoding),
             RuntimeImportKind::Call,
         ),
         StringIntrinsic::Utf8Encode => (
             "utf8Encode",
-            Some(RuntimeContext::Utf8Encoder),
+            Some(RuntimeContextIntrinsic::InitializeUtf8Encoder),
             RuntimeImportKind::Call,
         ),
         StringIntrinsic::Utf8EncodeAsync => (
             "utf8EncodeAsync",
-            Some(RuntimeContext::Utf8Encoder),
+            Some(RuntimeContextIntrinsic::InitializeUtf8Encoder),
             RuntimeImportKind::Call,
         ),
         StringIntrinsic::CompactUtf16Decode => (
             "compactUtf16Decode",
-            Some(RuntimeContext::Utf16Decoder),
+            Some(RuntimeContextIntrinsic::InitializeUtf16Decoder),
             RuntimeImportKind::Call,
         ),
         StringIntrinsic::CompactUtf16Encode => (
             "compactUtf16Encode",
-            Some(RuntimeContext::Utf16Encoding),
+            Some(RuntimeContextIntrinsic::InitializeUtf16Encoding),
             RuntimeImportKind::Call,
         ),
         StringIntrinsic::Utf16ValidatingCopy => {
