@@ -35,11 +35,12 @@ suite('dropping the readable end the host holds', () => {
     });
 
     /** A new instance, and the things it made with how often they were disposed. */
-    async function setup() {
+    async function setup(onCreate?: () => void) {
         const things = { made: 0, disposed: 0 };
         class Thing {
             constructor() {
                 things.made += 1;
+                onCreate?.();
             }
             [Symbol.dispose]() {
                 things.disposed += 1;
@@ -120,10 +121,12 @@ suite('dropping the readable end the host holds', () => {
             assert.strictEqual(things.disposed, 1);
         });
 
-        test.concurrent('dropping it after a read disposes the value, and reads no more', async ({ expect }) => {
+        test.concurrent('dropping it after a read preserves the delivered value, and reads no more', async ({
+            expect,
+        }) => {
             const { instance, things } = await setup();
             const { future } = await open(instance, true);
-            await future;
+            const value = await future;
             await pause();
             await expect.poll(() => instance.writeResult()).toBe(WRITE_COMPLETED);
             assert.strictEqual(things.disposed, 0);
@@ -131,6 +134,8 @@ suite('dropping the readable end the host holds', () => {
             future[Symbol.dispose]();
             future[Symbol.dispose]();
             await pause();
+            assert.strictEqual(things.disposed, 0);
+            value[Symbol.dispose]();
             assert.strictEqual(things.disposed, 1);
 
             let error;
@@ -138,13 +143,46 @@ suite('dropping the readable end the host holds', () => {
             assert.instanceOf(error, Error);
         });
 
-        test.concurrent('a guest reader dropping it after a read disposes the value', async () => {
+        test.concurrent('a guest reader dropping it after a read preserves the delivered value', async () => {
             const { instance, things } = await setup();
             const { future } = await open(instance, true);
-            await future;
+            const value = await future;
             assert.strictEqual(things.disposed, 0);
 
             await instance.discard(future);
+            await pause();
+            assert.strictEqual(things.disposed, 0);
+            value[Symbol.dispose]();
+            assert.strictEqual(things.disposed, 1);
+        });
+
+        test.concurrent('dropping it in a fulfillment callback preserves the received value', async () => {
+            const { instance, things } = await setup();
+            const { future } = await open(instance, true);
+            const value = await new Promise<{ [Symbol.dispose](): void }>((resolve, reject) =>
+                future.then((value) => {
+                    future[Symbol.dispose]();
+                    resolve(value);
+                }, reject),
+            );
+            await pause();
+            assert.strictEqual(things.disposed, 0);
+            value[Symbol.dispose]();
+            assert.strictEqual(things.disposed, 1);
+        });
+
+        test.concurrent('dropping a copied but undelivered value disposes it once', async ({ expect }) => {
+            const { instance, things } = await setup(() => queueMicrotask(() => future[Symbol.dispose]()));
+            const { future } = await open(instance, false);
+            const read = new Promise((resolve, reject) => future.then(resolve, reject));
+            const rejected = expect(read).rejects.toThrow('future was dropped');
+            await pause();
+
+            await instance.writeFuture();
+            await rejected;
+            await expect.poll(() => instance.writeResult()).toBe(WRITE_COMPLETED);
+            await expect.poll(() => things.disposed).toBe(1);
+            future[Symbol.dispose]();
             await pause();
             assert.strictEqual(things.disposed, 1);
         });
@@ -182,6 +220,38 @@ suite('dropping the readable end the host holds', () => {
             instance.dropWritten();
             assert.strictEqual(things.disposed, 1);
         });
+    });
+
+    test.concurrent('dropping an outer future preserves the delivered inner future', async () => {
+        const { instance, things } = await setup();
+        const outer = await instance.openNestedFuture();
+        const inner = await outer;
+        outer[Symbol.dispose]();
+        await pause();
+        const value = await inner;
+        inner[Symbol.dispose]();
+        await pause();
+        assert.strictEqual(things.disposed, 0);
+        value[Symbol.dispose]();
+        assert.strictEqual(things.disposed, 1);
+    });
+
+    test.concurrent('stopping after the guest drops a host future disposes its source once', async () => {
+        const { instance } = await setup();
+        let disposed = 0;
+        const future = {
+            then() {},
+            [Symbol.dispose]() {
+                disposed += 1;
+            },
+        };
+        await instance.discard(future);
+        await pause();
+        assert.strictEqual(disposed, 1);
+        instance._util.stop();
+        instance._util.stop();
+        await pause();
+        assert.strictEqual(disposed, 1);
     });
 
     // Nothing here calls process.exit: the process ends when no timer is left.

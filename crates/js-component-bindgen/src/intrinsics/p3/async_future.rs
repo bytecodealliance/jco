@@ -328,6 +328,7 @@ impl AsyncFutureIntrinsic {
                         #start;
                         #dropFn;
                         #dropped = false;
+                        #delivered = false;
                         #settled;
                         #hideThen = 0;
                         #thenFn;
@@ -378,23 +379,33 @@ impl AsyncFutureIntrinsic {
                             const droppedErr = () => new Error('future was dropped');
                             const read = this.#dropped
                                 ? Promise.reject(droppedErr())
-                                : this.#read().then(box => {{
-                                    if (this.#dropped) {{ throw droppedErr(); }}
-                                    return box;
-                                }});
+                                : this.#read();
                             return read.then(
-                                box => this.#deliver(resolve, box.value),
+                                box => {{
+                                    // Check at delivery, so a drop after the copy but before
+                                    // this callback rejects the read and discards its value.
+                                    if (this.#dropped) {{
+                                        if (typeof reject === 'function') {{ return reject(droppedErr()); }}
+                                        throw droppedErr();
+                                    }}
+                                    // The recipient owns the value even if its callback drops
+                                    // this future reentrantly or throws after receiving it.
+                                    this.#delivered = true;
+                                    return this.#deliver(resolve, box.value);
+                                }},
                                 reject,
                             );
                         }}
 
-                        // Drops the readable end. A write waiting on it, or made later, ends as
-                        // the canonical ABI says, and a value already read is nobody's now.
+                        // Drops the readable end. Only a copied value that has not reached
+                        // a recipient is discarded; delivered values belong to the host.
                         [{symbol_dispose}]() {{
                             if (this.#dropped) {{ return; }}
                             this.#dropped = true;
                             this.#dropFn?.();
-                            this.#settled?.then(box => {dispose_host_value}box.value), () => {{}});
+                            this.#settled?.then(box => {{
+                                if (!this.#delivered) {{ {dispose_host_value}box.value); }}
+                            }}, () => {{}});
                         }}
                     }}
                     "#
@@ -1414,6 +1425,8 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         onInstanceStop() {{
+                            // A normal drop already notified the host source.
+                            if (this.isDropped()) {{ return; }}
                             super.onInstanceStop();
                             this.#hostInjectFn?.drop?.();
                         }}
