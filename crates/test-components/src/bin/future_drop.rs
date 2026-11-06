@@ -1,5 +1,6 @@
 //! Keep failed writes owned by the guest until the host explicitly releases them.
-use std::cell::{Cell, RefCell};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicI32, Ordering};
 
 mod bindings {
     use super::Component;
@@ -13,23 +14,24 @@ use wit_bindgen::{FutureReader, FutureWriter, StreamReader, StreamWriter};
 
 struct Component;
 
-thread_local! {
-    static READER: RefCell<Option<FutureReader<Thing>>> = const { RefCell::new(None) };
-    static FUTURE: RefCell<Option<FutureWriter<Thing>>> = const { RefCell::new(None) };
-    static STREAM: RefCell<Option<StreamWriter<Thing>>> = const { RefCell::new(None) };
-    static HELD: RefCell<Option<Thing>> = const { RefCell::new(None) };
-    static RESULT: Cell<i32> = const { Cell::new(-2) };
-}
+static READER: Mutex<Option<FutureReader<Thing>>> = Mutex::new(None);
+static FUTURE: Mutex<Option<FutureWriter<Thing>>> = Mutex::new(None);
+static STREAM: Mutex<Option<StreamWriter<Thing>>> = Mutex::new(None);
+static HELD: Mutex<Option<Thing>> = Mutex::new(None);
+static RESULT: AtomicI32 = AtomicI32::new(-2);
 
 fn finished(value: Option<Thing>) {
-    RESULT.set(if value.is_some() { 1 } else { 0 });
-    HELD.replace(value);
+    let result = if value.is_some() { 1 } else { 0 };
+    let previous = std::mem::replace(&mut *HELD.lock().unwrap(), value);
+    drop(previous);
+    RESULT.store(result, Ordering::Release);
 }
 
 impl bindings::Guest for Component {
     async fn open_future(write_now: bool) -> FutureReader<Thing> {
         let (tx, rx) = wit_future::new(|| unreachable!("test always writes explicitly"));
-        FUTURE.replace(Some(tx));
+        let previous = FUTURE.lock().unwrap().replace(tx);
+        drop(previous);
         if write_now {
             wit_bindgen::spawn_local(Self::write_future());
         }
@@ -37,15 +39,17 @@ impl bindings::Guest for Component {
     }
 
     async fn prepare(write_now: bool) {
-        READER.replace(Some(Self::open_future(write_now).await));
+        let reader = Self::open_future(write_now).await;
+        let previous = READER.lock().unwrap().replace(reader);
+        drop(previous);
     }
 
     fn take_future() -> FutureReader<Thing> {
-        READER.take().unwrap()
+        READER.lock().unwrap().take().unwrap()
     }
 
     async fn write_future() {
-        let tx = FUTURE.take().unwrap();
+        let tx = FUTURE.lock().unwrap().take().unwrap();
         finished(tx.write(Thing::new()).await.err().map(|error| error.value));
     }
 
@@ -61,21 +65,23 @@ impl bindings::Guest for Component {
 
     async fn open_stream_idle() -> StreamReader<Thing> {
         let (tx, rx) = wit_stream::new();
-        STREAM.replace(Some(tx));
+        let previous = STREAM.lock().unwrap().replace(tx);
+        drop(previous);
         rx
     }
 
     async fn write_stream() {
-        let mut tx = STREAM.take().unwrap();
+        let mut tx = STREAM.lock().unwrap().take().unwrap();
         finished(tx.write_one(Thing::new()).await);
     }
 
     fn write_result() -> i32 {
-        RESULT.get()
+        RESULT.load(Ordering::Acquire)
     }
 
     fn drop_written() {
-        drop(HELD.take());
+        let held = HELD.lock().unwrap().take();
+        drop(held);
     }
 }
 
