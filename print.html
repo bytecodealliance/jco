@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-1889d7af.js";
+            window.path_to_searchindex_js = "searchindex-853eb55a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-5f84a43a.js"></script>
@@ -927,6 +927,13 @@ Jco’s default Node capability map is not applied to instantiation output.</p>
 ): { [exportName: string]: any };
 </code></pre>
 <p>Where instead of promises, all functions are synchronous.</p>
+<h3 id="dropping-a-received-future"><a class="header" href="#dropping-a-received-future">Dropping a received future</a></h3>
+<p>A future received from a guest is lazy: receiving it does not consume its value. Read it with
+<code>await future</code>, or call <code>future[Symbol.dispose]?.()</code> to release its readable end. Disposal is
+idempotent, rejects a pending read, and notifies a waiting or subsequent writer that the reader
+has gone. Further reads reject. If the future has already read a disposable value, disposal
+also releases that value; do not continue using it afterward. Host-supplied promises need not
+implement disposal, so generated future types make the method optional.</p>
 <h3 id="stopping-an-instance"><a class="header" href="#stopping-an-instance">Stopping an instance</a></h3>
 <p>Call <code>instance._util.stop()</code> when the host is done with an instance:</p>
 <pre><code class="language-js">const instance = await instantiate(getCoreModule, imports);
