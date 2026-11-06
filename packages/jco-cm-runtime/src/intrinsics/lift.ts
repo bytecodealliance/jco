@@ -1,5 +1,7 @@
 import type {
     LiftModule,
+    StreamReadableEnd,
+    StreamWritableEnd,
     TaskLiftContext,
     LiftRecordMeta,
     LiftVariantMeta,
@@ -20,6 +22,7 @@ import type {
     StringDecoder,
     LiftFlagsContext,
 } from '../runtime.js';
+import { getStreamEnd } from './stream-state.js';
 import { getFutureEnd } from './future-state.js';
 import { debugLog } from './core-debug.js';
 import { compactUtf16Decode } from './string.js';
@@ -1083,7 +1086,7 @@ export function liftFlatStream(
     return function liftFlatStreamInner(ctx) {
         debugLog('[liftFlatStream()] args', { ctx });
 
-        const streamMeta = _context.getTables()[streamTableIdx];
+        const streamMeta = _context.tables[streamTableIdx];
         if (streamMeta.componentIdx !== componentIdx) {
             throw new Error('unexpectedly mismatched component idx');
         }
@@ -1111,7 +1114,7 @@ export function liftFlatStream(
             throw new Error(`missing async state for component [${componentIdx}]`);
         }
 
-        const streamEnd = _context.getEnd({
+        const streamEnd = getStreamEnd(_context, {
             tableIdx: streamTableIdx,
             streamEndWaitableIdx: streamEndWaitableIdx as number,
         });
@@ -1137,15 +1140,15 @@ export function liftFlatStream(
             throw new _context.RuntimeError("cannot lift stream while it's in a waitable set");
         }
 
-        const stream = new (_context.getExternalStream())({
+        const stream = new _context.Stream({
             globalRep: streamEnd.globalStreamMapRep(),
             isReadable: streamEnd.isReadable(),
             isWritable: streamEnd.isWritable(),
             writeFn: (v) => {
-                return streamEnd.write(v);
+                return (streamEnd as StreamWritableEnd).write(v);
             },
             readFn: (opts) => {
-                return streamEnd.read(opts);
+                return (streamEnd as StreamReadableEnd).read(opts);
             },
             // A host can dispose an in-flight read after its event has
             // been published but before its polling continuation consumes

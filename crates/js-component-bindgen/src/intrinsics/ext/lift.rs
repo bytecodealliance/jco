@@ -1,13 +1,10 @@
 //! Lift helpers share selected codec/scratch owners and lazy pending-family capabilities.
 use super::{
-    ComponentContext, CoreContext, ErrCtxContext, FutureContext, RuntimeContext, RuntimeImport,
-    RuntimeImportKind, RuntimeInitializer,
+    ErrCtxContext, FutureContext, RuntimeContext, RuntimeImport, RuntimeImportKind,
+    RuntimeInitializer, StreamContext,
 };
 use crate::{
-    intrinsics::{
-        Intrinsic, RenderIntrinsicsArgs, lift::LiftIntrinsic,
-        p3::async_stream::AsyncStreamIntrinsic,
-    },
+    intrinsics::{RenderIntrinsicsArgs, lift::LiftIntrinsic},
     source::Source,
     uwriteln,
 };
@@ -61,8 +58,8 @@ impl LiftContext {
             Self::Strings => &[RuntimeContext::Utf8Decoder, RuntimeContext::Utf16Decoder],
             Self::Future => &[RuntimeContext::Future(FutureContext::Lookup)],
             Self::Stream => &[
-                RuntimeContext::Component(ComponentContext::StateLookup),
-                RuntimeContext::Core(CoreContext::WebAssemblyRuntimeError),
+                RuntimeContext::Stream(StreamContext::Lookup),
+                RuntimeContext::Stream(StreamContext::ExternalClass),
             ],
             _ => &[],
         }
@@ -79,11 +76,11 @@ impl LiftContext {
                 let as_bigint = args.transpile_opts.flags_as_bigint;
                 uwriteln!(output, "const {local} = {{ asBigInt: {as_bigint} }};");
             }
-            // Until N17/N18, look up the actual inline tables/classes at call time.
+            // Share selected named owner contexts.
             Self::Future => uwriteln!(output, "const {local} = _jcoFutureEndLookupContext;"),
             Self::Stream => uwriteln!(
                 output,
-                "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, getTables: () => STREAM_TABLES, getEnd: (options) => getStreamEnd(options), getExternalStream: () => Stream }};"
+                "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, tables: STREAM_TABLES, StreamEnd, Stream }};"
             ),
         }
     }
@@ -113,21 +110,13 @@ pub(crate) fn import(intrinsic: LiftIntrinsic) -> RuntimeImport {
     }
 }
 
-pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
-    if let Intrinsic::Lift(LiftIntrinsic::LiftFlatStream) = intrinsic {
-        args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
-        args.require_intrinsic(AsyncStreamIntrinsic::GetStreamEnd);
-        args.require_intrinsic(AsyncStreamIntrinsic::ExternalStreamClass);
-    }
-}
-
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {
     use super::*;
     use crate::{
         TranspileOpts,
         intrinsics::{
-            render_intrinsics,
+            Intrinsic, render_intrinsics,
             runtime::{self, IntrinsicBinding},
         },
     };
@@ -198,19 +187,13 @@ mod tests {
         );
     }
     #[test]
-    fn pending_endpoint_capabilities_are_lazy_and_keep_inline_dependencies() {
+    fn endpoint_capabilities_share_named_owners() {
         let (source, intrinsics) =
             generated(&[LiftIntrinsic::LiftFlatFuture, LiftIntrinsic::LiftFlatStream]);
-        for retained in [
-            Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
-            Intrinsic::AsyncStream(AsyncStreamIntrinsic::GetStreamEnd),
-            Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
-        ] {
-            assert!(intrinsics.contains(&retained), "{retained:?}");
-        }
+        assert_eq!(intrinsics.len(), 2);
         assert!(source.contains("const _jcoLiftFutureContext = _jcoFutureEndLookupContext;"));
-        assert!(source.contains("getTables: () => STREAM_TABLES"));
-        assert!(source.contains("getExternalStream: () => Stream"));
+        assert!(source.contains("tables: STREAM_TABLES, Stream"));
+        assert!(!source.contains("getExternalStream:"));
         assert!(!source.contains("function _liftFlatFuture("));
         assert!(!source.contains("function _liftFlatStream("));
         assert!(matches!(
