@@ -81,14 +81,17 @@ impl ErrCtxContext {
         })
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component as C, Core, ErrCtx as E};
+        use RuntimeContext::{Component, Core, ErrCtx};
         match self {
             Self::GlobalClass => &[Core(CoreContext::RepTableClass)],
-            Self::LocalTable => &[E(Self::LocalTables), Core(CoreContext::RepTableClass)],
-            Self::Handle => &[E(Self::GlobalClass), C(ComponentContext::StateLookup)],
-            Self::New | Self::Drop => &[E(Self::Handle), E(Self::LocalTable)],
-            Self::Debug => &[E(Self::Handle)],
-            Self::Transfer => &[E(Self::New), E(Self::Registrations)],
+            Self::LocalTable => &[ErrCtx(Self::LocalTables), Core(CoreContext::RepTableClass)],
+            Self::Handle => &[
+                ErrCtx(Self::GlobalClass),
+                Component(ComponentContext::StateLookup),
+            ],
+            Self::New | Self::Drop => &[ErrCtx(Self::Handle), ErrCtx(Self::LocalTable)],
+            Self::Debug => &[ErrCtx(Self::Handle)],
+            Self::Transfer => &[ErrCtx(Self::New), ErrCtx(Self::Registrations)],
             _ => &[],
         }
     }
@@ -128,33 +131,56 @@ impl ErrCtxContext {
 }
 
 pub(crate) fn import(intrinsic: ErrCtxIntrinsic) -> RuntimeImport {
-    use ErrCtxContext as C;
     use ErrCtxIntrinsic::*;
-    use RuntimeImportKind as K;
+
     let (export, context, kind) = match intrinsic {
         ComponentGlobalTable => (
             "initializeGlobalErrorContextTableClass",
-            C::GlobalClass,
-            K::InitializedConstructor,
+            ErrCtxContext::GlobalClass,
+            RuntimeImportKind::InitializedConstructor,
         ),
         GlobalErrCtxTableMap => (
             "initializeErrorContextTableRegistrations",
-            C::Registrations,
-            K::InitializedValue,
+            ErrCtxContext::Registrations,
+            RuntimeImportKind::InitializedValue,
         ),
         ComponentLocalTable => (
             "initializeLocalErrorContextTables",
-            C::LocalTables,
-            K::InitializedValue,
+            ErrCtxContext::LocalTables,
+            RuntimeImportKind::InitializedValue,
         ),
-        ErrorContextNew => ("errCtxNew", C::New, K::Call),
-        ErrorContextDrop => ("errCtxDrop", C::Drop, K::Call),
-        ErrorContextTransfer => ("errCtxTransfer", C::Transfer, K::Call),
-        ErrorContextDebugMessage => ("errCtxDebugMessage", C::Debug, K::Call),
-        GetLocalTable => ("errCtxGetLocalTable", C::LocalTable, K::Call),
-        GlobalRefCountAdd => ("errCtxGlobalRefCountAdd", C::GlobalClass, K::Call),
-        CreateLocalHandle => ("errCtxCreateLocalHandle", C::Handle, K::Call),
-        ReserveGlobalRep => ("errCtxReserveGlobalRep", C::GlobalClass, K::Call),
+        ErrorContextNew => ("errCtxNew", ErrCtxContext::New, RuntimeImportKind::Call),
+        ErrorContextDrop => ("errCtxDrop", ErrCtxContext::Drop, RuntimeImportKind::Call),
+        ErrorContextTransfer => (
+            "errCtxTransfer",
+            ErrCtxContext::Transfer,
+            RuntimeImportKind::Call,
+        ),
+        ErrorContextDebugMessage => (
+            "errCtxDebugMessage",
+            ErrCtxContext::Debug,
+            RuntimeImportKind::Call,
+        ),
+        GetLocalTable => (
+            "errCtxGetLocalTable",
+            ErrCtxContext::LocalTable,
+            RuntimeImportKind::Call,
+        ),
+        GlobalRefCountAdd => (
+            "errCtxGlobalRefCountAdd",
+            ErrCtxContext::GlobalClass,
+            RuntimeImportKind::Call,
+        ),
+        CreateLocalHandle => (
+            "errCtxCreateLocalHandle",
+            ErrCtxContext::Handle,
+            RuntimeImportKind::Call,
+        ),
+        ReserveGlobalRep => (
+            "errCtxReserveGlobalRep",
+            ErrCtxContext::GlobalClass,
+            RuntimeImportKind::Call,
+        ),
     };
     RuntimeImport {
         suffix: "intrinsics/error-context",

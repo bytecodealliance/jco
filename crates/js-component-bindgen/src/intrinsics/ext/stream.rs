@@ -134,13 +134,13 @@ impl StreamContext {
         })
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component, Core, Stream as S, Task};
+        use RuntimeContext::{Component, Core, Stream, Task};
         match self {
             Self::Streams => &[Core(CoreContext::RepTableClass)],
             Self::Tables => &[],
             Self::EndClass => &[Core(CoreContext::AsyncEventCodeEnum)],
             Self::ReadableClass => &[
-                S(Self::EndClass),
+                Stream(Self::EndClass),
                 Core(CoreContext::ManagedBufferClass),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Core(CoreContext::GlobalBufferManager),
@@ -150,7 +150,7 @@ impl StreamContext {
                 Task(TaskContext::Lookup),
             ],
             Self::WritableClass => &[
-                S(Self::EndClass),
+                Stream(Self::EndClass),
                 Core(CoreContext::ManagedBufferClass),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Core(CoreContext::GlobalBufferManager),
@@ -159,7 +159,7 @@ impl StreamContext {
                 Component(ComponentContext::HostOperation),
                 Task(TaskContext::Lookup),
             ],
-            Self::InternalClass => &[S(Self::ReadableClass), S(Self::WritableClass)],
+            Self::InternalClass => &[Stream(Self::ReadableClass), Stream(Self::WritableClass)],
             Self::ExternalClass => &[
                 Core(CoreContext::SymbolDispose),
                 Core(CoreContext::SymbolAsyncIterator),
@@ -168,85 +168,89 @@ impl StreamContext {
             Self::HostClass => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                S(Self::Lookup),
-                S(Self::ExternalClass),
+                Stream(Self::Lookup),
+                Stream(Self::ExternalClass),
             ],
             Self::QueueClass => &[Component(ComponentContext::HostOperation)],
-            Self::Creation => &[S(Self::InternalClass), S(Self::Streams), S(Self::Tables)],
+            Self::Creation => &[
+                Stream(Self::InternalClass),
+                Stream(Self::Streams),
+                Stream(Self::Tables),
+            ],
             Self::Table => &[
-                S(Self::Tables),
-                S(Self::EndClass),
+                Stream(Self::Tables),
+                Stream(Self::EndClass),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
             ],
             Self::Lookup => &[
-                S(Self::EndClass),
-                S(Self::Tables),
+                Stream(Self::EndClass),
+                Stream(Self::Tables),
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
             ],
             Self::New => &[
                 Task(TaskContext::Lookup),
                 Component(ComponentContext::StateLookup),
-                S(Self::Creation),
+                Stream(Self::Creation),
             ],
-            Self::FromLift => &[S(Self::HostClass), S(Self::Streams)],
+            Self::FromLift => &[Stream(Self::HostClass), Stream(Self::Streams)],
             Self::Read => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                S(Self::Lookup),
+                Stream(Self::Lookup),
                 Task(TaskContext::MayBlock),
                 Core(CoreContext::ManagedBufferClass),
                 Core(CoreContext::AsyncEventCodeEnum),
-                S(Self::ReadableClass),
+                Stream(Self::ReadableClass),
             ],
             Self::Write => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                S(Self::Lookup),
+                Stream(Self::Lookup),
                 Task(TaskContext::MayBlock),
                 Core(CoreContext::ManagedBufferClass),
                 Core(CoreContext::AsyncEventCodeEnum),
-                S(Self::WritableClass),
+                Stream(Self::WritableClass),
             ],
             Self::CancelRead => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                S(Self::Lookup),
+                Stream(Self::Lookup),
                 Task(TaskContext::Lookup),
                 Core(CoreContext::AsyncEventCodeEnum),
-                S(Self::ReadableClass),
+                Stream(Self::ReadableClass),
             ],
             Self::CancelWrite => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                S(Self::Lookup),
+                Stream(Self::Lookup),
                 Task(TaskContext::Lookup),
                 Core(CoreContext::AsyncEventCodeEnum),
-                S(Self::WritableClass),
+                Stream(Self::WritableClass),
             ],
             Self::DropRead => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                S(Self::Lookup),
+                Stream(Self::Lookup),
                 Task(TaskContext::Lookup),
-                S(Self::ReadableClass),
+                Stream(Self::ReadableClass),
             ],
             Self::DropWrite => &[
                 Core(CoreContext::WebAssemblyRuntimeError),
                 Component(ComponentContext::StateLookup),
-                S(Self::Lookup),
+                Stream(Self::Lookup),
                 Task(TaskContext::Lookup),
-                S(Self::WritableClass),
+                Stream(Self::WritableClass),
             ],
             Self::Lowerable => &[
-                S(Self::ExternalClass),
+                Stream(Self::ExternalClass),
                 Core(CoreContext::SymbolAsyncIterator),
                 Core(CoreContext::SymbolIterator),
                 Core(CoreContext::PlatformReadableStreamClass),
             ],
-            Self::Source => &[S(Self::Lowerable), Core(CoreContext::SymbolDispose)],
-            Self::Inject => &[S(Self::QueueClass)],
+            Self::Source => &[Stream(Self::Lowerable), Core(CoreContext::SymbolDispose)],
+            Self::Inject => &[Stream(Self::QueueClass)],
         }
     }
     pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
@@ -318,74 +322,126 @@ impl StreamContext {
 }
 pub(crate) fn import(intrinsic: AsyncStreamIntrinsic) -> RuntimeImport {
     use AsyncStreamIntrinsic::*;
-    use RuntimeImportKind as K;
+
     let (export, context, kind) = match intrinsic {
         GlobalStreamMap => (
             "initializeStreams",
             StreamContext::Streams,
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         GlobalStreamTableMap => (
             "initializeStreamTables",
             StreamContext::Tables,
-            K::InitializedValue,
+            RuntimeImportKind::InitializedValue,
         ),
         StreamEndClass => (
             "initializeStreamEndClass",
             StreamContext::EndClass,
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         StreamReadableEndClass => (
             "initializeStreamReadableEndClass",
             StreamContext::ReadableClass,
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         StreamWritableEndClass => (
             "initializeStreamWritableEndClass",
             StreamContext::WritableClass,
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         InternalStreamClass => (
             "initializeInternalStreamClass",
             StreamContext::InternalClass,
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         ExternalStreamClass => (
             "initializeExternalStreamClass",
             StreamContext::ExternalClass,
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         HostStreamClass => (
             "initializeHostStreamClass",
             StreamContext::HostClass,
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
         PendingValueQueueClass => (
             "initializePendingValueQueueClass",
             StreamContext::QueueClass,
-            K::InitializedConstructor,
+            RuntimeImportKind::InitializedConstructor,
         ),
-        CreateStream => ("createStream", StreamContext::Creation, K::Call),
-        GetStreamEnd => ("getStreamEnd", StreamContext::Lookup, K::Call),
-        AddStreamEndToTable => ("addStreamEndToTable", StreamContext::Table, K::Call),
-        DeleteStreamEnd => ("deleteStreamEnd", StreamContext::Table, K::Call),
-        RemoveStreamEndFromTable => ("removeStreamEndFromTable", StreamContext::Table, K::Call),
-        StreamNew => ("streamNew", StreamContext::New, K::Call),
-        StreamNewFromLift => ("streamNewFromLift", StreamContext::FromLift, K::Call),
-        StreamRead => ("streamRead", StreamContext::Read, K::Call),
-        StreamWrite => ("streamWrite", StreamContext::Write, K::Call),
-        StreamCancelRead => ("streamCancelRead", StreamContext::CancelRead, K::Call),
-        StreamCancelWrite => ("streamCancelWrite", StreamContext::CancelWrite, K::Call),
-        StreamDropReadable => ("streamDropReadable", StreamContext::DropRead, K::Call),
-        StreamDropWritable => ("streamDropWritable", StreamContext::DropWrite, K::Call),
-        StreamTransfer => ("streamTransfer", StreamContext::Lookup, K::Call),
-        IsStreamLowerableObject => ("isStreamLowerableObject", StreamContext::Lowerable, K::Call),
+        CreateStream => (
+            "createStream",
+            StreamContext::Creation,
+            RuntimeImportKind::Call,
+        ),
+        GetStreamEnd => (
+            "getStreamEnd",
+            StreamContext::Lookup,
+            RuntimeImportKind::Call,
+        ),
+        AddStreamEndToTable => (
+            "addStreamEndToTable",
+            StreamContext::Table,
+            RuntimeImportKind::Call,
+        ),
+        DeleteStreamEnd => (
+            "deleteStreamEnd",
+            StreamContext::Table,
+            RuntimeImportKind::Call,
+        ),
+        RemoveStreamEndFromTable => (
+            "removeStreamEndFromTable",
+            StreamContext::Table,
+            RuntimeImportKind::Call,
+        ),
+        StreamNew => ("streamNew", StreamContext::New, RuntimeImportKind::Call),
+        StreamNewFromLift => (
+            "streamNewFromLift",
+            StreamContext::FromLift,
+            RuntimeImportKind::Call,
+        ),
+        StreamRead => ("streamRead", StreamContext::Read, RuntimeImportKind::Call),
+        StreamWrite => ("streamWrite", StreamContext::Write, RuntimeImportKind::Call),
+        StreamCancelRead => (
+            "streamCancelRead",
+            StreamContext::CancelRead,
+            RuntimeImportKind::Call,
+        ),
+        StreamCancelWrite => (
+            "streamCancelWrite",
+            StreamContext::CancelWrite,
+            RuntimeImportKind::Call,
+        ),
+        StreamDropReadable => (
+            "streamDropReadable",
+            StreamContext::DropRead,
+            RuntimeImportKind::Call,
+        ),
+        StreamDropWritable => (
+            "streamDropWritable",
+            StreamContext::DropWrite,
+            RuntimeImportKind::Call,
+        ),
+        StreamTransfer => (
+            "streamTransfer",
+            StreamContext::Lookup,
+            RuntimeImportKind::Call,
+        ),
+        IsStreamLowerableObject => (
+            "isStreamLowerableObject",
+            StreamContext::Lowerable,
+            RuntimeImportKind::Call,
+        ),
         GenReadFnFromLowerableStream => (
             "genReadFnFromLowerableStream",
             StreamContext::Source,
-            K::Call,
+            RuntimeImportKind::Call,
         ),
-        GenStreamHostInjectFn => ("genStreamHostInjectFn", StreamContext::Inject, K::Call),
+        GenStreamHostInjectFn => (
+            "genStreamHostInjectFn",
+            StreamContext::Inject,
+            RuntimeImportKind::Call,
+        ),
     };
     RuntimeImport {
         suffix: "intrinsics/stream",
