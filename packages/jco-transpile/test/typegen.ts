@@ -1,11 +1,15 @@
 import { Buffer } from 'node:buffer';
+import { copyFile, rm } from 'node:fs/promises';
+import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
+import ts from 'typescript-compiler-api';
 
-import { JCO_WIT_FIXTURE_DIR, WIT_FIXTURE_DIR } from './helpers.js';
+import { getTmpDir, JCO_WIT_FIXTURE_DIR, WIT_FIXTURE_DIR } from './helpers.js';
 
 import { generateGuestTypes, generateHostTypes } from '../src/typegen.js';
+import { writeFiles } from '../src/common.js';
 
 suite('Type Generation', () => {
     test.concurrent.each([
@@ -162,24 +166,27 @@ suite('Type Generation', () => {
             worldName: 'test:named-async-types/named-async-types',
         });
 
-        const worldDts = Buffer.from(files['named-async-types.d.ts']).toString();
-        const typesDts = Buffer.from(files['interfaces/test-named-async-types-types.d.ts']).toString();
-        const pipelineDts = Buffer.from(files['interfaces/test-named-async-types-pipeline.d.ts']).toString();
-
-        assert.include(worldDts, 'export type ByteStream = AsyncIterable<number>;');
-        assert.include(worldDts, 'export type Ready = PromiseLike<void>;');
-        assert.include(typesDts, 'export type MessageStream = AsyncIterable<Message>;');
-        assert.include(typesDts, 'export type MessageFuture = PromiseLike<Message>;');
-        assert.include(typesDts, 'export type SignalStream = AsyncIterable<void>;');
-        assert.include(typesDts, 'export type SignalFuture = PromiseLike<void>;');
-        assert.include(
-            pipelineDts,
-            "export type MessageStream = import('./test-named-async-types-types.js').MessageStream;",
-        );
-        assert.include(
-            pipelineDts,
-            "export type MessageFuture = import('./test-named-async-types-types.js').MessageFuture;",
-        );
+        // Check the public type contract without depending on declaration formatting
+        // or spelling (for example, intersections that add optional disposal).
+        const dir = await getTmpDir();
+        try {
+            await writeFiles(files, { baseDir: dir });
+            const testFile = join(dir, 'named-async-types.mts');
+            await copyFile(new URL('./fixtures/typescript/named-async-types.mts', import.meta.url), testFile);
+            const program = ts.createProgram([testFile], {
+                noEmit: true,
+                strict: true,
+                types: [],
+                target: ts.ScriptTarget.ESNext,
+                module: ts.ModuleKind.NodeNext,
+            });
+            assert.deepStrictEqual(
+                ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
+                [],
+            );
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
     });
 
     // https://github.com/bytecodealliance/jco/issues/926
