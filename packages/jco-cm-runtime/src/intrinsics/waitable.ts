@@ -1,3 +1,4 @@
+import { storeEventInComponentMemory } from './host.js';
 import type {
     AsyncEventCodes,
     ComponentWaitable,
@@ -13,6 +14,7 @@ import type {
     WaitableSetDropContext,
     WaitableJoinContext,
     WaitableMemoryContext,
+    WaitableStoreEventOptions,
     WaitableSet as WaitableSetType,
     WaitableSetRemoveContext,
     ComponentAsyncState,
@@ -396,7 +398,7 @@ export function waitableSetWait(
     resultPtr: number,
     syncOnly = false,
 ) {
-    const { RuntimeError, WaitableSet, storeEventInComponentMemory } = context;
+    const { RuntimeError, WaitableSet } = context;
     debugLog('[waitableSetWait()] args', { ctx, waitableSetRep, resultPtr });
     const { componentIdx, memoryIdx, getMemoryFn } = ctx;
 
@@ -422,15 +424,17 @@ export function waitableSetWait(
         throw new RuntimeError(`non-waitable set returned from component state handles @ [${waitableSetRep}]`);
     }
 
-    const storeEvent = (event: WaitableEvent | null) =>
-        storeEventInComponentMemory({
+    const storeEvent = (event: WaitableEvent | null) => {
+        const options: WaitableStoreEventOptions = {
             memory,
             ptr: resultPtr,
             event,
             componentIdx,
             task,
             memoryIdx,
-        });
+        };
+        return storeEventInComponentMemory(options);
+    };
     // Built-in waits never deliver cancellation. Only the
     // callback event loop's wait is cancellable.
     const waitOpts = { readyFn: () => true, task, cancellable: false };
@@ -450,7 +454,7 @@ export function waitableSetPoll(
     waitableSetRep: number,
     resultPtr: number,
 ) {
-    const { RuntimeError, WaitableSet, storeEventInComponentMemory, events: asyncEventCode } = context;
+    const { RuntimeError, WaitableSet, events: asyncEventCode } = context;
     const { componentIdx, memoryIdx, getMemoryFn } = ctx;
     debugLog('[waitableSetPoll()] args', {
         componentIdx,
@@ -500,16 +504,16 @@ export function waitableSetPoll(
         event = wset.getPendingEvent();
     }
 
-    const eventCode = storeEventInComponentMemory({
+    const options: WaitableStoreEventOptions = {
         event,
         ptr: resultPtr,
         memory: getMemoryFn(),
         componentIdx,
         task,
         memoryIdx,
-    });
+    };
 
-    return eventCode;
+    return storeEventInComponentMemory(options);
 }
 
 export function waitableSetDrop(context: WaitableSetDropContext, componentIdx: number, waitableSetRep: number) {

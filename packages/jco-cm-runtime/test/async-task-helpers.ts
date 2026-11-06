@@ -142,5 +142,5 @@ export function create(options: Options = {}) {
         state: { ...selected.resource.state, scopeCounter },
         callDestructor: <T>(args: ResourceDestructorArgs<T>) => callDestructor({ registers, creation }, args),
     };
-    return { ...selected, resource, asyncTask, taskLookup, threadLookup, threadControl, creation, clearing };
+    return { ...selected, resource, asyncTask, taskLookup, threadLookup, threadControl, creation, clearing, driver };
 }
