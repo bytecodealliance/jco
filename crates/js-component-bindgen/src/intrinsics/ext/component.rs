@@ -94,30 +94,33 @@ impl ComponentContext {
         })
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContext] {
-        use RuntimeContext::{Component as C, Core};
+        use RuntimeContext::{Component, Core};
         match self {
-            Self::NormalizeTrap => &[C(Self::CoreTrapMessages)],
+            Self::NormalizeTrap => &[Component(Self::CoreTrapMessages)],
             Self::Deadlock => &[
-                C(Self::StoreTrap),
-                C(Self::StoreAsyncState),
-                C(Self::AsyncStates),
+                Component(Self::StoreTrap),
+                Component(Self::StoreAsyncState),
+                Component(Self::AsyncStates),
             ],
-            Self::HostOperation => &[C(Self::Deadlock), Core(CoreContext::SymbolDispose)],
-            Self::MayLeave => &[C(Self::InstanceFlags)],
-            Self::StateLookup => &[C(Self::AsyncStates), C(Self::AsyncStateClass)],
-            Self::PostReturnTrap => &[C(Self::StateLookup)],
+            Self::HostOperation => &[Component(Self::Deadlock), Core(CoreContext::SymbolDispose)],
+            Self::MayLeave => &[Component(Self::InstanceFlags)],
+            Self::StateLookup => &[
+                Component(Self::AsyncStates),
+                Component(Self::AsyncStateClass),
+            ],
+            Self::PostReturnTrap => &[Component(Self::StateLookup)],
             Self::RecordTrap => &[
                 Core(CoreContext::GlobalCurrentTaskMeta),
-                C(Self::StateLookup),
+                Component(Self::StateLookup),
             ],
             Self::AsyncStateClass => &[
                 RuntimeContext::Waitable(WaitableContext::Class),
                 Core(CoreContext::RepTableClass),
                 RuntimeContext::HandleIndexSpaces,
-                C(Self::InstanceFlags),
-                C(Self::StoreTrap),
-                C(Self::NormalizeTrap),
-                C(Self::Deadlock),
+                Component(Self::InstanceFlags),
+                Component(Self::StoreTrap),
+                Component(Self::NormalizeTrap),
+                Component(Self::Deadlock),
             ],
             _ => &[],
         }
@@ -192,44 +195,99 @@ fn core_trap_messages_js() -> String {
     format!("{{{messages}}}")
 }
 pub(crate) fn import(intrinsic: ComponentIntrinsic) -> RuntimeImport {
-    use ComponentContext as C;
     use ComponentIntrinsic::*;
-    use RuntimeImportKind as K;
+
     let (export, context, kind) = match intrinsic {
         GlobalInstanceFlagsMap => (
             "initializeInstanceFlags",
-            C::InstanceFlags,
-            K::InitializedValue,
+            ComponentContext::InstanceFlags,
+            RuntimeImportKind::InitializedValue,
         ),
-        GlobalStoreTrap => ("initializeStoreTrap", C::StoreTrap, K::InitializedValue),
+        GlobalStoreTrap => (
+            "initializeStoreTrap",
+            ComponentContext::StoreTrap,
+            RuntimeImportKind::InitializedValue,
+        ),
         GlobalStoreAsyncState => (
             "initializeStoreAsyncState",
-            C::StoreAsyncState,
-            K::InitializedValue,
+            ComponentContext::StoreAsyncState,
+            RuntimeImportKind::InitializedValue,
         ),
         GlobalAsyncStateMap => (
             "initializeComponentAsyncStates",
-            C::AsyncStates,
-            K::InitializedValue,
+            ComponentContext::AsyncStates,
+            RuntimeImportKind::InitializedValue,
         ),
         ComponentAsyncStateClass => (
             "initializeComponentAsyncStateClass",
-            C::AsyncStateClass,
-            K::InitializedConstructor,
+            ComponentContext::AsyncStateClass,
+            RuntimeImportKind::InitializedConstructor,
         ),
-        CheckForDeadlock => ("checkForDeadlock", C::Deadlock, K::Call),
-        TrackHostOperation => ("trackHostOperation", C::HostOperation, K::Call),
-        NormalizeCoreTrap => ("normalizeCoreTrap", C::NormalizeTrap, K::Call),
-        CheckMayLeave => ("checkMayLeave", C::MayLeave, K::Call),
-        GuardMayLeave => ("guardMayLeave", C::MayLeave, K::Call),
-        RecordTrap => ("recordTrap", C::RecordTrap, K::Call),
-        PostReturnTrap => ("postReturnTrap", C::PostReturnTrap, K::Call),
-        GuardPostReturn => ("guardPostReturn", C::PostReturnTrap, K::Call),
-        GuardTrap => ("guardTrap", C::RecordTrap, K::Call),
-        GetOrCreateAsyncState => ("getOrCreateAsyncState", C::StateLookup, K::Call),
-        BackpressureInc => ("backpressureInc", C::StateLookup, K::Call),
-        BackpressureDec => ("backpressureDec", C::StateLookup, K::Call),
-        ComponentStateSetAllError => ("setAllError", C::AsyncStates, K::Call),
+        CheckForDeadlock => (
+            "checkForDeadlock",
+            ComponentContext::Deadlock,
+            RuntimeImportKind::Call,
+        ),
+        TrackHostOperation => (
+            "trackHostOperation",
+            ComponentContext::HostOperation,
+            RuntimeImportKind::Call,
+        ),
+        NormalizeCoreTrap => (
+            "normalizeCoreTrap",
+            ComponentContext::NormalizeTrap,
+            RuntimeImportKind::Call,
+        ),
+        CheckMayLeave => (
+            "checkMayLeave",
+            ComponentContext::MayLeave,
+            RuntimeImportKind::Call,
+        ),
+        GuardMayLeave => (
+            "guardMayLeave",
+            ComponentContext::MayLeave,
+            RuntimeImportKind::Call,
+        ),
+        RecordTrap => (
+            "recordTrap",
+            ComponentContext::RecordTrap,
+            RuntimeImportKind::Call,
+        ),
+        PostReturnTrap => (
+            "postReturnTrap",
+            ComponentContext::PostReturnTrap,
+            RuntimeImportKind::Call,
+        ),
+        GuardPostReturn => (
+            "guardPostReturn",
+            ComponentContext::PostReturnTrap,
+            RuntimeImportKind::Call,
+        ),
+        GuardTrap => (
+            "guardTrap",
+            ComponentContext::RecordTrap,
+            RuntimeImportKind::Call,
+        ),
+        GetOrCreateAsyncState => (
+            "getOrCreateAsyncState",
+            ComponentContext::StateLookup,
+            RuntimeImportKind::Call,
+        ),
+        BackpressureInc => (
+            "backpressureInc",
+            ComponentContext::StateLookup,
+            RuntimeImportKind::Call,
+        ),
+        BackpressureDec => (
+            "backpressureDec",
+            ComponentContext::StateLookup,
+            RuntimeImportKind::Call,
+        ),
+        ComponentStateSetAllError => (
+            "setAllError",
+            ComponentContext::AsyncStates,
+            RuntimeImportKind::Call,
+        ),
     };
     RuntimeImport {
         suffix: "intrinsics/component",
