@@ -1,5 +1,5 @@
 //! Exercise future results from synchronous, native async, and JSPI exports.
-use std::cell::RefCell;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 mod bindings {
@@ -19,9 +19,7 @@ struct Component;
 
 static COMPLETED_FUTURE_WRITES: AtomicU32 = AtomicU32::new(0);
 
-thread_local! {
-    static READER: RefCell<Option<FutureReader<u32>>> = const { RefCell::new(None) };
-}
+static READER: Mutex<Option<FutureReader<u32>>> = Mutex::new(None);
 
 /// Observe the rendezvous completing, rather than merely starting a write.
 async fn write_value(writer: FutureWriter<u32>, value: u32) {
@@ -49,11 +47,13 @@ impl Guest for Component {
 
     async fn prepare_future(value: u32) {
         // The async task owns the writer even when a sync export returns its reader.
-        READER.replace(Some(Self::prove_future_async(value).await));
+        let reader = Self::prove_future_async(value).await;
+        let previous = READER.lock().unwrap().replace(reader);
+        drop(previous);
     }
 
     fn take_future() -> FutureReader<u32> {
-        READER.take().unwrap()
+        READER.lock().unwrap().take().unwrap()
     }
 
     fn completed_future_writes() -> u32 {
