@@ -273,7 +273,9 @@ suite('stopping an instance', () => {
     });
 });
 
-suite('stopping an instance closes its streams and futures', () => {
+// Async component exports require the current JSPI API, which older Node versions lack.
+const HAS_JSPI = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
+suite.skipIf(!HAS_JSPI)('stopping an instance closes its streams and futures', () => {
     test.concurrent("a guest's writer stops, and its reader sees a shutdown error", async () => {
         const instantiate = await transpiled(WRITES_FOREVER);
         let ticks = 0;
