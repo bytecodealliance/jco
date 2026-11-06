@@ -23,7 +23,10 @@ import { promiseWithResolvers } from './core-promises.js';
 import { getHandleIndexSpace } from './resource.js';
 
 export const initializeInstanceFlags: ComponentModule['initializeInstanceFlags'] = () => new Map();
-export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({ error: null });
+export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({
+    error: null,
+    disposed: new WeakSet(),
+});
 export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncState'] = () => ({
     deadlockCheck: null,
     pendingHostOperations: 0,
