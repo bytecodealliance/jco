@@ -10,6 +10,7 @@ import { transpileBytes } from './transpilation.js';
 import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 import { getTmpDir, setupAsyncTest } from './helpers.js';
 import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
+import { writeCustomRuntime } from './external-runtime/helpers.js';
 
 suite('resources', () => {
     // https://github.com/bytecodealliance/jco/issues/2329
@@ -81,38 +82,45 @@ suite('resources', () => {
         }
     });
 
-    test.each([
-        { name: 'inline', cmRuntimeEsModule: undefined },
-        {
-            name: 'external',
-            cmRuntimeEsModule: new URL('../../jco-cm-runtime/dist/', import.meta.url).href,
-        },
-        {
-            name: 'custom',
-            cmRuntimeEsModule: new URL('./fixtures/custom-runtime/', import.meta.url).href,
-        },
-    ])('resource reps survive own and borrow transfers ($name runtime)', async ({ cmRuntimeEsModule }) => {
-        const { instance, cleanup } = await setupAsyncTest({
-            component: {
-                name: 'zero-resource-rep',
-                path: fileURLToPath(
-                    new URL('./fixtures/components/runtime/zero-resource-rep.component.wat', import.meta.url),
-                ),
-            },
-            jco: { transpile: { extraArgs: { cmRuntimeEsModule } } },
-        });
-
-        try {
-            const reps = [0, 0, 7, 0x3fffffff, 0x40000000, 0x80000010, 0xc0000010, 0xffffffff];
-            for (const [index, rep] of reps.entries()) {
-                assert.strictEqual(instance.run(rep), rep);
-                assert.strictEqual(instance.last(), rep, 'the destructor receives the original rep');
-                assert.strictEqual(instance.count(), index + 1, 'only dropping the owned handle runs the destructor');
+    test.each(['inline', 'external', 'custom'] as const)(
+        'resource reps survive own and borrow transfers (%s runtime)',
+        async (runtime) => {
+            const providerDir = await getTmpDir();
+            let cleanup: (() => Promise<void>) | undefined;
+            try {
+                const cmRuntimeEsModule =
+                    runtime === 'custom'
+                        ? (await writeCustomRuntime(providerDir)).href
+                        : runtime === 'external'
+                          ? new URL('../../jco-cm-runtime/dist/', import.meta.url).href
+                          : undefined;
+                const setup = await setupAsyncTest({
+                    component: {
+                        name: 'zero-resource-rep',
+                        path: fileURLToPath(
+                            new URL('./fixtures/components/runtime/zero-resource-rep.component.wat', import.meta.url),
+                        ),
+                    },
+                    jco: { transpile: { extraArgs: { cmRuntimeEsModule } } },
+                });
+                cleanup = setup.cleanup;
+                const { instance } = setup;
+                const reps = [0, 0, 7, 0x3fffffff, 0x40000000, 0x80000010, 0xc0000010, 0xffffffff];
+                for (const [index, rep] of reps.entries()) {
+                    assert.strictEqual(instance.run(rep), rep);
+                    assert.strictEqual(instance.last(), rep, 'the destructor receives the original rep');
+                    assert.strictEqual(
+                        instance.count(),
+                        index + 1,
+                        'only dropping the owned handle runs the destructor',
+                    );
+                }
+            } finally {
+                await cleanup?.();
+                await rm(providerDir, { recursive: true, force: true });
             }
-        } finally {
-            await cleanup();
-        }
-    });
+        },
+    );
 
     test('host resource reps preserve captured identity and disposal', async () => {
         class Thing {
