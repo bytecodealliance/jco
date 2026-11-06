@@ -320,53 +320,21 @@ implement disposal, so generated future types make the method optional.
 
 ### Stopping an instance
 
-Call `instance._util.stop()` when the host is done with an instance:
+Call `instance._util.stop()` to permanently stop a generated instantiation, including its
+background guest work. For direct ES module output, call the exported `_util.stop()`.
 
-```js
-const instance = await instantiate(getCoreModule, imports);
-try {
-  await instance.run();
-} finally {
-  instance._util.stop();
-}
-```
-
-For direct ES module output, import `_util` from the generated module and call
-`_util.stop()` instead. Each call to `instantiate()` has its own stop function;
-stopping one instance does not affect another.
-
-Stopping is permanent and synchronous. It stops the runtime's scheduler timers,
-rejects pending guest calls with a `WebAssembly.RuntimeError`, and prevents further
-calls into any component in the instance. Host resources still owned by the guest
-have their `Symbol.dispose` method called. Resources borrowed from the host or
-already returned to it are not disposed. Guest Wasm destructors are not run.
-
-Its streams and futures are closed, whichever side holds each end: a read the host has
-pending settles, as the end of the stream or as a rejection of the future, a writer's next
-write fails, and an iterator or promise the host gave a guest is disposed of as when a guest
-drops it.
-
-Repeated calls to `stop()` do nothing. If a host resource's disposal throws, cleanup
-continues for the other resources, then `stop()` throws an `AggregateError`; the
-instance remains stopped. Resources can also be released this way after a guest trap.
-
-Already-started host operations may continue independently, but their completion
-cannot resume guest execution. The host remains responsible for cancelling its own
-I/O and timers. Like other JavaScript APIs, `stop()` cannot interrupt synchronous
-Wasm that never yields control back to JavaScript.
+See [Stopping running instances](./advanced/stopping-running-instances.md) for the scope of
+shutdown, channel and resource ownership, host cleanup, and output draining.
 
 ### Knowing when an instance is idle
 
-`instance._util.whenIdle()` returns a promise that resolves once no guest task is left in the
-instance. A task counts until it has exited, however long after returning, so this covers what a
-guest goes on doing in the background. It also resolves once the instance has stopped or trapped.
+`instance._util.whenIdle()` waits for guest task exit, including background work after an
+export returns. It also resolves when the instance stops or traps. See
+[Wait for guest tasks to exit](./advanced/stopping-running-instances.md#wait-for-guest-tasks-to-exit)
+for completion semantics and an orderly shutdown example.
 
-To wait on some calls and not the rest, say beside a task that never ends, take
-`instance._util.lastTaskGroup()` straight after calling an export, in the same turn, and pass those to
-`whenIdle(groups)`. A task group is a call's task and those of everything it called, transitively.
-Group tokens are opaque and belong to the instance that produced them. Passing an invalid or
-foreign token throws `TypeError`. The group list is copied when `whenIdle(groups)` is called,
-so later changes to the caller's array do not change the wait.
+Use `_util.lastTaskGroup()` and `whenIdle(groups)` to wait for selected calls alongside
+unrelated long-lived work. See [Wait for selected calls](./advanced/stopping-running-instances.md#wait-for-selected-calls).
 
 ### Runtime overrides
 

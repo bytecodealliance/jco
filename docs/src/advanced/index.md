@@ -9,6 +9,8 @@ the [Transpiling](../transpiling.md) chapter and the [WASI support](../wasi/inde
   JavaScript.
 - [Manual Wasm instantiation with WASI overrides](./manual-wasm-instantiation-with-wasi-overrides.md):
   instantiating a transpiled component yourself and replacing individual WASI interfaces.
+- [Stopping running instances](./stopping-running-instances.md): ending guest execution,
+  releasing runtime-managed resources, and coordinating host cleanup.
 - [Detecting traps](./detecting-traps.md): telling a component trap apart from an ordinary error.
 - [Preview 3 streams and backpressure](./preview3-streams-and-backpressure.md): how WASI 0.3
   streams flow between host and guest.

@@ -2,7 +2,8 @@
 
 The Preview 3 shim provides host helpers for draining stdout and stderr in
 Node.js and browser environments. These helpers are useful when a custom host
-needs to preserve output before exiting or disposing its component.
+needs to preserve output before exiting or disposing its component. For instance-wide
+execution and cleanup, see [Stopping running instances](./stopping-running-instances.md).
 
 ## Flush queued destination writes
 
