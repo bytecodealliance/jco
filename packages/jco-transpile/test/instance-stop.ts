@@ -49,16 +49,22 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('instance stopping', 
                 const borrowed = new Thing();
                 const returned = new Thing();
                 const dropped = new Thing();
+                const aliased = new Thing();
                 const other = new Thing();
                 first.hold(owned);
                 first.borrow(borrowed);
                 assert.strictEqual(first.giveBack(returned), returned);
                 first.drop(dropped);
+                // Two guest handles refer to one host object; dropping one already disposes it.
+                first.hold(aliased);
+                first.drop(aliased);
+                expect(aliased.dispose).toHaveBeenCalledTimes(1);
                 second.hold(other);
                 first._util.stop();
                 first._util.stop();
                 expect(owned.dispose).toHaveBeenCalledTimes(1);
                 expect(dropped.dispose).toHaveBeenCalledTimes(1);
+                expect(aliased.dispose).toHaveBeenCalledTimes(1);
                 expect(borrowed.dispose).not.toHaveBeenCalled();
                 expect(returned.dispose).not.toHaveBeenCalled();
                 expect(other.dispose).not.toHaveBeenCalled();
