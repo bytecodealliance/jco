@@ -38,6 +38,15 @@ impl bindings::Guest for Component {
         rx
     }
 
+    async fn open_nested_future() -> FutureReader<FutureReader<Thing>> {
+        let inner = Self::open_future(true).await;
+        let (tx, rx) = wit_future::new(|| unreachable!("test always writes explicitly"));
+        wit_bindgen::spawn_local(async move {
+            let _ = tx.write(inner).await;
+        });
+        rx
+    }
+
     async fn prepare(write_now: bool) {
         let reader = Self::open_future(write_now).await;
         let previous = READER.lock().unwrap().replace(reader);

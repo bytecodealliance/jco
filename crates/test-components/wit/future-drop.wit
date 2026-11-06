@@ -8,6 +8,7 @@ world future-drop {
   import future-drop-host;
   use future-drop-host.{thing};
   export open-future: async func(write-now: bool) -> future<thing>;
+  export open-nested-future: async func() -> future<future<thing>>;
   export prepare: async func(write-now: bool);
   export take-future: func() -> future<thing>;
   export write-future: async func();

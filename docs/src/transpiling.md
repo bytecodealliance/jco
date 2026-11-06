@@ -306,9 +306,12 @@ Where instead of promises, all functions are synchronous.
 A future received from a guest is lazy: receiving it does not consume its value. Read it with
 `await future`, or call `future[Symbol.dispose]?.()` to release its readable end. Disposal is
 idempotent, rejects a pending read, and notifies a waiting or subsequent writer that the reader
-has gone. Further reads reject. If the future has already read a disposable value, disposal
-also releases that value; do not continue using it afterward. Host-supplied promises need not
-implement disposal, so generated future types make the method optional.
+has gone. Further reads reject. A value already delivered by `await` or a fulfillment callback
+belongs to the caller and remains usable after the future is disposed. The caller must dispose
+that value separately when appropriate. Disposal only releases a copied disposable value if
+it has not yet been delivered. Host-supplied promises need not implement disposal, so generated
+future types make the method optional.
+
 ### Stopping an instance
 
 Call `instance._util.stop()` when the host is done with an instance:
@@ -325,6 +328,10 @@ try {
 For direct ES module output, import `_util` from the generated module and call
 `_util.stop()` instead. Each call to `instantiate()` has its own stop function;
 stopping one instance does not affect another.
+
+This is a host embedding convenience separate from canonical stream/future drop operations.
+Its shutdown hooks can close pending copies and unwritten future writers; ordinary guest
+operations retain their canonical drop checks.
 
 Stopping is permanent and synchronous. It stops the runtime's scheduler timers,
 rejects pending guest calls with a `WebAssembly.RuntimeError`, and prevents further
