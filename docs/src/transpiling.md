@@ -367,9 +367,10 @@ shutdown, channel and resource ownership, host cleanup, and output draining.
 
 ### Knowing when an instance is idle
 
-`instance._util.whenIdle()` returns a promise that resolves once no guest task is left in the
-instance. A task counts until it has exited, however long after returning, so this covers what a
-guest goes on doing in the background. It also resolves once the instance has stopped or trapped.
+`instance._util.whenIdle()` waits for guest task exit, including background work after an
+export returns. It also resolves when the instance stops or traps. See
+[Wait for guest tasks to exit](./advanced/stopping-running-instances.md#wait-for-guest-tasks-to-exit)
+for completion semantics and an orderly shutdown example.
 
 ### Runtime overrides
 
