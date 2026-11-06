@@ -20,7 +20,10 @@ export const getCurrentTask: AsyncTaskModule['getCurrentTask'] = ({ tasks, regis
     const executing = current && entries.find((meta) => meta.task.id() === current.taskID);
     return executing || entries.at(-1);
 };
-export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({ error: null });
+export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({
+    error: null,
+    disposed: new WeakSet(),
+});
 export const checkMayLeave: ComponentModule['checkMayLeave'] = (context, componentIdx) => {
     if (context.instanceFlags.get(componentIdx)?.value !== 1) {
         throw new context.RuntimeError('cannot leave component instance');
