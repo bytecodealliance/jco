@@ -85,8 +85,10 @@ stream remains usable (see [Preview 3 streams and backpressure](./preview3-strea
   individual call, so they are never disposed.
 - If a guest cancels an `async` import call whose result would have contained a future or
   stream, only the returned promise is disposed, as the future or stream was never created.
-- Cancellation of the enclosing task, instance teardown, and the lifetime of resources already
-  delivered to the guest are not covered by this mechanism.
+- Cancellation of the enclosing task and the lifetime of resources already delivered to the
+  guest are not covered by this mechanism. Instance teardown uses a separate
+  [stop operation](./stopping-running-instances.md), which also notifies host-provided channel
+  sources of disposal.
 
 [mdn-async-dispose]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/asyncDispose
 [mdn-dispose]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Symbol/dispose
