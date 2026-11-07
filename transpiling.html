@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-82975c8e.js";
+            window.path_to_searchindex_js = "searchindex-901ae824.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-11cdb37d.js"></script>
@@ -307,6 +307,38 @@ feature to stability.</p>
 <p>If not needing this disambiguation feature, and since support for string exports in JS can be limited, this feature can be disabled with the <code>--no-namespaced-exports</code> flag to instead output only:</p>
 <pre><code class="language-js">export { interface }
 </code></pre>
+<h3 id="generated-utilities"><a class="header" href="#generated-utilities">Generated utilities</a></h3>
+<p>Jco-generated bindings provide an <code>_util</code> object alongside the component’s exports.
+For default ES module output, import it from the generated module:</p>
+<pre><code class="language-js">import { _util } from './component.js';
+</code></pre>
+<p>With <code>--instantiation sync</code> or <code>--instantiation async</code>, use the utilities returned by
+<code>instantiate()</code> for that instance:</p>
+<pre><code class="language-js">import { instantiate } from './component.js';
+
+const instance = await instantiate(getCoreModule, imports);
+const { _util } = instance;
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Helper</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>stop()</code></td><td>Permanently stop this instantiation and dispose guest-owned host resources. See <a href="./advanced/stopping-running-instances.html">Stopping running instances</a>.</td></tr>
+<tr><td><code>isComponentError(value)</code></td><td>Recognize a wrapped, declared WIT <code>result::err</code> from this instantiation. See <a href="./advanced/wit-type-representations.html#results-in-context-function-return-values">Recognizing declared errors</a>.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>isComponentError()</code> is available when the generated bindings use <code>ComponentError</code> wrapping.
+The <code>jco</code> API and CLI enable wrapping by default; for <code>@bytecodealliance/jco-transpile</code>, set
+<code>noComponentErrorWrapping: false</code>. Bindings without error wrapping omit the predicate.
+The error constructor stays private, and the predicate only recognizes errors from the same
+generated module or explicit instantiation. In TypeScript, it narrows the value to
+<code>Error &amp; { readonly payload: unknown }</code>.</p>
+<p><strong>Traps are not <code>ComponentError</code> instances.</strong> They have a distinct type,
+<code>WebAssembly.RuntimeError</code>, and <code>isComponentError()</code> returns <code>false</code> for them.
+See <a href="./advanced/detecting-traps.html">Detecting traps</a> for trap handling and notifications.</p>
 <h3 id="import-conventions"><a class="header" href="#import-conventions">Import Conventions</a></h3>
 <p>When using the ESM integration default transpilation output bindings are output directly in the <code>registry:name/interface</code> form, but with versions removed.</p>
 <p>For example an import to <code>my:pkg/interface@1.2.3</code> will become an import to <code>import { fn } from 'my:pkg/interface';</code>.</p>

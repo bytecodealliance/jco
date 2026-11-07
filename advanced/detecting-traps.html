@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-82975c8e.js";
+            window.path_to_searchindex_js = "../searchindex-901ae824.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-11cdb37d.js"></script>
@@ -188,7 +188,8 @@ component-model traps they detect with the built-in <code>WebAssembly.RuntimeErr
 without re-entering the component. A trap in a background task can end only that task;
 it does not always disable the entire instance.</p>
 <h2 id="catch-traps-from-exported-calls"><a class="header" href="#catch-traps-from-exported-calls">Catch traps from exported calls</a></h2>
-<p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class:</p>
+<p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class. For bindings that
+use <code>ComponentError</code> wrapping, handle declared WIT errors separately with <code>isComponentError()</code>:</p>
 <pre><code class="language-js">import { instantiate } from './dist/transpiled/component.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
@@ -198,7 +199,9 @@ const instance = await instantiate(undefined, shim);
 try {
     await instance['ns:pkg/iface'].someFunction();
 } catch (err) {
-    if (err instanceof WebAssembly.RuntimeError) {
+    if (instance._util.isComponentError(err)) {
+        console.error('Declared WIT error:', err.payload);
+    } else if (err instanceof WebAssembly.RuntimeError) {
         console.error(`TRAP: ${err}`);
         // Release runtime-managed resources and end any remaining guest work.
         instance._util.stop();
@@ -208,8 +211,15 @@ try {
     }
 }
 </code></pre>
-<p>WIT <code>result&lt;T, E&gt;</code> values remain part of the component’s normal return contract and are not
-thrown as <code>WebAssembly.RuntimeError</code> instances.</p>
+<p><strong>Traps are not <code>ComponentError</code> instances.</strong> Jco reports component-model traps as
+<code>WebAssembly.RuntimeError</code>, a distinct error type. Declared WIT <code>result::err</code> values are part
+of the component’s normal return contract; when wrapping is enabled, they are thrown as
+<code>ComponentError</code> instances instead. <code>_util.isComponentError(error)</code> returns <code>false</code> for traps.</p>
+<p>For direct ES module output, import <code>_util</code> from the generated module and call
+<code>_util.isComponentError(error)</code>. The predicate is only generated when the bindings use
+error wrapping. See <a href="./wit-type-representations.html#results-in-context-function-return-values">WIT result return values</a>
+for wrapping defaults and payload handling, and <a href="../transpiling.html#generated-utilities">Generated utilities</a>
+for the <code>_util</code> overview.</p>
 <p>Using <code>await</code> inside the <code>try</code> block catches both synchronous exceptions and rejected
 asynchronous calls. It cannot catch a trap in guest work that continues after the call
 has returned.</p>

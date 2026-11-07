@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-82975c8e.js";
+            window.path_to_searchindex_js = "searchindex-901ae824.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-11cdb37d.js"></script>
@@ -804,6 +804,38 @@ feature to stability.</p>
 <p>If not needing this disambiguation feature, and since support for string exports in JS can be limited, this feature can be disabled with the <code>--no-namespaced-exports</code> flag to instead output only:</p>
 <pre><code class="language-js">export { interface }
 </code></pre>
+<h3 id="generated-utilities"><a class="header" href="#generated-utilities">Generated utilities</a></h3>
+<p>Jco-generated bindings provide an <code>_util</code> object alongside the component’s exports.
+For default ES module output, import it from the generated module:</p>
+<pre><code class="language-js">import { _util } from './component.js';
+</code></pre>
+<p>With <code>--instantiation sync</code> or <code>--instantiation async</code>, use the utilities returned by
+<code>instantiate()</code> for that instance:</p>
+<pre><code class="language-js">import { instantiate } from './component.js';
+
+const instance = await instantiate(getCoreModule, imports);
+const { _util } = instance;
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Helper</th><th>Purpose</th></tr>
+</thead>
+<tbody>
+<tr><td><code>stop()</code></td><td>Permanently stop this instantiation and dispose guest-owned host resources. See <a href="#stopping-running-instances">Stopping running instances</a>.</td></tr>
+<tr><td><code>isComponentError(value)</code></td><td>Recognize a wrapped, declared WIT <code>result::err</code> from this instantiation. See <a href="#results-in-context-function-return-values">Recognizing declared errors</a>.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>isComponentError()</code> is available when the generated bindings use <code>ComponentError</code> wrapping.
+The <code>jco</code> API and CLI enable wrapping by default; for <code>@bytecodealliance/jco-transpile</code>, set
+<code>noComponentErrorWrapping: false</code>. Bindings without error wrapping omit the predicate.
+The error constructor stays private, and the predicate only recognizes errors from the same
+generated module or explicit instantiation. In TypeScript, it narrows the value to
+<code>Error &amp; { readonly payload: unknown }</code>.</p>
+<p><strong>Traps are not <code>ComponentError</code> instances.</strong> They have a distinct type,
+<code>WebAssembly.RuntimeError</code>, and <code>isComponentError()</code> returns <code>false</code> for them.
+See <a href="#detecting-traps">Detecting traps</a> for trap handling and notifications.</p>
 <h3 id="import-conventions"><a class="header" href="#import-conventions">Import Conventions</a></h3>
 <p>When using the ESM integration default transpilation output bindings are output directly in the <code>registry:name/interface</code> form, but with versions removed.</p>
 <p>For example an import to <code>my:pkg/interface@1.2.3</code> will become an import to <code>import { fn } from 'my:pkg/interface';</code>.</p>
@@ -5109,6 +5141,29 @@ while any direct return value is treated as the result success type.</p>
 API and CLI preserve the historical behavior of wrapping that value in an <code>Error</code> with a <code>payload</code> property. Pass
 <code>noComponentErrorWrapping: true</code> to the API, or <code>--no-component-error-wrapping</code> to the CLI, to make <code>jco</code> throw the
 payload directly. Pass <code>noComponentErrorWrapping: false</code> to <code>jco-transpile</code> to request the compatibility wrapper.</p>
+<p>When wrapping is enabled, bindings that use the wrapper expose <code>_util.isComponentError(value)</code>.
+Use this predicate to distinguish declared WIT errors from traps and other exceptions:</p>
+<pre><code class="language-js">import { fallible, _util } from './component.js';
+
+try {
+    await fallible.f(42);
+} catch (error) {
+    if (_util.isComponentError(error)) {
+        console.error('Declared WIT error:', error.payload);
+    } else {
+        throw error;
+    }
+}
+</code></pre>
+<p>With explicit instantiation, use <code>instance._util.isComponentError(value)</code>. The predicate uses <code>instanceof</code>
+against the private error constructor, which belongs to that instance. It returns <code>false</code> for errors
+from other instances, ordinary host exceptions, and objects that only have a <code>payload</code> property.
+The predicate is absent when bindings do not use error wrapping. In TypeScript, it narrows the value to
+<code>Error &amp; { readonly payload: unknown }</code>.</p>
+<p><strong>Traps are not <code>ComponentError</code> instances.</strong> They have a distinct type, <code>WebAssembly.RuntimeError</code>,
+and the predicate returns <code>false</code> for them. Using <code>await</code> in the example catches both synchronous
+exceptions and rejected asynchronous exports. See <a href="#detecting-traps">Detecting traps</a> for handling
+traps, and <a href="#generated-utilities">Generated utilities</a> for an overview of <code>_util</code>.</p>
 <p>Consider the following interface:</p>
 <pre><code class="language-wit">interface fallible {
     f: func(n: u32) -&gt; result&lt;string, string&gt;;
@@ -5906,7 +5961,8 @@ component-model traps they detect with the built-in <code>WebAssembly.RuntimeErr
 without re-entering the component. A trap in a background task can end only that task;
 it does not always disable the entire instance.</p>
 <h2 id="catch-traps-from-exported-calls"><a class="header" href="#catch-traps-from-exported-calls">Catch traps from exported calls</a></h2>
-<p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class:</p>
+<p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class. For bindings that
+use <code>ComponentError</code> wrapping, handle declared WIT errors separately with <code>isComponentError()</code>:</p>
 <pre><code class="language-js">import { instantiate } from './dist/transpiled/component.js';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
@@ -5916,7 +5972,9 @@ const instance = await instantiate(undefined, shim);
 try {
     await instance['ns:pkg/iface'].someFunction();
 } catch (err) {
-    if (err instanceof WebAssembly.RuntimeError) {
+    if (instance._util.isComponentError(err)) {
+        console.error('Declared WIT error:', err.payload);
+    } else if (err instanceof WebAssembly.RuntimeError) {
         console.error(`TRAP: ${err}`);
         // Release runtime-managed resources and end any remaining guest work.
         instance._util.stop();
@@ -5926,8 +5984,15 @@ try {
     }
 }
 </code></pre>
-<p>WIT <code>result&lt;T, E&gt;</code> values remain part of the component’s normal return contract and are not
-thrown as <code>WebAssembly.RuntimeError</code> instances.</p>
+<p><strong>Traps are not <code>ComponentError</code> instances.</strong> Jco reports component-model traps as
+<code>WebAssembly.RuntimeError</code>, a distinct error type. Declared WIT <code>result::err</code> values are part
+of the component’s normal return contract; when wrapping is enabled, they are thrown as
+<code>ComponentError</code> instances instead. <code>_util.isComponentError(error)</code> returns <code>false</code> for traps.</p>
+<p>For direct ES module output, import <code>_util</code> from the generated module and call
+<code>_util.isComponentError(error)</code>. The predicate is only generated when the bindings use
+error wrapping. See <a href="#results-in-context-function-return-values">WIT result return values</a>
+for wrapping defaults and payload handling, and <a href="#generated-utilities">Generated utilities</a>
+for the <code>_util</code> overview.</p>
 <p>Using <code>await</code> inside the <code>try</code> block catches both synchronous exceptions and rejected
 asynchronous calls. It cannot catch a trap in guest work that continues after the call
 has returned.</p>

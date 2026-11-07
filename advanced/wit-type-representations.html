@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-82975c8e.js";
+            window.path_to_searchindex_js = "../searchindex-901ae824.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-11cdb37d.js"></script>
@@ -401,6 +401,29 @@ while any direct return value is treated as the result success type.</p>
 API and CLI preserve the historical behavior of wrapping that value in an <code>Error</code> with a <code>payload</code> property. Pass
 <code>noComponentErrorWrapping: true</code> to the API, or <code>--no-component-error-wrapping</code> to the CLI, to make <code>jco</code> throw the
 payload directly. Pass <code>noComponentErrorWrapping: false</code> to <code>jco-transpile</code> to request the compatibility wrapper.</p>
+<p>When wrapping is enabled, bindings that use the wrapper expose <code>_util.isComponentError(value)</code>.
+Use this predicate to distinguish declared WIT errors from traps and other exceptions:</p>
+<pre><code class="language-js">import { fallible, _util } from './component.js';
+
+try {
+    await fallible.f(42);
+} catch (error) {
+    if (_util.isComponentError(error)) {
+        console.error('Declared WIT error:', error.payload);
+    } else {
+        throw error;
+    }
+}
+</code></pre>
+<p>With explicit instantiation, use <code>instance._util.isComponentError(value)</code>. The predicate uses <code>instanceof</code>
+against the private error constructor, which belongs to that instance. It returns <code>false</code> for errors
+from other instances, ordinary host exceptions, and objects that only have a <code>payload</code> property.
+The predicate is absent when bindings do not use error wrapping. In TypeScript, it narrows the value to
+<code>Error &amp; { readonly payload: unknown }</code>.</p>
+<p><strong>Traps are not <code>ComponentError</code> instances.</strong> They have a distinct type, <code>WebAssembly.RuntimeError</code>,
+and the predicate returns <code>false</code> for them. Using <code>await</code> in the example catches both synchronous
+exceptions and rejected asynchronous exports. See <a href="./detecting-traps.html">Detecting traps</a> for handling
+traps, and <a href="../transpiling.html#generated-utilities">Generated utilities</a> for an overview of <code>_util</code>.</p>
 <p>Consider the following interface:</p>
 <pre><code class="language-wit">interface fallible {
     f: func(n: u32) -&gt; result&lt;string, string&gt;;
