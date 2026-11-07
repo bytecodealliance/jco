@@ -391,8 +391,8 @@ pub fn ts_bindgen(
 
     let camel = world.name.to_upper_camel_case();
     let component_error = if has_result_export && !opts.no_component_error_wrapping {
-        "/** Constructor for this component's declared WIT result errors. */
-        readonly ComponentError: { new (value: unknown): Error & { readonly payload: unknown } };"
+        "/** Test whether a value is a declared WIT result error from this instance. */
+        isComponentError(value: unknown): value is Error & { readonly payload: unknown };"
     } else {
         ""
     };
