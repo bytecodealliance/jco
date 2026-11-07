@@ -796,6 +796,8 @@ export interface ComponentStoreTrap {
     stopWaiters: Set<(error: unknown) => void>;
     /** Host resources already disposed by a guest drop, skipped during store shutdown. */
     disposed: WeakSet<object>;
+    onTrap: ((error: Error) => void) | null;
+    trapsReported: WeakSet<object>;
 }
 export type ComponentAsyncStates = Map<number, ComponentAsyncState>;
 export interface ComponentNormalizeTrapContext extends TrapContext {
@@ -834,10 +836,12 @@ export interface ComponentAsyncStateContext extends TrapContext {
     readonly cannotEnter: string;
     readonly deadlock: ComponentDeadlockContext;
     readonly Waitable: new (args: { target?: unknown }) => ComponentWaitable;
+    /** Generated instantiation's trap notifier, shared with its inline task code. */
+    readonly reportTrap?: (error: Error) => void;
 }
 export interface ComponentModule {
     readonly initializeInstanceFlags: () => ComponentInstanceFlags;
-    readonly initializeStoreTrap: () => ComponentStoreTrap;
+    readonly initializeStoreTrap: (onTrap?: ((error: Error) => void) | null) => ComponentStoreTrap;
     readonly initializeStoreAsyncState: () => ComponentStoreAsyncState;
     readonly initializeComponentAsyncStates: () => ComponentAsyncStates;
     readonly initializeCoreTrapMessages: (messages: Readonly<Record<string, string>>) => Map<string, string>;

@@ -6,6 +6,7 @@ import { createTestIntrinsics, type CoreTestOptions } from './core-test-helpers.
 interface ComponentTestOptions extends CoreTestOptions {
     componentTrapMessages?: { core?: Readonly<Record<string, string>>; cannotEnter?: string };
     Waitable?: new (args: { target?: unknown }) => ComponentWaitable;
+    reportTrap?: (error: Error) => void;
 }
 export function create(options: ComponentTestOptions = {}) {
     const { core, resource } = createTestIntrinsics(options);
@@ -28,6 +29,7 @@ export function create(options: ComponentTestOptions = {}) {
         cannotEnter: options.componentTrapMessages?.cannotEnter ?? 'wasm trap: cannot enter component instance',
         deadlock,
         Waitable: options.Waitable ?? initializeWaitableClass(),
+        reportTrap: options.reportTrap,
     });
     const lookup = { asyncState, ComponentAsyncState };
     const record = { RuntimeError: core.RuntimeError, registers: core.currentTaskMeta, lookup };

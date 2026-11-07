@@ -23,12 +23,14 @@ import { promiseWithResolvers } from './core-promises.js';
 import { getHandleIndexSpace } from './resource.js';
 
 export const initializeInstanceFlags: ComponentModule['initializeInstanceFlags'] = () => new Map();
-export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({
+export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTrap = null) => ({
     error: null,
     stopped: false,
     resourceTables: [],
     stopWaiters: new Set(),
     disposed: new WeakSet(),
+    onTrap,
+    trapsReported: new WeakSet(),
 });
 export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncState'] = () => ({
     deadlockCheck: null,
@@ -384,6 +386,7 @@ export function initializeComponentAsyncStateClass(
             if (storeTrap.error === null) {
                 storeTrap.error = trap;
             }
+            context.reportTrap?.(trap);
             return true;
         }
 

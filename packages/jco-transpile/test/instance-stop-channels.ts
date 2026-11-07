@@ -479,10 +479,9 @@ suite.skipIf(!HAS_JSPI)('hearing of traps', () => {
 
     test.concurrent('it may stop the instance', async () => {
         const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
-        let instance;
         let ended;
         const heard = new Promise((resolve) => (ended = resolve));
-        instance = await instantiate(
+        const instance = await instantiate(
             {},
             {
                 onTrap: (err) => {

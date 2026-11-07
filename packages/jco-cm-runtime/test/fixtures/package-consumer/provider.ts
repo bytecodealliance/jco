@@ -6,12 +6,14 @@ import type {
     CoreModule,
     ComponentModule,
 } from './contract.js';
-export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({
+export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTrap = null) => ({
     error: null,
     stopped: false,
     resourceTables: [],
     stopWaiters: new Set(),
     disposed: new WeakSet(),
+    onTrap,
+    trapsReported: new WeakSet(),
 });
 export const checkMayLeave: ComponentModule['checkMayLeave'] = (context, componentIdx) => {
     if (context.instanceFlags.get(componentIdx)?.value !== 1) {

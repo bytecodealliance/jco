@@ -604,6 +604,7 @@ impl Provides<ComponentIntrinsic> for ExternalRuntime {
         output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
+        component::discover(intrinsic, args);
         if component::import(intrinsic).is_none() {
             InlineRuntime.render(intrinsic, output, args);
         }

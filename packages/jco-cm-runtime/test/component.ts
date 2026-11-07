@@ -99,6 +99,25 @@ test.concurrent('guardTrap records synchronous traps and preserves values, promi
     expect(component.getOrCreateAsyncState(0).isTrapped()).toBe(true);
 });
 
+test.concurrent('external component traps notify the selected reporter after recording the normalized trap', () => {
+    const traps: Error[] = [];
+    const { component } = create({
+        componentTrapMessages: { core: { unreachable: 'normalized unreachable' } },
+        reportTrap(error) {
+            expect(component.storeTrap.error).toBe(error);
+            expect(component.getOrCreateAsyncState(0).isTrapped()).toBe(true);
+            traps.push(error);
+        },
+    });
+    const trap = new WebAssembly.RuntimeError('unreachable');
+    component.recordTrap(0, trap);
+    expect(traps).toEqual([trap]);
+    expect(traps[0].message).toBe('normalized unreachable');
+    component.recordTrap(0, new Error('host failure'));
+    create().component.recordTrap(0, new WebAssembly.RuntimeError('other instance'));
+    expect(traps).toEqual([trap]);
+});
+
 test.concurrent('backpressure waits for zero, wakes every waiter, and cleans up handlers once', async () => {
     const { component } = create();
     const state = component.getOrCreateAsyncState(0);

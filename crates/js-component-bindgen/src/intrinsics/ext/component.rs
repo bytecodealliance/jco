@@ -148,14 +148,17 @@ impl ComponentContextIntrinsic {
             _ => &[],
         }
     }
-    pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
+    pub(crate) fn render(self, output: &mut Source, args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
         if let Some(initializer) = self.initializer() {
             let initialize = initializer.local_name;
             let arguments = match self {
+                Self::InitializeStoreTrap if args.instantiation_occurred => {
+                    "options?.onTrap ?? null".into()
+                }
                 Self::InitializeCoreTrapMessages => core_trap_messages_js(),
                 Self::InitializeComponentAsyncStateClass => format!(
-                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable }}",
+                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable, reportTrap: err => _reportTrap(err) }}",
                     Trap::CannotEnterComponent.to_string()
                 ),
                 _ => String::new(),
@@ -220,8 +223,8 @@ fn core_trap_messages_js() -> String {
 pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
     use ComponentIntrinsic::*;
     let (export, context, kind) = match intrinsic {
-        // Shutdown coordinates the task and resource tables that are still generated inline.
-        StopInstance => return None,
+        // Trap reporting uses instantiation options; shutdown coordinates generated tables.
+        StopInstance | ReportTrap => return None,
         GlobalInstanceFlagsMap => (
             "initializeInstanceFlags",
             ComponentContextIntrinsic::InitializeInstanceFlags,
@@ -322,6 +325,18 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
         kind,
     })
 }
+pub(crate) fn discover(intrinsic: ComponentIntrinsic, args: &RenderIntrinsicsArgs<'_>) {
+    if let Some(context) = import(intrinsic).and_then(|import| import.context) {
+        let mut contexts = Vec::new();
+        context.collect(&mut contexts);
+        if contexts.contains(&RuntimeContextIntrinsic::Component(
+            ComponentContextIntrinsic::InitializeComponentAsyncStateClass,
+        )) {
+            args.require_intrinsic(ComponentIntrinsic::ReportTrap);
+        }
+    }
+}
+
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {
     use super::*;
@@ -396,6 +411,9 @@ mod tests {
             1
         );
         assert!(source.contains("deadlock: _jcoComponentDeadlockContext, Waitable"));
+        assert!(source.contains("reportTrap: err => _reportTrap(err)"));
+        assert!(source.contains("function _reportTrap(err)"));
+        assert!(source.contains("_normalizeCoreTrap(_jcoComponentNormalizeTrapContext, err)"));
         assert!(source.contains("instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP"));
         assert!(source.contains("asyncState: ASYNC_STATE, ComponentAsyncState"));
         assert!(source.contains("wasm trap: cannot enter component instance"));
@@ -406,6 +424,21 @@ mod tests {
         assert!(!source.contains("class ComponentAsyncState"));
         assert!(!source.contains("function getOrCreateAsyncState("));
         assert!(!intrinsics.contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableClass)));
+    }
+
+    #[test]
+    fn store_trap_receives_the_instantiations_notifier() {
+        let mut intrinsics = BTreeSet::from([ComponentIntrinsic::GlobalStoreTrap.into()]);
+        let opts = TranspileOpts::builder().name("component".into()).build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .external_runtime(true)
+                .instantiation_occurred(true)
+                .build(),
+        );
+        assert!(source.contains("_jcoInitializeStoreTrap(options?.onTrap ?? null)"));
     }
 
     #[test]
