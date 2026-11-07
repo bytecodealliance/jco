@@ -53,7 +53,7 @@ export function create(options: Options = {}) {
         registers,
         isFutureValue: options.isFutureValue ?? ((_value): _value is TaskFutureValue => false),
     });
-    const creation = { ...clearing, AsyncTask, AsyncThread };
+    const creation = { ...clearing, AsyncTask, AsyncThread, storeAsyncState: component.storeAsyncState };
     const cancellation = { ...taskLookup, lookup };
     const subtaskCancellation = { ...cancellation, AsyncSubtask, RuntimeError: core.RuntimeError };
     const taskReturn = { ...taskLookup, RuntimeError: core.RuntimeError };

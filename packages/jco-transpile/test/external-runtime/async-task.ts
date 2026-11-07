@@ -112,7 +112,7 @@ function checkLookup(context) {
  if (!maps.includes(context.tasks) || !contexts.some(selected => selected.registers === context.registers)) throw new Error('detached task lookup');
 }
 export function createNewCurrentImplicitThread(context, options) {
- if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncTask,AsyncThread,componentIdxs,taskIds,tasks' || !classes.includes(context.AsyncTask)) throw new Error('invalid task creation');
+ if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncTask,AsyncThread,componentIdxs,storeAsyncState,taskIds,tasks' || !classes.includes(context.AsyncTask)) throw new Error('invalid task creation');
  calls.push('create'); return defaults.createNewCurrentImplicitThread(context, options);
 }
 export function clearCurrentThread(context, ...args) {

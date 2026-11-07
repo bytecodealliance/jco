@@ -115,8 +115,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.strictEqual(provider.stores[index].pendingHostOperations, 0);
                     // The provider callback must settle waiters on this instance's selected scheduler.
                     let idle = false;
-                    provider.stores[index].idleWaiters.add(() => {
-                        idle = true;
+                    provider.stores[index].idleWaiters.add({
+                        resolve: () => {
+                            idle = true;
+                        },
                     });
                     provider.contexts[index].checkIdle();
                     assert.isTrue(idle);

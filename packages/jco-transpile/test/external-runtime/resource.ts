@@ -19,7 +19,7 @@ export function initializeResourceScopeTasks() { const state = defaults.initiali
 export function initializeHandleTables() { const state = defaults.initializeHandleTables(); tables.push(state); return state; }
 export function callDestructor(context, args) {
   if (Object.keys(context).sort().join() !== 'creation,registers,storeTrap') throw new Error('broad destructor context');
-  if (Object.keys(context.creation).sort().join() !== 'AsyncTask,AsyncThread,componentIdxs,taskIds,tasks' || typeof context.creation.AsyncTask !== 'function') throw new Error('detached task creation owners');
+  if (Object.keys(context.creation).sort().join() !== 'AsyncTask,AsyncThread,componentIdxs,storeAsyncState,taskIds,tasks' || typeof context.creation.AsyncTask !== 'function') throw new Error('detached task creation owners');
   destructorStores.push(context.storeTrap);
   calls.push('callDestructor'); return defaults.callDestructor(context, args);
 }
