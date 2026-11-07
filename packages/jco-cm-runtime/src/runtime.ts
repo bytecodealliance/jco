@@ -1472,6 +1472,7 @@ export interface TaskLookupContext<T extends TaskIdentity = AsyncTask> {
     readonly tasks: Pick<AsyncTasksByComponent<T>, 'get'>;
 }
 export interface TaskClearContext<T extends TaskIdentity = AsyncTask> {
+    readonly checkIdle?: () => void;
     readonly tasks: Pick<AsyncTasksByComponent<T>, 'get'>;
     readonly taskIds: bigint[];
     readonly componentIdxs: number[];

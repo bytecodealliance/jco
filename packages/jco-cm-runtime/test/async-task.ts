@@ -662,3 +662,18 @@ test.concurrent('marking completion handled does not read a returned future', as
         store.cleanup();
     }
 });
+
+test.concurrent('retiring an external task notifies the instance idle tracker', () => {
+    let idleChecks = 0;
+    const store = setup({ checkIdle: () => idleChecks++ });
+    try {
+        const [task] = store.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+        task.enterSync();
+        expect(idleChecks).toBe(0);
+        finish(task);
+        expect(idleChecks).toBe(1);
+        expect(store.asyncTask.getCurrentTask(0)).toBeUndefined();
+    } finally {
+        store.cleanup();
+    }
+});
