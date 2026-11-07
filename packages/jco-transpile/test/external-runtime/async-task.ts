@@ -11,8 +11,13 @@ import { defaultRuntimeUrl, transpile, transpileBytes, writeFiles } from '../tra
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resource-drop.wat', import.meta.url));
 const taskUrl = new URL('intrinsics/async-task.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
+const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 
-test.concurrent.each([false, true])('symmetric entry preserves its callback receiver (jspi=%s)', async (jspi) => {
+test.concurrent.for([false, true])('symmetric entry preserves its callback receiver (jspi=%s)', async (jspi, ctx) => {
+    if (jspi && !hasJspi) {
+        ctx.skip();
+    }
+
     const dir = await getTmpDir();
     try {
         await writeProvider(
