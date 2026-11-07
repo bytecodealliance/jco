@@ -81,7 +81,7 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
         let replacements = 0;
         const source = new TextDecoder()
             .decode(files['task-regression.js'])
-            .replace(/return \{ _util: \{ stop: _stopInstance \}, run,\s*\};/g, () => {
+            .replace(/return \{ _util: \{ stop: _stopInstance,? \}, run,\s*\};/g, () => {
                 replacements++;
                 return `return { run, __test: {
                     createTask: ${external ? 'createNewCurrentImplicitThread.bind(void 0, _jcoTaskCreateContext)' : 'createNewCurrentImplicitThread'}, State: ComponentAsyncState, states: ASYNC_STATE,

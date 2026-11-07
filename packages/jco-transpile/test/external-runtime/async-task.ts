@@ -49,8 +49,8 @@ export function symmetricSyncGuestCallEnter(context, ...args) {
         // binds the direct-call receiver. Neither path may lose its context.
         const callback = source.match(/_symmetricSyncGuestCallEnter\.bind\([^)]*\)/)?.[0];
         assert.isString(callback);
-        const exports = 'return { _util: { stop: _stopInstance }, postCount, run,  };';
-        assert.include(source, exports);
+        const exports = /return \{ _util: \{ stop: _stopInstance,? \}, postCount, run,\s*\};/;
+        assert.match(source, exports);
         files['receiver.js'] = new TextEncoder().encode(
             source.replace(exports, `return { testCallback: () => (${callback}).apply(null, [-99, false, 0]) };`),
         );
