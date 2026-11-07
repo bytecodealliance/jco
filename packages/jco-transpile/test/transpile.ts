@@ -28,6 +28,7 @@ suite('Transpile', async () => {
         const source = Buffer.from(files['variants.js']).toString();
         assert.include(source, 'throw retCopy.val;');
         assert.notInclude(source, 'class ComponentError extends Error');
+        assert.notInclude(Buffer.from(files['variants.d.ts']).toString(), 'ComponentError');
     });
 
     test.concurrent('can preserve ComponentError wrapping', async () => {
@@ -37,6 +38,7 @@ suite('Transpile', async () => {
         });
         const source = Buffer.from(files['variants.js']).toString();
         assert.include(source, 'throw new ComponentError(retCopy.val);');
+        assert.include(Buffer.from(files['variants.d.ts']).toString(), 'readonly ComponentError:');
         if (externalRuntime) {
             assert.include(source, 'initializeComponentErrorClass');
             assert.notInclude(source, 'class ComponentError extends Error');
