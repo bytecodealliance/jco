@@ -342,7 +342,7 @@ impl TaskContextIntrinsic {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META"
             }
             Self::ClearCurrentThread => {
-                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
+                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS, checkIdle: () => _checkIdle()"
             }
             Self::InitializeAsyncSubtaskClass => {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
@@ -652,6 +652,11 @@ pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsic
         let mut contexts = Vec::new();
         context.collect(&mut contexts);
         if contexts.contains(&RuntimeContextIntrinsic::Task(
+            TaskContextIntrinsic::ClearCurrentThread,
+        )) {
+            args.require_intrinsic(crate::intrinsics::component::ComponentIntrinsic::CheckIdle);
+        }
+        if contexts.contains(&RuntimeContextIntrinsic::Task(
             TaskContextIntrinsic::DriverLoop,
         )) {
             args.require_intrinsic(crate::intrinsics::component::ComponentIntrinsic::ReportTrap);
@@ -680,6 +685,13 @@ mod tests {
         )
         .to_string()
     }
+    #[test]
+    fn task_retirement_selects_the_instance_idle_tracker() {
+        let source = generated([Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentThread)]);
+        assert!(source.contains("checkIdle: () => _checkIdle()"));
+        assert!(source.contains("function _checkIdle()"));
+    }
+
     #[test]
     fn driver_reports_background_traps_through_the_instance_notifier() {
         let source = generated([Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop)]);
