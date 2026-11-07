@@ -181,7 +181,12 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             // entrypoint is still suspended, before the export wrapper awaits
             // this promise. Mark it handled immediately while preserving the
             // original rejected promise for the eventual caller.
-            completionPromise.catch(() => {});
+            // Do not forward successful results into a derived promise: that
+            // would assimilate a returned future and read it before the host.
+            completionPromise.then(
+                () => {},
+                () => {},
+            );
             let completionSettled = false;
             const settleCompletionPromise = () => {
                 if (completionSettled || !this.#fields.completionReady) {
