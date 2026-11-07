@@ -79,15 +79,17 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
             cmRuntimeEsModule: external ? defaultRuntimeUrl.href : undefined,
         });
         let replacements = 0;
-        const source = new TextDecoder().decode(files['task-regression.js']).replace(/return \{ run,\s*\};/g, () => {
-            replacements++;
-            return `return { run, __test: {
+        const source = new TextDecoder()
+            .decode(files['task-regression.js'])
+            .replace(/return \{ _util: \{ stop: _stopInstance \}, run,\s*\};/g, () => {
+                replacements++;
+                return `return { run, __test: {
                     createTask: ${external ? 'createNewCurrentImplicitThread.bind(void 0, _jcoTaskCreateContext)' : 'createNewCurrentImplicitThread'}, State: ComponentAsyncState, states: ASYNC_STATE,
                     memories: GLOBAL_COMPONENT_MEMORY_MAP, registers: CURRENT_TASK_META,
                     tasks: ASYNC_TASKS_BY_COMPONENT_IDX, scopes: RESOURCE_SCOPE_TASKS,
                     scheduler: STORE_ASYNC_STATE, compat: ${external ? '_lowerImportBackwardsCompat.bind(void 0, _jcoTaskCompatImportContext)' : '_lowerImportBackwardsCompat'},
                 } };`;
-        });
+            });
         assert.strictEqual(replacements, 1);
         files['task-regression.js'] = new TextEncoder().encode(source);
         await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
