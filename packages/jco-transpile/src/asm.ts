@@ -85,6 +85,16 @@ export async function generateASMJS(args: GenerateASMJSArgs): Promise<string> {
             (_, i, literal) => `exports${i}[${JSON.stringify(asmMangle(JSON.parse(literal)))}]`,
         )
         .replace(/exports(\d+)\['([^']+)']/g, (_, i, s) => `exports${i}['${asmMangle(s)}']`)
+        // Oxc also emits dotted identifiers, including keywords and Unicode names.
+        .replace(
+            /exports(\d+)\.([$_\p{ID_Start}][$_\u200c\u200d\p{ID_Continue}]*)/gu,
+            (_, index, key) => `exports${index}[${JSON.stringify(asmMangle(key))}]`,
+        )
+        // Oxc prints canonical numeric property names as numeric literals.
+        .replace(
+            /exports(\d+)\[(-?\d+(?:e\+?\d+)?)\]/g,
+            (_, index, key) => `exports${index}[${JSON.stringify(asmMangle(String(Number(key))))}]`,
+        )
         .replace(/export (async )?function instantiate/, '$1function _instantiate');
 
     // Filter to get all current generated wasm files
