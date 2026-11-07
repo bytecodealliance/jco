@@ -13,7 +13,8 @@ the [Transpiling](../transpiling.md) chapter and the [WASI support](../wasi/inde
   cleanup behavior across JavaScript and Rust embeddings.
 - [Stopping running instances](./stopping-running-instances.md): ending guest execution,
   releasing runtime-managed resources, and coordinating host cleanup.
-- [Detecting traps](./detecting-traps.md): telling a component trap apart from an ordinary error.
+- [Detecting traps](./detecting-traps.md): catching component traps and receiving background
+  trap notifications with `onTrap`.
 - [Preview 3 streams and backpressure](./preview3-streams-and-backpressure.md): how WASI 0.3
   streams flow between host and guest.
 - [Preview 3 output flush and shutdown](./preview3-output-flush-and-shutdown.md): draining

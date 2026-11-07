@@ -308,6 +308,8 @@ is reported too. A host import throwing something other than a `WebAssembly.Runt
 trap, and isn't reported: the host knows it threw.
 `onTrap` is called from the middle of the runtime's unwinding: it may call `_util.stop()`, but it
 shouldn't use the instance otherwise. An exception it throws is left uncaught.
+See [Detecting traps](./advanced/detecting-traps.md#receive-background-traps-with-ontrap)
+for examples of catching failed calls and receiving background trap notifications.
 
 ### Dropping a received future
 
