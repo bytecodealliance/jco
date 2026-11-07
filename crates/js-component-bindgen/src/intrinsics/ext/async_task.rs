@@ -12,139 +12,179 @@ use crate::{
     uwriteln,
 };
 use std::fmt::Write;
+
+/// State initializers and capability contexts for external task and thread intrinsics.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub(crate) enum TaskContext {
-    ThreadLookup,
-    ThreadClass,
-    ThreadControl,
-    ThreadNew,
-    ThreadStart,
+pub(crate) enum TaskContextIntrinsic {
+    /// Shared capabilities for `getCurrentThread`, `currentThreadOrThrow`,
+    /// `threadIndex`, `contextGet`, and `contextSet`.
+    GetCurrentThread,
+    /// The `initializeAsyncThreadClass` constructor factory; a JS helper, not a canonical operation.
+    InitializeAsyncThreadClass,
+    /// Shared capabilities for `asyncYield`, `threadSuspend`, `threadResumeLater`,
+    /// and the `thread*ThenResume` and `thread*ThenPromote` helpers.
+    ThreadSuspend,
+    /// Capabilities for `threadNewIndirect`.
+    ThreadNewIndirect,
+    /// The WebAssembly start checks returned by `initializeThreadStartChecks`.
+    InitializeThreadStartChecks,
+    /// Capabilities for `subtaskDrop`.
     SubtaskDrop,
-    MayBlock,
-    BlockingDepth,
-    Tasks,
-    TaskIds,
-    ComponentIdxs,
-    Stack,
-    Lookup,
-    Clearing,
-    FuturePredicate,
-    SubtaskClass,
-    TaskClass,
-    Creation,
-    Trap,
-    Return,
-    Cancellation,
-    SubtaskCancellation,
-    Driver,
-    Lower,
-    Compat,
-    SymmetricEnter,
-    SymmetricExit,
+    /// The blocking-permission register returned by `initializeCurrentTaskMayBlock`.
+    InitializeCurrentTaskMayBlock,
+    /// The blocking-depth register returned by `initializeAsyncBlockingCallDepth`.
+    InitializeAsyncBlockingCallDepth,
+    /// The component-indexed task map returned by `initializeTasksByComponent`.
+    InitializeTasksByComponent,
+    /// The current task ID array returned by `initializeCurrentTaskIds`.
+    InitializeCurrentTaskIds,
+    /// The current component-index array returned by `initializeCurrentComponentIdxs`.
+    InitializeCurrentComponentIdxs,
+    /// The guest-call stack returned by `initializeSymmetricSyncGuestCallStack`.
+    InitializeSymmetricSyncGuestCallStack,
+    /// Capabilities for the `getCurrentTask` JS helper.
+    GetCurrentTask,
+    /// Shared capabilities for the `clearCurrentThread` and `clearCurrentTask` JS helpers.
+    ClearCurrentThread,
+    /// The predicate which checks values against the selected `FutureValue` constructor.
+    IsFutureValue,
+    /// The `initializeAsyncSubtaskClass` constructor factory; a JS helper, not a canonical operation.
+    InitializeAsyncSubtaskClass,
+    /// The `initializeAsyncTaskClass` constructor factory; a JS helper, not a canonical operation.
+    InitializeAsyncTaskClass,
+    /// Shared capabilities for the `createNewCurrentImplicitThread` and `createNewCurrentTask` JS helpers.
+    CreateNewCurrentImplicitThread,
+    /// Capabilities for the `unpackCallbackResult` JS helper.
+    UnpackCallbackResult,
+    /// Capabilities for `taskReturn`.
+    TaskReturn,
+    /// Capabilities for the `taskCancel` JS helper.
+    TaskCancel,
+    /// Capabilities for `subtaskCancel`.
+    SubtaskCancel,
+    /// Capabilities for the `driverLoop` JS helper.
+    DriverLoop,
+    /// Capabilities for the `lowerImport` JS helper.
+    LowerImport,
+    /// Capabilities for the `lowerImportBackwardsCompat` JS helper.
+    LowerImportBackwardsCompat,
+    /// Capabilities for the `symmetricSyncGuestCallEnter` JS helper.
+    SymmetricSyncGuestCallEnter,
+    /// Capabilities for the `symmetricSyncGuestCallExit` JS helper.
+    SymmetricSyncGuestCallExit,
 }
-impl TaskContext {
-    const ALL: &'static [Self] = &[
-        Self::ThreadLookup,
-        Self::ThreadClass,
-        Self::ThreadControl,
-        Self::ThreadNew,
-        Self::ThreadStart,
+impl TaskContextIntrinsic {
+    const ALL: [Self; 27] = [
+        Self::GetCurrentThread,
+        Self::InitializeAsyncThreadClass,
+        Self::ThreadSuspend,
+        Self::ThreadNewIndirect,
+        Self::InitializeThreadStartChecks,
         Self::SubtaskDrop,
-        Self::MayBlock,
-        Self::BlockingDepth,
-        Self::Tasks,
-        Self::TaskIds,
-        Self::ComponentIdxs,
-        Self::Stack,
-        Self::Lookup,
-        Self::Clearing,
-        Self::FuturePredicate,
-        Self::SubtaskClass,
-        Self::TaskClass,
-        Self::Creation,
-        Self::Trap,
-        Self::Return,
-        Self::Cancellation,
-        Self::SubtaskCancellation,
-        Self::Driver,
-        Self::Lower,
-        Self::Compat,
-        Self::SymmetricEnter,
-        Self::SymmetricExit,
+        Self::InitializeCurrentTaskMayBlock,
+        Self::InitializeAsyncBlockingCallDepth,
+        Self::InitializeTasksByComponent,
+        Self::InitializeCurrentTaskIds,
+        Self::InitializeCurrentComponentIdxs,
+        Self::InitializeSymmetricSyncGuestCallStack,
+        Self::GetCurrentTask,
+        Self::ClearCurrentThread,
+        Self::IsFutureValue,
+        Self::InitializeAsyncSubtaskClass,
+        Self::InitializeAsyncTaskClass,
+        Self::CreateNewCurrentImplicitThread,
+        Self::UnpackCallbackResult,
+        Self::TaskReturn,
+        Self::TaskCancel,
+        Self::SubtaskCancel,
+        Self::DriverLoop,
+        Self::LowerImport,
+        Self::LowerImportBackwardsCompat,
+        Self::SymmetricSyncGuestCallEnter,
+        Self::SymmetricSyncGuestCallExit,
     ];
     pub(crate) fn get_global_names() -> impl Iterator<Item = &'static str> {
         Self::ALL
             .iter()
-            .flat_map(|c| [Some(c.local_name()), c.initializer().map(|i| i.local_name)])
+            .flat_map(|context| {
+                [
+                    Some(context.local_name()),
+                    context.initializer().map(|init| init.local_name),
+                ]
+            })
             .flatten()
     }
     pub(crate) fn local_name(self) -> &'static str {
         match self {
-            Self::ThreadLookup => "_jcoThreadLookupContext",
-            Self::ThreadClass => "AsyncThread",
-            Self::ThreadControl => "_jcoThreadControlContext",
-            Self::ThreadNew => "_jcoThreadNewContext",
-            Self::ThreadStart => "_jcoThreadStartChecks",
+            Self::GetCurrentThread => "_jcoThreadLookupContext",
+            Self::InitializeAsyncThreadClass => "AsyncThread",
+            Self::ThreadSuspend => "_jcoThreadControlContext",
+            Self::ThreadNewIndirect => "_jcoThreadNewContext",
+            Self::InitializeThreadStartChecks => "_jcoThreadStartChecks",
             Self::SubtaskDrop => "_jcoSubtaskDropContext",
-            Self::MayBlock => "CURRENT_TASK_MAY_BLOCK",
-            Self::BlockingDepth => "ASYNC_BLOCKING_CALL_DEPTH",
-            Self::Tasks => "ASYNC_TASKS_BY_COMPONENT_IDX",
-            Self::TaskIds => "ASYNC_CURRENT_TASK_IDS",
-            Self::ComponentIdxs => "ASYNC_CURRENT_COMPONENT_IDXS",
-            Self::Stack => "SYMMETRIC_SYNC_GUEST_CALL_STACK",
-            Self::Lookup => "_jcoTaskLookupContext",
-            Self::Clearing => "_jcoTaskClearContext",
-            Self::FuturePredicate => "_jcoTaskFuturePredicate",
-            Self::SubtaskClass => "AsyncSubtask",
-            Self::TaskClass => "AsyncTask",
-            Self::Creation => "_jcoTaskCreateContext",
-            Self::Trap => "_jcoTaskTrapContext",
-            Self::Return => "_jcoTaskReturnContext",
-            Self::Cancellation => "_jcoTaskCancelContext",
-            Self::SubtaskCancellation => "_jcoSubtaskCancelContext",
-            Self::Driver => "_jcoTaskDriverContext",
-            Self::Lower => "_jcoTaskLowerImportContext",
-            Self::Compat => "_jcoTaskCompatImportContext",
-            Self::SymmetricEnter => "_jcoTaskSymmetricEnterContext",
-            Self::SymmetricExit => "_jcoTaskSymmetricExitContext",
+            Self::InitializeCurrentTaskMayBlock => "CURRENT_TASK_MAY_BLOCK",
+            Self::InitializeAsyncBlockingCallDepth => "ASYNC_BLOCKING_CALL_DEPTH",
+            Self::InitializeTasksByComponent => "ASYNC_TASKS_BY_COMPONENT_IDX",
+            Self::InitializeCurrentTaskIds => "ASYNC_CURRENT_TASK_IDS",
+            Self::InitializeCurrentComponentIdxs => "ASYNC_CURRENT_COMPONENT_IDXS",
+            Self::InitializeSymmetricSyncGuestCallStack => "SYMMETRIC_SYNC_GUEST_CALL_STACK",
+            Self::GetCurrentTask => "_jcoTaskLookupContext",
+            Self::ClearCurrentThread => "_jcoTaskClearContext",
+            Self::IsFutureValue => "_jcoTaskFuturePredicate",
+            Self::InitializeAsyncSubtaskClass => "AsyncSubtask",
+            Self::InitializeAsyncTaskClass => "AsyncTask",
+            Self::CreateNewCurrentImplicitThread => "_jcoTaskCreateContext",
+            Self::UnpackCallbackResult => "_jcoTaskTrapContext",
+            Self::TaskReturn => "_jcoTaskReturnContext",
+            Self::TaskCancel => "_jcoTaskCancelContext",
+            Self::SubtaskCancel => "_jcoSubtaskCancelContext",
+            Self::DriverLoop => "_jcoTaskDriverContext",
+            Self::LowerImport => "_jcoTaskLowerImportContext",
+            Self::LowerImportBackwardsCompat => "_jcoTaskCompatImportContext",
+            Self::SymmetricSyncGuestCallEnter => "_jcoTaskSymmetricEnterContext",
+            Self::SymmetricSyncGuestCallExit => "_jcoTaskSymmetricExitContext",
         }
     }
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (export, local_name) = match self {
-            Self::ThreadClass => (
+            Self::InitializeAsyncThreadClass => (
                 "initializeAsyncThreadClass",
                 "_jcoInitializeAsyncThreadClass",
             ),
-            Self::ThreadStart => (
+            Self::InitializeThreadStartChecks => (
                 "initializeThreadStartChecks",
                 "_jcoInitializeThreadStartChecks",
             ),
-            Self::MayBlock => (
+            Self::InitializeCurrentTaskMayBlock => (
                 "initializeCurrentTaskMayBlock",
                 "_jcoInitializeCurrentTaskMayBlock",
             ),
-            Self::BlockingDepth => (
+            Self::InitializeAsyncBlockingCallDepth => (
                 "initializeAsyncBlockingCallDepth",
                 "_jcoInitializeAsyncBlockingCallDepth",
             ),
-            Self::Tasks => (
+            Self::InitializeTasksByComponent => (
                 "initializeTasksByComponent",
                 "_jcoInitializeTasksByComponent",
             ),
-            Self::TaskIds => ("initializeCurrentTaskIds", "_jcoInitializeCurrentTaskIds"),
-            Self::ComponentIdxs => (
+            Self::InitializeCurrentTaskIds => {
+                ("initializeCurrentTaskIds", "_jcoInitializeCurrentTaskIds")
+            }
+            Self::InitializeCurrentComponentIdxs => (
                 "initializeCurrentComponentIdxs",
                 "_jcoInitializeCurrentComponentIdxs",
             ),
-            Self::Stack => (
+            Self::InitializeSymmetricSyncGuestCallStack => (
                 "initializeSymmetricSyncGuestCallStack",
                 "_jcoInitializeSymmetricSyncGuestCallStack",
             ),
-            Self::SubtaskClass => (
+            Self::InitializeAsyncSubtaskClass => (
                 "initializeAsyncSubtaskClass",
                 "_jcoInitializeAsyncSubtaskClass",
             ),
-            Self::TaskClass => ("initializeAsyncTaskClass", "_jcoInitializeAsyncTaskClass"),
+            Self::InitializeAsyncTaskClass => {
+                ("initializeAsyncTaskClass", "_jcoInitializeAsyncTaskClass")
+            }
             _ => return None,
         };
         Some(RuntimeInitializer {
@@ -156,36 +196,42 @@ impl TaskContext {
     pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
         use RuntimeContextIntrinsic::{Component, Core, Task, Waitable};
         match self {
-            Self::ThreadLookup => &[
+            Self::GetCurrentThread => &[
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Core(CoreContextIntrinsic::InitializeTaskRegisters),
             ],
-            Self::ThreadClass => &[
-                Task(Self::ThreadLookup),
+            Self::InitializeAsyncThreadClass => &[
+                Task(Self::GetCurrentThread),
                 Component(ComponentContextIntrinsic::RecordTrap),
             ],
-            Self::ThreadControl => &[Task(Self::ThreadLookup), Task(Self::ThreadClass)],
-            Self::ThreadNew => &[Task(Self::ThreadControl), Task(Self::ThreadStart)],
+            Self::ThreadSuspend => &[
+                Task(Self::GetCurrentThread),
+                Task(Self::InitializeAsyncThreadClass),
+            ],
+            Self::ThreadNewIndirect => &[
+                Task(Self::ThreadSuspend),
+                Task(Self::InitializeThreadStartChecks),
+            ],
             Self::SubtaskDrop => &[
-                Task(Self::SubtaskClass),
+                Task(Self::InitializeAsyncSubtaskClass),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
             ],
-            Self::Lookup => &[
-                Task(Self::Tasks),
+            Self::GetCurrentTask => &[
+                Task(Self::InitializeTasksByComponent),
                 Core(CoreContextIntrinsic::InitializeTaskRegisters),
             ],
-            Self::Clearing => &[
-                Task(Self::Tasks),
-                Task(Self::TaskIds),
-                Task(Self::ComponentIdxs),
+            Self::ClearCurrentThread => &[
+                Task(Self::InitializeTasksByComponent),
+                Task(Self::InitializeCurrentTaskIds),
+                Task(Self::InitializeCurrentComponentIdxs),
             ],
-            Self::SubtaskClass => &[
+            Self::InitializeAsyncSubtaskClass => &[
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Core(CoreContextIntrinsic::InitializeComponentMemoryMap),
                 Core(CoreContextIntrinsic::InitializeSymbolDispose),
             ],
-            Self::TaskClass => &[
-                Task(Self::SubtaskClass),
+            Self::InitializeAsyncTaskClass => &[
+                Task(Self::InitializeAsyncSubtaskClass),
                 Component(ComponentContextIntrinsic::PostReturnTrap),
                 Component(ComponentContextIntrinsic::RecordTrap),
                 Waitable(WaitableContextIntrinsic::InitializeWaitableClass),
@@ -195,67 +241,70 @@ impl TaskContext {
                 Core(CoreContextIntrinsic::InitializeAsyncDeterminism),
                 RuntimeContextIntrinsic::InitializeResourceScopeCounter,
                 RuntimeContextIntrinsic::InitializeResourceScopeTasks,
-                Task(Self::Clearing),
+                Task(Self::ClearCurrentThread),
                 Core(CoreContextIntrinsic::InitializeTaskRegisters),
-                Task(Self::FuturePredicate),
+                Task(Self::IsFutureValue),
             ],
-            Self::Creation => &[
-                Task(Self::TaskClass),
-                Task(Self::ThreadClass),
-                Task(Self::Clearing),
+            Self::CreateNewCurrentImplicitThread => &[
+                Task(Self::InitializeAsyncTaskClass),
+                Task(Self::InitializeAsyncThreadClass),
+                Task(Self::ClearCurrentThread),
             ],
-            Self::Trap => &[Core(
+            Self::UnpackCallbackResult => &[Core(
                 CoreContextIntrinsic::InitializeRuntimeErrorConstructor,
             )],
-            Self::Return => &[
-                Task(Self::Lookup),
+            Self::TaskReturn => &[
+                Task(Self::GetCurrentTask),
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
             ],
-            Self::Cancellation => &[
-                Task(Self::Lookup),
+            Self::TaskCancel => &[
+                Task(Self::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
             ],
-            Self::SubtaskCancellation => &[Task(Self::Cancellation), Task(Self::SubtaskClass)],
-            Self::Driver => &[
+            Self::SubtaskCancel => &[
+                Task(Self::TaskCancel),
+                Task(Self::InitializeAsyncSubtaskClass),
+            ],
+            Self::DriverLoop => &[
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Waitable(WaitableContextIntrinsic::InitializeWaitableSetClass),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
                 RuntimeContextIntrinsic::NumericConversion,
             ],
-            Self::Lower => &[
-                Task(Self::Lookup),
+            Self::LowerImport => &[
+                Task(Self::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Component(ComponentContextIntrinsic::CheckMayLeave),
-                Task(Self::TaskClass),
+                Task(Self::InitializeAsyncTaskClass),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
             ],
-            Self::Compat => &[
-                Task(Self::Lookup),
+            Self::LowerImportBackwardsCompat => &[
+                Task(Self::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Component(ComponentContextIntrinsic::CheckMayLeave),
-                Task(Self::Creation),
+                Task(Self::CreateNewCurrentImplicitThread),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
             ],
-            Self::SymmetricEnter => &[
-                Task(Self::Lookup),
+            Self::SymmetricSyncGuestCallEnter => &[
+                Task(Self::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
-                Task(Self::Creation),
-                Task(Self::MayBlock),
-                Task(Self::Stack),
+                Task(Self::CreateNewCurrentImplicitThread),
+                Task(Self::InitializeCurrentTaskMayBlock),
+                Task(Self::InitializeSymmetricSyncGuestCallStack),
             ],
-            Self::SymmetricExit => &[
-                Task(Self::Lookup),
+            Self::SymmetricSyncGuestCallExit => &[
+                Task(Self::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
-                Task(Self::MayBlock),
-                Task(Self::Stack),
+                Task(Self::InitializeCurrentTaskMayBlock),
+                Task(Self::InitializeSymmetricSyncGuestCallStack),
             ],
             _ => &[],
         }
     }
     pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
-        if self == Self::FuturePredicate {
+        if self == Self::IsFutureValue {
             uwriteln!(
                 output,
                 "const {local} = value => value instanceof FutureValue;"
@@ -263,71 +312,73 @@ impl TaskContext {
             return;
         }
         let properties = match self {
-            Self::ThreadLookup => {
+            Self::GetCurrentThread => {
                 "lookup: _jcoComponentStateLookupContext, registers: CURRENT_TASK_META"
             }
-            Self::ThreadClass => {
+            Self::InitializeAsyncThreadClass => {
                 "{ lookup: _jcoComponentStateLookupContext, registers: CURRENT_TASK_META, traps: _jcoComponentRecordTrapContext }"
             }
-            Self::ThreadControl => {
+            Self::ThreadSuspend => {
                 "lookup: _jcoComponentStateLookupContext, registers: CURRENT_TASK_META, AsyncThread, RuntimeError: WebAssembly.RuntimeError"
             }
-            Self::ThreadNew => {
+            Self::ThreadNewIndirect => {
                 "lookup: _jcoComponentStateLookupContext, registers: CURRENT_TASK_META, AsyncThread, RuntimeError: WebAssembly.RuntimeError, start: _jcoThreadStartChecks"
             }
-            Self::ThreadStart => "WebAssembly",
+            Self::InitializeThreadStartChecks => "WebAssembly",
             Self::SubtaskDrop => {
                 "lookup: _jcoComponentStateLookupContext, AsyncSubtask, RuntimeError: WebAssembly.RuntimeError"
             }
-            Self::MayBlock => {
+            Self::InitializeCurrentTaskMayBlock => {
                 "typeof WebAssembly === 'undefined' ? false : { Global: WebAssembly.Global }"
             }
-            Self::BlockingDepth => {
+            Self::InitializeAsyncBlockingCallDepth => {
                 "typeof WebAssembly === 'undefined' ? false : { Global: WebAssembly.Global }"
             }
-            Self::Tasks => "",
-            Self::TaskIds => "",
-            Self::ComponentIdxs => "",
-            Self::Stack => "",
-            Self::Lookup => "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META",
-            Self::Clearing => {
+            Self::InitializeTasksByComponent => "",
+            Self::InitializeCurrentTaskIds => "",
+            Self::InitializeCurrentComponentIdxs => "",
+            Self::InitializeSymmetricSyncGuestCallStack => "",
+            Self::GetCurrentTask => {
+                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META"
+            }
+            Self::ClearCurrentThread => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
             }
-            Self::SubtaskClass => {
+            Self::InitializeAsyncSubtaskClass => {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
             }
-            Self::TaskClass => {
+            Self::InitializeAsyncTaskClass => {
                 "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, isFutureValue: _jcoTaskFuturePredicate }"
             }
-            Self::Creation => {
+            Self::CreateNewCurrentImplicitThread => {
                 "AsyncTask, AsyncThread, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
             }
-            Self::Trap => "RuntimeError: WebAssemblyRuntimeError",
-            Self::Return => {
+            Self::UnpackCallbackResult => "RuntimeError: WebAssemblyRuntimeError",
+            Self::TaskReturn => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, RuntimeError: WebAssemblyRuntimeError"
             }
-            Self::Cancellation => {
+            Self::TaskCancel => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext"
             }
-            Self::SubtaskCancellation => {
+            Self::SubtaskCancel => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, AsyncSubtask, RuntimeError: WebAssembly.RuntimeError"
             }
-            Self::Driver => {
+            Self::DriverLoop => {
                 "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, events: ASYNC_EVENT_CODE, strictNumeric: _jcoStrictNumericContext"
             }
-            Self::Lower => {
+            Self::LowerImport => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, AsyncTask, mayLeave: _jcoComponentMayLeaveContext, events: ASYNC_EVENT_CODE"
             }
-            Self::Compat => {
+            Self::LowerImportBackwardsCompat => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, creation: _jcoTaskCreateContext, mayLeave: _jcoComponentMayLeaveContext, events: ASYNC_EVENT_CODE"
             }
-            Self::SymmetricEnter => {
+            Self::SymmetricSyncGuestCallEnter => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, creation: _jcoTaskCreateContext, mayBlock: CURRENT_TASK_MAY_BLOCK, stack: SYMMETRIC_SYNC_GUEST_CALL_STACK"
             }
-            Self::SymmetricExit => {
+            Self::SymmetricSyncGuestCallExit => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, mayBlock: CURRENT_TASK_MAY_BLOCK, stack: SYMMETRIC_SYNC_GUEST_CALL_STACK"
             }
-            Self::FuturePredicate => unreachable!(),
+            Self::IsFutureValue => unreachable!(),
         };
         if let Some(init) = self.initializer() {
             let initialize = init.local_name;
@@ -342,180 +393,248 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
     let (export, context, kind) = match intrinsic {
         CurrentTaskMayBlock => (
             "initializeCurrentTaskMayBlock",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::MayBlock)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeCurrentTaskMayBlock,
+            )),
             RuntimeImportKind::InitializedValue,
         ),
         AsyncBlockingCallDepth => (
             "initializeAsyncBlockingCallDepth",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::BlockingDepth)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeAsyncBlockingCallDepth,
+            )),
             RuntimeImportKind::InitializedValue,
         ),
         AsyncBlockedConstant => ("asyncBlockedCode", None, RuntimeImportKind::Value),
         AsyncSubtaskClass => (
             "initializeAsyncSubtaskClass",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::SubtaskClass)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeAsyncSubtaskClass,
+            )),
             RuntimeImportKind::InitializedConstructor,
         ),
         AsyncTaskClass => (
             "initializeAsyncTaskClass",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::TaskClass)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeAsyncTaskClass,
+            )),
             RuntimeImportKind::InitializedConstructor,
         ),
         GlobalAsyncCurrentTaskMap => (
             "initializeTasksByComponent",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Tasks)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeTasksByComponent,
+            )),
             RuntimeImportKind::InitializedValue,
         ),
         GlobalAsyncCurrentTaskIds => (
             "initializeCurrentTaskIds",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::TaskIds)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeCurrentTaskIds,
+            )),
             RuntimeImportKind::InitializedValue,
         ),
         GlobalAsyncCurrentComponentIdxs => (
             "initializeCurrentComponentIdxs",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ComponentIdxs)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeCurrentComponentIdxs,
+            )),
             RuntimeImportKind::InitializedValue,
         ),
         SymmetricSyncGuestCallStack => (
             "initializeSymmetricSyncGuestCallStack",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Stack)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeSymmetricSyncGuestCallStack,
+            )),
             RuntimeImportKind::InitializedValue,
         ),
         ContextGet => (
             "contextGet",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadLookup)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::GetCurrentThread,
+            )),
             RuntimeImportKind::Call,
         ),
         ContextSet => (
             "contextSet",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadLookup)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::GetCurrentThread,
+            )),
             RuntimeImportKind::Call,
         ),
         GetCurrentTask => (
             "getCurrentTask",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Lookup)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::GetCurrentTask,
+            )),
             RuntimeImportKind::Call,
         ),
         SubtaskCancel => (
             "subtaskCancel",
             Some(RuntimeContextIntrinsic::Task(
-                TaskContext::SubtaskCancellation,
+                TaskContextIntrinsic::SubtaskCancel,
             )),
             RuntimeImportKind::Call,
         ),
         SubtaskDrop => (
             "subtaskDrop",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::SubtaskDrop)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::SubtaskDrop,
+            )),
             RuntimeImportKind::Call,
         ),
         TaskCancel => (
             "taskCancel",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Cancellation)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::TaskCancel,
+            )),
             RuntimeImportKind::Call,
         ),
         TaskReturn => (
             "taskReturn",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Return)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::TaskReturn,
+            )),
             RuntimeImportKind::Call,
         ),
         UnpackCallbackResult => (
             "unpackCallbackResult",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Trap)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::UnpackCallbackResult,
+            )),
             RuntimeImportKind::Call,
         ),
         DriverLoop => (
             "driverLoop",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Driver)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::DriverLoop,
+            )),
             RuntimeImportKind::Call,
         ),
         LowerImport => (
             "lowerImport",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Lower)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::LowerImport,
+            )),
             RuntimeImportKind::Call,
         ),
         LowerImportBackwardsCompat => (
             "lowerImportBackwardsCompat",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Compat)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::LowerImportBackwardsCompat,
+            )),
             RuntimeImportKind::Call,
         ),
         EnterSymmetricSyncGuestCall => (
             "symmetricSyncGuestCallEnter",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::SymmetricEnter)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::SymmetricSyncGuestCallEnter,
+            )),
             RuntimeImportKind::Call,
         ),
         ExitSymmetricSyncGuestCall => (
             "symmetricSyncGuestCallExit",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::SymmetricExit)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::SymmetricSyncGuestCallExit,
+            )),
             RuntimeImportKind::Call,
         ),
         AsyncThreadClass => (
             "initializeAsyncThreadClass",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadClass)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::InitializeAsyncThreadClass,
+            )),
             RuntimeImportKind::InitializedConstructor,
         ),
         GetCurrentThread => (
             "getCurrentThread",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadLookup)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::GetCurrentThread,
+            )),
             RuntimeImportKind::Call,
         ),
         CurrentThreadOrThrow => (
             "currentThreadOrThrow",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadLookup)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::GetCurrentThread,
+            )),
             RuntimeImportKind::Call,
         ),
         CreateNewCurrentImplicitThread => (
             "createNewCurrentImplicitThread",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Creation)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::CreateNewCurrentImplicitThread,
+            )),
             RuntimeImportKind::Call,
         ),
         ClearCurrentThread => (
             "clearCurrentThread",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::Clearing)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ClearCurrentThread,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadYield => (
             "asyncYield",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadControl)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadSuspend,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadIndex => (
             "threadIndex",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadLookup)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::GetCurrentThread,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadNewIndirect => (
             "threadNewIndirect",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadNew)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadNewIndirect,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadSuspend => (
             "threadSuspend",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadControl)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadSuspend,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadResumeLater => (
             "threadResumeLater",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadControl)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadSuspend,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadSuspendThenResume => (
             "threadSuspendThenResume",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadControl)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadSuspend,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadYieldThenResume => (
             "threadYieldThenResume",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadControl)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadSuspend,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadSuspendThenPromote => (
             "threadSuspendThenPromote",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadControl)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadSuspend,
+            )),
             RuntimeImportKind::Call,
         ),
         ThreadYieldThenPromote => (
             "threadYieldThenPromote",
-            Some(RuntimeContextIntrinsic::Task(TaskContext::ThreadControl)),
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::ThreadSuspend,
+            )),
             RuntimeImportKind::Call,
         ),
     };
@@ -532,7 +651,9 @@ pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     {
         let mut contexts = Vec::new();
         context.collect(&mut contexts);
-        if contexts.contains(&RuntimeContextIntrinsic::Task(TaskContext::TaskClass)) {
+        if contexts.contains(&RuntimeContextIntrinsic::Task(
+            TaskContextIntrinsic::InitializeAsyncTaskClass,
+        )) {
             args.require_intrinsic(AsyncFutureIntrinsic::FutureValueClass);
         }
     }

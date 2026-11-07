@@ -96,19 +96,19 @@ impl WaitableContextIntrinsic {
                 Waitable(Self::InitializeWaitableSetClass),
             ],
             Self::WaitableSetWait => &[
-                RuntimeContextIntrinsic::Task(super::TaskContext::Lookup),
+                RuntimeContextIntrinsic::Task(super::TaskContextIntrinsic::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Waitable(Self::InitializeWaitableSetClass),
             ],
             Self::WaitableSetPoll => &[
-                RuntimeContextIntrinsic::Task(super::TaskContext::Lookup),
+                RuntimeContextIntrinsic::Task(super::TaskContextIntrinsic::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Waitable(Self::InitializeWaitableSetClass),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
             ],
             Self::RemoveWaitableSet => &[Waitable(Self::InitializeWaitableSetClass)],
             Self::WaitableSetDrop => &[
-                RuntimeContextIntrinsic::Task(super::TaskContext::Lookup),
+                RuntimeContextIntrinsic::Task(super::TaskContextIntrinsic::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Waitable(Self::InitializeWaitableSetClass),
             ],
