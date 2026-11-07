@@ -46,8 +46,9 @@ export function initializeStoreTrap(onTrap) { const owner = defaults.initializeS
 export function initializeStoreAsyncState() { const owner = defaults.initializeStoreAsyncState(); stores.push(owner); return owner; }
 export function initializeComponentAsyncStates() { const owner = defaults.initializeComponentAsyncStates(); states.push(owner); return owner; }
 export function initializeComponentAsyncStateClass(context) {
- if (Object.keys(context).sort().join() !== 'RepTable,RuntimeError,Waitable,cannotEnter,deadlock,indexSpaces,instanceFlags,normalization,reportTrap,storeTrap') throw new Error('broad component constructor context');
+ if (Object.keys(context).sort().join() !== 'RepTable,RuntimeError,Waitable,cannotEnter,checkIdle,deadlock,indexSpaces,instanceFlags,normalization,reportTrap,storeTrap') throw new Error('broad component constructor context');
  if (typeof context.reportTrap !== 'function') throw new Error('missing component trap reporter');
+ if (typeof context.checkIdle !== 'function') throw new Error('missing component idle checker');
  if (!flags.includes(context.instanceFlags) || !traps.includes(context.storeTrap) || !states.includes(context.deadlock.asyncState)) throw new Error('detached component owner');
  const constructor = defaults.initializeComponentAsyncStateClass(context); constructors.push(constructor); contexts.push(context); return constructor;
 }
@@ -110,12 +111,21 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.isNull(provider.traps[index].error);
                     assert.strictEqual(provider.traps[index].onTrap, instantiation ? onTrap : null);
                     assert.strictEqual(provider.stores[index].pendingHostOperations, 0);
+                    // The provider callback must settle waiters on this instance's selected scheduler.
+                    let idle = false;
+                    provider.stores[index].idleWaiters.add(() => {
+                        idle = true;
+                    });
+                    provider.contexts[index].checkIdle();
+                    assert.isTrue(idle);
+                    assert.strictEqual(provider.stores[index].idleWaiters.size, 0);
                     for (const state of provider.states[index].values()) {
                         assert.instanceOf(state, provider.constructors[index]);
                     }
                 }
                 assert.include(provider.calls, 'getOrCreateAsyncState');
                 if (instantiation) {
+                    assert.notStrictEqual(provider.stores[0].idleWaiters, provider.stores[1].idleWaiters);
                     for (const owners of [
                         provider.flags,
                         provider.states,
