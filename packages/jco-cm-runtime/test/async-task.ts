@@ -456,7 +456,7 @@ test.concurrent('symmetric guest calls preserve synchronous entry and restore th
     }
 });
 
-test.concurrent('backwards-compatible import lowering creates and retires an initialization task', () => {
+test.concurrent.each([false, true])('initialization import retires its task (manual async=%s)', (isManualAsync) => {
     const s = setup();
     try {
         s.component.instanceFlags.set(0, { value: 1 });
@@ -464,6 +464,7 @@ test.concurrent('backwards-compatible import lowering creates and retires an ini
             {
                 componentIdx: 0,
                 isAsync: false,
+                isManualAsync,
                 funcTypeIsAsync: false,
                 getMemoryFn: () => undefined,
                 importFn(value) {
@@ -584,5 +585,19 @@ test.concurrent('subtask result lowering falls back to registered component memo
         finish(parent);
     } finally {
         s.cleanup();
+    }
+});
+
+test.concurrent('stopping a task rejects completion before its host import returns', async () => {
+    const store = setup();
+    const [task] = store.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+    const error = new Error('instance stopped');
+    try {
+        const completion = expect(task.completionPromise()).rejects.toBe(error);
+        task.stop(error);
+        await completion;
+        expect(task.isErrored()).toBe(error);
+    } finally {
+        store.cleanup();
     }
 });

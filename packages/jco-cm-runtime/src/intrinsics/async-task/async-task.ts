@@ -969,6 +969,12 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                 this.#fields.errored = err;
             }
         }
+        stop(err: unknown) {
+            this.reject(err);
+            // Publish rejection even while a JSPI stack awaits a host import.
+            this.#fields.completionReady = true;
+            this.#fields.settleCompletionPromise();
+        }
         reject(taskErr: unknown) {
             debugLog('[AsyncTask#reject()] args', {
                 componentIdx: this.#fields.componentIdx,
