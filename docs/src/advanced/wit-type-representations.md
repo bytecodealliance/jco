@@ -302,6 +302,28 @@ API and CLI preserve the historical behavior of wrapping that value in an `Error
 `noComponentErrorWrapping: true` to the API, or `--no-component-error-wrapping` to the CLI, to make `jco` throw the
 payload directly. Pass `noComponentErrorWrapping: false` to `jco-transpile` to request the compatibility wrapper.
 
+When wrapping is enabled, bindings that use the wrapper expose its constructor as `_util.ComponentError`.
+Use `instanceof` to distinguish declared WIT errors from traps and other exceptions:
+
+```js
+import { fallible, _util } from './component.js';
+
+try {
+    fallible.f(42);
+} catch (error) {
+    if (error instanceof _util.ComponentError) {
+        console.error('Declared WIT error:', error.payload);
+    } else {
+        throw error;
+    }
+}
+```
+
+With explicit instantiation, use `instance._util.ComponentError`. Each instance has its own constructor;
+an error from one instance does not pass an `instanceof` check against another instance's constructor.
+The constructor is absent when bindings do not use error wrapping. This is an ordinary JavaScript
+constructor: host code can also construct these errors, so the check does not authenticate their origin.
+
 Consider the following interface:
 
 ```wit
