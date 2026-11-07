@@ -254,8 +254,10 @@ impl CoreContextIntrinsic {
                 Self::InitializeFileCompileCache,
             )],
             Self::SuspendingImport => &[
-                RuntimeContextIntrinsic::Task(super::TaskContext::ThreadLookup),
-                RuntimeContextIntrinsic::Task(super::TaskContext::MayBlock),
+                RuntimeContextIntrinsic::Task(super::TaskContextIntrinsic::GetCurrentThread),
+                RuntimeContextIntrinsic::Task(
+                    super::TaskContextIntrinsic::InitializeCurrentTaskMayBlock,
+                ),
                 RuntimeContextIntrinsic::Core(Self::InitializeTaskRegisters),
                 RuntimeContextIntrinsic::Component(ComponentContextIntrinsic::CheckMayLeave),
                 RuntimeContextIntrinsic::Component(ComponentContextIntrinsic::RecordTrap),
