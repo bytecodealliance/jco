@@ -62,6 +62,10 @@
         "./intrinsics/waitable": {
             "types": "./dist/intrinsics/waitable.d.ts",
             "default": "./dist/intrinsics/waitable.js"
+        },
+        "./intrinsics/error-context": {
+            "types": "./dist/intrinsics/error-context.d.ts",
+            "default": "./dist/intrinsics/error-context.js"
         }
     },
     "scripts": {

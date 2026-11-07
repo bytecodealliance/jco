@@ -28,6 +28,8 @@ use std::fmt::Write;
 mod component;
 pub(crate) mod conversion;
 mod core;
+mod error_context;
+use error_context::ErrCtxContextIntrinsic;
 mod waitable;
 use component::ComponentContextIntrinsic;
 use core::CoreContextIntrinsic;
@@ -51,6 +53,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     Component(ComponentContextIntrinsic),
     /// Context intrinsics for waitables and waitable sets.
     Waitable(WaitableContextIntrinsic),
+    /// Context intrinsics for error-context tables and operations.
+    ErrCtx(ErrCtxContextIntrinsic),
     /// Capabilities for the `tableGet` resource-table helper.
     ResourceTableGet,
     /// The per-component resource handle index spaces returned by `initializeHandleIndexSpaces`.
@@ -136,6 +140,7 @@ impl RuntimeContextIntrinsic {
         .chain(CoreContextIntrinsic::get_global_names())
         .chain(ComponentContextIntrinsic::get_global_names())
         .chain(WaitableContextIntrinsic::get_global_names())
+        .chain(ErrCtxContextIntrinsic::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -143,6 +148,7 @@ impl RuntimeContextIntrinsic {
             Self::Core(context) => context.local_name(),
             Self::Component(context) => context.local_name(),
             Self::Waitable(context) => context.local_name(),
+            Self::ErrCtx(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::InitializeHandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::InitializeHandleTables => "HANDLE_TABLES",
@@ -173,6 +179,7 @@ impl RuntimeContextIntrinsic {
             Self::Core(context) => return context.initializer(),
             Self::Component(context) => return context.initializer(),
             Self::Waitable(context) => return context.initializer(),
+            Self::ErrCtx(context) => return context.initializer(),
             Self::InitializeHandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -262,6 +269,7 @@ impl RuntimeContextIntrinsic {
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
+            Self::ErrCtx(context) => context.dependencies(),
             Self::ResourceTableRemove => &[
                 Self::InitializeHandleIndexSpaces,
                 Self::InitializeResourceScopeTasks,
@@ -303,6 +311,7 @@ impl RuntimeContextIntrinsic {
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),
+            Self::ErrCtx(context) => context.render(output, args),
             Self::ResourceTableRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -391,6 +400,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::ErrCtx(i) => Some(error_context::import(i)),
             Intrinsic::Waitable(i) => Some(waitable::import(i)),
             Intrinsic::Component(i) => component::import(i),
             Intrinsic::Resource(i) => Some(resource::resource_import(i)),
@@ -627,6 +637,22 @@ impl Provides<WaitableIntrinsic> for ExternalRuntime {
     }
 }
 
+impl Provides<ErrCtxIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: ErrCtxIntrinsic) -> IntrinsicBinding {
+        let _ = error_context::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        _intrinsic: ErrCtxIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
+}
+
 /// Families the external runtime does not implement yet.
 macro_rules! delegate_to_inline {
     ($($family:ty),+ $(,)?) => {
@@ -650,7 +676,6 @@ macro_rules! delegate_to_inline {
 }
 
 delegate_to_inline! {
-    ErrCtxIntrinsic,
     AsyncTaskIntrinsic,
     LiftIntrinsic,
     LowerIntrinsic,

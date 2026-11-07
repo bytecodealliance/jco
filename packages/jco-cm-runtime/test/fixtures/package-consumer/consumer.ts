@@ -6,6 +6,7 @@ import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/convers
 import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
 import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
 import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
+import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
 import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
 import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
 import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
@@ -24,6 +25,7 @@ const publicModules: Record<string, Record<string, unknown>> = {
     CoreModule: core,
     ComponentModule: component,
     WaitableModule: waitable,
+    ErrorContextModule: errorContext,
 };
 
 const constants = new Set([
@@ -127,6 +129,43 @@ if (!(w instanceof Waitable) || !(state.handles.get(setRep) instanceof WaitableS
 }
 w.drop();
 waitables.removeWaitableSet({ RuntimeError: Error, WaitableSet }, { state, waitableSetRep: setRep });
+const errors: RuntimeModuleContracts['intrinsics/error-context'] = errorContext;
+const GlobalTable = errors.initializeGlobalErrorContextTableClass(Rep);
+const localTables = errors.initializeLocalErrorContextTables();
+const registrations = errors.initializeErrorContextTableRegistrations();
+if (GlobalTable.data !== null || localTables.size || Object.keys(registrations).length) {
+    throw new Error('error-context eager storage');
+}
+const errorLocal = { localTables, RepTable: Rep };
+const errorHandles = {
+    RuntimeError: WebAssembly.RuntimeError,
+    globalTable: GlobalTable,
+    lookup: { asyncState, ComponentAsyncState: State },
+};
+const errorContextView = { ...errorHandles, local: errorLocal };
+errors.errCtxGetLocalTable(errorLocal, 0, 0, { upsert: true });
+const errorHandle = errors.errCtxNew(
+    errorContextView,
+    { componentIdx: 0, localTableIdx: 0, readStrFn: () => 'packed error' },
+    0,
+    12,
+);
+let errorMessage = '';
+errors.errCtxDebugMessage(
+    errorHandles,
+    {
+        componentIdx: 0,
+        writeStrFn: (message) => {
+            errorMessage = message;
+        },
+    },
+    errorHandle,
+    0,
+);
+errors.errCtxDrop(errorContextView, { componentIdx: 0, localTableIdx: 0 }, errorHandle);
+if (errorMessage !== 'packed error' || GlobalTable.get().size() !== 0) {
+    throw new Error('error-context consumer failed');
+}
 instanceFlags.set(0, { value: 1 });
 custom.checkMayLeave({ RuntimeError: Error, instanceFlags }, 0);
 const receiver = { answer: 42 };
