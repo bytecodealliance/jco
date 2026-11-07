@@ -694,7 +694,10 @@ impl JsBindgen<'_> {
         let js_intrinsics = render_intrinsics(render_args.build());
         let mut util_members = format!("stop: {stop_instance},");
         if self.all_intrinsics.contains(&Intrinsic::ComponentError) {
-            util_members.push_str("ComponentError,");
+            util_members.push_str(
+                "/** Test whether a value is a declared WIT result error from this instance. */
+                isComponentError: value => value instanceof ComponentError,",
+            );
         }
         let early_webidl_intrinsics = opts.instantiation_mode.is_none()
             && self.cm_runtime_es_module.is_some()

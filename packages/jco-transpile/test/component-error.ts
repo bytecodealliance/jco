@@ -18,10 +18,10 @@ interface Component {
     runSync(tag: number, fail: number): number;
     run(tag: number, fail: number): Promise<number>;
     ok(): number;
-    _util: { stop(): void; ComponentError: new (value: unknown) => ComponentError };
+    _util: { stop(): void; isComponentError(value: unknown): value is ComponentError };
 }
 
-/** Compile a consumer that narrows caught errors using the generated constructor. */
+/** Compile a consumer that narrows caught errors using the generated predicate. */
 async function checkTypes(dir: string, instantiation: 'async' | 'sync' | undefined) {
     const consumer = join(dir, 'consumer.mts');
     await writeFile(
@@ -29,10 +29,12 @@ async function checkTypes(dir: string, instantiation: 'async' | 'sync' | undefin
         `import * as component from './component.js';
         declare const getCoreModule: (path: string) => WebAssembly.Module;
         ${instantiation ? `const instance = await component.instantiate(getCoreModule, {});` : 'const instance = component;'}
+        // @ts-expect-error The error constructor is private.
+        instance._util.ComponentError;
         try {
             instance.runSync(1, 0);
         } catch (error: unknown) {
-            if (error instanceof instance._util.ComponentError) {
+            if (instance._util.isComponentError(error)) {
                 const payload: unknown = error.payload;
                 const message: string = error.message;
                 // @ts-expect-error A declared error may carry any WIT error payload.
@@ -65,7 +67,7 @@ async function caught(call: () => unknown): Promise<unknown> {
 
 for (const instantiation of [undefined, 'sync', 'async'] as const) {
     for (const minify of [false, true]) {
-        test.concurrent(`ComponentError identifies declared errors (instantiation=${instantiation}, minify=${minify})`, async () => {
+        test.concurrent(`isComponentError identifies declared errors (instantiation=${instantiation}, minify=${minify})`, async () => {
             const dir = await getTmpDir();
             try {
                 const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'post-return-traps/result-async.wat'), 'utf8');
@@ -80,41 +82,48 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
                 const module = await import(pathToFileURL(join(dir, 'component.js')).href);
                 const getCoreModule = (path: string) => new WebAssembly.Module(files[path]);
                 const instance: Component = instantiation ? await module.instantiate(getCoreModule, {}) : module;
-                const { ComponentError } = instance._util;
-                assert.isFunction(ComponentError);
+                const { isComponentError } = instance._util;
+                assert.isFunction(isComponentError);
+                assert.notProperty(instance._util, 'ComponentError');
                 assert.strictEqual(instance.runSync(0, 0), 42);
 
                 const declared = await caught(() => instance.runSync(1, 0));
-                assert.instanceOf(declared, ComponentError);
+                assert.isTrue(isComponentError(declared));
                 assert.instanceOf(declared, Error);
-                assert.strictEqual((declared as ComponentError).payload, 42);
+                if (!isComponentError(declared)) {
+                    assert.fail('expected a declared WIT error');
+                }
+                assert.strictEqual(declared.payload, 42);
                 assert.strictEqual(instance.ok(), 42);
                 for (const other of [
                     new Error('host failure'),
                     Object.assign(new Error(), { name: 'ComponentError', payload: 42 }),
                     { payload: 42 },
+                    undefined,
                     null,
+                    false,
                     42,
                 ]) {
-                    assert.isFalse(other instanceof ComponentError);
+                    assert.isFalse(isComponentError(other));
                 }
 
                 if (typeof WebAssembly.Suspending === 'function') {
                     assert.strictEqual(await instance.run(0, 0), 42);
-                    assert.instanceOf(await caught(() => instance.run(1, 0)), ComponentError);
+                    assert.isTrue(isComponentError(await caught(() => instance.run(1, 0))));
                 }
 
                 if (instantiation) {
                     const second: Component = await module.instantiate(getCoreModule, {});
-                    assert.notStrictEqual(second._util.ComponentError, ComponentError);
-                    assert.notInstanceOf(declared, second._util.ComponentError);
-                    assert.instanceOf(await caught(() => second.runSync(1, 0)), second._util.ComponentError);
+                    assert.isFalse(second._util.isComponentError(declared));
+                    const secondError = await caught(() => second.runSync(1, 0));
+                    assert.isTrue(second._util.isComponentError(secondError));
+                    assert.isFalse(isComponentError(secondError));
                     second._util.stop();
                 }
 
                 const trap = await caught(() => instance.runSync(1, 1));
                 assert.instanceOf(trap, WebAssembly.RuntimeError);
-                assert.notInstanceOf(trap, ComponentError);
+                assert.isFalse(isComponentError(trap));
                 instance._util.stop();
                 if (!minify) {
                     await checkTypes(dir, instantiation);
@@ -126,7 +135,7 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
     }
 }
 
-test.concurrent('raw errors and components without results do not expose ComponentError', async () => {
+test.concurrent('raw errors and components without results do not expose isComponentError', async () => {
     const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'post-return-traps/result-async.wat'), 'utf8');
     for (const [component, noComponentErrorWrapping] of [
         [await parse(wat), true],
@@ -146,6 +155,7 @@ test.concurrent('raw errors and components without results do not expose Compone
                 const getCoreModule = (path: string) => new WebAssembly.Module(files[path]);
                 const instance = instantiation ? await module.instantiate(getCoreModule, {}) : module;
                 assert.notProperty(instance._util, 'ComponentError');
+                assert.notProperty(instance._util, 'isComponentError');
                 assert.notInclude(Buffer.from(files['component.d.ts']).toString(), 'ComponentError');
                 if (instance.runSync) {
                     assert.strictEqual(await caught(() => instance.runSync(1, 0)), 42);
