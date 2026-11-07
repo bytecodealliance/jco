@@ -24,6 +24,18 @@ transpile-bindgen = []
 coop-threads = []
 # Enable selection of an external Component Model runtime provider.
 external-runtime = []
+# Embed the built-in runtime and eliminate unused JavaScript before returning bindings.
+embedded-runtime = [
+    "external-runtime",
+    "dep:oxc_allocator",
+    "dep:oxc_ast",
+    "dep:oxc_codegen",
+    "dep:oxc_minifier",
+    "dep:oxc_parser",
+    "dep:oxc_semantic",
+    "dep:oxc_span",
+    "dep:oxc_str",
+]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -42,6 +54,15 @@ wasmtime-environ = { workspace = true, features = ['component-model'] }
 wit-bindgen-core = { workspace = true }
 wit-component = { workspace = true }
 wit-parser = { workspace = true }
+
+oxc_allocator = { version = "=0.157.0", default-features = false, optional = true }
+oxc_ast = { version = "=0.157.0", default-features = false, optional = true }
+oxc_codegen = { version = "=0.157.0", default-features = false, optional = true }
+oxc_minifier = { version = "=0.157.0", default-features = false, optional = true }
+oxc_parser = { version = "=0.157.0", default-features = false, optional = true }
+oxc_semantic = { version = "=0.157.0", default-features = false, optional = true }
+oxc_span = { version = "=0.157.0", default-features = false, optional = true }
+oxc_str = { version = "=0.157.0", default-features = false, optional = true }
 
 [dev-dependencies]
 wat = { workspace = true, features = [ "component-model" ] }

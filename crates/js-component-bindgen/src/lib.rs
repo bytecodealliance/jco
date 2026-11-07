@@ -11,6 +11,8 @@ use wit_component::DecodedWasm;
 use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
 
 mod core;
+#[cfg(feature = "embedded-runtime")]
+mod embedded_runtime;
 mod files;
 mod transpile_bindgen;
 mod ts_bindgen;
@@ -92,6 +94,10 @@ pub struct TranspileConfig {
     /// Requires the `external-runtime` Cargo feature.
     #[cfg(feature = "external-runtime")]
     pub cm_runtime_es_module: Option<String>,
+    /// Embed and reduce the built-in runtime into the generated JavaScript.
+    #[cfg(feature = "embedded-runtime")]
+    #[builder(default)]
+    pub bundled_runtime: bool,
 }
 
 pub fn generate_types(
@@ -129,10 +135,14 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     use wasmtime_environ::component::{Component, Translator};
 
     normalize_transpile_config(&mut config)?;
+    #[cfg(feature = "embedded-runtime")]
+    let bundled_runtime = config.bundled_runtime;
     let TranspileConfig {
         mut opts,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
+        #[cfg(feature = "embedded-runtime")]
+            bundled_runtime: _,
     } = config;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
@@ -247,6 +257,14 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, source) in files.iter() {
+        #[cfg(feature = "embedded-runtime")]
+        if bundled_runtime && name.ends_with(".js") {
+            files_out.push((
+                name.to_string(),
+                embedded_runtime::reduce(std::str::from_utf8(source)?)?.into_bytes(),
+            ));
+            continue;
+        }
         files_out.push((name.to_string(), source.to_vec()));
     }
     Ok(Transpiled {
@@ -269,6 +287,14 @@ fn normalize_namespace_object_options(opts: &mut TranspileOpts) -> Result<()> {
 
 fn normalize_transpile_config(config: &mut TranspileConfig) -> Result<()> {
     normalize_namespace_object_options(&mut config.opts)?;
+    #[cfg(feature = "embedded-runtime")]
+    if config.bundled_runtime {
+        ensure!(
+            config.cm_runtime_es_module.is_none(),
+            "bundled runtime selects the built-in provider"
+        );
+        config.cm_runtime_es_module = Some("@bytecodealliance/jco-cm-runtime".into());
+    }
     #[cfg(feature = "external-runtime")]
     if let Some(cm_runtime_es_module) = &config.cm_runtime_es_module {
         intrinsics::ext::module_specifier(cm_runtime_es_module, "runtime")?;

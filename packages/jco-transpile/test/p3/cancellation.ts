@@ -241,10 +241,11 @@ suite('subtask cancellation', () => {
 
         try {
             const source = await readFile(setup.esModuleOutputPath, 'utf8');
-            const taskMapDeclaration = 'const ASYNC_TASKS_BY_COMPONENT_IDX = new Map();';
+            const taskMapDeclaration = /(?:const|let) ASYNC_TASKS_BY_COMPONENT_IDX = new Map(?:\(\))?;/;
             const instrumented = source.replace(
                 taskMapDeclaration,
-                `${taskMapDeclaration}\n` +
+                (declaration) =>
+                    `${declaration}\n` +
                     `globalThis.${taskCountKey} = () => ` +
                     'Array.from(ASYNC_TASKS_BY_COMPONENT_IDX.values(), tasks => tasks.length)' +
                     '.reduce((total, count) => total + count, 0);',

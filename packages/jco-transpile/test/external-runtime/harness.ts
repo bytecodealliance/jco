@@ -8,6 +8,7 @@ import { getTmpDir, setupAsyncTest } from '../helpers.js';
 import {
     defaultRuntimeUrl,
     externalRuntime,
+    embeddedRuntime,
     runtimeOptions,
     transpile,
     transpileBytes,
@@ -48,6 +49,7 @@ test.concurrent.each([
                 : await transpile(componentPath, selectedOptions);
         const source = new TextDecoder().decode(files['component.js']);
         assert.strictEqual(source.includes(defaultRuntimeUrl.href), externalRuntime && !optOut);
+        assert.strictEqual(source.includes('__jcoEmbeddedRuntime$'), embeddedRuntime && !optOut);
         const production = await productionTranspileBytes(component, options);
         assert.notInclude(new TextDecoder().decode(production.files['component.js']), defaultRuntimeUrl.href);
         await writeFiles(files, { baseDir: outDir });

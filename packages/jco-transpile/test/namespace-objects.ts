@@ -23,6 +23,8 @@ suite('namespace objects', async () => {
 
         const result = await transpileBytes(component, {
             name: 'namespace-objects',
+            // Exact source formatting is covered independently of runtime execution below.
+            embedRuntime: false,
             useNamespaceObjects: true,
         });
         const source = Buffer.from(result.files['namespace-objects.js']).toString();

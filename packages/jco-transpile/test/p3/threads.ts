@@ -81,7 +81,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Threads (WASI P3)', 
         // re-read the register.
         const source = await transpiledSource('stackful-lift.wat', 'thread-reinstall');
         assert.notInclude(source, '_getGlobalCurrentThreadMeta(task.componentIdx()).threadID');
-        assert.include(source, 'const { task, threadID } = createNewCurrentImplicitThread({');
+        assert.match(source, /(?:const|let) \{\s*task,\s*threadID\s*\} = createNewCurrentImplicitThread\(\{/);
         assert.match(
             source,
             /_withGlobalCurrentThreadMeta\((?:CURRENT_TASK_META, )?\{\s*taskID: task\.id\(\),\s*threadID,\s*componentIdx: task\.componentIdx\(\),\s*fn: \(\) => /,

@@ -125,7 +125,8 @@ suite('Transpile (WASI P3)', () => {
     test('uses the core signature for sync-lowered async imports', async () => {
         const componentPath = join(P3_COMPONENT_FIXTURES_DIR, 'sync-lowered-async-import.wat');
         const component = await parse(await readFile(componentPath, 'utf8'));
-        const { files } = await transpileBytes(component);
+        // Inspect raw ABI lowering before the optional optimization pass rewrites declarations.
+        const { files } = await transpileBytes(component, { embedRuntime: false });
         const decoder = new TextDecoder();
         const source = Object.entries(files)
             .filter(([name]) => name.endsWith('.js'))

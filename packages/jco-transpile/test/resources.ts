@@ -249,7 +249,7 @@ suite('resources', () => {
 
         assert.match(
             source,
-            /const handleEntry = rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]{0,300}?\[['"]0['"]\]\(handleEntry\.rep\);/,
+            /(?:const|let) handleEntry = rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]{0,300}?\[(?:['"]0['"]|0)\]\(handleEntry\.rep\);/,
             'explicit disposal should call the destructor with the representation returned while removing the handle',
         );
         assert.notMatch(
@@ -350,7 +350,7 @@ suite('resources', () => {
 
         assert.match(
             source,
-            /Object\.defineProperty\(rsc\d+, symbolDispose,[\s\S]*?const handleEntry = rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]*?symbolRscHandle\] = undefined;/,
+            /Object\.defineProperty\(rsc\d+, symbolDispose,[\s\S]*?(?:const|let) handleEntry = rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]*?symbolRscHandle\] = (?:undefined|void 0);/,
             'explicit disposal should release and invalidate an owned handle even without a guest destructor',
         );
     });

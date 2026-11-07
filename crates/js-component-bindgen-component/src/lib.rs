@@ -110,6 +110,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             TranspileConfig::builder()
                 .opts(opts)
                 .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
+                .bundled_runtime(options.embed_runtime.unwrap_or(false))
                 .build(),
         )
         .map_err(|e| format!("{e:?}"))

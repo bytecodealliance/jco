@@ -235,7 +235,10 @@ export async function setupAsyncTest(args) {
     const componentBytes = await readComponentBytes(componentPath);
 
     // Perform transpilation, write out files
-    const { files } = await transpile(componentBytes, transpileOpts);
+    const { files } = await transpile(componentBytes, {
+        ...(env.JCO_TEST_RUNTIME === "embedded" ? { embedRuntime: true } : {}),
+        ...transpileOpts,
+    });
     await Promise.all(
         Object.entries(files).map(async ([name, file]) => {
             await mkdir(dirname(name), { recursive: true });

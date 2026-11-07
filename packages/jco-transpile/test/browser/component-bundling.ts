@@ -56,13 +56,15 @@ test.concurrent.each(['development', 'production'] as const)(
             await page.waitForFunction(() => 'componentBundling' in globalThis);
             const result = await page.evaluate(async () => {
                 const state = globalThis as typeof globalThis & {
-                    componentBundling: Promise<{ files?: string[]; error?: string }>;
+                    componentBundling: Promise<{ files?: string[]; error?: string; sum?: number; embedded?: boolean }>;
                 };
                 return state.componentBundling;
             });
             assert.deepStrictEqual(errors, []);
             assert.isUndefined(result.error);
             assert.include(result.files, 'empty.js');
+            assert.equal(result.sum, 42);
+            assert.isTrue(result.embedded);
         } finally {
             // Close network and browser resources even when loading or compilation fails.
             await browser?.close();

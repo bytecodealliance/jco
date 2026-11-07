@@ -483,8 +483,8 @@ importers:
         specifier: ^0.10.0
         version: 0.10.0(@bytecodealliance/preview2-shim@0.31.0)
       '@bytecodealliance/jco-transpile':
-        specifier: ^0.23.0
-        version: 0.23.0
+        specifier: workspace:^
+        version: link:../jco-transpile
       '@bytecodealliance/preview2-shim':
         specifier: ^0.31.0
         version: 0.31.0
