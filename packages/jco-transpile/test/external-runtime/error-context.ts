@@ -10,6 +10,7 @@ import { defaultRuntimeUrl, transpile, transpileBytes, writeFiles } from '../tra
 import { composeCallerCallee } from '../p3/ported/wasmtime/component-async/common.js';
 const errorContextUrl = new URL('intrinsics/error-context.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
+const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 
 function component(encoding: string) {
     return `(component
@@ -217,64 +218,69 @@ test.concurrent.each([
     }
 });
 
-test.concurrent.each([false, true])('composed error-context transfer callback (external=%s)', async (external) => {
-    const dir = await getTmpDir();
-    try {
-        await writeProvider(dir, providerSource());
-        const fixtureDir = fileURLToPath(new URL('../fixtures/components/p3/error-context/', import.meta.url));
-        const composed = await composeCallerCallee({
-            callerPath: join(fixtureDir, 'async-error-context-caller.wasm'),
-            calleePath: join(fixtureDir, 'async-error-context-callee.wasm'),
-            outputPath: join(dir, 'composed.wasm'),
-        });
-        const { files } = await transpile(composed, {
-            name: 'composed',
-            instantiation: 'sync',
-            asyncExports: ['local:local/run#run'],
-            cmRuntimeEsModule: external ? './provider/' : undefined,
-        });
-        const source = new TextDecoder().decode(files['composed.js']);
-        assert.match(
-            source,
-            external
-                ? /const trampoline\d+ = errCtxTransfer\.bind\((?:undefined|void 0), _jcoErrorContextTransferContext\);/
-                : /const trampoline\d+ = errCtxTransfer;/,
-        );
-        if (external) {
-            // Evaluate the emitted callback in a scope with a component-style
-            // binding named undefined. Its receiver must remain undefined.
-            let replacements = 0;
-            const shadowed = source.replace(
-                /(const trampoline\d+ = )(errCtxTransfer\.bind\((?:undefined|void 0), _jcoErrorContextTransferContext\));/g,
-                (_match, declaration, expression) => {
-                    replacements++;
-                    return `${declaration}((undefined) => ${expression})({ shadowed: true });`;
-                },
-            );
-            assert.isAbove(replacements, 0);
-            files['composed.js'] = new TextEncoder().encode(shadowed);
-        }
-        await writeFiles(files, { baseDir: dir });
-        const bindings = await import(pathToFileURL(join(dir, 'composed.js')).href);
-        const { WASIShim } = await import('@bytecodealliance/preview2-shim/instantiation');
-        const instance = bindings.instantiate(
-            (name: string) => new WebAssembly.Module(files[name]),
-            new WASIShim().getImportObject(),
-        );
+test.concurrent.skipIf(!hasJspi).each([false, true])(
+    'composed error-context transfer callback (external=%s)',
+    async (external) => {
+        const dir = await getTmpDir();
         try {
-            await instance['local:local/run'].run();
-        } finally {
+            await writeProvider(dir, providerSource());
+            const fixtureDir = fileURLToPath(new URL('../fixtures/components/p3/error-context/', import.meta.url));
+            const composed = await composeCallerCallee({
+                callerPath: join(fixtureDir, 'async-error-context-caller.wasm'),
+                calleePath: join(fixtureDir, 'async-error-context-callee.wasm'),
+                outputPath: join(dir, 'composed.wasm'),
+            });
+            const { files } = await transpile(composed, {
+                name: 'composed',
+                instantiation: 'sync',
+                asyncExports: ['local:local/run#run'],
+                cmRuntimeEsModule: external ? './provider/' : undefined,
+            });
+            const source = new TextDecoder().decode(files['composed.js']);
+            assert.match(
+                source,
+                external
+                    ? /const trampoline\d+ = errCtxTransfer\.bind\((?:undefined|void 0), _jcoErrorContextTransferContext\);/
+                    : /const trampoline\d+ = errCtxTransfer;/,
+            );
             if (external) {
-                const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/error-context.js')).href);
-                assert.isAbove(provider.transferReceivers.length, 0);
-                assert.deepEqual(
-                    provider.transferReceivers,
-                    provider.transferReceivers.map(() => undefined),
+                // Evaluate the emitted callback in a scope with a component-style
+                // binding named undefined. Its receiver must remain undefined.
+                let replacements = 0;
+                const shadowed = source.replace(
+                    /(const trampoline\d+ = )(errCtxTransfer\.bind\((?:undefined|void 0), _jcoErrorContextTransferContext\));/g,
+                    (_match, declaration, expression) => {
+                        replacements++;
+                        return `${declaration}((undefined) => ${expression})({ shadowed: true });`;
+                    },
                 );
-                assert.include(provider.calls, 'transfer');
+                assert.isAbove(replacements, 0);
+                files['composed.js'] = new TextEncoder().encode(shadowed);
             }
+            await writeFiles(files, { baseDir: dir });
+            const bindings = await import(pathToFileURL(join(dir, 'composed.js')).href);
+            const { WASIShim } = await import('@bytecodealliance/preview2-shim/instantiation');
+            const instance = bindings.instantiate(
+                (name: string) => new WebAssembly.Module(files[name]),
+                new WASIShim().getImportObject(),
+            );
+            try {
+                await instance['local:local/run'].run();
+            } finally {
+                if (external) {
+                    const provider = await import(
+                        pathToFileURL(join(dir, 'provider/intrinsics/error-context.js')).href
+                    );
+                    assert.isAbove(provider.transferReceivers.length, 0);
+                    assert.deepEqual(
+                        provider.transferReceivers,
+                        provider.transferReceivers.map(() => undefined),
+                    );
+                    assert.include(provider.calls, 'transfer');
+                }
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true });
         }
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-});
+    },
+);
