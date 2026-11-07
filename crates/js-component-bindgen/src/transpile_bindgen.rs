@@ -692,6 +692,10 @@ impl JsBindgen<'_> {
         #[cfg(feature = "external-runtime")]
         let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
         let js_intrinsics = render_intrinsics(render_args.build());
+        let mut util_members = format!("stop: {stop_instance},");
+        if self.all_intrinsics.contains(&Intrinsic::ComponentError) {
+            util_members.push_str("ComponentError,");
+        }
         let early_webidl_intrinsics = opts.instantiation_mode.is_none()
             && self.cm_runtime_es_module.is_some()
             && self
@@ -758,7 +762,7 @@ impl JsBindgen<'_> {
                 self.opts.instantiation_mode.is_some(),
                 &mut self.local_names,
                 opts,
-                Some(&stop_instance),
+                Some(&util_members),
             );
             let helper = self.instantiation_helper_names();
             uwrite!(
@@ -908,7 +912,7 @@ impl JsBindgen<'_> {
         // The generated ES module will have a `util` member that can be used,
         // (but may be empty), which hosts can use to perform special functionality
         // like nesting futures where necessary.
-        self.write_util_export(&mut output, &stop_instance);
+        self.write_util_export(&mut output, &util_members);
 
         let mut bytes = output.as_bytes();
         // strip leading newline
@@ -949,7 +953,7 @@ impl JsBindgen<'_> {
     }
 
     /// Write out utility helpers/objects (available via esModule._util)
-    fn write_util_export(&mut self, output: &mut source::Source, stop_instance: &str) {
+    fn write_util_export(&mut self, output: &mut source::Source, util_members: &str) {
         // Future` class that can be used by external consumers (e.g. host code) to build nested future values
         //
         // This class is exposed via module._util, always
@@ -990,16 +994,16 @@ impl JsBindgen<'_> {
             "".into()
         };
 
-        let stop = if self.opts.instantiation_mode.is_none() {
-            format!("stop: {stop_instance},")
+        let members = if self.opts.instantiation_mode.is_none() {
+            util_members
         } else {
-            String::new()
+            ""
         };
         uwriteln!(
             output,
             r#"
               export const _util = {{
-                  {stop}
+                  {members}
                   {maybe_ext_future_class}
               }}
             "#,
