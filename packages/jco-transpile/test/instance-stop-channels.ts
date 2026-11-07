@@ -20,9 +20,11 @@ function rustComponent(name) {
 }
 
 /** Transpile a Rust component, or a focused canonical ABI regression written in WAT. */
-async function generated(wat) {
+async function generated(componentUrl: URL) {
     await $init;
-    const { files } = generate(wat instanceof URL ? await readFile(wat) : await parse(wat), {
+    const source = await readFile(componentUrl);
+    const component = componentUrl.pathname.endsWith('.wat') ? await parse(source.toString('utf8')) : source;
+    const { files } = generate(component, {
         name: 'component',
         instantiation: { tag: 'async' },
         noTypescript: true,
@@ -125,68 +127,7 @@ const SYNC_THINGS = rustComponent('instance-stop-resources');
  * `start` returns a stream, and its task writes to it for as long as it can, one
  * item at a time, calling a host import for each.
  */
-// Drive one write per canonical callback, independently of a language executor.
-const WRITES_FOREVER = `
-(component
-  (import "test:host/api" (instance $host
-    (export "tick" (func))
-  ))
-  (alias export $host "tick" (func $tick))
-  (type $s (stream u8))
-  (core module $mem (memory (export "memory") 1))
-  (core instance $mem_i (instantiate $mem))
-  (alias core export $mem_i "memory" (core memory $memory))
-  (core func $tick_l (canon lower (func $tick)))
-  (core func $stream_new (canon stream.new $s))
-  (core func $stream_write (canon stream.write $s async (memory $memory)))
-  (core func $task_return (canon task.return (result $s)))
-  (core func $set_new (canon waitable-set.new))
-  (core func $join (canon waitable.join))
-  (core module $m
-    (import "" "memory" (memory 1))
-    (import "" "tick" (func $tick))
-    (import "" "stream.new" (func $stream_new (result i64)))
-    (import "" "stream.write" (func $write (param i32 i32 i32) (result i32)))
-    (import "" "task.return" (func $ret (param i32)))
-    (import "" "waitable-set.new" (func $set_new (result i32)))
-    (import "" "waitable.join" (func $join (param i32 i32)))
-    (global $writer (mut i32) (i32.const 0))
-    (global $set (mut i32) (i32.const 0))
-    ;; What to do after writing an item: wait for it to be taken, or write again.
-    (func $next (param $written i32) (result i32)
-      (if (result i32) (i32.eq (local.get $written) (i32.const -1))
-        (then (i32.or (i32.const 2) (i32.shl (global.get $set) (i32.const 4))))
-        (else (i32.const 1))
-      )
-    )
-    (func (export "start") (result i32)
-      (local $ends i64)
-      (local.set $ends (call $stream_new))
-      (global.set $writer (i32.wrap_i64 (i64.shr_u (local.get $ends) (i64.const 32))))
-      (global.set $set (call $set_new))
-      (call $ret (i32.wrap_i64 (local.get $ends)))
-      (i32.store8 (i32.const 16) (i32.const 7))
-      (call $next (call $write (global.get $writer) (i32.const 16) (i32.const 1)))
-      (call $join (global.get $writer) (global.get $set))
-    )
-    (func (export "cb") (param i32 i32 i32) (result i32)
-      (call $tick)
-      (call $next (call $write (global.get $writer) (i32.const 16) (i32.const 1)))
-    )
-  )
-  (core instance $i (instantiate $m (with "" (instance
-    (export "memory" (memory $memory))
-    (export "tick" (func $tick_l))
-    (export "stream.new" (func $stream_new))
-    (export "stream.write" (func $stream_write))
-    (export "task.return" (func $task_return))
-    (export "waitable-set.new" (func $set_new))
-    (export "waitable.join" (func $join))
-  ))))
-  (type $start (func async (result $s)))
-  (func (export "start") (type $start)
-    (canon lift (core func $i "start") async (callback (core func $i "cb"))))
-)`;
+const WRITES_FOREVER = new URL('./fixtures/components/p3/instance-stop-writes-forever.wat', import.meta.url);
 
 /** `start` returns a stream and a future it never writes to, and its task waits. */
 const NEVER_WRITES = rustComponent('instance-stop-unwritten');
@@ -197,46 +138,7 @@ const NEVER_WRITES = rustComponent('instance-stop-unwritten');
  * on being told of that drop. Memory has what its writes returned: the first at 96,
  * the second at 100.
  */
-// Keep WAT here to observe raw write results in memory after a reentrant stop.
-// Rust ownership and executor teardown would hide this canonical ABI boundary.
-const WRITES_ACROSS_THE_END = `
-(component
-  (import "test:host/things" (instance $host
-    (export "thing" (type (sub resource)))
-  ))
-  (alias export $host "thing" (type $thing))
-  (type $s (stream u8))
-  (core module $mem (memory (export "memory") 1))
-  (core instance $mem_i (instantiate $mem))
-  (alias core export $mem_i "memory" (core memory $memory))
-  (core func $drop (canon resource.drop $thing))
-  (core func $stream_new (canon stream.new $s))
-  (core func $stream_write (canon stream.write $s async (memory $memory)))
-  (core module $m
-    (import "" "memory" (memory 1))
-    (import "" "drop" (func $drop (param i32)))
-    (import "" "stream.new" (func $stream_new (result i64)))
-    (import "" "stream.write" (func $write (param i32 i32 i32) (result i32)))
-    (func (export "start") (param $thing i32) (result i32)
-      (local $writer i32)
-      (local.set $writer (i32.wrap_i64 (i64.shr_u (call $stream_new) (i64.const 32))))
-      (i32.store (i32.const 96) (call $write (local.get $writer) (i32.const 16) (i32.const 1)))
-      (call $drop (local.get $thing))
-      (i32.store (i32.const 100) (call $write (local.get $writer) (i32.const 16) (i32.const 1)))
-      (i32.const 0)
-    )
-    (func (export "cb") (param i32 i32 i32) (result i32) (unreachable))
-  )
-  (core instance $i (instantiate $m (with "" (instance
-    (export "memory" (memory $memory))
-    (export "drop" (func $drop))
-    (export "stream.new" (func $stream_new))
-    (export "stream.write" (func $stream_write))
-  ))))
-  (type $start (func async (param "t" (own $thing))))
-  (func (export "start") (type $start)
-    (canon lift (core func $i "start") async (callback (core func $i "cb"))))
-)`;
+const WRITES_ACROSS_THE_END = new URL('./fixtures/components/p3/instance-stop-reentrant-write.wat', import.meta.url);
 
 /** `feed` takes a stream from the host, reads it, and waits for the read. */
 const READS_FROM_HOST = rustComponent('instance-stop-reader');
@@ -246,92 +148,10 @@ const READS_FROM_HOST = rustComponent('instance-stop-reader');
  * `later`'s task then traps in a callback, by when no call of the host's is left to
  * fail. `first` traps as it starts.
  */
-// Exact callback traps and nested task-return ordering require direct canonical ABI control.
-const TRAPS_IN_THE_BACKGROUND = `
-(component
-  (component $callee
-    (core module $m
-      (func (export "first") (result i32) (unreachable))
-      (func (export "later") (result i32) (i32.const 1))
-      (func (export "cb") (param i32 i32 i32) (result i32) (unreachable))
-    )
-    (core instance $i (instantiate $m))
-    (type $t (func async))
-    (func (export "first") (type $t) (canon lift (core func $i "first") async (callback (core func $i "cb"))))
-    (func (export "later") (type $t) (canon lift (core func $i "later") async (callback (core func $i "cb"))))
-  )
-  (instance $c (instantiate $callee))
-  (core func $first (canon lower (func $c "first") async))
-  (core func $later (canon lower (func $c "later") async))
-  (core func $task_return (canon task.return))
-  (core module $m
-    (import "" "first" (func $first (result i32)))
-    (import "" "later" (func $later (result i32)))
-    (import "" "task.return" (func $ret))
-    (func (export "start-first") (result i32)
-      (drop (call $first))
-      (call $ret)
-      (i32.const 0)
-    )
-    (func (export "start-later") (result i32)
-      (drop (call $later))
-      (call $ret)
-      (i32.const 0)
-    )
-    (func (export "cb") (param i32 i32 i32) (result i32) (i32.const 0))
-  )
-  (core instance $i (instantiate $m (with "" (instance
-    (export "first" (func $first))
-    (export "later" (func $later))
-    (export "task.return" (func $task_return))
-  ))))
-  (type $t (func async))
-  (func (export "start-first") (type $t)
-    (canon lift (core func $i "start-first") async (callback (core func $i "cb"))))
-  (func (export "start-later") (type $t)
-    (canon lift (core func $i "start-later") async (callback (core func $i "cb"))))
-)`;
+const TRAPS_IN_THE_BACKGROUND = new URL('./fixtures/components/p3/background-traps-composed.wat', import.meta.url);
 
 /** `start` returns, and its own task traps in a callback. `stuck` waits on nothing that can happen. */
-// Exercise the raw callback/deadlock protocol independently of a language executor.
-const TRAPS_AFTER_RETURNING = `
-(component
-  (type $s (stream u8))
-  (core func $stream_new (canon stream.new $s))
-  (core func $task_return (canon task.return))
-  (core func $set_new (canon waitable-set.new))
-  (core func $join (canon waitable.join))
-  (core module $m
-    (import "" "stream.new" (func $stream_new (result i64)))
-    (import "" "task.return" (func $ret))
-    (import "" "waitable-set.new" (func $set_new (result i32)))
-    (import "" "waitable.join" (func $join (param i32 i32)))
-    (func (export "start") (result i32)
-      (call $ret)
-      (i32.const 1)
-    )
-    (func (export "stuck") (result i32)
-      (local $set i32)
-      (local.set $set (call $set_new))
-      (call $join (i32.wrap_i64 (call $stream_new)) (local.get $set))
-      (i32.or (i32.const 2) (i32.shl (local.get $set) (i32.const 4)))
-    )
-    (func (export "cb") (param i32 i32 i32) (result i32) (unreachable))
-    (func (export "sync-trap") (unreachable))
-  )
-  (core instance $i (instantiate $m (with "" (instance
-    (export "stream.new" (func $stream_new))
-    (export "task.return" (func $task_return))
-    (export "waitable-set.new" (func $set_new))
-    (export "waitable.join" (func $join))
-  ))))
-  (type $t (func async))
-  (func (export "start") (type $t)
-    (canon lift (core func $i "start") async (callback (core func $i "cb"))))
-  (func (export "stuck") (type $t)
-    (canon lift (core func $i "stuck") async (callback (core func $i "cb"))))
-  (func (export "sync-trap") (canon lift (core func $i "sync-trap")))
-)`;
+const TRAPS_AFTER_RETURNING = new URL('./fixtures/components/p3/background-traps-after-return.wat', import.meta.url);
 
 suite('stopping an instance', () => {
     test.concurrent('each host object is disposed once, and what was only lent is not', async () => {
