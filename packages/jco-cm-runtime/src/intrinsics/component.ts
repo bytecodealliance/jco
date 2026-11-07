@@ -324,7 +324,7 @@ export function initializeComponentAsyncStateClass(
 
         handles: RepTableType;
         subtasks: RepTableType;
-        threads: RepTableType;
+        threads: RepTableType<ComponentThread>;
 
         constructor(args: { componentIdx: number }) {
             this.#componentIdx = args.componentIdx;
@@ -333,7 +333,7 @@ export function initializeComponentAsyncStateClass(
                 space: getHandleIndexSpace(indexSpaces, this.#componentIdx),
             });
             this.subtasks = new RepTable({ target: `component [${this.#componentIdx}] subtasks` });
-            this.threads = new RepTable({ target: `component [${this.#componentIdx}] threads` });
+            this.threads = new RepTable<ComponentThread>({ target: `component [${this.#componentIdx}] threads` });
         }
 
         componentIdx() {

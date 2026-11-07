@@ -42,11 +42,11 @@ Generated code reads and replaces their members directly, so operations observe
 the live values rather than captured snapshots. Every selected owner is created
 once per instantiation; importing the module creates no map or task.
 
-Borrow transfer receives the actual task registers and a lazy task lookup while
-tasks remain inline. Destructors receive lazy `createTask`, the actual
-`registers` owner, and the shared `storeTrap` state. They skip task creation and
-guest execution once `storeTrap.stopped` is set. Otherwise, each destructor
-creates a synchronous task with fresh context slots and restores the
+Borrow transfer receives `taskLookup`, containing the actual task Map and registers.
+Destructors receive `creation`, containing the selected task constructor, actual
+task Map and ID arrays, plus the actual `registers` owner, and the shared
+`storeTrap` state. They skip task creation and guest execution once
+`storeTrap.stopped` is set. Otherwise, each destructor creates a synchronous task with fresh context slots and restores the
 enclosing task after success or failure. Explicit disposal releases the handle
 before invoking a destructor and becomes a no-op on repeated disposal.
 `tableEnsureBorrowDrop`, `tableFlag` and `tableOwn` are context-free.
@@ -55,4 +55,4 @@ The API version is currently 1. See the [runtime API](../runtime.md) for module 
 
 [All intrinsic contracts](README.md) · [Runtime API](../runtime.md)
 
-The destructor task capability returns `{ task, threadID }`; the external helper installs both IDs and restores the enclosing thread after the destructor completes or throws.
+The destructor creates a task and its implicit thread from the selected constructors; the external helper installs both IDs and restores the enclosing thread after the destructor completes or throws.

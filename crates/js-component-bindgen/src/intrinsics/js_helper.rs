@@ -98,7 +98,7 @@ impl JsHelperIntrinsic {
             Self::ConditionalSuspendingHostImportFn => {
                 let wrapper = args.require_intrinsic(*self);
                 let current_meta = args.require_intrinsic(Intrinsic::GlobalCurrentThreadMeta);
-                let get_thread = args.require_intrinsic(AsyncTaskIntrinsic::GetCurrentThread);
+                let get_thread = args.intrinsic_call_prefix(AsyncTaskIntrinsic::GetCurrentThread);
                 uwriteln!(
                     output,
                     r#"
@@ -107,7 +107,7 @@ impl JsHelperIntrinsic {
                             mayBlock: () => {{
                                 const saved = {current_meta}[componentIdx];
                                 const thread = saved
-                                    ? {get_thread}(saved.componentIdx, saved.threadID)
+                                    ? {get_thread}saved.componentIdx, saved.threadID)
                                     : null;
                                 return thread?.task.mayBlock() ?? false;
                             }},

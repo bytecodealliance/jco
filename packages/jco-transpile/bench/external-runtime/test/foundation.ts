@@ -100,7 +100,7 @@ test(
         for (const name of [
             'runtime.js',
             'index.js',
-            ...(await readdir(new URL('intrinsics/', defaultRuntimeUrl)))
+            ...(await readdir(new URL('intrinsics/', defaultRuntimeUrl), { recursive: true }))
                 .filter((name) => name.endsWith('.js'))
                 .sort()
                 .map((name) => 'intrinsics/' + name),
@@ -115,6 +115,7 @@ test(
                     'runtime/component.rs',
                     'runtime/waitable.rs',
                     'runtime/error_context.rs',
+                    'runtime/async_task.rs',
                 ].map(async (name) => [
                     name,
                     hash(
