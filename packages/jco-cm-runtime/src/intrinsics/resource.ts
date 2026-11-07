@@ -1,5 +1,5 @@
 import { getCurrentTaskMeta, withCurrentTaskMeta } from './task-context.js';
-import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
+import { getCurrentTask, createNewCurrentImplicitThread } from './async-task/task-operations.js';
 import type { ResourceModule, ResourceHandleTables, ResourceTable } from '../runtime.js';
 
 // Bit 30 of a scope marks a freed entry. An owned entry stores its u32 rep plus 2 ** 32.

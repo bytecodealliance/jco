@@ -10,7 +10,7 @@ import type {
     ConditionalSuspendingPlatform,
 } from '../runtime.js';
 import { checkMayLeave, recordTrap, getOrCreateAsyncState } from './component.js';
-import { getCurrentThread } from './thread-operations.js';
+import { getCurrentThread } from './async-task/thread-operations.js';
 export { debugLog } from './core-debug.js';
 export { initializeRepTableClass } from './rep-table.js';
 export { initializeManagedBufferClass, initializeBufferManagerClass } from './buffers.js';
