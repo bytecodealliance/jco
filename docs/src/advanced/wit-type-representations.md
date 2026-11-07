@@ -309,7 +309,7 @@ Use this predicate to distinguish declared WIT errors from traps and other excep
 import { fallible, _util } from './component.js';
 
 try {
-    fallible.f(42);
+    await fallible.f(42);
 } catch (error) {
     if (_util.isComponentError(error)) {
         console.error('Declared WIT error:', error.payload);
@@ -324,6 +324,11 @@ against the private error constructor, which belongs to that instance. It return
 from other instances, ordinary host exceptions, and objects that only have a `payload` property.
 The predicate is absent when bindings do not use error wrapping. In TypeScript, it narrows the value to
 `Error & { readonly payload: unknown }`.
+
+**Traps are not `ComponentError` instances.** They have a distinct type, `WebAssembly.RuntimeError`,
+and the predicate returns `false` for them. Using `await` in the example catches both synchronous
+exceptions and rejected asynchronous exports. See [Detecting traps](./detecting-traps.md) for handling
+traps, and [Generated utilities](../transpiling.md#generated-utilities) for an overview of `_util`.
 
 Consider the following interface:
 
