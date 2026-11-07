@@ -10,29 +10,43 @@ use crate::{
 };
 use std::fmt::Write;
 
+/// State initializers and capability contexts for external error-context intrinsics.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum ErrCtxContextIntrinsic {
-    GlobalClass,
-    Registrations,
-    LocalTables,
-    LocalTable,
-    Handle,
-    Debug,
-    Drop,
-    New,
-    Transfer,
+    /// The `initializeGlobalErrorContextTableClass` constructor factory;
+    /// a JS helper, not a canonical operation.
+    InitializeGlobalErrorContextTableClass,
+    /// The table registrations returned by `initializeErrorContextTableRegistrations`;
+    /// a JS helper, not a canonical operation.
+    InitializeErrorContextTableRegistrations,
+    /// The component-local tables returned by `initializeLocalErrorContextTables`;
+    /// a JS helper, not a canonical operation.
+    InitializeLocalErrorContextTables,
+    /// Capabilities for the `errCtxGetLocalTable` JS helper; not a canonical operation.
+    GetLocalTable,
+    /// Capabilities for the `errCtxCreateLocalHandle` JS helper; not a canonical operation.
+    CreateLocalHandle,
+    /// Capabilities for `errCtxDebugMessage`, implementing `canon error-context.debug-message`.
+    ErrorContextDebugMessage,
+    /// Capabilities for `errCtxDrop`, implementing `canon error-context.drop`.
+    ErrorContextDrop,
+    /// Capabilities for `errCtxNew`, implementing `canon error-context.new`.
+    ErrorContextNew,
+    /// Capabilities for the `errCtxTransfer` JS helper for transfers between components;
+    /// not a canonical operation.
+    ErrorContextTransfer,
 }
 impl ErrCtxContextIntrinsic {
     const ALL: [Self; 9] = [
-        Self::GlobalClass,
-        Self::Registrations,
-        Self::LocalTables,
-        Self::LocalTable,
-        Self::Handle,
-        Self::Debug,
-        Self::Drop,
-        Self::New,
-        Self::Transfer,
+        Self::InitializeGlobalErrorContextTableClass,
+        Self::InitializeErrorContextTableRegistrations,
+        Self::InitializeLocalErrorContextTables,
+        Self::GetLocalTable,
+        Self::CreateLocalHandle,
+        Self::ErrorContextDebugMessage,
+        Self::ErrorContextDrop,
+        Self::ErrorContextNew,
+        Self::ErrorContextTransfer,
     ];
     pub(crate) fn get_global_names() -> impl Iterator<Item = &'static str> {
         Self::ALL
@@ -47,28 +61,28 @@ impl ErrCtxContextIntrinsic {
     }
     pub(crate) fn local_name(self) -> &'static str {
         match self {
-            Self::GlobalClass => "GlobalErrorContextTable",
-            Self::Registrations => "ERR_CTX_TABLES",
-            Self::LocalTables => "errCtxLocal",
-            Self::LocalTable => "_jcoErrorContextLocalTableContext",
-            Self::Handle => "_jcoErrorContextHandleContext",
-            Self::Debug => "_jcoErrorContextDebugContext",
-            Self::Drop => "_jcoErrorContextDropContext",
-            Self::New => "_jcoErrorContextNewContext",
-            Self::Transfer => "_jcoErrorContextTransferContext",
+            Self::InitializeGlobalErrorContextTableClass => "GlobalErrorContextTable",
+            Self::InitializeErrorContextTableRegistrations => "ERR_CTX_TABLES",
+            Self::InitializeLocalErrorContextTables => "errCtxLocal",
+            Self::GetLocalTable => "_jcoErrorContextLocalTableContext",
+            Self::CreateLocalHandle => "_jcoErrorContextHandleContext",
+            Self::ErrorContextDebugMessage => "_jcoErrorContextDebugContext",
+            Self::ErrorContextDrop => "_jcoErrorContextDropContext",
+            Self::ErrorContextNew => "_jcoErrorContextNewContext",
+            Self::ErrorContextTransfer => "_jcoErrorContextTransferContext",
         }
     }
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (export, local_name) = match self {
-            Self::GlobalClass => (
+            Self::InitializeGlobalErrorContextTableClass => (
                 "initializeGlobalErrorContextTableClass",
                 "_jcoInitializeGlobalErrorContextTableClass",
             ),
-            Self::Registrations => (
+            Self::InitializeErrorContextTableRegistrations => (
                 "initializeErrorContextTableRegistrations",
                 "_jcoInitializeErrorContextTableRegistrations",
             ),
-            Self::LocalTables => (
+            Self::InitializeLocalErrorContextTables => (
                 "initializeLocalErrorContextTables",
                 "_jcoInitializeLocalErrorContextTables",
             ),
@@ -83,18 +97,25 @@ impl ErrCtxContextIntrinsic {
     pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
         use RuntimeContextIntrinsic::{Component, Core, ErrCtx};
         match self {
-            Self::GlobalClass => &[Core(CoreContextIntrinsic::InitializeRepTableClass)],
-            Self::LocalTable => &[
-                ErrCtx(Self::LocalTables),
+            Self::InitializeGlobalErrorContextTableClass => {
+                &[Core(CoreContextIntrinsic::InitializeRepTableClass)]
+            }
+            Self::GetLocalTable => &[
+                ErrCtx(Self::InitializeLocalErrorContextTables),
                 Core(CoreContextIntrinsic::InitializeRepTableClass),
             ],
-            Self::Handle => &[
-                ErrCtx(Self::GlobalClass),
+            Self::CreateLocalHandle => &[
+                ErrCtx(Self::InitializeGlobalErrorContextTableClass),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
             ],
-            Self::New | Self::Drop => &[ErrCtx(Self::Handle), ErrCtx(Self::LocalTable)],
-            Self::Debug => &[ErrCtx(Self::Handle)],
-            Self::Transfer => &[ErrCtx(Self::New), ErrCtx(Self::Registrations)],
+            Self::ErrorContextNew | Self::ErrorContextDrop => {
+                &[ErrCtx(Self::CreateLocalHandle), ErrCtx(Self::GetLocalTable)]
+            }
+            Self::ErrorContextDebugMessage => &[ErrCtx(Self::CreateLocalHandle)],
+            Self::ErrorContextTransfer => &[
+                ErrCtx(Self::ErrorContextNew),
+                ErrCtx(Self::InitializeErrorContextTableRegistrations),
+            ],
             _ => &[],
         }
     }
@@ -102,7 +123,7 @@ impl ErrCtxContextIntrinsic {
         let local = self.local_name();
         if let Some(initializer) = self.initializer() {
             let initialize = initializer.local_name;
-            let arguments = if self == Self::GlobalClass {
+            let arguments = if self == Self::InitializeGlobalErrorContextTableClass {
                 "RepTable"
             } else {
                 ""
@@ -111,20 +132,20 @@ impl ErrCtxContextIntrinsic {
             return;
         }
         let properties = match self {
-            Self::LocalTable => "localTables: errCtxLocal, RepTable",
-            Self::Handle => {
+            Self::GetLocalTable => "localTables: errCtxLocal, RepTable",
+            Self::CreateLocalHandle => {
                 "globalTable: GlobalErrorContextTable, lookup: _jcoComponentStateLookupContext"
             }
-            Self::Debug => {
+            Self::ErrorContextDebugMessage => {
                 "RuntimeError: WebAssembly.RuntimeError, globalTable: GlobalErrorContextTable, lookup: _jcoComponentStateLookupContext"
             }
-            Self::Drop => {
+            Self::ErrorContextDrop => {
                 "RuntimeError: WebAssembly.RuntimeError, globalTable: GlobalErrorContextTable, lookup: _jcoComponentStateLookupContext, local: _jcoErrorContextLocalTableContext"
             }
-            Self::New => {
+            Self::ErrorContextNew => {
                 "globalTable: GlobalErrorContextTable, lookup: _jcoComponentStateLookupContext, local: _jcoErrorContextLocalTableContext"
             }
-            Self::Transfer => {
+            Self::ErrorContextTransfer => {
                 "globalTable: GlobalErrorContextTable, lookup: _jcoComponentStateLookupContext, local: _jcoErrorContextLocalTableContext, tables: ERR_CTX_TABLES"
             }
             _ => unreachable!("state initializers handled above"),
@@ -139,57 +160,57 @@ pub(crate) fn import(intrinsic: ErrCtxIntrinsic) -> RuntimeImport {
     let (export, context, kind) = match intrinsic {
         ComponentGlobalTable => (
             "initializeGlobalErrorContextTableClass",
-            ErrCtxContextIntrinsic::GlobalClass,
+            ErrCtxContextIntrinsic::InitializeGlobalErrorContextTableClass,
             RuntimeImportKind::InitializedConstructor,
         ),
         GlobalErrCtxTableMap => (
             "initializeErrorContextTableRegistrations",
-            ErrCtxContextIntrinsic::Registrations,
+            ErrCtxContextIntrinsic::InitializeErrorContextTableRegistrations,
             RuntimeImportKind::InitializedValue,
         ),
         ComponentLocalTable => (
             "initializeLocalErrorContextTables",
-            ErrCtxContextIntrinsic::LocalTables,
+            ErrCtxContextIntrinsic::InitializeLocalErrorContextTables,
             RuntimeImportKind::InitializedValue,
         ),
         ErrorContextNew => (
             "errCtxNew",
-            ErrCtxContextIntrinsic::New,
+            ErrCtxContextIntrinsic::ErrorContextNew,
             RuntimeImportKind::Call,
         ),
         ErrorContextDrop => (
             "errCtxDrop",
-            ErrCtxContextIntrinsic::Drop,
+            ErrCtxContextIntrinsic::ErrorContextDrop,
             RuntimeImportKind::Call,
         ),
         ErrorContextTransfer => (
             "errCtxTransfer",
-            ErrCtxContextIntrinsic::Transfer,
+            ErrCtxContextIntrinsic::ErrorContextTransfer,
             RuntimeImportKind::Call,
         ),
         ErrorContextDebugMessage => (
             "errCtxDebugMessage",
-            ErrCtxContextIntrinsic::Debug,
+            ErrCtxContextIntrinsic::ErrorContextDebugMessage,
             RuntimeImportKind::Call,
         ),
         GetLocalTable => (
             "errCtxGetLocalTable",
-            ErrCtxContextIntrinsic::LocalTable,
+            ErrCtxContextIntrinsic::GetLocalTable,
             RuntimeImportKind::Call,
         ),
         GlobalRefCountAdd => (
             "errCtxGlobalRefCountAdd",
-            ErrCtxContextIntrinsic::GlobalClass,
+            ErrCtxContextIntrinsic::InitializeGlobalErrorContextTableClass,
             RuntimeImportKind::Call,
         ),
         CreateLocalHandle => (
             "errCtxCreateLocalHandle",
-            ErrCtxContextIntrinsic::Handle,
+            ErrCtxContextIntrinsic::CreateLocalHandle,
             RuntimeImportKind::Call,
         ),
         ReserveGlobalRep => (
             "errCtxReserveGlobalRep",
-            ErrCtxContextIntrinsic::GlobalClass,
+            ErrCtxContextIntrinsic::InitializeGlobalErrorContextTableClass,
             RuntimeImportKind::Call,
         ),
     };
