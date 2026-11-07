@@ -26,7 +26,6 @@ async function writeProvider(dir: string, core: string) {
         'component',
         'waitable',
         'error-context',
-        ,
         'async-task',
     ]) {
         await writeFile(
