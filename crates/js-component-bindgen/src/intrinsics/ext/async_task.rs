@@ -364,7 +364,7 @@ impl TaskContextIntrinsic {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, AsyncSubtask, RuntimeError: WebAssembly.RuntimeError"
             }
             Self::DriverLoop => {
-                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, events: ASYNC_EVENT_CODE, strictNumeric: _jcoStrictNumericContext"
+                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, events: ASYNC_EVENT_CODE, strictNumeric: _jcoStrictNumericContext, reportTrap: err => _reportTrap(err)"
             }
             Self::LowerImport => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, AsyncTask, mayLeave: _jcoComponentMayLeaveContext, events: ASYNC_EVENT_CODE"
@@ -652,6 +652,11 @@ pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsic
         let mut contexts = Vec::new();
         context.collect(&mut contexts);
         if contexts.contains(&RuntimeContextIntrinsic::Task(
+            TaskContextIntrinsic::DriverLoop,
+        )) {
+            args.require_intrinsic(crate::intrinsics::component::ComponentIntrinsic::ReportTrap);
+        }
+        if contexts.contains(&RuntimeContextIntrinsic::Task(
             TaskContextIntrinsic::InitializeAsyncTaskClass,
         )) {
             args.require_intrinsic(AsyncFutureIntrinsic::FutureValueClass);
@@ -675,6 +680,13 @@ mod tests {
         )
         .to_string()
     }
+    #[test]
+    fn driver_reports_background_traps_through_the_instance_notifier() {
+        let source = generated([Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop)]);
+        assert!(source.contains("reportTrap: err => _reportTrap(err)"));
+        assert!(source.contains("function _reportTrap(err)"));
+    }
+
     #[test]
     fn task_variants_use_named_exports_and_actual_owners_once() {
         use AsyncTaskIntrinsic::*;
