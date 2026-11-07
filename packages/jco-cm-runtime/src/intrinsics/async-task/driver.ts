@@ -68,6 +68,9 @@ export function driverLoop(
             },
             err,
         });
+        if (err instanceof _context.RuntimeError) {
+            _context.reportTrap?.(err);
+        }
         task.setErrored(err);
         task.reject(err);
         if (!task.isExited()) {

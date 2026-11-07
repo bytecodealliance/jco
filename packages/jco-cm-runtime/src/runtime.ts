@@ -1488,6 +1488,7 @@ export interface SubtaskCancelContext extends TaskCancelContext, TrapContext {
     readonly AsyncSubtask: AsyncSubtaskConstructor;
 }
 export interface TaskDriverContext extends TrapContext {
+    readonly reportTrap?: (error: Error) => void;
     readonly lookup: ComponentStateLookupContext;
     readonly WaitableSet: WaitableSetConstructor;
     readonly events: Pick<AsyncEventCodes, 'NONE' | 'TASK_CANCELLED'>;
