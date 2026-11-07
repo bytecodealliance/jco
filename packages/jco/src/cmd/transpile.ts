@@ -172,6 +172,8 @@ export interface TranspileOpts {
     wasiShim?: boolean;
     /** Optional module specifier imported by generated bindings, never loaded during transpilation. */
     cmRuntimeEsModule?: string;
+    /** Embed and reduce the built-in runtime into the generated JavaScript. */
+    embedRuntime?: boolean;
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
     useNamespaceObjects?: boolean;

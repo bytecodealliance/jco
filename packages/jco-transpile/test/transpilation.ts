@@ -5,11 +5,12 @@ import type { TranspilationOptions } from '../src/transpile.js';
 
 export * from '../src/index.js';
 
-if (env.JCO_TEST_RUNTIME && !['inline', 'external'].includes(env.JCO_TEST_RUNTIME)) {
+if (env.JCO_TEST_RUNTIME && !['inline', 'external', 'embedded'].includes(env.JCO_TEST_RUNTIME)) {
     throw new Error(`unknown JCO_TEST_RUNTIME: ${env.JCO_TEST_RUNTIME}`);
 }
 
 export const externalRuntime = env.JCO_TEST_RUNTIME === 'external';
+export const embeddedRuntime = env.JCO_TEST_RUNTIME === 'embedded';
 export const defaultRuntimeUrl = new URL('../../jco-cm-runtime/dist/', import.meta.url);
 
 /**
@@ -20,6 +21,7 @@ export const defaultRuntimeUrl = new URL('../../jco-cm-runtime/dist/', import.me
 export function runtimeOptions(options: TranspilationOptions = {}): TranspilationOptions {
     return {
         ...(externalRuntime ? { cmRuntimeEsModule: defaultRuntimeUrl.href } : {}),
+        ...(embeddedRuntime && !('cmRuntimeEsModule' in options) ? { embedRuntime: true } : {}),
         ...options,
     };
 }

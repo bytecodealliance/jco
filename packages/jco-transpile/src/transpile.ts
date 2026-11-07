@@ -164,6 +164,9 @@ export interface TranspilationOptions {
     /** Optional experimental runtime package or directory base. Imports runtime and intrinsics/* subpaths; directory/URL bases use .js files. */
     cmRuntimeEsModule?: string;
 
+    /** Embed and reduce the built-in runtime into the generated JavaScript. */
+    embedRuntime?: boolean;
+
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
 
@@ -346,6 +349,7 @@ export async function transpileBytes(
         perfStringsSkipCopyUtf8Validation: opts.perfStringsSkipCopyUtf8Validation === true,
         perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
         cmRuntimeEsModule: opts.cmRuntimeEsModule,
+        embedRuntime: opts.embedRuntime,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,

@@ -9,7 +9,7 @@ const child = spawn(
         'run',
         ...process.argv.slice(2),
     ],
-    { stdio: 'inherit', env: { ...process.env, JCO_TEST_RUNTIME: 'external' } },
+    { stdio: 'inherit', env: { ...process.env, JCO_TEST_RUNTIME: process.env.JCO_TEST_RUNTIME ?? 'external' } },
 );
 child.on('error', (error) => {
     console.error(error);

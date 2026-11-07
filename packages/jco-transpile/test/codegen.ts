@@ -88,7 +88,7 @@ suite(`Naming`, () => {
 
         const bindingsSource = new TextDecoder().decode(files['resource-naming.js']);
 
-        assert.isOk(bindingsSource.includes('class Thing$1{'));
+        assert.match(bindingsSource, /class Thing\$1\s*\{/);
         assert.isOk(bindingsSource.includes('Thing: Thing$1'));
     });
 

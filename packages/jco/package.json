@@ -61,13 +61,16 @@
         "test": "pnpm run build:ts && vitest run -c test/vitest.ts",
         "test:lts": "pnpm run build:ts && vitest run -c test/vitest.lts.ts",
         "test:extended": "pnpm run build:ts && vitest run -c test/vitest.extended.ts",
-        "prepack": "cargo xtask build release"
+        "prepack": "cargo xtask build release",
+        "test:embedded-runtime": "pnpm run build:ts && node ../jco-transpile/scripts/test-embedded-runtime.mjs -c test/vitest.ts",
+        "test:lts:embedded-runtime": "pnpm run build:ts && node ../jco-transpile/scripts/test-embedded-runtime.mjs -c test/vitest.lts.ts",
+        "test:extended:embedded-runtime": "pnpm run build:ts && node ../jco-transpile/scripts/test-embedded-runtime.mjs -c test/vitest.extended.ts"
     },
     "dependencies": {
         "@bytecodealliance/componentize-js": "^0.23.0",
         "@bytecodealliance/componentize-js-0-19-3": "npm:@bytecodealliance/componentize-js@^0.19.3",
         "@bytecodealliance/jco-std": "^0.10.0",
-        "@bytecodealliance/jco-transpile": "^0.23.0",
+        "@bytecodealliance/jco-transpile": "workspace:^",
         "@bytecodealliance/preview2-shim": "^0.31.0",
         "binaryen": "^132.0.0",
         "commander": "^14",

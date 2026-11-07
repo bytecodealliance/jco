@@ -205,6 +205,11 @@ program
         "--cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base (named runtime and intrinsics/* subpaths)",
     )
+    .addOption(
+        new Option("--embed-runtime", "embed and reduce the built-in Component Model runtime").conflicts(
+            "cmRuntimeEsModule",
+        ),
+    )
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
     .addOption(
