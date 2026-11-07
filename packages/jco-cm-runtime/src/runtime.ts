@@ -1319,6 +1319,7 @@ export interface AsyncTask extends ComponentTask, WaitableTask {
     readonly cancel: (args?: { error?: unknown }) => void;
     readonly onResolve: (value: unknown) => void;
     readonly registerOnResolveHandler: (fn: (value: unknown) => void) => void;
+    readonly stop: (error: unknown) => void;
     readonly isErrored: () => unknown;
     readonly resolve: (results: unknown[]) => void;
     readonly exit: (args?: { skipExclusiveLockCheck?: boolean }) => void;
