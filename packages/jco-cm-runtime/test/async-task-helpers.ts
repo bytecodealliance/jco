@@ -62,6 +62,7 @@ export function create(options: Options = {}) {
         WaitableSet: waitable.WaitableSet,
         events: core.asyncEventCode,
         strictNumeric: { strict: false },
+        reportTrap: options.reportTrap,
     };
     const lower = { ...cancellation, AsyncTask, mayLeave, events: core.asyncEventCode };
     const compat = { ...cancellation, creation, mayLeave, events: core.asyncEventCode };
