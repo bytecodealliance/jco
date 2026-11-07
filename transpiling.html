@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-901ae824.js";
+            window.path_to_searchindex_js = "searchindex-083431fb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-11cdb37d.js"></script>
@@ -485,6 +485,11 @@ future types make the method optional.</p>
 background guest work. For direct ES module output, call the exported <code>_util.stop()</code>.</p>
 <p>See <a href="./advanced/stopping-running-instances.html">Stopping running instances</a> for the scope of
 shutdown, channel and resource ownership, host cleanup, and output draining.</p>
+<h3 id="knowing-when-an-instance-is-idle"><a class="header" href="#knowing-when-an-instance-is-idle">Knowing when an instance is idle</a></h3>
+<p><code>instance._util.whenIdle()</code> waits for guest task exit, including background work after an
+export returns. It also resolves when the instance stops or traps. See
+<a href="./advanced/stopping-running-instances.html#wait-for-guest-tasks-to-exit">Wait for guest tasks to exit</a>
+for completion semantics and an orderly shutdown example.</p>
 <h3 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h3>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>

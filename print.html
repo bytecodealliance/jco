@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-901ae824.js";
+            window.path_to_searchindex_js = "searchindex-083431fb.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-11cdb37d.js"></script>
@@ -982,6 +982,11 @@ future types make the method optional.</p>
 background guest work. For direct ES module output, call the exported <code>_util.stop()</code>.</p>
 <p>See <a href="#stopping-running-instances">Stopping running instances</a> for the scope of
 shutdown, channel and resource ownership, host cleanup, and output draining.</p>
+<h3 id="knowing-when-an-instance-is-idle"><a class="header" href="#knowing-when-an-instance-is-idle">Knowing when an instance is idle</a></h3>
+<p><code>instance._util.whenIdle()</code> waits for guest task exit, including background work after an
+export returns. It also resolves when the instance stops or traps. See
+<a href="#wait-for-guest-tasks-to-exit">Wait for guest tasks to exit</a>
+for completion semantics and an orderly shutdown example.</p>
 <h3 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h3>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>
@@ -5850,6 +5855,7 @@ Choose the operation that matches the work you want to finish:</p>
 </thead>
 <tbody>
 <tr><td>Await an exported call</td><td>The call’s result. Guest background work may continue after it returns.</td></tr>
+<tr><td><code>instance._util.whenIdle()</code></td><td>Guest task exit, including background work after a call returns.</td></tr>
 <tr><td>Dispose a received future or return a stream iterator</td><td>That readable channel end. Other guest work can continue.</td></tr>
 <tr><td><code>instance._util.stop()</code></td><td>Execution and runtime-managed cleanup for the entire generated instantiation.</td></tr>
 <tr><td>Preview 3 <code>cli._flush()</code> / <code>cli._shutdown()</code></td><td>Queued output writes / host-owned stdout and stderr transfers.</td></tr>
@@ -5869,7 +5875,7 @@ try {
 }
 </code></pre>
 <p>This example deliberately ends any background work left after <code>run()</code> returns. If that work
-must finish, wait for the application’s completion signal before stopping.</p>
+must finish, <a href="#wait-for-guest-tasks-to-exit">wait for guest tasks to exit</a> before stopping.</p>
 <p>For direct ES module output, import <code>_util</code> from the generated module and call <code>_util.stop()</code>.
 For instantiation output, use the <code>_util</code> returned by <code>instantiate()</code>. Each instantiation has
 its own runtime state: stopping one stops its entire component graph, including nested
@@ -5928,6 +5934,31 @@ the future is discarded. See <a href="#dropping-a-received-future">Dropping a re
 <p>Stopping the instance is broader than disposing one channel. Host-owned resources already
 returned to the caller remain the caller’s responsibility. A returned value that needs to
 call back into the stopped guest can no longer execute that guest code.</p>
+<h2 id="wait-for-guest-tasks-to-exit"><a class="header" href="#wait-for-guest-tasks-to-exit">Wait for guest tasks to exit</a></h2>
+<p><code>instance._util.whenIdle()</code> resolves once no guest task remains in the generated instantiation.
+A task counts until it exits, including work it performs after returning its result. This lets
+hosts wait for background work that outlives an exported call.</p>
+<p>Waiting does not stop the instance or prevent new calls. A long-lived task can keep the wait
+pending indefinitely; ask such tasks to finish through the application’s own protocol first.
+The promise also resolves if the instance stops or traps, so resolution alone is not evidence
+of successful completion. Observe exported-call failures and, for background traps,
+<a href="#instantiation"><code>options.onTrap</code></a>.</p>
+<p><code>whenIdle()</code> tracks guest tasks. It does not wait for arbitrary host I/O, deferred disposal,
+or destination flushing. With a workload whose guest tasks are expected to exit, an orderly
+sequence is:</p>
+<pre><code class="language-js">import * as cli from '@bytecodealliance/preview3-shim/cli';
+
+try {
+  await instance.run();
+  await instance._util.whenIdle();
+  await cli._shutdown();
+} finally {
+  instance._util.stop();
+}
+</code></pre>
+<p>Use a host timeout or other application policy if waiting indefinitely is inappropriate.
+Calling <code>stop()</code> abandons outstanding guest work and releases idle waiters; it does not wait
+for normal task exit first. Keep waiting and forced teardown as separate choices.</p>
 <h2 id="finish-work-and-drain-output"><a class="header" href="#finish-work-and-drain-output">Finish work and drain output</a></h2>
 <p>For orderly shutdown, first stop accepting new application work and ask any long-lived guest
 producer to finish through the application’s own protocol. Wait for the work you need to
