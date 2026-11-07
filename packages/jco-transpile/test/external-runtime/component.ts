@@ -33,11 +33,12 @@ function providerSource() {
 export * from ${JSON.stringify(componentUrl)};
 export const flags = [], traps = [], stores = [], states = [], constructors = [], contexts = [], calls = [];
 export function initializeInstanceFlags() { const owner = defaults.initializeInstanceFlags(); flags.push(owner); return owner; }
-export function initializeStoreTrap() { const owner = defaults.initializeStoreTrap(); traps.push(owner); return owner; }
+export function initializeStoreTrap(onTrap) { const owner = defaults.initializeStoreTrap(onTrap); traps.push(owner); return owner; }
 export function initializeStoreAsyncState() { const owner = defaults.initializeStoreAsyncState(); stores.push(owner); return owner; }
 export function initializeComponentAsyncStates() { const owner = defaults.initializeComponentAsyncStates(); states.push(owner); return owner; }
 export function initializeComponentAsyncStateClass(context) {
- if (Object.keys(context).sort().join() !== 'RepTable,RuntimeError,Waitable,cannotEnter,deadlock,indexSpaces,instanceFlags,normalization,storeTrap') throw new Error('broad component constructor context');
+ if (Object.keys(context).sort().join() !== 'RepTable,RuntimeError,Waitable,cannotEnter,deadlock,indexSpaces,instanceFlags,normalization,reportTrap,storeTrap') throw new Error('broad component constructor context');
+ if (typeof context.reportTrap !== 'function') throw new Error('missing component trap reporter');
  if (!flags.includes(context.instanceFlags) || !traps.includes(context.storeTrap) || !states.includes(context.deadlock.asyncState)) throw new Error('detached component owner');
  const constructor = defaults.initializeComponentAsyncStateClass(context); constructors.push(constructor); contexts.push(context); return constructor;
 }
@@ -83,8 +84,11 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 }
                 const bindings = await import(pathToFileURL(join(dir, 'component.js')).href);
                 const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/component.js')).href);
+                const onTrap = () => assert.fail('unexpected trap');
                 const instantiate = () =>
-                    bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {});
+                    bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {}, undefined, {
+                        onTrap,
+                    });
                 const instances = instantiation ? [await instantiate(), await instantiate()] : [bindings];
                 assert.lengthOf(provider.constructors, instances.length);
                 for (const [index, instance] of instances.entries()) {
@@ -95,6 +99,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.isAbove(provider.flags[index].size, 0);
                     assert.isAbove(provider.states[index].size, 0);
                     assert.isNull(provider.traps[index].error);
+                    assert.strictEqual(provider.traps[index].onTrap, instantiation ? onTrap : null);
                     assert.strictEqual(provider.stores[index].pendingHostOperations, 0);
                     for (const state of provider.states[index].values()) {
                         assert.instanceOf(state, provider.constructors[index]);
