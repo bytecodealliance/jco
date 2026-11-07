@@ -20,7 +20,7 @@ import type {
 import { debugLog } from './core-debug.js';
 import { promiseWithResolvers } from './core-promises.js';
 import { getOrCreateAsyncState } from './component.js';
-import { getCurrentTask } from './task-operations.js';
+import { getCurrentTask } from './async-task/task-operations.js';
 
 /** Fresh class identity per store, with no state or platform capability required. */
 export function initializeWaitableClass(): WaitableConstructor {

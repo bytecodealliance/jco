@@ -100,7 +100,7 @@ test(
         for (const name of [
             'runtime.js',
             'index.js',
-            ...(await readdir(new URL('intrinsics/', defaultRuntimeUrl)))
+            ...(await readdir(new URL('intrinsics/', defaultRuntimeUrl), { recursive: true }))
                 .filter((name) => name.endsWith('.js'))
                 .sort()
                 .map((name) => 'intrinsics/' + name),
