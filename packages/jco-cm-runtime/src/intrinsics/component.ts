@@ -35,6 +35,7 @@ export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTr
 export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncState'] = () => ({
     deadlockCheck: null,
     pendingHostOperations: 0,
+    idleWaiters: new Set(),
 });
 export const initializeComponentAsyncStates: ComponentModule['initializeComponentAsyncStates'] = () => new Map();
 export const initializeCoreTrapMessages: ComponentModule['initializeCoreTrapMessages'] = (messages) =>
@@ -387,6 +388,7 @@ export function initializeComponentAsyncStateClass(
                 storeTrap.error = trap;
             }
             context.reportTrap?.(trap);
+            context.checkIdle?.();
             return true;
         }
 

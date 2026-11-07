@@ -1359,6 +1359,8 @@ impl AsyncTaskIntrinsic {
                     render_args.require_intrinsic(Self::GlobalAsyncCurrentTaskIds);
                 let component_idx_globals =
                     render_args.require_intrinsic(Self::GlobalAsyncCurrentComponentIdxs);
+                let check_idle_fn = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::CheckIdle));
 
                 output.push_str(&format!(
                     r#"
@@ -1385,6 +1387,7 @@ impl AsyncTaskIntrinsic {
                         const taskMeta = tasks[taskIdx];
                         if (!opts.preserveTask) {{
                             tasks.splice(taskIdx, 1);
+                            {check_idle_fn}();
                         }}
                         const globalTaskIdx = {task_id_globals}.lastIndexOf(taskMeta.id);
                         if (globalTaskIdx !== -1) {{

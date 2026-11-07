@@ -20,10 +20,15 @@ function rustComponent(name) {
 }
 
 /** Transpile a Rust component, or a focused canonical ABI regression written in WAT. */
-async function generated(componentUrl: URL) {
+async function generated(componentUrl: URL | string) {
     await $init;
-    const source = await readFile(componentUrl);
-    const component = componentUrl.pathname.endsWith('.wat') ? await parse(source.toString('utf8')) : source;
+    let component: Uint8Array;
+    if (typeof componentUrl === 'string') {
+        component = await parse(componentUrl);
+    } else {
+        const source = await readFile(componentUrl);
+        component = componentUrl.pathname.endsWith('.wat') ? await parse(source.toString('utf8')) : source;
+    }
     const { files } = generate(component, {
         name: 'component',
         instantiation: { tag: 'async' },
@@ -331,6 +336,84 @@ suite.skipIf(!HAS_JSPI)('stopping an instance closes its streams and futures', (
         assert.strictEqual(reads, 1);
     });
 
+    test.concurrent('what a host stream yields after the stop is disposed', async () => {
+        const instantiate = await transpiled(READS_FROM_HOST);
+        const instance = await instantiate({});
+        let release;
+        let reading = false;
+        let disposed = 0;
+        const late = {
+            [Symbol.dispose]() {
+                disposed += 1;
+            },
+        };
+        await instance.feed({
+            [Symbol.asyncIterator]() {
+                return this;
+            },
+            next() {
+                reading = true;
+                return new Promise((resolve) => {
+                    release = () => resolve({ done: false, value: late });
+                });
+            },
+            async return() {
+                return { done: true };
+            },
+        });
+        while (!reading) {
+            await sleep(1);
+        }
+        instance._util.stop();
+        release();
+        await sleep(1);
+        assert.strictEqual(disposed, 1);
+    });
+
+    test.concurrent('late host stream values are disposed after reader return without stopping', async ({ expect }) => {
+        const instantiate = await transpiled(READS_FROM_HOST);
+        const instance = await instantiate({});
+        let release;
+        let reading;
+        const started = new Promise((resolve) => {
+            reading = resolve;
+        });
+        let disposed = 0;
+        const source = {
+            [Symbol.asyncIterator]() {
+                return this;
+            },
+            next() {
+                reading();
+                return new Promise((resolve) => {
+                    release = () =>
+                        resolve({
+                            done: false,
+                            value: {
+                                [Symbol.dispose]() {
+                                    disposed += 1;
+                                },
+                            },
+                        });
+                });
+            },
+            async return() {
+                return { done: true };
+            },
+        };
+        try {
+            const reader = instance.pass(source)[Symbol.asyncIterator]();
+            const pending = reader.next();
+            await started;
+            await reader.return();
+            release();
+            assert.isTrue((await pending).done);
+            await expect.poll(() => disposed).toBe(1);
+        } finally {
+            instance._util.stop();
+        }
+    });
+
     test.concurrent("another instance's stream is unaffected", async () => {
         const instantiate = await transpiled(WRITES_FOREVER);
         const imports = { 'test:host/api': { tick() {} } };
@@ -385,6 +468,96 @@ suite.skipIf(!HAS_JSPI)('stopping an instance closes its streams and futures', (
         assert.strictEqual(err, '');
         assert.deepStrictEqual({ code, signal }, { code: 0, signal: null });
         assert.strictEqual(out, 'finished ERR_COMPONENT_STOPPED\n');
+    });
+});
+
+// A structurally empty component checks that utilities need no core module or exports.
+const NO_EXPORTS = `(component)`;
+
+/** `feed` returns, and its task stays until the stream it reads gives it something. */
+const LINGERS = READS_FROM_HOST;
+
+suite.skipIf(!HAS_JSPI)('knowing when an instance is idle', () => {
+    /** A stream of one byte, which comes when `release` is called. */
+    function oneByte() {
+        let release!: () => void;
+        const arrives = new Promise<void>((resolve) => (release = resolve));
+        let sent = false;
+        return {
+            release,
+            stream: {
+                [Symbol.asyncIterator]() {
+                    return this;
+                },
+                async next() {
+                    if (sent) {
+                        return { done: true };
+                    }
+                    await arrives;
+                    sent = true;
+                    return { done: false, value: 1 };
+                },
+                async return() {
+                    return { done: true };
+                },
+            },
+        };
+    }
+
+    /** Whether `promise` has settled by the time things have had a chance to run. */
+    async function settled(promise: Promise<void>) {
+        let done = false;
+        promise.then(() => (done = true));
+        await sleep(20);
+        return done;
+    }
+
+    test.concurrent('with nothing running it already is', async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        assert.isTrue(await settled(instance._util.whenIdle()));
+        const bare = await (await transpiled(NO_EXPORTS))({});
+        assert.isTrue(await settled(bare._util.whenIdle()));
+    });
+
+    test.concurrent('a task that has returned counts until it has exited', async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        const { stream, release } = oneByte();
+        await instance.feed(stream);
+        const idle = instance._util.whenIdle();
+        assert.isFalse(await settled(idle), 'its task is still reading');
+        release();
+        assert.isTrue(await settled(idle));
+        assert.isTrue(await settled(instance._util.whenIdle()));
+    });
+
+    test.concurrent('stopping an instance ends the wait', async () => {
+        const instance = await (await transpiled(LINGERS))({});
+        await instance.feed(oneByte().stream);
+        const idle = instance._util.whenIdle();
+        assert.isFalse(await settled(idle));
+        instance._util.stop();
+        assert.isTrue(await settled(idle));
+        assert.isTrue(await settled(instance._util.whenIdle()));
+    });
+
+    test.concurrent('a trap ends the wait', async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const instance = await instantiate({}, { onTrap() {} });
+        await instance.start();
+        // Wait for the notification itself; callback scheduling can exceed a short timer under load.
+        await instance._util.whenIdle();
+    });
+
+    test.concurrent('another instance of the same module is its own', async () => {
+        const instantiate = await transpiled(LINGERS);
+        const [first, second] = [await instantiate({}), await instantiate({})];
+        const { stream, release } = oneByte();
+        await first.feed(stream);
+        assert.isTrue(await settled(second._util.whenIdle()));
+        const idle = first._util.whenIdle();
+        assert.isFalse(await settled(idle));
+        release();
+        assert.isTrue(await settled(idle));
     });
 });
 

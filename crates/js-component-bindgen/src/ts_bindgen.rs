@@ -319,6 +319,7 @@ pub fn ts_bindgen(
     }
 
     let mut funcs = Vec::new();
+    let mut has_result_export = false;
 
     for (name, export) in world.exports.iter() {
         match export {
@@ -339,6 +340,7 @@ pub fn ts_bindgen(
                     continue;
                 }
 
+                has_result_export |= get_thrown_type(resolve, f.result).is_some();
                 funcs.push((export_name.to_lower_camel_case(), f));
             }
 
@@ -363,6 +365,10 @@ pub fn ts_bindgen(
                 }
 
                 let instantiation = opts.instantiation_mode.is_some();
+                has_result_export |= resolve.interfaces[*id]
+                    .functions
+                    .values()
+                    .any(|func| get_thrown_type(resolve, func.result).is_some());
                 bindgen.export_interface(resolve, export_name, *id, files, instantiation);
                 // Also export the interface name as a type alias
                 let alt_export_name = iface_name.to_lower_camel_case();
@@ -384,6 +390,12 @@ pub fn ts_bindgen(
     }
 
     let camel = world.name.to_upper_camel_case();
+    let component_error = if has_result_export && !opts.no_component_error_wrapping {
+        "/** Test whether a value is a declared WIT result error from this instance. */
+        isComponentError(value: unknown): value is Error & { readonly payload: unknown };"
+    } else {
+        ""
+    };
 
     // Generate a type definition for the import object to type-check
     // all imports to the component.
@@ -406,7 +418,10 @@ pub fn ts_bindgen(
             bindgen.src,
             "/** Permanently stop this instance and dispose guest-owned host resources. */"
         );
-        uwriteln!(bindgen.src, "readonly _util: {{ stop(): void }};");
+        uwriteln!(
+            bindgen.src,
+            "readonly _util: {{ stop(): void; whenIdle(): Promise<void>; {component_error} }};"
+        );
         uwriteln!(bindgen.src, "}}");
     } else {
         bindgen.src.push_str(&bindgen.export_object);
@@ -415,7 +430,10 @@ pub fn ts_bindgen(
                 bindgen.src,
                 "/** Permanently stop this instance and dispose guest-owned host resources. */"
             );
-            uwriteln!(bindgen.src, "export const _util: {{ stop(): void }};");
+            uwriteln!(
+                bindgen.src,
+                "export const _util: {{ stop(): void; whenIdle(): Promise<void>; {component_error} }};"
+            );
         }
     }
 

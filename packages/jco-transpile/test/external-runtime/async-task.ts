@@ -115,7 +115,7 @@ export function createNewCurrentImplicitThread(context, options) {
  calls.push('create'); return defaults.createNewCurrentImplicitThread(context, options);
 }
 export function clearCurrentThread(context, ...args) {
- if (this !== undefined || Object.keys(context).sort().join() !== 'componentIdxs,taskIds,tasks') throw new Error('invalid task clearing');
+ if (this !== undefined || Object.keys(context).sort().join() !== 'checkIdle,componentIdxs,taskIds,tasks') throw new Error('invalid task clearing');
  calls.push('clear'); return defaults.clearCurrentThread(context, ...args);
 }
 export function contextGet(context, options) {

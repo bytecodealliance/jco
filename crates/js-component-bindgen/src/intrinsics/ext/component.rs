@@ -158,7 +158,7 @@ impl ComponentContextIntrinsic {
                 }
                 Self::InitializeCoreTrapMessages => core_trap_messages_js(),
                 Self::InitializeComponentAsyncStateClass => format!(
-                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable, reportTrap: err => _reportTrap(err) }}",
+                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable, reportTrap: err => _reportTrap(err), checkIdle: () => _checkIdle() }}",
                     Trap::CannotEnterComponent.to_string()
                 ),
                 _ => String::new(),
@@ -223,8 +223,8 @@ fn core_trap_messages_js() -> String {
 pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
     use ComponentIntrinsic::*;
     let (export, context, kind) = match intrinsic {
-        // Trap reporting uses instantiation options; shutdown coordinates generated tables.
-        StopInstance | ReportTrap => return None,
+        // Trap reporting uses instantiation options; shutdown and idle checks use generated tables.
+        StopInstance | ReportTrap | WhenIdle | CheckIdle => return None,
         GlobalInstanceFlagsMap => (
             "initializeInstanceFlags",
             ComponentContextIntrinsic::InitializeInstanceFlags,
@@ -336,6 +336,7 @@ pub(crate) fn discover_dependencies(
             ComponentContextIntrinsic::InitializeComponentAsyncStateClass,
         )) {
             args.require_intrinsic(ComponentIntrinsic::ReportTrap);
+            args.require_intrinsic(ComponentIntrinsic::CheckIdle);
         }
     }
 }

@@ -6,6 +6,7 @@ import { create as createWaitable } from './waitable-test-helpers.js';
 import { initializeTaskRegisters } from '../src/intrinsics/task-context.js';
 
 type Options = Omit<NonNullable<Parameters<typeof createWaitable>[0]>, 'waitableContext'> & {
+    checkIdle?: () => void;
     isFutureValue?: (value: unknown) => value is TaskFutureValue;
 };
 type Tail<A extends unknown[]> = A extends [unknown, ...infer Rest] ? Rest : never;
@@ -23,7 +24,7 @@ export function create(options: Options = {}) {
     const stack = operations.initializeSymmetricSyncGuestCallStack();
     const scopeCounter = initializeResourceScopeCounter();
     const scopeTasks = selected.resource.state.scopeTasks;
-    const clearing = { tasks, taskIds, componentIdxs };
+    const clearing = { tasks, taskIds, componentIdxs, checkIdle: options.checkIdle };
     const taskLookup = { tasks, registers };
     const mayLeave = { RuntimeError: core.RuntimeError, instanceFlags: component.instanceFlags };
     const AsyncSubtask = operations.initializeAsyncSubtaskClass({

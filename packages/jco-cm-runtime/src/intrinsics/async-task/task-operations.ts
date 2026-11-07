@@ -134,6 +134,7 @@ export function clearCurrentThread<T extends TaskIdentity = AsyncTask>(
     const taskMeta = tasks[taskIdx];
     if (!options.preserveTask) {
         tasks.splice(taskIdx, 1);
+        _context.checkIdle?.();
     }
     const globalTaskIdx = _context.taskIds.lastIndexOf(taskMeta.id);
     if (globalTaskIdx !== -1) {
