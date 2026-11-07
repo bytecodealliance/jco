@@ -168,7 +168,8 @@ impl ComponentIntrinsic {
             Self::ReportTrap => {
                 let report_trap_fn = render_args.require_intrinsic(Self::ReportTrap);
                 let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
-                let normalize_core_trap_fn = render_args.require_intrinsic(Self::NormalizeCoreTrap);
+                let normalize_core_trap =
+                    render_args.intrinsic_call(Self::NormalizeCoreTrap, "err");
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(
@@ -178,7 +179,7 @@ impl ComponentIntrinsic {
                         if ({store}.onTrap === null || {store}.stopped) {{ return; }}
                         if (!(err instanceof {runtime_error_class}) || {store}.trapsReported.has(err)) {{ return; }}
                         {store}.trapsReported.add(err);
-                        err = {normalize_core_trap_fn}(err);
+                        err = {normalize_core_trap};
                         // Not the runtime's to handle, whose own unwinding is under way
                         try {{ {store}.onTrap(err); }} catch (e) {{ queueMicrotask(() => {{ throw e; }}); }}
                     }}
