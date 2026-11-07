@@ -619,3 +619,46 @@ test.concurrent('the async driver reports traps after a task has returned', () =
         store.cleanup();
     }
 });
+
+test.concurrent('marking completion handled does not read a returned future', async () => {
+    let reads = 0;
+    class FutureValue implements TaskFutureValue {
+        hidden = false;
+        get then() {
+            if (this.hidden) {
+                return undefined;
+            }
+            return (resolve: (value: number) => void) => {
+                reads++;
+                resolve(42);
+            };
+        }
+        resolveAsValue(resolve: (value: unknown) => void) {
+            this.hidden = true;
+            try {
+                resolve(this);
+            } finally {
+                this.hidden = false;
+            }
+        }
+    }
+    const store = setup({ isFutureValue: (value): value is TaskFutureValue => value instanceof FutureValue });
+    try {
+        const [task] = store.asyncTask.createNewCurrentTask({
+            componentIdx: 0,
+            isAsync: true,
+            preserveFutureResult: true,
+        });
+        const future = new FutureValue();
+        task.resolve([future]);
+        task.settleCompletion();
+        await task.completionPromise().then((value) => {
+            expect(value).toBe(future);
+        });
+        await Promise.resolve();
+        expect(reads).toBe(0);
+        finish(task);
+    } finally {
+        store.cleanup();
+    }
+});
