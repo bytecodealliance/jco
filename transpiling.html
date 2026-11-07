@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-853eb55a.js";
+            window.path_to_searchindex_js = "searchindex-043e076c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-5f84a43a.js"></script>
+        <script src="toc-11cdb37d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -434,33 +434,16 @@ Jco’s default Node capability map is not applied to instantiation output.</p>
 <p>A future received from a guest is lazy: receiving it does not consume its value. Read it with
 <code>await future</code>, or call <code>future[Symbol.dispose]?.()</code> to release its readable end. Disposal is
 idempotent, rejects a pending read, and notifies a waiting or subsequent writer that the reader
-has gone. Further reads reject. If the future has already read a disposable value, disposal
-also releases that value; do not continue using it afterward. Host-supplied promises need not
-implement disposal, so generated future types make the method optional.</p>
+has gone. Further reads reject. A value already delivered by <code>await</code> or a fulfillment callback
+belongs to the caller and remains usable after the future is disposed. The caller must dispose
+that value separately when appropriate. Disposal only releases a copied disposable value if
+it has not yet been delivered. Host-supplied promises need not implement disposal, so generated
+future types make the method optional.</p>
 <h3 id="stopping-an-instance"><a class="header" href="#stopping-an-instance">Stopping an instance</a></h3>
-<p>Call <code>instance._util.stop()</code> when the host is done with an instance:</p>
-<pre><code class="language-js">const instance = await instantiate(getCoreModule, imports);
-try {
-  await instance.run();
-} finally {
-  instance._util.stop();
-}
-</code></pre>
-<p>For direct ES module output, import <code>_util</code> from the generated module and call
-<code>_util.stop()</code> instead. Each call to <code>instantiate()</code> has its own stop function;
-stopping one instance does not affect another.</p>
-<p>Stopping is permanent and synchronous. It stops the runtime’s scheduler timers,
-rejects pending guest calls with a <code>WebAssembly.RuntimeError</code>, and prevents further
-calls into any component in the instance. Host resources still owned by the guest
-have their <code>Symbol.dispose</code> method called. Resources borrowed from the host or
-already returned to it are not disposed. Guest Wasm destructors are not run.</p>
-<p>Repeated calls to <code>stop()</code> do nothing. If a host resource’s disposal throws, cleanup
-continues for the other resources, then <code>stop()</code> throws an <code>AggregateError</code>; the
-instance remains stopped. Resources can also be released this way after a guest trap.</p>
-<p>Already-started host operations may continue independently, but their completion
-cannot resume guest execution. The host remains responsible for cancelling its own
-I/O and timers. Like other JavaScript APIs, <code>stop()</code> cannot interrupt synchronous
-Wasm that never yields control back to JavaScript.</p>
+<p>Call <code>instance._util.stop()</code> to permanently stop a generated instantiation, including its
+background guest work. For direct ES module output, call the exported <code>_util.stop()</code>.</p>
+<p>See <a href="./advanced/stopping-running-instances.html">Stopping running instances</a> for the scope of
+shutdown, channel and resource ownership, host cleanup, and output draining.</p>
 <h3 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h3>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>

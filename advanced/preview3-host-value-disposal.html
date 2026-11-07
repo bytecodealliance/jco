@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-853eb55a.js";
+            window.path_to_searchindex_js = "../searchindex-043e076c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5f84a43a.js"></script>
+        <script src="../toc-11cdb37d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -256,8 +256,10 @@ and synchronous imports suspended via JSPI, give the guest no handle with which 
 individual call, so they are never disposed.</li>
 <li>If a guest cancels an <code>async</code> import call whose result would have contained a future or
 stream, only the returned promise is disposed, as the future or stream was never created.</li>
-<li>Cancellation of the enclosing task, instance teardown, and the lifetime of resources already
-delivered to the guest are not covered by this mechanism.</li>
+<li>Cancellation of the enclosing task and the lifetime of resources already delivered to the
+guest are not covered by this mechanism. Instance teardown uses a separate
+<a href="./stopping-running-instances.html">stop operation</a>, which also notifies host-provided channel
+sources of disposal.</li>
 </ul>
 
                     </main>

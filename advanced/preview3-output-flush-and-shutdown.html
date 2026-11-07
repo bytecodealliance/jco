@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-853eb55a.js";
+            window.path_to_searchindex_js = "../searchindex-043e076c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5f84a43a.js"></script>
+        <script src="../toc-11cdb37d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,7 +183,8 @@
                         <h1 id="preview-3-output-flush-and-shutdown"><a class="header" href="#preview-3-output-flush-and-shutdown">Preview 3 output flush and shutdown</a></h1>
 <p>The Preview 3 shim provides host helpers for draining stdout and stderr in
 Node.js and browser environments. These helpers are useful when a custom host
-needs to preserve output before exiting or disposing its component.</p>
+needs to preserve output before exiting or disposing its component. For instance-wide
+execution and cleanup, see <a href="./stopping-running-instances.html">Stopping running instances</a>.</p>
 <h2 id="flush-queued-destination-writes"><a class="header" href="#flush-queued-destination-writes">Flush queued destination writes</a></h2>
 <p>Await <code>stdout._flush()</code> or <code>stderr._flush()</code> to wait for writes currently queued
 on that output destination. <code>cli._flush()</code> waits for both destinations:</p>

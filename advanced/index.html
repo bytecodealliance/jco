@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-853eb55a.js";
+            window.path_to_searchindex_js = "../searchindex-043e076c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-5f84a43a.js"></script>
+        <script src="../toc-11cdb37d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -190,6 +190,10 @@ calls, and when they apply.</li>
 JavaScript.</li>
 <li><a href="./manual-wasm-instantiation-with-wasi-overrides.html">Manual Wasm instantiation with WASI overrides</a>:
 instantiating a transpiled component yourself and replacing individual WASI interfaces.</li>
+<li><a href="./differences-with-wasmtime.html">Differences with Wasmtime</a>: comparing host lifecycle and
+cleanup behavior across JavaScript and Rust embeddings.</li>
+<li><a href="./stopping-running-instances.html">Stopping running instances</a>: ending guest execution,
+releasing runtime-managed resources, and coordinating host cleanup.</li>
 <li><a href="./detecting-traps.html">Detecting traps</a>: telling a component trap apart from an ordinary error.</li>
 <li><a href="./preview3-streams-and-backpressure.html">Preview 3 streams and backpressure</a>: how WASI 0.3
 streams flow between host and guest.</li>

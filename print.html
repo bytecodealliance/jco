@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-853eb55a.js";
+            window.path_to_searchindex_js = "searchindex-043e076c.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-5f84a43a.js"></script>
+        <script src="toc-11cdb37d.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -931,33 +931,16 @@ Jco’s default Node capability map is not applied to instantiation output.</p>
 <p>A future received from a guest is lazy: receiving it does not consume its value. Read it with
 <code>await future</code>, or call <code>future[Symbol.dispose]?.()</code> to release its readable end. Disposal is
 idempotent, rejects a pending read, and notifies a waiting or subsequent writer that the reader
-has gone. Further reads reject. If the future has already read a disposable value, disposal
-also releases that value; do not continue using it afterward. Host-supplied promises need not
-implement disposal, so generated future types make the method optional.</p>
+has gone. Further reads reject. A value already delivered by <code>await</code> or a fulfillment callback
+belongs to the caller and remains usable after the future is disposed. The caller must dispose
+that value separately when appropriate. Disposal only releases a copied disposable value if
+it has not yet been delivered. Host-supplied promises need not implement disposal, so generated
+future types make the method optional.</p>
 <h3 id="stopping-an-instance"><a class="header" href="#stopping-an-instance">Stopping an instance</a></h3>
-<p>Call <code>instance._util.stop()</code> when the host is done with an instance:</p>
-<pre><code class="language-js">const instance = await instantiate(getCoreModule, imports);
-try {
-  await instance.run();
-} finally {
-  instance._util.stop();
-}
-</code></pre>
-<p>For direct ES module output, import <code>_util</code> from the generated module and call
-<code>_util.stop()</code> instead. Each call to <code>instantiate()</code> has its own stop function;
-stopping one instance does not affect another.</p>
-<p>Stopping is permanent and synchronous. It stops the runtime’s scheduler timers,
-rejects pending guest calls with a <code>WebAssembly.RuntimeError</code>, and prevents further
-calls into any component in the instance. Host resources still owned by the guest
-have their <code>Symbol.dispose</code> method called. Resources borrowed from the host or
-already returned to it are not disposed. Guest Wasm destructors are not run.</p>
-<p>Repeated calls to <code>stop()</code> do nothing. If a host resource’s disposal throws, cleanup
-continues for the other resources, then <code>stop()</code> throws an <code>AggregateError</code>; the
-instance remains stopped. Resources can also be released this way after a guest trap.</p>
-<p>Already-started host operations may continue independently, but their completion
-cannot resume guest execution. The host remains responsible for cancelling its own
-I/O and timers. Like other JavaScript APIs, <code>stop()</code> cannot interrupt synchronous
-Wasm that never yields control back to JavaScript.</p>
+<p>Call <code>instance._util.stop()</code> to permanently stop a generated instantiation, including its
+background guest work. For direct ES module output, call the exported <code>_util.stop()</code>.</p>
+<p>See <a href="#stopping-running-instances">Stopping running instances</a> for the scope of
+shutdown, channel and resource ownership, host cleanup, and output draining.</p>
 <h3 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h3>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>
@@ -4752,6 +4735,10 @@ calls, and when they apply.</li>
 JavaScript.</li>
 <li><a href="#manual-wasm-instantiation-with-wasi-overrides">Manual Wasm instantiation with WASI overrides</a>:
 instantiating a transpiled component yourself and replacing individual WASI interfaces.</li>
+<li><a href="#differences-with-wasmtime">Differences with Wasmtime</a>: comparing host lifecycle and
+cleanup behavior across JavaScript and Rust embeddings.</li>
+<li><a href="#stopping-running-instances">Stopping running instances</a>: ending guest execution,
+releasing runtime-managed resources, and coordinating host cleanup.</li>
 <li><a href="#detecting-traps">Detecting traps</a>: telling a component trap apart from an ordinary error.</li>
 <li><a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>: how WASI 0.3
 streams flow between host and guest.</li>
@@ -5689,6 +5676,217 @@ const component = await wasmESModule.instantiate(
 </table>
 </div>
 <div style="break-before: page; page-break-before: always;"></div>
+<h1 id="differences-with-wasmtime"><a class="header" href="#differences-with-wasmtime">Differences with Wasmtime</a></h1>
+<p>Jco and Wasmtime implement the Component Model in different host environments. The Canonical
+ABI defines the behavior of guest-visible operations; each embedding also provides lifecycle
+and integration APIs beyond those operations. Similar host APIs need not have identical
+cleanup mechanisms or completion guarantees.</p>
+<p>Jco runs in browsers and Node.js, where JavaScript garbage collection and platform I/O APIs
+control much of an application’s lifetime. A host can retain a promise, iterator, exported
+function, or resource after guest execution ends. Jco therefore provides explicit lifecycle
+operations to settle outstanding work, notify sources of disposal, and release resources
+that would otherwise depend on application cleanup or garbage collection. These operations
+give hosts more deterministic control over execution and cleanup initiation; they cannot
+force the platform to reclaim all memory immediately.</p>
+<h2 id="stopping-and-shutting-down-instances"><a class="header" href="#stopping-and-shutting-down-instances">Stopping and shutting down instances</a></h2>
+<p>Jco’s <code>instance._util.stop()</code> permanently stops the entire generated instantiation, including
+its nested components. Its scope is comparable to destroying a Wasmtime store, which owns
+its component instances. Wasmtime’s component <code>Instance</code> is a handle into that store rather
+than an independently destructible owner. See the <a href="https://docs.wasmtime.dev/api/wasmtime/struct.Store.html">Wasmtime Store API</a> and
+<a href="https://docs.wasmtime.dev/api/wasmtime/component/struct.Instance.html">component Instance API</a>.</p>
+<p>For instructions on using Jco’s API, see <a href="#stopping-running-instances">Stopping running instances</a>.</p>
+<h3 id="teardown-behavior"><a class="header" href="#teardown-behavior">Teardown behavior</a></h3>
+<p>The comparison below describes Jco’s explicit stop operation and Wasmtime store destruction.
+A trapped or poisoned store is a separate state: preventing further execution alone does not
+perform all the cleanup associated with destroying the store.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Concern</th><th>Jco <code>_util.stop()</code></th><th>Wasmtime store destruction</th></tr>
+</thead>
+<tbody>
+<tr><td>Pending execution</td><td>Explicitly rejects pending guest calls and prevents guest execution from resuming.</td><td>Disposes fibers and drops store-owned futures.</td></tr>
+<tr><td>Pending stream reads</td><td>Rejects interrupted host reads with <code>code: "ERR_COMPONENT_STOPPED"</code>.</td><td>Drops channel state and associated host machinery; teardown does not promise a final EOF notification.</td></tr>
+<tr><td>Pending future reads</td><td>Rejects host reads still waiting for a value.</td><td>Drops the relevant machinery; externally observed cancellation depends on the host implementation.</td></tr>
+<tr><td>Host sources</td><td>Explicitly invokes iterator return or disposal hooks for discarded sources.</td><td>Rust destruction releases stored producers, consumers, and their captured state.</td></tr>
+<tr><td>Host resources owned by the guest</td><td>Calls <code>Symbol.dispose</code> on captured owned objects.</td><td>Cleanup follows ownership of host data and resource tables; canonical resource-destructor callbacks are separate operations.</td></tr>
+<tr><td>Memory</td><td>Objects may remain reachable after stop; JavaScript GC can reclaim them when references are released.</td><td>Destruction releases store-owned instance allocations.</td></tr>
+<tr><td>Cleanup completion</td><td>Returns synchronously without awaiting asynchronous host disposal.</td><td>Rust <code>Drop</code> runs synchronously; separately owned external work can still outlive the store.</td></tr>
+<tr><td>Cleanup failures</td><td>Synchronous resource-disposal errors are aggregated after other cleanup; deferred source-disposal errors are reported separately.</td><td><code>Drop</code> has no returned cleanup result; the embedder defines how its own cleanup failures are handled.</td></tr>
+</tbody>
+</table>
+</div>
+<p>This is a source-level comparison against Wasmtime revision
+<a href="https://github.com/bytecodealliance/wasmtime/commit/67d70b4e192e88faa597008560811dc7e2b1414b"><code>67d70b4e</code></a>. Its <a href="https://github.com/bytecodealliance/wasmtime/blob/67d70b4e192e88faa597008560811dc7e2b1414b/crates/wasmtime/src/runtime/store.rs#L2498">store destructor</a> runs manual cleanup,
+drops host data and internal state, and deallocates instances. The component cleanup path
+<a href="https://github.com/bytecodealliance/wasmtime/blob/67d70b4e192e88faa597008560811dc7e2b1414b/crates/wasmtime/src/runtime/component/store.rs#L200">disposes fibers and drops pending host futures</a>. It does not walk every
+stream or future through the ordinary reader/writer close operations as a final protocol
+exchange.</p>
+<p>Wasmtime still cleans up host sources: its <a href="https://github.com/bytecodealliance/wasmtime/blob/67d70b4e192e88faa597008560811dc7e2b1414b/crates/wasmtime/src/runtime/component/concurrent/futures_and_streams.rs#L2167">channel state</a> owns producer and
+consumer closures, and releasing these can run Rust destructors. Jco needs explicit hooks
+because losing interest in a JavaScript promise or retaining a stopped instance does not
+provide the same deterministic destruction mechanism. Pending JavaScript operations may
+remain observable to their callers, so settling them is useful independently of memory
+reclamation.</p>
+<h3 id="resource-ownership"><a class="header" href="#resource-ownership">Resource ownership</a></h3>
+<p>Wasmtime’s <a href="https://github.com/bytecodealliance/wasmtime/blob/67d70b4e192e88faa597008560811dc7e2b1414b/crates/wasmtime/src/runtime/component/resources/host_static.rs#L60"><code>Resource&lt;T&gt;</code> contract</a> leaves host-resource destruction to the
+embedder. Normal <code>Store&lt;T&gt;</code> destruction drops its host data <code>T</code>; <a href="https://github.com/bytecodealliance/wasmtime/blob/67d70b4e192e88faa597008560811dc7e2b1414b/crates/wasmtime/src/runtime/store.rs#L856"><code>Store::into_data()</code></a>
+destroys the store while returning that data to the caller. Store destruction is therefore
+not a promise to invoke each resource’s canonical destructor. Explicit
+<a href="https://github.com/bytecodealliance/wasmtime/blob/67d70b4e192e88faa597008560811dc7e2b1414b/crates/wasmtime/src/runtime/component/resources/any.rs#L248"><code>ResourceAny::resource_drop</code></a> is the operation that can invoke such a destructor.</p>
+<p>Jco adds an explicit cleanup policy for host objects still owned by the guest. It does not
+dispose borrowed host objects or host resources already returned to the caller, and it does
+not execute guest Wasm destructors during stop. A value that needs the stopped guest to
+execute code can no longer use that guest, even if its JavaScript wrapper remains reachable.</p>
+<p>Channel ownership and payload ownership are also separate. After a future delivers its
+payload to the host, disposing that future releases the channel without disposing the
+delivered value. The recipient owns that value and its eventual cleanup.</p>
+<h3 id="interruption-versus-normal-end-of-stream"><a class="header" href="#interruption-versus-normal-end-of-stream">Interruption versus normal end of stream</a></h3>
+<p>A Jco host stream read interrupted by instance stop rejects with an error whose <code>code</code> is
+<code>"ERR_COMPONENT_STOPPED"</code>. Subsequent reads on the interrupted stream also reject. Ordinary
+EOF remains <code>done: true</code>: shutdown does not turn a stream that already ended or was explicitly
+closed into an error. Reads that already copied data still deliver it before a later read
+reports shutdown. See <a href="#recognize-an-interrupted-stream">Recognize an interrupted stream</a>.</p>
+<p>The <a href="https://github.com/WebAssembly/component-model/blob/d230073ce81c6634f175b4d0c5ad900b5253f1f4/design/mvp/CanonicalABI.md#stream-and-future-state">Canonical ABI’s copy results</a> distinguish <code>COMPLETED</code>, <code>DROPPED</code>, and
+<code>CANCELLED</code>, but do not carry a reason identifying instance shutdown. <code>CANCELLED</code> describes
+cancellation of a copy operation; it should not be repurposed as a shutdown reason.
+Jco’s rejection is an additional host-binding policy. It leaves guest-visible copy result
+codes, transferred counts, and ordinary guest drop validation unchanged. It does not require
+a matching teardown notification in Wasmtime or other embeddings.</p>
+<h3 id="waiting-and-cleanup-completion"><a class="header" href="#waiting-and-cleanup-completion">Waiting and cleanup completion</a></h3>
+<p>Waiting for guest task exit, draining output, and completing host disposal are different
+conditions. Waiting for guest tasks to exit before calling <code>stop()</code> allows application work
+to finish normally. Long-lived tasks need an application-specific request to finish, or the
+host can choose to abandon them with <code>stop()</code>.</p>
+<p>A wait that resolves when an instance is stopped establishes that further guest execution
+has ended. It does not establish that asynchronous host disposers, network operations, or
+output destinations have finished. Hosts that require those guarantees must await the
+completion signals supplied by their own providers as well.</p>
+<p>Jco’s Preview 3 output helpers are one such provider-specific mechanism. See
+<a href="#preview-3-output-flush-and-shutdown">Preview 3 output flush and shutdown</a> for draining
+stdout and stderr. Neither Jco stop nor Wasmtime store destruction is a general graceful
+completion protocol for arbitrary external I/O.</p>
+<h3 id="relationship-to-the-canonical-abi"><a class="header" href="#relationship-to-the-canonical-abi">Relationship to the Canonical ABI</a></h3>
+<p>Jco’s dedicated instance-stop hooks are a host embedding convenience, separate from ordinary
+canonical channel drops. They can close pending copies and unwritten future writers during
+teardown while preserving the <a href="https://github.com/WebAssembly/component-model/blob/d230073ce81c6634f175b4d0c5ad900b5253f1f4/design/mvp/CanonicalABI.md#-canon-streamfuturedrop-readablewritable">ordinary guest drop checks</a>. Wasmtime’s store
+destruction is likewise a host lifecycle operation. The ABI remains the authority for guest
+operations; it does not require identical teardown notifications between the two hosts.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="stopping-running-instances"><a class="header" href="#stopping-running-instances">Stopping running instances</a></h1>
+<p>A host controls how long a transpiled component remains usable. Returning from an export,
+closing a channel, draining output, and stopping the instance are separate lifecycle events.
+Choose the operation that matches the work you want to finish:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Operation</th><th>What it finishes</th></tr>
+</thead>
+<tbody>
+<tr><td>Await an exported call</td><td>The call’s result. Guest background work may continue after it returns.</td></tr>
+<tr><td>Dispose a received future or return a stream iterator</td><td>That readable channel end. Other guest work can continue.</td></tr>
+<tr><td><code>instance._util.stop()</code></td><td>Execution and runtime-managed cleanup for the entire generated instantiation.</td></tr>
+<tr><td>Preview 3 <code>cli._flush()</code> / <code>cli._shutdown()</code></td><td>Queued output writes / host-owned stdout and stderr transfers.</td></tr>
+</tbody>
+</table>
+</div>
+<h2 id="stop-an-instance-permanently"><a class="header" href="#stop-an-instance-permanently">Stop an instance permanently</a></h2>
+<p>Call <code>_util.stop()</code> when the host is finished with an instance, including when abandoning
+unfinished work:</p>
+<pre><code class="language-js">import { instantiate } from './component.js';
+
+const instance = await instantiate(getCoreModule, imports);
+try {
+  await instance.run();
+} finally {
+  instance._util.stop();
+}
+</code></pre>
+<p>This example deliberately ends any background work left after <code>run()</code> returns. If that work
+must finish, wait for the application’s completion signal before stopping.</p>
+<p>For direct ES module output, import <code>_util</code> from the generated module and call <code>_util.stop()</code>.
+For instantiation output, use the <code>_util</code> returned by <code>instantiate()</code>. Each instantiation has
+its own runtime state: stopping one stops its entire component graph, including nested
+components, without stopping other instantiations of the same generated module.</p>
+<p>Stopping is permanent. An instance cannot be restarted; create another instantiation to run
+it again. Repeated calls to <code>stop()</code> do nothing.</p>
+<h2 id="what-stopping-does"><a class="header" href="#what-stopping-does">What stopping does</a></h2>
+<p><code>stop()</code> synchronously marks the instance stopped and initiates cleanup:</p>
+<ul>
+<li>Further calls into its components fail, and pending guest calls reject with a
+<code>WebAssembly.RuntimeError</code>. Guest execution cannot resume when pending host work completes.</li>
+<li>Runtime scheduler timers are cleared.</li>
+<li>Both ends of its streams and futures are closed. A host stream read interrupted while waiting
+for data rejects with an error whose <code>code</code> is <code>"ERR_COMPONENT_STOPPED"</code>; a host future read
+still waiting for its value also rejects. Discarded
+host-provided sources receive the disposal notification used when a guest discards their channel.</li>
+<li>Host resources still owned by the guest have their <code>Symbol.dispose</code> method called.
+Borrowed resources and resources already returned to the host are not disposed.</li>
+</ul>
+<p>Guest Wasm destructors are not run. Stopping can also release runtime-managed resources
+after a guest trap.</p>
+<p>If synchronous host-resource disposal throws, cleanup continues for other resources and
+<code>stop()</code> throws an <code>AggregateError</code>. The instance remains stopped. Deferred source disposal
+uses the reporting behavior described in <a href="#preview-3-host-value-disposal">Preview 3 host value disposal</a>.</p>
+<p>The call does not await asynchronous host cleanup. Promise handlers and deferred disposal
+run afterward. Hosts remain responsible for cancelling their own I/O and timers and for
+awaiting any cleanup completion they need to observe. A host operation that ignores its
+disposal notification can continue independently.</p>
+<p>Like other JavaScript APIs, <code>stop()</code> cannot interrupt synchronous Wasm that never yields
+control back to JavaScript. It also does not promise immediate memory reclamation: release
+references to the generated instance, exports, and values so JavaScript garbage collection
+can reclaim them when they are no longer reachable.</p>
+<h2 id="recognize-an-interrupted-stream"><a class="header" href="#recognize-an-interrupted-stream">Recognize an interrupted stream</a></h2>
+<p>A host stream’s <code>next()</code> or <code>read()</code> rejects with <code>code: "ERR_COMPONENT_STOPPED"</code> when
+instance shutdown interrupts it. Reads started after shutdown on that stream also reject.
+This is a JavaScript binding guarantee, not a new Canonical ABI copy result.</p>
+<pre><code class="language-js">try {
+  for await (const item of stream) {
+    consume(item);
+  }
+} catch (error) {
+  if (error?.code !== 'ERR_COMPONENT_STOPPED') throw error;
+  // The instance was stopped before the stream finished normally.
+}
+</code></pre>
+<p>A read that already copied data still delivers that data; a subsequent read reports the
+shutdown. A stream that ended normally or whose iterator was returned or disposed before
+shutdown still reports ordinary EOF (<code>done: true</code>). Calling <code>return()</code> to clean up an
+interrupted iterator remains safe. The error code above applies to host stream reads;
+other stopped operations, including future reads, retain their existing rejection behavior.</p>
+<h2 id="channel-disposal-and-value-ownership"><a class="header" href="#channel-disposal-and-value-ownership">Channel disposal and value ownership</a></h2>
+<p>Disposing a received future releases its readable end. Once <code>await future</code> or a fulfillment
+callback has received a value, the recipient owns that value; disposing the future does not
+dispose it. A copied disposable value that has not yet been delivered is cleaned up when
+the future is discarded. See <a href="#dropping-a-received-future">Dropping a received future</a>.</p>
+<p>Stopping the instance is broader than disposing one channel. Host-owned resources already
+returned to the caller remain the caller’s responsibility. A returned value that needs to
+call back into the stopped guest can no longer execute that guest code.</p>
+<h2 id="finish-work-and-drain-output"><a class="header" href="#finish-work-and-drain-output">Finish work and drain output</a></h2>
+<p>For orderly shutdown, first stop accepting new application work and ask any long-lived guest
+producer to finish through the application’s own protocol. Wait for the work you need to
+preserve, then drain the host destinations before calling <code>stop()</code>.</p>
+<p>An exported call can return while guest tasks continue in the background. Awaiting the call
+alone therefore does not establish that the guest has finished producing output. Similarly,
+completion of a component-model stream write acknowledges the copy to the receiver, not a
+flush to its final destination.</p>
+<p>The Preview 3 shim provides <code>cli._flush()</code> and <code>cli._shutdown()</code> for stdout and stderr.
+<code>_flush()</code> waits for writes already queued at the destinations. <code>_shutdown()</code> closes their
+host-owned readers, finishes active transfers, and awaits destination completion. Producers
+must have stopped writing before <code>_shutdown()</code> begins. These helpers do not stop the component
+instance or wait for all its guest work.</p>
+<p>See <a href="#preview-3-output-flush-and-shutdown">Preview 3 output flush and shutdown</a> for the
+Node.js and browser APIs, destination acknowledgements, and the sequence used by <code>jco run</code>.
+Abruptly stopping an instance does not guarantee delivery of all guest output.</p>
+<h2 id="host-embedding-policy-and-the-canonical-abi"><a class="header" href="#host-embedding-policy-and-the-canonical-abi">Host embedding policy and the Canonical ABI</a></h2>
+<p><code>_util.stop()</code> is a Jco host convenience. Its dedicated shutdown hooks are separate from
+ordinary canonical stream and future drop operations. Shutdown can close pending copies
+and unwritten future writers; ordinary guest operations retain the Canonical ABI’s drop
+checks. Stopping an instance is not an additional canonical instruction.</p>
+<p>See <a href="#stopping-and-shutting-down-instances">Differences with Wasmtime</a>
+for a comparison of pending operations, host sources, resources, and memory during teardown,
+and why Jco provides explicit lifecycle control in browsers and Node.js.</p>
+<div style="break-before: page; page-break-before: always;"></div>
 <h1 id="detecting-traps"><a class="header" href="#detecting-traps">Detecting Traps</a></h1>
 <p>While some errors are represented at the WIT type level and expected, some internal errors
 may cause a component instance to <a href="https://en.wikipedia.org/wiki/Interrupt#Terminology">trap</a>. Jco-generated bindings report the
@@ -5836,7 +6034,8 @@ interact with the stream directly.</p>
 <h1 id="preview-3-output-flush-and-shutdown"><a class="header" href="#preview-3-output-flush-and-shutdown">Preview 3 output flush and shutdown</a></h1>
 <p>The Preview 3 shim provides host helpers for draining stdout and stderr in
 Node.js and browser environments. These helpers are useful when a custom host
-needs to preserve output before exiting or disposing its component.</p>
+needs to preserve output before exiting or disposing its component. For instance-wide
+execution and cleanup, see <a href="#stopping-running-instances">Stopping running instances</a>.</p>
 <h2 id="flush-queued-destination-writes"><a class="header" href="#flush-queued-destination-writes">Flush queued destination writes</a></h2>
 <p>Await <code>stdout._flush()</code> or <code>stderr._flush()</code> to wait for writes currently queued
 on that output destination. <code>cli._flush()</code> waits for both destinations:</p>
@@ -5981,8 +6180,10 @@ and synchronous imports suspended via JSPI, give the guest no handle with which 
 individual call, so they are never disposed.</li>
 <li>If a guest cancels an <code>async</code> import call whose result would have contained a future or
 stream, only the returned promise is disposed, as the future or stream was never created.</li>
-<li>Cancellation of the enclosing task, instance teardown, and the lifetime of resources already
-delivered to the guest are not covered by this mechanism.</li>
+<li>Cancellation of the enclosing task and the lifetime of resources already delivered to the
+guest are not covered by this mechanism. Instance teardown uses a separate
+<a href="#stopping-running-instances">stop operation</a>, which also notifies host-provided channel
+sources of disposal.</li>
 </ul>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="script-only-components"><a class="header" href="#script-only-components">Script-only components</a></h1>
