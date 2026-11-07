@@ -192,10 +192,35 @@ export function lowerImportBackwardsCompat(
     // lifting/lowering (async ABI did not exist when JSPI integratiton was
     // initially merged to enable asynchronously returning values from the host)
     //
-    const requiresManualAsyncResult = !isAsync && !funcTypeIsAsync && isManualAsync;
-    let manualAsyncResult: ReturnType<typeof promiseWithResolvers<unknown>> | undefined;
-    if (requiresManualAsyncResult) {
-        manualAsyncResult = promiseWithResolvers();
+    // Call the host in this slice so a synchronous answer stays synchronous.
+    // Nonblocking tasks, including destructors, trap only on a returned promise.
+    if (!isAsync && !funcTypeIsAsync && isManualAsync) {
+        if (createdTask) {
+            createdTask.enterSync();
+        }
+        try {
+            const result = importFn(...params);
+            const isPromise =
+                result !== null &&
+                (typeof result === 'object' || typeof result === 'function') &&
+                typeof (result as { then?: unknown }).then === 'function';
+            if (createdTask) {
+                createdTask.resolve([isPromise ? undefined : result]);
+            }
+            if (!isPromise) {
+                return subtask.getResult();
+            }
+            return Promise.resolve(result).then(() => subtask.getResult());
+        } catch (error) {
+            if (createdTask) {
+                createdTask.reject(error);
+            }
+            throw error;
+        } finally {
+            if (createdTask) {
+                createdTask.exit();
+            }
+        }
     }
     queueMicrotask(async () => {
         try {
@@ -204,25 +229,15 @@ export function lowerImportBackwardsCompat(
                 await createdTask.enter();
             }
             const asyncRes = await importFn(...params);
-            if (requiresManualAsyncResult) {
-                manualAsyncResult!.resolve(subtask.getResult());
-            }
             if (createdTask) {
                 createdTask.resolve([asyncRes]);
             }
         } catch (err) {
             debugLog('[lowerImportBackwardsCompat()] import fn error:', err);
-            if (requiresManualAsyncResult) {
-                manualAsyncResult!.reject(err);
-                return;
-            }
             task.setErrored(err);
             task.reject(err);
         }
     });
-    if (requiresManualAsyncResult) {
-        return manualAsyncResult!.promise;
-    }
     debugLog('[lowerImportBackwardsCompat()] async-lowered import return', {
         fnName: importFn.fnName,
         componentIdx,
