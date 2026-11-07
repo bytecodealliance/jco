@@ -118,6 +118,41 @@ If not needing this disambiguation feature, and since support for string exports
 export { interface }
 ```
 
+### Generated utilities
+
+Jco-generated bindings provide an `_util` object alongside the component's exports.
+For default ES module output, import it from the generated module:
+
+```js
+import { _util } from './component.js';
+```
+
+With `--instantiation sync` or `--instantiation async`, use the utilities returned by
+`instantiate()` for that instance:
+
+```js
+import { instantiate } from './component.js';
+
+const instance = await instantiate(getCoreModule, imports);
+const { _util } = instance;
+```
+
+| Helper | Purpose |
+| --- | --- |
+| `stop()` | Permanently stop this instantiation and dispose guest-owned host resources. See [Stopping running instances](./advanced/stopping-running-instances.md). |
+| `isComponentError(value)` | Recognize a wrapped, declared WIT `result::err` from this instantiation. See [Recognizing declared errors](./advanced/wit-type-representations.md#results-in-context-function-return-values). |
+
+`isComponentError()` is available when the generated bindings use `ComponentError` wrapping.
+The `jco` API and CLI enable wrapping by default; for `@bytecodealliance/jco-transpile`, set
+`noComponentErrorWrapping: false`. Bindings without error wrapping omit the predicate.
+The error constructor stays private, and the predicate only recognizes errors from the same
+generated module or explicit instantiation. In TypeScript, it narrows the value to
+`Error & { readonly payload: unknown }`.
+
+**Traps are not `ComponentError` instances.** They have a distinct type,
+`WebAssembly.RuntimeError`, and `isComponentError()` returns `false` for them.
+See [Detecting traps](./advanced/detecting-traps.md) for trap handling and notifications.
+
 ### Import Conventions
 
 When using the ESM integration default transpilation output bindings are output directly in the `registry:name/interface` form, but with versions removed.

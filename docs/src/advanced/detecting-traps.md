@@ -10,7 +10,8 @@ it does not always disable the entire instance.
 
 ## Catch traps from exported calls
 
-To detect these traps, use the built-in `WebAssembly.RuntimeError` class:
+To detect these traps, use the built-in `WebAssembly.RuntimeError` class. For bindings that
+use `ComponentError` wrapping, handle declared WIT errors separately with `isComponentError()`:
 
 ```js
 import { instantiate } from './dist/transpiled/component.js';
@@ -22,7 +23,9 @@ const instance = await instantiate(undefined, shim);
 try {
     await instance['ns:pkg/iface'].someFunction();
 } catch (err) {
-    if (err instanceof WebAssembly.RuntimeError) {
+    if (instance._util.isComponentError(err)) {
+        console.error('Declared WIT error:', err.payload);
+    } else if (err instanceof WebAssembly.RuntimeError) {
         console.error(`TRAP: ${err}`);
         // Release runtime-managed resources and end any remaining guest work.
         instance._util.stop();
@@ -33,8 +36,16 @@ try {
 }
 ```
 
-WIT `result<T, E>` values remain part of the component's normal return contract and are not
-thrown as `WebAssembly.RuntimeError` instances.
+**Traps are not `ComponentError` instances.** Jco reports component-model traps as
+`WebAssembly.RuntimeError`, a distinct error type. Declared WIT `result::err` values are part
+of the component's normal return contract; when wrapping is enabled, they are thrown as
+`ComponentError` instances instead. `_util.isComponentError(error)` returns `false` for traps.
+
+For direct ES module output, import `_util` from the generated module and call
+`_util.isComponentError(error)`. The predicate is only generated when the bindings use
+error wrapping. See [WIT result return values](./wit-type-representations.md#results-in-context-function-return-values)
+for wrapping defaults and payload handling, and [Generated utilities](../transpiling.md#generated-utilities)
+for the `_util` overview.
 
 Using `await` inside the `try` block catches both synchronous exceptions and rejected
 asynchronous calls. It cannot catch a trap in guest work that continues after the call
