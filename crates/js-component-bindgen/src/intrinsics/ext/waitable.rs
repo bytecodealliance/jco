@@ -205,7 +205,7 @@ pub(crate) fn import(intrinsic: WaitableIntrinsic) -> RuntimeImport {
     }
 }
 
-pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
+pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     if matches!(
         intrinsic,
         Intrinsic::Waitable(

@@ -552,7 +552,7 @@ pub(crate) fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
     })
 }
 
-pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
+pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     if intrinsic.conditional_suspending_wasm().is_some() {
         args.require_intrinsic(Intrinsic::ConditionalSuspendingWasm);
     }

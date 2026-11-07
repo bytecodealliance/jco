@@ -503,7 +503,7 @@ impl Provides<ResourceIntrinsic> for ExternalRuntime {
         _output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
-        async_task::discover(Intrinsic::Resource(intrinsic), args);
+        async_task::discover_dependencies(Intrinsic::Resource(intrinsic), args);
     }
 }
 
@@ -528,8 +528,8 @@ impl Provides<BaseIntrinsic> for ExternalRuntime {
         if Self::import(i).is_none() {
             InlineRuntime.render(intrinsic, output, args);
         } else {
-            core::discover(i, args);
-            async_task::discover(i, args);
+            core::discover_dependencies(i, args);
+            async_task::discover_dependencies(i, args);
             if i.conditional_suspending_wasm().is_some() {
                 output.push_str(&i.register_conditional_suspending_js(args));
             }
@@ -626,7 +626,7 @@ impl Provides<ComponentIntrinsic> for ExternalRuntime {
         output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
-        component::discover(intrinsic, args);
+        component::discover_dependencies(intrinsic, args);
         if component::import(intrinsic).is_none() {
             InlineRuntime.render(intrinsic, output, args);
         }
@@ -646,7 +646,7 @@ impl Provides<WaitableIntrinsic> for ExternalRuntime {
         _output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
-        waitable::discover(intrinsic.into(), args);
+        waitable::discover_dependencies(intrinsic.into(), args);
     }
 }
 
@@ -683,7 +683,7 @@ impl Provides<AsyncTaskIntrinsic> for ExternalRuntime {
         args: &RenderIntrinsicsArgs<'_>,
     ) {
         if async_task::import(intrinsic).is_some() {
-            async_task::discover(intrinsic.into(), args);
+            async_task::discover_dependencies(intrinsic.into(), args);
         } else {
             InlineRuntime.render(intrinsic, output, args);
         }
