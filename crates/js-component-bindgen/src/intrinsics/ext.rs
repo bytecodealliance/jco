@@ -26,7 +26,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
 mod async_task;
-use async_task::TaskContext;
+use async_task::TaskContextIntrinsic;
 mod component;
 pub(crate) mod conversion;
 mod core;
@@ -57,7 +57,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     Waitable(WaitableContextIntrinsic),
     /// Context intrinsics for error-context tables and operations.
     ErrCtx(ErrCtxContextIntrinsic),
-    Task(TaskContext),
+    /// Context intrinsics for task, subtask, and thread operations.
+    Task(TaskContextIntrinsic),
     /// Capabilities for the `tableGet` resource-table helper.
     ResourceTableGet,
     /// The per-component resource handle index spaces returned by `initializeHandleIndexSpaces`.
@@ -144,7 +145,7 @@ impl RuntimeContextIntrinsic {
         .chain(ComponentContextIntrinsic::get_global_names())
         .chain(WaitableContextIntrinsic::get_global_names())
         .chain(ErrCtxContextIntrinsic::get_global_names())
-        .chain(TaskContext::get_global_names())
+        .chain(TaskContextIntrinsic::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -291,11 +292,11 @@ impl RuntimeContextIntrinsic {
                 Self::InitializeHandleTables,
                 Self::InitializeScopeId,
                 Self::InitializeCallBorrows,
-                Self::Task(TaskContext::Lookup),
+                Self::Task(TaskContextIntrinsic::GetCurrentTask),
             ],
             Self::ResourceDestructorCall => &[
                 Self::Core(CoreContextIntrinsic::InitializeTaskRegisters),
-                Self::Task(TaskContext::Creation),
+                Self::Task(TaskContextIntrinsic::CreateNewCurrentImplicitThread),
                 Self::Component(ComponentContextIntrinsic::InitializeStoreTrap),
             ],
             _ => &[],
