@@ -325,7 +325,10 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
         kind,
     })
 }
-pub(crate) fn discover(intrinsic: ComponentIntrinsic, args: &RenderIntrinsicsArgs<'_>) {
+pub(crate) fn discover_dependencies(
+    intrinsic: ComponentIntrinsic,
+    args: &RenderIntrinsicsArgs<'_>,
+) {
     if let Some(context) = import(intrinsic).and_then(|import| import.context) {
         let mut contexts = Vec::new();
         context.collect(&mut contexts);

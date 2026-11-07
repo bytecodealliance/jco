@@ -645,7 +645,7 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
         kind,
     })
 }
-pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
+pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     if let Some(import) = super::ExternalRuntime::import(intrinsic)
         && let Some(context) = import.context
     {
