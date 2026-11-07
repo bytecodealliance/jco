@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-043e076c.js";
+            window.path_to_searchindex_js = "searchindex-82975c8e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-11cdb37d.js"></script>
@@ -927,6 +927,15 @@ Jco’s default Node capability map is not applied to instantiation output.</p>
 ): { [exportName: string]: any };
 </code></pre>
 <p>Where instead of promises, all functions are synchronous.</p>
+<p><code>options.onTrap</code> is called with each trap of the instance, once, as soon as it happens. That includes
+a trap in a task a guest left running, after the calls of the host’s that started it have returned,
+which no promise would otherwise report; a trap that also fails a call does that as well. A deadlock
+is reported too. A host import throwing something other than a <code>WebAssembly.RuntimeError</code> isn’t a
+trap, and isn’t reported: the host knows it threw.
+<code>onTrap</code> is called from the middle of the runtime’s unwinding: it may call <code>_util.stop()</code>, but it
+shouldn’t use the instance otherwise. An exception it throws is left uncaught.
+See <a href="#receive-background-traps-with-ontrap">Detecting traps</a>
+for examples of catching failed calls and receiving background trap notifications.</p>
 <h3 id="dropping-a-received-future"><a class="header" href="#dropping-a-received-future">Dropping a received future</a></h3>
 <p>A future received from a guest is lazy: receiving it does not consume its value. Read it with
 <code>await future</code>, or call <code>future[Symbol.dispose]?.()</code> to release its readable end. Disposal is
@@ -945,6 +954,7 @@ shutdown, channel and resource ownership, host cleanup, and output draining.</p>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>
 <pre><code class="language-ts">export interface InstantiateOptions {
+  onTrap?: (error: WebAssembly.RuntimeError) =&gt; void;
   shim?: {
     globals?: {
       WebAssembly?: typeof WebAssembly;
@@ -4739,7 +4749,8 @@ instantiating a transpiled component yourself and replacing individual WASI inte
 cleanup behavior across JavaScript and Rust embeddings.</li>
 <li><a href="#stopping-running-instances">Stopping running instances</a>: ending guest execution,
 releasing runtime-managed resources, and coordinating host cleanup.</li>
-<li><a href="#detecting-traps">Detecting traps</a>: telling a component trap apart from an ordinary error.</li>
+<li><a href="#detecting-traps">Detecting traps</a>: catching component traps and receiving background
+trap notifications with <code>onTrap</code>.</li>
 <li><a href="#preview-3-streams-and-backpressure">Preview 3 streams and backpressure</a>: how WASI 0.3
 streams flow between host and guest.</li>
 <li><a href="#preview-3-output-flush-and-shutdown">Preview 3 output flush and shutdown</a>: draining
@@ -5891,21 +5902,24 @@ and why Jco provides explicit lifecycle control in browsers and Node.js.</p>
 <p>While some errors are represented at the WIT type level and expected, some internal errors
 may cause a component instance to <a href="https://en.wikipedia.org/wiki/Interrupt#Terminology">trap</a>. Jco-generated bindings report the
 component-model traps they detect with the built-in <code>WebAssembly.RuntimeError</code> class.</p>
-<p>After an instance has trapped, Jco marks the component instance as unusable. Any subsequent
-call throws the original trap without re-entering the component.</p>
+<p>A trap that disables a component instance makes subsequent calls throw the original trap
+without re-entering the component. A trap in a background task can end only that task;
+it does not always disable the entire instance.</p>
+<h2 id="catch-traps-from-exported-calls"><a class="header" href="#catch-traps-from-exported-calls">Catch traps from exported calls</a></h2>
 <p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class:</p>
-<pre><code class="language-js">import { instantiate } from "./dist/transpiled/component.js";
-import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+<pre><code class="language-js">import { instantiate } from './dist/transpiled/component.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
 const shim = new WASIShim().getImportObject();
 const instance = await instantiate(undefined, shim);
 
 try {
-    instance['ns:pkg/iface'].someFunction();
+    await instance['ns:pkg/iface'].someFunction();
 } catch (err) {
     if (err instanceof WebAssembly.RuntimeError) {
         console.error(`TRAP: ${err}`);
-        // The instance is now disabled and cannot be called again.
+        // Release runtime-managed resources and end any remaining guest work.
+        instance._util.stop();
     } else {
         // Other exceptions are unexpected and should be handled separately.
         throw err;
@@ -5914,6 +5928,55 @@ try {
 </code></pre>
 <p>WIT <code>result&lt;T, E&gt;</code> values remain part of the component’s normal return contract and are not
 thrown as <code>WebAssembly.RuntimeError</code> instances.</p>
+<p>Using <code>await</code> inside the <code>try</code> block catches both synchronous exceptions and rejected
+asynchronous calls. It cannot catch a trap in guest work that continues after the call
+has returned.</p>
+<h2 id="receive-background-traps-with-ontrap"><a class="header" href="#receive-background-traps-with-ontrap">Receive background traps with <code>onTrap</code></a></h2>
+<p>When generating bindings with <code>--instantiation async</code> or <code>--instantiation sync</code>, pass an
+<code>onTrap</code> callback in the fourth argument to <code>instantiate</code>. The callback receives each trap
+once, including traps in background tasks and deadlocks. It also receives traps that throw
+or reject an exported call, so catching that call is still necessary.</p>
+<p>For example, a Node.js host using asynchronous instantiation can log traps even after
+<code>someFunction()</code> has returned:</p>
+<pre><code class="language-js">import { readFile } from 'node:fs/promises';
+import { instantiate } from './dist/transpiled/component.js';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+
+const getCoreModule = async (path) =&gt;
+    WebAssembly.compile(await readFile(new URL(`./dist/transpiled/${path}`, import.meta.url)));
+
+const instance = await instantiate(
+    getCoreModule,
+    new WASIShim().getImportObject(),
+    undefined, // Use the default core Wasm instantiator.
+    {
+        onTrap(error) {
+            console.error('Component trapped:', error);
+        },
+    },
+);
+
+try {
+    await instance['ns:pkg/iface'].someFunction();
+} catch (error) {
+    // End remaining guest work before propagating the failed call.
+    instance._util.stop();
+    throw error;
+}
+// Background guest work can still report traps through onTrap after this point.
+</code></pre>
+<p>The callback belongs to this instantiation, including its nested components. Other
+instantiations have their own callbacks. Without <code>onTrap</code>, traps retain their existing
+behavior, but a background trap may have no outstanding host call to reject.</p>
+<p><code>onTrap</code> runs synchronously while the runtime unwinds the trap. It may call
+<code>instance._util.stop()</code> to end the remaining guest work, but it should not call other guest
+exports. Stopping an instance does not notify <code>onTrap</code>, and no further notifications are
+sent after it is stopped. See <a href="#stopping-running-instances">Stopping running instances</a>
+for cleanup and host-owned I/O responsibilities.</p>
+<p>If <code>onTrap</code> throws, its exception is rethrown in a microtask as an uncaught exception so
+the runtime can finish unwinding the original trap. Keep the callback from throwing when
+using it for logging or cleanup. Host imports throwing an error other than
+<code>WebAssembly.RuntimeError</code> do not trigger <code>onTrap</code>.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="preview-3-streams-and-backpressure"><a class="header" href="#preview-3-streams-and-backpressure">Preview 3 Streams and Backpressure</a></h1>
 <p>Preview 3 WIT <code>stream&lt;T&gt;</code> values are asynchronous sequences of elements.</p>

@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-043e076c.js";
+            window.path_to_searchindex_js = "../searchindex-82975c8e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-11cdb37d.js"></script>
@@ -194,7 +194,8 @@ instantiating a transpiled component yourself and replacing individual WASI inte
 cleanup behavior across JavaScript and Rust embeddings.</li>
 <li><a href="./stopping-running-instances.html">Stopping running instances</a>: ending guest execution,
 releasing runtime-managed resources, and coordinating host cleanup.</li>
-<li><a href="./detecting-traps.html">Detecting traps</a>: telling a component trap apart from an ordinary error.</li>
+<li><a href="./detecting-traps.html">Detecting traps</a>: catching component traps and receiving background
+trap notifications with <code>onTrap</code>.</li>
 <li><a href="./preview3-streams-and-backpressure.html">Preview 3 streams and backpressure</a>: how WASI 0.3
 streams flow between host and guest.</li>
 <li><a href="./preview3-output-flush-and-shutdown.html">Preview 3 output flush and shutdown</a>: draining

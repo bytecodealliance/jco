@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-043e076c.js";
+            window.path_to_searchindex_js = "searchindex-82975c8e.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-11cdb37d.js"></script>
@@ -430,6 +430,15 @@ Jco’s default Node capability map is not applied to instantiation output.</p>
 ): { [exportName: string]: any };
 </code></pre>
 <p>Where instead of promises, all functions are synchronous.</p>
+<p><code>options.onTrap</code> is called with each trap of the instance, once, as soon as it happens. That includes
+a trap in a task a guest left running, after the calls of the host’s that started it have returned,
+which no promise would otherwise report; a trap that also fails a call does that as well. A deadlock
+is reported too. A host import throwing something other than a <code>WebAssembly.RuntimeError</code> isn’t a
+trap, and isn’t reported: the host knows it threw.
+<code>onTrap</code> is called from the middle of the runtime’s unwinding: it may call <code>_util.stop()</code>, but it
+shouldn’t use the instance otherwise. An exception it throws is left uncaught.
+See <a href="./advanced/detecting-traps.html#receive-background-traps-with-ontrap">Detecting traps</a>
+for examples of catching failed calls and receiving background trap notifications.</p>
 <h3 id="dropping-a-received-future"><a class="header" href="#dropping-a-received-future">Dropping a received future</a></h3>
 <p>A future received from a guest is lazy: receiving it does not consume its value. Read it with
 <code>await future</code>, or call <code>future[Symbol.dispose]?.()</code> to release its readable end. Disposal is
@@ -448,6 +457,7 @@ shutdown, channel and resource ownership, host cleanup, and output draining.</p>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>
 <pre><code class="language-ts">export interface InstantiateOptions {
+  onTrap?: (error: WebAssembly.RuntimeError) =&gt; void;
   shim?: {
     globals?: {
       WebAssembly?: typeof WebAssembly;
