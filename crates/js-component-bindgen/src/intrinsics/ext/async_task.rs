@@ -302,13 +302,19 @@ impl TaskContextIntrinsic {
             _ => &[],
         }
     }
-    pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
+    pub(crate) fn render(self, output: &mut Source, args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
         if self == Self::IsFutureValue {
-            uwriteln!(
-                output,
-                "const {local} = value => value instanceof FutureValue;"
-            );
+            // Contexts are emitted after dependency discovery. A task only needs
+            // the lazy future bridge when another intrinsic actually uses futures.
+            let predicate = if args.intrinsics.contains(&Intrinsic::AsyncFuture(
+                AsyncFutureIntrinsic::FutureValueClass,
+            )) {
+                "value => value instanceof FutureValue"
+            } else {
+                "() => false"
+            };
+            uwriteln!(output, "const {local} = {predicate};");
             return;
         }
         let properties = match self {
@@ -661,11 +667,6 @@ pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsic
         )) {
             args.require_intrinsic(crate::intrinsics::component::ComponentIntrinsic::ReportTrap);
         }
-        if contexts.contains(&RuntimeContextIntrinsic::Task(
-            TaskContextIntrinsic::InitializeAsyncTaskClass,
-        )) {
-            args.require_intrinsic(AsyncFutureIntrinsic::FutureValueClass);
-        }
     }
 }
 #[cfg(all(test, feature = "external-runtime"))]
@@ -766,9 +767,20 @@ mod tests {
         ] {
             assert_eq!(source.matches(once).count(), 1, "{once}");
         }
-        assert!(source.contains("class FutureValue"));
+        assert!(!source.contains("class FutureValue"));
+        assert!(source.contains("const _jcoTaskFuturePredicate = () => false;"));
+    }
+
+    #[test]
+    fn tasks_preserve_the_future_bridge_when_futures_are_selected() {
+        let source = generated([
+            Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass),
+        ]);
+        assert_eq!(source.matches("class FutureValue").count(), 1);
         assert!(source.contains("value => value instanceof FutureValue"));
     }
+
     #[test]
     fn callback_binding_preserves_plain_and_suspending_receivers() {
         let intrinsic = Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall);
