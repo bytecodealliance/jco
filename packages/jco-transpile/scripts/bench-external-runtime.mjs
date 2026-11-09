@@ -69,7 +69,7 @@ export async function main(args = []) {
 
         // Render sizes, timing uncertainty, and diagnostic findings.
         const lines = [
-            '# Named runtime ' + portfolio + ' benchmark',
+            '## Inline and external runtime comparison (' + portfolio + ')',
             '',
             `Coverage: ${result.settings.coverage.mapped.length} variants. Input fingerprint: ${result.inputFingerprint}.`,
             '',

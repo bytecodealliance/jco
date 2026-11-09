@@ -1,4 +1,4 @@
-name: external-runtime-bench
+name: runtime bench
 
 on:
     workflow_dispatch:
@@ -45,9 +45,13 @@ jobs:
             - name: Build and compare bundled runtimes
               run: node script/bench-runtime.mjs
 
-            - name: Upload bundled runtime measurements
+            - name: Publish runtime benchmark summary
+              if: always()
+              run: node script/bench-runtime.mjs --summary
+
+            - name: Upload runtime benchmark results
               if: always()
               uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
               with:
-                  name: external-runtime-bench
-                  path: packages/jco-transpile/bench/output/external-runtime-named
+                  name: runtime-bench
+                  path: packages/jco-transpile/bench/output
