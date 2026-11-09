@@ -17,6 +17,8 @@ import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 import { composeCallerCallee, getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
 
+const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
+
 interface Probe {
     readonly createTask: (args: { componentIdx: number; isAsync: boolean }) => { task: AsyncTask; threadID: number };
     readonly prepare: (...args: unknown[]) => void;
@@ -143,7 +145,7 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
 }
 
 for (const external of [false, true]) {
-    test.concurrent.each([0, 1, 2])(
+    test.concurrent.skipIf(!hasJspi).each([0, 1, 2])(
         'generated prepare normalizes all encoding operands (%s, external=' + external + ')',
         async (encoding) => {
             await withProbe(external, (probe) => {
@@ -179,35 +181,38 @@ for (const external of [false, true]) {
         },
     );
 
-    test.concurrent('generated prepare captures actual return memory (external=' + external + ')', async () => {
-        await withProbe(external, (probe) => {
-            const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
-            probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
-            const memory: RuntimeMemory = { buffer: new ArrayBuffer(32) };
-            let reads = 0;
-            probe.prepare(
-                3,
-                () => {
-                    reads++;
-                    return memory;
-                },
-                () => [],
-                () => {},
-                99,
-                100,
-                7,
-                1,
-                0,
-                -2,
-                8,
-            );
-            const child = probe.tasks.get(100)!.at(-1)!.task;
-            assert.strictEqual(child.getReturnMemory(), memory);
-            assert.strictEqual(reads, 1);
-        });
-    });
+    test.concurrent.skipIf(!hasJspi)(
+        'generated prepare captures actual return memory (external=' + external + ')',
+        async () => {
+            await withProbe(external, (probe) => {
+                const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
+                probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
+                const memory: RuntimeMemory = { buffer: new ArrayBuffer(32) };
+                let reads = 0;
+                probe.prepare(
+                    3,
+                    () => {
+                        reads++;
+                        return memory;
+                    },
+                    () => [],
+                    () => {},
+                    99,
+                    100,
+                    7,
+                    1,
+                    0,
+                    -2,
+                    8,
+                );
+                const child = probe.tasks.get(100)!.at(-1)!.task;
+                assert.strictEqual(child.getReturnMemory(), memory);
+                assert.strictEqual(reads, 1);
+            });
+        },
+    );
 
-    test.concurrent(
+    test.concurrent.skipIf(!hasJspi)(
         'generated host result lowering selects registered memory (external=' + external + ')',
         async () => {
             await withProbe(external, (probe) => {
