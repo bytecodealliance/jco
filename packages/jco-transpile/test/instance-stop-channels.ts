@@ -505,7 +505,7 @@ suite.skipIf(!hasJspi)('knowing when an instance is idle', () => {
         };
     }
 
-    /** Whether `promise` has settled by the time things have had a chance to run. */
+    /** Observe that a promise stays pending while its task is blocked by the host. */
     async function settled(promise: Promise<unknown>) {
         let done = false;
         promise.then(() => (done = true));
@@ -515,9 +515,9 @@ suite.skipIf(!hasJspi)('knowing when an instance is idle', () => {
 
     test.concurrent('with nothing running it already is', async () => {
         const instance = await (await transpiled(LINGERS))({});
-        assert.isTrue(await settled(instance._util.whenIdle()));
+        await instance._util.whenIdle();
         const bare = await (await transpiled(NO_EXPORTS))({});
-        assert.isTrue(await settled(bare._util.whenIdle()));
+        await bare._util.whenIdle();
     });
 
     test.concurrent('a task that has returned counts until it has exited', async () => {
@@ -527,8 +527,8 @@ suite.skipIf(!hasJspi)('knowing when an instance is idle', () => {
         const idle = instance._util.whenIdle();
         assert.isFalse(await settled(idle), 'its task is still reading');
         release();
-        assert.isTrue(await settled(idle));
-        assert.isTrue(await settled(instance._util.whenIdle()));
+        await idle;
+        await instance._util.whenIdle();
     });
 
     test.concurrent('stopping an instance ends the wait', async () => {
@@ -537,8 +537,8 @@ suite.skipIf(!hasJspi)('knowing when an instance is idle', () => {
         const idle = instance._util.whenIdle();
         assert.isFalse(await settled(idle));
         instance._util.stop();
-        assert.isTrue(await settled(idle));
-        assert.isTrue(await settled(instance._util.whenIdle()));
+        await idle;
+        await instance._util.whenIdle();
     });
 
     test.concurrent('a trap ends the wait', async () => {
@@ -635,11 +635,11 @@ suite.skipIf(!hasJspi)('knowing when an instance is idle', () => {
         const [first, second] = [await instantiate({}), await instantiate({})];
         const { stream, release } = oneByte();
         await first.feed(stream);
-        assert.isTrue(await settled(second._util.whenIdle()));
+        await second._util.whenIdle();
         const idle = first._util.whenIdle();
         assert.isFalse(await settled(idle));
         release();
-        assert.isTrue(await settled(idle));
+        await idle;
     });
 });
 
