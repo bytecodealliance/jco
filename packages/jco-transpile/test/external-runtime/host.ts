@@ -8,6 +8,7 @@ import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
 
 const hostUrl = new URL('intrinsics/host.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
+const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 function fixture(name: string) {
     return fileURLToPath(new URL(`../fixtures/components/p3/${name}.wat`, import.meta.url));
 }
@@ -76,7 +77,7 @@ export function storeEventInComponentMemory() {
 }
 
 for (const instantiation of ['sync', 'async', undefined] as const) {
-    test.concurrent.each([false, true])(
+    test.concurrent.skipIf(!hasJspi).each([false, true])(
         `host named provider (${instantiation ?? 'direct'}, minify=%s)`,
         async (minify) => {
             const dir = await getTmpDir();
@@ -182,7 +183,7 @@ test.concurrent.each([
     }
 });
 
-test.concurrent('host uses the selected JSPI namespace lazily with its actual receiver', async () => {
+test.concurrent.skipIf(!hasJspi)('host uses the selected JSPI namespace lazily with its actual receiver', async () => {
     const dir = await getTmpDir();
     try {
         const { files } = await transpile(fixture('sync-lowered-async-callee'), {

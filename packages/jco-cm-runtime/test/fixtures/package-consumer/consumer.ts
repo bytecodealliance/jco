@@ -62,8 +62,9 @@ if (
         event: { code: 1, payload0: 17, payload1: 23 },
     }) !== 1 ||
     new DataView(eventMemory.buffer).getUint32(4, true) !== 23
-)
-    {throw new Error('host event writer consumer failed');}
+) {
+    throw new Error('host event writer consumer failed');
+}
 if (custom.getCurrentTask({ tasks: custom.initializeTasksByComponent(), registers: {} }, 0) !== undefined) {
     throw new Error('copied task contract consumer failed');
 }
