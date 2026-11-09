@@ -5,6 +5,24 @@ Each run builds both modes from the same revision and fixtures.
 
 ## Running
 
+Run the complete CI benchmark locally from the repository root:
+
+```sh
+node script/bench-runtime.mjs
+```
+
+This installs dependencies, builds the transpiler, runtime and fixtures, checks
+types and bundled correctness, and runs the existing full parity suite. It requires
+Node.js 24+, pnpm 11 and the repository's Rust toolchain. Use `--skip-build` to reuse
+prepared dependencies and artifacts. Run on an otherwise idle machine; Linux runs
+also audit for leftover workers before timing.
+
+The independent `external-runtime-bench` workflow runs this same script on pushes
+and pull requests to `main`, for merge groups, and through **Run workflow** in the
+GitHub Actions UI once the workflow is on the default branch. Its build and benchmark
+work runs independently of the main test workflow. Measurement artifacts are uploaded
+even when the benchmark fails.
+
 Build the local transpiler, Component Model runtime, and test fixtures first
 (see [transpilation tests](../../test/README.md)).
 Run measurements on an otherwise idle machine, after builds and functional tests finish.
@@ -22,6 +40,25 @@ Omit `--smoke` when recording the full matrix.
 Recording requires a complete matrix, is disabled in CI and parity mode, and never overwrites an existing baseline.
 A missing matching baseline fails ordinary runs; use `--parity` to check parity without one.
 Recording observations does not establish parity.
+
+`named-baselines/` contains saved JSON measurements, not executable benchmark
+suites. Baseline and parity measurements share `test/foundation.ts` and the same
+fixture catalog; `verify` runs the separate functional tests:
+
+| Command                         | Portfolio    | Acceptance check                                                           |
+| ------------------------------- | ------------ | -------------------------------------------------------------------------- |
+| `bench:external-runtime`        | Full         | Regression against the matching saved baseline                             |
+| `bench:external-runtime:smoke`  | Smoke subset | Regression against its matching saved baseline                             |
+| `bench:external-runtime:parity` | Full         | Inline/external budgets from the current build; no saved baseline required |
+| `bench:external-runtime:verify` | Full         | Functional correctness and integrity checks; no timing gate                |
+
+The top-level script calls `verify` and then `parity`; it does not add another timing
+suite or run a second baseline comparison. Correctness checks intentionally overlap:
+the functional preflight verifies bundles, and the timing suite verifies its own
+freshly built bundles before measuring them. Integrity canaries also run in both
+commands. Historical baseline files can describe
+older fixture matrices and toolchains; they are selected only by an exact input
+fingerprint, not run as separate suites.
 
 Run artifacts go under `bench/output/external-runtime-named/run-*`.
 `JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT` overrides the output root; `latest.json` identifies the latest run and its status.
