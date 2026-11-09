@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-083431fb.js";
+            window.path_to_searchindex_js = "searchindex-dab95095.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-11cdb37d.js"></script>
+        <script src="toc-332598f4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -756,6 +756,9 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
 </li>
 <li>
+<p><code>--call-tracking</code>: Emit optional invocation handles to observe selected guest execution. See <a href="#tracking-individual-calls">Tracking individual calls</a>.</p>
+</li>
+<li>
 <p><code>--no-component-error-wrapping</code>: Throw the lifted error payload directly for a top-level <code>result::err</code> instead of wrapping it in a generated <code>ComponentError</code>. Jco preserves wrapping by default for compatibility.</p>
 </li>
 <li>
@@ -987,6 +990,8 @@ shutdown, channel and resource ownership, host cleanup, and output draining.</p>
 export returns. It also resolves when the instance stops or traps. See
 <a href="#wait-for-guest-tasks-to-exit">Wait for guest tasks to exit</a>
 for completion semantics and an orderly shutdown example.</p>
+<p>With <code>--call-tracking</code>, <code>_util.calls.start(fn, ...args)</code> returns a handle with a separate
+<code>finished</code> promise for selected guest execution. See <a href="#tracking-individual-calls">Tracking individual calls</a>.</p>
 <h3 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h3>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>
@@ -5959,6 +5964,13 @@ try {
 <p>Use a host timeout or other application policy if waiting indefinitely is inappropriate.
 Calling <code>stop()</code> abandons outstanding guest work and releases idle waiters; it does not wait
 for normal task exit first. Keep waiting and forced teardown as separate choices.</p>
+<h2 id="wait-for-selected-calls"><a class="header" href="#wait-for-selected-calls">Wait for selected calls</a></h2>
+<p>With <code>--call-tracking</code>, use <code>_util.calls.start(exportedFunction, ...args)</code> to obtain a
+handle whose <code>result</code> preserves the call’s return value and whose <code>finished</code> promise
+reports when that invocation’s guest execution and descendant calls have ended.
+Unrelated long-lived calls do not keep this wait pending. See
+<a href="#tracking-individual-calls">Tracking individual calls</a> for usage, completion outcomes, and
+stream/future consumption requirements.</p>
 <h2 id="finish-work-and-drain-output"><a class="header" href="#finish-work-and-drain-output">Finish work and drain output</a></h2>
 <p>For orderly shutdown, first stop accepting new application work and ask any long-lived guest
 producer to finish through the application’s own protocol. Wait for the work you need to
@@ -5983,6 +5995,107 @@ checks. Stopping an instance is not an additional canonical instruction.</p>
 <p>See <a href="#stopping-and-shutting-down-instances">Differences with Wasmtime</a>
 for a comparison of pending operations, host sources, resources, and memory during teardown,
 and why Jco provides explicit lifecycle control in browsers and Node.js.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="tracking-individual-calls"><a class="header" href="#tracking-individual-calls">Tracking individual calls</a></h1>
+<p>An exported call can return a stream or future while its guest task continues producing
+values. Awaiting the result therefore does not establish that the guest has finished.
+Whole-instance <code>whenIdle()</code> includes all guest work, so an unrelated long-lived call can
+keep it pending indefinitely.</p>
+<p>Optional call tracking lets a host observe the end of one invocation’s guest execution,
+including its descendant calls, while other work continues.</p>
+<h2 id="enable-tracking"><a class="header" href="#enable-tracking">Enable tracking</a></h2>
+<p>Enable tracking when transpiling:</p>
+<pre><code class="language-sh">jco transpile component.wasm -o out --instantiation async --call-tracking
+</code></pre>
+<p>The JavaScript transpilation option is <code>callTracking: true</code>. The Rust API exposes
+<code>TranspileConfig::call_tracking</code> through <code>transpile_with_config</code>. For standalone host
+declarations, use <code>jco types --call-tracking</code> or Rust’s <code>generate_types_with_config</code>.</p>
+<p>Enabled bindings expose <code>instance._util.calls</code>. Direct ESM output exposes the same API
+through its <code>_util</code> export. Without the option, neither the API nor its instrumentation
+is generated. This is an experimental Jco embedding feature, not a Canonical ABI extension.</p>
+<h2 id="start-and-observe-a-call"><a class="header" href="#start-and-observe-a-call">Start and observe a call</a></h2>
+<pre><code class="language-js">const call = instance._util.calls.start(instance.processRequest, request);
+const response = await call.result;
+
+// Consume the output while its guest producer can still run. Waiting for finished
+// before consuming a backpressured stream could deadlock its producer.
+for await (const chunk of response.body) {
+  await destination.write(chunk);
+}
+
+const completion = await call.finished;
+switch (completion.status) {
+  case 'completed':
+    break;
+  case 'stopped':
+    throw new Error('The instance was stopped before execution finished');
+  case 'trapped':
+    throw completion.error;
+}
+</code></pre>
+<p><code>start(fn, ...args)</code> invokes a generated export from this instance and returns a frozen
+handle with two properties:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Property</th><th>Meaning</th></tr>
+</thead>
+<tbody>
+<tr><td><code>result</code></td><td>The export’s ordinary return value, promise, or future wrapper, with the same representation as a direct call.</td></tr>
+<tr><td><code>finished</code></td><td>A promise for the invocation’s terminal guest-execution outcome. It does not reject.</td></tr>
+</tbody>
+</table>
+</div>
+<p>Synchronous exceptions propagate from <code>start()</code> without returning a handle. Asynchronous
+failures remain observable through <code>result</code>. A <code>completed</code> execution outcome says that the
+selected guest execution has ended; a declared WIT error can still make <code>result</code> fail.
+A <code>trapped</code> outcome contains the invocation’s trap error or a store-wide trap error.
+Existing <code>onTrap</code> notifications still apply. Stopping an instance settles outstanding
+handles as <code>stopped</code>; a handle that has already finished keeps its original outcome.</p>
+<p>Calls are associated at their generated entry point. There is no ambient “last call”
+lookup, and calls made reentrantly by host imports receive separate handles when started
+through the tracking API. Functions from another instantiation, arbitrary callbacks, and
+bound wrappers are rejected with <code>TypeError</code> before invocation. Export aliases that refer
+to the same generated function are accepted.</p>
+<p>For exported resource methods, supply the receiver explicitly:</p>
+<pre><code class="language-js">const read = instance._util.calls.startWithThis(resource, resource.read, size);
+const bytes = await read.result;
+const completion = await read.finished;
+</code></pre>
+<p>Exported resource constructors can be passed directly to <code>start(ResourceClass, ...args)</code>.
+Constructing or awaiting a handle does not transfer ownership of returned resources.</p>
+<h2 id="streams-futures-and-selected-work"><a class="header" href="#streams-futures-and-selected-work">Streams, futures, and selected work</a></h2>
+<p>Tracking starts the invocation immediately, including exports whose future-returning
+wrapper would otherwise defer execution until read. It does not read the returned future
+or consume returned streams. The usual awaitable layers and disposal behavior are
+preserved. Continue consuming or disposing channel results according to their ordinary
+contracts; their producers may need that participation before <code>finished</code> can settle.</p>
+<p>A handle includes the guest tasks transitively called by its invocation, even if the
+initial task exits first. It does not include unrelated calls merely because they share
+an instance or exchange stream values. To wait for several nodes in a dataflow pipeline,
+keep the handles for the selected producer and consumer invocations:</p>
+<pre><code class="language-js">const outcomes = await Promise.all(selectedCalls.map(call =&gt; call.finished));
+</code></pre>
+<p>Completion does not await arbitrary host I/O, destination flushing, asynchronous host
+cleanup, or release of every resource and task handle. It is an execution predicate, not
+a resource-lifetime predicate. A selected long-lived producer can keep its handle pending
+indefinitely. Tracking neither cancels a call nor prevents new calls. Whole-instance
+<code>whenIdle()</code> and <code>stop()</code> retain their existing behavior.</p>
+<h2 id="runtime-compatibility-and-cost"><a class="header" href="#runtime-compatibility-and-cost">Runtime compatibility and cost</a></h2>
+<p>Tracking lives in generated binding glue and works with inline intrinsics and external
+runtime providers. It reuses the existing task ancestry and idle-notification contracts;
+providers need no additional task methods, scheduler fields, modules, or feature flag.
+A provider that already correctly implements those lifecycle contracts can be used
+unchanged.</p>
+<p>Enabled output adds export registration and invocation-entry instrumentation. Only calls
+started through the tracking API retain tracking records. While handles are pending,
+lifecycle notifications scan live guest tasks to determine which selected roots still
+have work. Finished records release their internal task references. Applications that do
+not need this facility should leave it disabled.</p>
+<p>Wasmtime’s optional task-group hooks also support attributing activity to an originating
+call, including tracing enter/exit notifications. Its group disposal includes task-handle
+lifetimes. Jco’s handles intentionally document guest execution completion instead; they
+do not expose runtime tasks or reproduce Wasmtime’s full hook API.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="detecting-traps"><a class="header" href="#detecting-traps">Detecting Traps</a></h1>
 <p>While some errors are represented at the WIT type level and expected, some internal errors

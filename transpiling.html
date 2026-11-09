@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-083431fb.js";
+            window.path_to_searchindex_js = "searchindex-dab95095.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-11cdb37d.js"></script>
+        <script src="toc-332598f4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -257,6 +257,9 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
+</li>
+<li>
+<p><code>--call-tracking</code>: Emit optional invocation handles to observe selected guest execution. See <a href="./advanced/call-tracking.html">Tracking individual calls</a>.</p>
 </li>
 <li>
 <p><code>--no-component-error-wrapping</code>: Throw the lifted error payload directly for a top-level <code>result::err</code> instead of wrapping it in a generated <code>ComponentError</code>. Jco preserves wrapping by default for compatibility.</p>
@@ -490,6 +493,8 @@ shutdown, channel and resource ownership, host cleanup, and output draining.</p>
 export returns. It also resolves when the instance stops or traps. See
 <a href="./advanced/stopping-running-instances.html#wait-for-guest-tasks-to-exit">Wait for guest tasks to exit</a>
 for completion semantics and an orderly shutdown example.</p>
+<p>With <code>--call-tracking</code>, <code>_util.calls.start(fn, ...args)</code> returns a handle with a separate
+<code>finished</code> promise for selected guest execution. See <a href="./advanced/call-tracking.html">Tracking individual calls</a>.</p>
 <h3 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h3>
 <p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
 from the generated bindings as <code>InstantiateOptions</code>:</p>

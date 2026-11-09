@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-083431fb.js";
+            window.path_to_searchindex_js = "../searchindex-dab95095.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-11cdb37d.js"></script>
+        <script src="../toc-332598f4.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -295,6 +295,13 @@ try {
 <p>Use a host timeout or other application policy if waiting indefinitely is inappropriate.
 Calling <code>stop()</code> abandons outstanding guest work and releases idle waiters; it does not wait
 for normal task exit first. Keep waiting and forced teardown as separate choices.</p>
+<h2 id="wait-for-selected-calls"><a class="header" href="#wait-for-selected-calls">Wait for selected calls</a></h2>
+<p>With <code>--call-tracking</code>, use <code>_util.calls.start(exportedFunction, ...args)</code> to obtain a
+handle whose <code>result</code> preserves the call’s return value and whose <code>finished</code> promise
+reports when that invocation’s guest execution and descendant calls have ended.
+Unrelated long-lived calls do not keep this wait pending. See
+<a href="./call-tracking.html">Tracking individual calls</a> for usage, completion outcomes, and
+stream/future consumption requirements.</p>
 <h2 id="finish-work-and-drain-output"><a class="header" href="#finish-work-and-drain-output">Finish work and drain output</a></h2>
 <p>For orderly shutdown, first stop accepting new application work and ask any long-lived guest
 producer to finish through the application’s own protocol. Wait for the work you need to
@@ -328,7 +335,7 @@ and why Jco provides explicit lifecycle control in browsers and Node.js.</p>
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                             </a>
 
-                            <a rel="next prefetch" href="../advanced/detecting-traps.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                            <a rel="next prefetch" href="../advanced/call-tracking.html" class="mobile-nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                                 <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                             </a>
 
@@ -342,7 +349,7 @@ and why Jco provides explicit lifecycle control in browsers and Node.js.</p>
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M41.4 233.4c-12.5 12.5-12.5 32.8 0 45.3l160 160c12.5 12.5 32.8 12.5 45.3 0s12.5-32.8 0-45.3L109.3 256 246.6 118.6c12.5-12.5 12.5-32.8 0-45.3s-32.8-12.5-45.3 0l-160 160z"/></svg></span>
                     </a>
 
-                    <a rel="next prefetch" href="../advanced/detecting-traps.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
+                    <a rel="next prefetch" href="../advanced/call-tracking.html" class="nav-chapters next" title="Next chapter" aria-label="Next chapter" aria-keyshortcuts="Right">
                         <span class=fa-svg><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><!--! Font Awesome Free 6.2.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2022 Fonticons, Inc. --><path d="M278.6 233.4c12.5 12.5 12.5 32.8 0 45.3l-160 160c-12.5 12.5-32.8 12.5-45.3 0s-12.5-32.8 0-45.3L210.7 256 73.4 118.6c-12.5-12.5-12.5-32.8 0-45.3s32.8-12.5 45.3 0l160 160z"/></svg></span>
                     </a>
             </nav>
