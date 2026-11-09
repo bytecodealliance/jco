@@ -20,7 +20,7 @@ function rustComponent(name) {
 }
 
 /** Transpile a Rust component, or a focused canonical ABI regression written in WAT. */
-async function generated(componentUrl: URL | string) {
+async function generated(componentUrl: URL | string, callTracking = false) {
     await $init;
     let component: Uint8Array;
     if (typeof componentUrl === 'string') {
@@ -31,6 +31,7 @@ async function generated(componentUrl: URL | string) {
     }
     const { files } = generate(component, {
         name: 'component',
+        callTracking,
         instantiation: { tag: 'async' },
         noTypescript: true,
         cmRuntimeEsModule:
@@ -43,10 +44,10 @@ async function generated(componentUrl: URL | string) {
 }
 
 /** `instantiate` for `wat`: each call makes a new instance of one transpiled module. */
-async function transpiled(wat) {
+async function transpiled(wat, callTracking = false) {
     let source;
     const modules = new Map();
-    for (const [name, bytes] of await generated(wat)) {
+    for (const [name, bytes] of await generated(wat, callTracking)) {
         if (name.endsWith('.wasm')) {
             modules.set(name, WebAssembly.compile(bytes));
         } else if (name.endsWith('.js')) {
@@ -505,7 +506,7 @@ suite.skipIf(!HAS_JSPI)('knowing when an instance is idle', () => {
     }
 
     /** Whether `promise` has settled by the time things have had a chance to run. */
-    async function settled(promise: Promise<void>) {
+    async function settled(promise: Promise<unknown>) {
         let done = false;
         promise.then(() => (done = true));
         await sleep(20);
@@ -548,91 +549,85 @@ suite.skipIf(!HAS_JSPI)('knowing when an instance is idle', () => {
         await instance._util.whenIdle();
     });
 
-    test.concurrent('a task group can be waited on beside another that goes on', async () => {
-        const instance = await (await transpiled(LINGERS))({});
+    test.concurrent('tracked calls finish independently beside unrelated work', async () => {
+        const instance = await (await transpiled(LINGERS, true))({});
         const [one, other] = [oneByte(), oneByte()];
-        await instance.feed(one.stream);
-        const first = instance._util.lastTaskGroup();
-        await instance.feed(other.stream);
-        const second = instance._util.lastTaskGroup();
-        assert.notStrictEqual(first, second);
-
-        const firstIdle = instance._util.whenIdle([first]);
-        assert.isFalse(await settled(firstIdle));
-        one.release();
-        assert.isTrue(await settled(firstIdle), "the other's work is not this one's");
-        assert.isFalse(await settled(instance._util.whenIdle()), "it is still everything's");
-        const secondIdle = instance._util.whenIdle([second]);
-        assert.isFalse(await settled(secondIdle));
-        assert.isTrue(await settled(instance._util.whenIdle([first])));
-        other.release();
-        assert.isTrue(await settled(secondIdle));
-        assert.isTrue(await settled(instance._util.whenIdle()));
-        assert.isTrue(await settled(instance._util.whenIdle([])));
+        try {
+            const first = instance._util.calls.start(instance.feed, one.stream);
+            const second = instance._util.calls.start(instance.feed, other.stream);
+            await Promise.all([first.result, second.result]);
+            assert.isFalse(await settled(first.finished));
+            one.release();
+            assert.deepStrictEqual(await first.finished, { status: 'completed' });
+            assert.isFalse(await settled(second.finished));
+            assert.isFalse(await settled(instance._util.whenIdle()));
+            other.release();
+            assert.deepStrictEqual(await second.finished, { status: 'completed' });
+            await instance._util.whenIdle();
+        } finally {
+            instance._util.stop();
+        }
     });
 
-    test.concurrent('a task group includes a composed callee after its caller exits', async () => {
-        let idleSettled = false;
+    test.concurrent('a tracked call includes composed callees after its own task exits', async () => {
+        let finished = false;
         let reportTrap!: (error: Error) => void;
         const trapped = new Promise<Error>((resolve) => {
             reportTrap = resolve;
         });
         const instance = await (
-            await transpiled(TRAPS_IN_THE_BACKGROUND)
+            await transpiled(TRAPS_IN_THE_BACKGROUND, true)
         )(
             {},
             {
                 onTrap(error) {
-                    assert.isFalse(idleSettled, "the callee still belongs to its caller's group");
                     reportTrap(error);
                 },
             },
         );
-        const call = instance.startLater();
-        const group = instance._util.lastTaskGroup();
-        const idle = instance._util.whenIdle([group]).then(() => {
-            idleSettled = true;
+        const call = instance._util.calls.start(instance.startLater);
+        call.finished.then(() => {
+            finished = true;
         });
-        await call;
-        assert.match((await trapped).message, /unreachable/);
-        await idle;
-        assert.isTrue(idleSettled);
+        await call.result;
+        assert.isFalse(finished, 'the composed callee still has execution left');
+        const error = await trapped;
+        assert.match(error.message, /unreachable/);
+        assert.deepStrictEqual(await call.finished, { status: 'trapped', error });
     });
 
-    test.concurrent('task groups are opaque and reject foreign or invalid tokens', async () => {
-        const instantiate = await transpiled(LINGERS);
+    test.concurrent('handles are frozen and reject functions from another instance', async () => {
+        const instantiate = await transpiled(LINGERS, true);
         const first = await instantiate({});
         const other = await instantiate({});
         try {
-            await first.feed(oneByte().stream);
-            const group = first._util.lastTaskGroup();
-            assert.isTrue(Object.isFrozen(group));
-            assert.deepStrictEqual(Object.keys(group), []);
-            assert.throws(() => other._util.whenIdle([group]), TypeError);
-            assert.throws(() => first._util.whenIdle([{}]), TypeError);
-            assert.throws(() => first._util.whenIdle([undefined]), TypeError);
+            const call = first._util.calls.start(first.feed, oneByte().stream);
+            await call.result;
+            assert.isTrue(Object.isFrozen(call));
+            assert.deepStrictEqual(Object.keys(call).sort(), ['finished', 'result']);
+            assert.isTrue(Object.isFrozen(first._util.calls));
+            assert.throws(() => other._util.calls.start(first.feed, oneByte().stream), TypeError);
+            assert.throws(() => first._util.calls.start(() => undefined), TypeError);
+            assert.throws(() => first._util.calls.start(undefined), TypeError);
+            other._util.stop();
+            assert.isFalse(await settled(call.finished));
+            first._util.stop();
+            assert.deepStrictEqual(await call.finished, { status: 'stopped' });
         } finally {
             first._util.stop();
             other._util.stop();
         }
     });
 
-    test.concurrent('a wait snapshots its selected task groups', async () => {
-        const instance = await (await transpiled(LINGERS))({});
-        const first = oneByte();
-        const other = oneByte();
-        try {
-            await instance.feed(first.stream);
-            const selected = [instance._util.lastTaskGroup()];
-            await instance.feed(other.stream);
-            const idle = instance._util.whenIdle(selected);
-            selected.push(instance._util.lastTaskGroup());
-            first.release();
-            assert.isTrue(await settled(idle));
-            assert.isFalse(await settled(instance._util.whenIdle()));
-        } finally {
-            instance._util.stop();
-        }
+    test.concurrent('async entry failures settle without adopting an earlier call', async () => {
+        const instance = await (await transpiled(LINGERS, true))({});
+        const first = instance._util.calls.start(instance.feed, oneByte().stream);
+        await first.result;
+        instance._util.stop();
+        const afterStop = instance._util.calls.start(instance.feed, oneByte().stream);
+        await expect(afterStop.result).rejects.toThrow(/stopped/);
+        assert.deepStrictEqual(await afterStop.finished, { status: 'stopped' });
+        assert.deepStrictEqual(await first.finished, { status: 'stopped' });
     });
 
     test.concurrent('another instance of the same module is its own', async () => {

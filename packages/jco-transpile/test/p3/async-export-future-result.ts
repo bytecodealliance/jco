@@ -25,6 +25,7 @@ suite('manual async export returning a future', () => {
                 transpile: {
                     extraArgs: {
                         minify: false,
+                        callTracking: true,
                         asyncExports: [`${EXPORT_NAME}#prove-future`, `${EXPORT_NAME}#prove-stream`],
                     },
                 },
@@ -67,6 +68,7 @@ suite('native exports leave returned futures unread', () => {
 
     beforeAll(async () => {
         ({ esModule, cleanup } = await setupAsyncTest({
+            jco: { transpile: { extraArgs: { callTracking: true } } },
             component: {
                 path: join(LOCAL_TEST_COMPONENTS_DIR, 'async-export-future-result.wasm'),
                 skipInstantiation: true,
@@ -76,6 +78,27 @@ suite('native exports leave returned futures unread', () => {
 
     afterAll(async () => {
         await cleanup?.();
+    });
+
+    test.concurrent('tracking starts an async invocation without reading its future result', async () => {
+        const instance = await esModule.instantiate(undefined, new WASIShim().getImportObject());
+        try {
+            const api = instance[EXPORT_NAME];
+            const call = instance._util.calls.start(api.proveFutureAsync, 40);
+            let finished = false;
+            call.finished.then(() => {
+                finished = true;
+            });
+            await setTimeout(20);
+            assert.strictEqual(api.completedFutureWrites(), 0);
+            assert.isFalse(finished);
+            const future = await call.result;
+            assert.strictEqual(api.completedFutureWrites(), 0);
+            assert.strictEqual(await future, 42);
+            assert.deepEqual(await call.finished, { status: 'completed' });
+        } finally {
+            instance._util.stop();
+        }
     });
 
     test.concurrent.for(['sync', 'async'])(
