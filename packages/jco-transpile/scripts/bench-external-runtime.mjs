@@ -3,16 +3,14 @@ import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { assertCompleteReports, expectedReportIds, portfolioFromArgs } from '../bench/external-runtime/matrix.mjs';
-import { publishBaseline } from '../bench/external-runtime/recording.mjs';
 
+/**
+ * Run a full or smoke parity comparison and retain reports for this run.
+ * @param {string[]} [args] Benchmark options; --parity is a compatibility alias.
+ * @returns {Promise<number>} Process exit code.
+ */
 export async function main(args = []) {
     const portfolio = portfolioFromArgs(args);
-    const record = args.includes('--record');
-    const parity = args.includes('--parity');
-    if (record && (parity || process.env.CI)) {
-        throw new Error('Recording is disabled in CI and parity runs');
-    }
-
     // Create a fresh output directory for this attempt.
     const output = resolve(process.env.JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT ?? 'bench/output/external-runtime-named');
     await mkdir(output, { recursive: true });
@@ -36,8 +34,6 @@ export async function main(args = []) {
                     ...process.env,
                     JCO_EXTERNAL_RUNTIME_BENCH_PORTFOLIO: portfolio,
                     JCO_EXTERNAL_RUNTIME_BENCH_RUN: runDir,
-                    JCO_EXTERNAL_RUNTIME_BENCH_RECORD: record ? '1' : '0',
-                    JCO_EXTERNAL_RUNTIME_BENCH_GATE: parity ? 'parity' : 'baseline',
                 },
             },
         );
@@ -47,10 +43,6 @@ export async function main(args = []) {
                 child.on('exit', (code) => resolve(code ?? 1));
             }),
         );
-        if (code !== 0) {
-            throw new Error(`Benchmark suite exited with code ${code}`);
-        }
-
         // Validate the complete report matrix before publishing results.
         const result = JSON.parse(await readFile(join(runDir, 'result.json'), 'utf8'));
         if (!result.complete || result.controls.length !== result.expectedControls) {
@@ -77,9 +69,9 @@ export async function main(args = []) {
 
         // Render sizes, timing uncertainty, and diagnostic findings.
         const lines = [
-            '# Named runtime ' + portfolio + ' checkpoint',
+            '# Named runtime ' + portfolio + ' benchmark',
             '',
-            `Coverage: ${result.settings.coverage.mapped.length} variants. Checkpoint: ${result.checkpointKey}.`,
+            `Coverage: ${result.settings.coverage.mapped.length} variants. Input fingerprint: ${result.inputFingerprint}.`,
             '',
             `Parity: ${result.parityAchieved}. Five-process protocol (actual processes: ${result.settings.processCount}; paired samples/process: ${result.settings.sampleCount}).`,
             '',
@@ -109,24 +101,20 @@ export async function main(args = []) {
             '',
             `Invalid memory diagnostics (negative GC deltas; excluded from evidence): ${invalidMemory.join(', ') || 'none'}. Heap/external/ArrayBuffer counters are diagnostic, overlap and do not measure complete process memory. External accounting may include WebAssembly linear memory.`,
             '',
-            'Cold native ESM import + initialization of the complete bundle is a separate diagnostic; it excludes process launch, core compilation and host-import setup. Browser timing and matched historical factory comparisons follow at N14. Inline remains the production default.',
+            'Cold native ESM import + initialization of the complete bundle is a separate diagnostic; it excludes process launch, core compilation and host-import setup. Inline remains the production default.',
             '',
         ];
 
-        // Publish baseline observations only when explicitly requested.
-        if (record) {
-            await publishBaseline(result.baselinePath, {
-                schema: 2,
-                checkpointKey: result.checkpointKey,
-                environment: result.environment,
-                settings: result.settings,
-                reports: Object.fromEntries(
-                    entries.map(([id, r]) => [id, { size: r.size, performance: r.performance }]),
-                ),
-            });
-        }
         await writeFile(join(runDir, 'summary.md'), lines.join('\n'));
         await writeFile(join(runDir, 'summary.json'), JSON.stringify(result, null, 2) + '\n');
+
+        // Keep completed reports available even when a parity gate fails.
+        if (code !== 0) {
+            throw new Error(`Benchmark suite exited with code ${code}`);
+        }
+        if (result.parityAchieved !== true) {
+            throw new Error('External runtime exceeds inline parity budgets');
+        }
 
         await writeFile(
             join(output, 'latest.json'),
@@ -135,7 +123,7 @@ export async function main(args = []) {
                     status: 'complete',
                     runDir,
                     args,
-                    checkpointKey: result.checkpointKey,
+                    inputFingerprint: result.inputFingerprint,
                     parityAchieved: result.parityAchieved,
                 },
                 null,

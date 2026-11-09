@@ -31,36 +31,6 @@ export function parityLosses(values: Values) {
     });
 }
 
-export function regressionLosses(values: Values, baseline: Values, kind: 'size' | 'performance') {
-    parityLosses(values);
-    parityLosses(baseline);
-
-    return Object.keys(values.inline).flatMap((metric) => {
-        const inline = values.inline[metric],
-            external = values.external[metric];
-        const oldInline = baseline.inline[metric],
-            oldExternal = baseline.external[metric];
-        if (![oldInline, oldExternal].every((value) => Number.isFinite(value) && value > 0)) {
-            return [`${metric}: missing baseline`];
-        }
-
-        if (kind === 'size') {
-            return [
-                ...(inline > oldInline * 1.05 + 128 ? [`${metric}: absolute inline growth`] : []),
-                ...(external > oldExternal * 1.05 + 128 ? [`${metric}: absolute external growth`] : []),
-                ...(external / inline > (oldExternal / oldInline) * 1.05 + 128 / inline
-                    ? [`${metric}: relative growth`]
-                    : []),
-            ];
-        }
-
-        const budget = parity[metric as keyof typeof parity];
-        return external > inline * Math.max(budget.ratio, (oldExternal / oldInline) * 1.35) + budget.slack
-            ? [`${metric}: relative timing regression`]
-            : [];
-    });
-}
-
 export const median = (values: number[]) => values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)];
 
 /** Seeded percentile bootstrap over independent PROCESS medians, not inner samples. */

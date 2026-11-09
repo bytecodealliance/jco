@@ -1,14 +1,13 @@
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { assert, expect, test } from 'vitest';
 import { measure } from '../measure.js';
-import { parityLosses, processInterval, regressionLosses } from '../report.js';
+import { parityLosses, processInterval } from '../report.js';
 import { expectedReportIds, portfolioFromArgs, scenarioIdsForPortfolio } from '../matrix.mjs';
-import { publishBaseline } from '../recording.mjs';
 import { workload } from '../workloads.mjs';
 import { sourceHashes } from '../provenance.js';
 
@@ -21,7 +20,9 @@ test('empty workload permits instance utilities but rejects guest exports', asyn
 
 test.concurrent('full and smoke portfolios require their complete distinct matrices', () => {
     assert.equal(portfolioFromArgs([]), 'full');
-    assert.equal(portfolioFromArgs(['--smoke', '--record']), 'smoke');
+    assert.equal(portfolioFromArgs(['--parity']), 'full');
+    assert.equal(portfolioFromArgs(['--smoke', '--parity']), 'smoke');
+    assert.equal(portfolioFromArgs(['--smoke']), 'smoke');
     assert.equal(expectedReportIds('full').length, 34);
     assert.equal(expectedReportIds('smoke').length, 16);
     assert.equal(new Set(expectedReportIds('full')).size, 34);
@@ -29,24 +30,8 @@ test.concurrent('full and smoke portfolios require their complete distinct matri
         [...scenarioIdsForPortfolio('full')],
         ['lists', 'records', 'flavorful', 'resources', 'events', 'async', 'streams', 'futures', 'portfolio'],
     );
-    assert.throws(() => portfolioFromArgs(['adder']), /without filters/);
+    assert.throws(() => portfolioFromArgs(['adder']), /Unsupported benchmark option/);
     assert.throws(() => expectedReportIds('partial'), /Unknown/);
-});
-
-test.concurrent('checkpoint recording cannot overwrite an existing baseline', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'jco-immutable-baseline-'));
-    try {
-        const file = join(dir, 'baseline.json');
-        const original = { schema: 2, checkpointKey: 'original', reports: { raw: 42 } };
-        await publishBaseline(file, original);
-        const bytes = await readFile(file, 'utf8');
-        await expect(publishBaseline(file, { ...original, reports: { raw: 1 } })).rejects.toMatchObject({
-            code: 'EEXIST',
-        });
-        assert.equal(await readFile(file, 'utf8'), bytes);
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
 });
 
 test.concurrent.each(['lists', 'records', 'flavorful', 'resources', 'events', 'async', 'streams', 'futures'])(
@@ -78,39 +63,43 @@ test.concurrent('ten-process bootstrap does not force balanced index parity', ()
     assert.deepEqual(processInterval(alternating), processInterval(alternating));
 });
 
-test.concurrent('reanalysis preserves source results and refuses to overwrite artifacts', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'jco-reanalysis-canary-'));
-    try {
-        const input = join(dir, 'result.json');
-        const output = join(dir, 'analysis.json');
-        const source = JSON.stringify({
-            schema: 2,
-            complete: true,
-            checkpointKey: 'canary',
-            expectedReports: ['test--file--noise'],
-            settings: { processCount: 10 },
-            parityAchieved: true,
-            reports: {
-                'test--file--noise': {
-                    size: { inline: { raw: 100 }, external: { raw: 100 } },
-                    performance: { inline: { parse: 100 }, external: { parse: 100 } },
-                    raw: Array.from({ length: 10 }, (_, i) => ({ pairedRatios: { parse: i % 2 ? 2 : 1 } })),
+test.concurrent.each([2, 3])(
+    'reanalysis preserves schema %s results and refuses to overwrite artifacts',
+    async (schema) => {
+        const dir = await mkdtemp(join(tmpdir(), 'jco-reanalysis-canary-'));
+        try {
+            const input = join(dir, 'result.json');
+            const output = join(dir, 'analysis.json');
+            const source = JSON.stringify({
+                schema,
+                complete: true,
+                ...(schema === 2 ? { checkpointKey: 'canary' } : { inputFingerprint: 'canary' }),
+                expectedReports: ['test--file--noise'],
+                settings: { processCount: 10 },
+                parityAchieved: true,
+                reports: {
+                    'test--file--noise': {
+                        size: { inline: { raw: 100 }, external: { raw: 100 } },
+                        performance: { inline: { parse: 100 }, external: { parse: 100 } },
+                        raw: Array.from({ length: 10 }, (_, i) => ({ pairedRatios: { parse: i % 2 ? 2 : 1 } })),
+                    },
                 },
-            },
-        });
-        await writeFile(input, source);
-        const script = fileURLToPath(new URL('../reanalyze.mjs', import.meta.url));
-        await exec(process.execPath, [script, input, output]);
-        const analysis = await readFile(output, 'utf8');
-        assert.deepEqual(JSON.parse(analysis).reports['test--file--noise'].uncertainty.parse.ci95, [1, 2]);
-        await expect(exec(process.execPath, [script, input, input])).rejects.toThrow(/distinct/);
-        await expect(exec(process.execPath, [script, input, output])).rejects.toThrow(/EEXIST/);
-        assert.equal(await readFile(input, 'utf8'), source);
-        assert.equal(await readFile(output, 'utf8'), analysis);
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-});
+            });
+            await writeFile(input, source);
+            const script = fileURLToPath(new URL('../reanalyze.mjs', import.meta.url));
+            await exec(process.execPath, [script, input, output]);
+            const analysis = await readFile(output, 'utf8');
+            assert.equal(JSON.parse(analysis).inputFingerprint, 'canary');
+            assert.deepEqual(JSON.parse(analysis).reports['test--file--noise'].uncertainty.parse.ci95, [1, 2]);
+            await expect(exec(process.execPath, [script, input, input])).rejects.toThrow(/distinct/);
+            await expect(exec(process.execPath, [script, input, output])).rejects.toThrow(/EEXIST/);
+            assert.equal(await readFile(input, 'utf8'), source);
+            assert.equal(await readFile(output, 'utf8'), analysis);
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    },
+);
 
 test.concurrent.each([0, 42])('rejects two equally wrong constant implementations (%s)', async (answer) => {
     const dir = await mkdtemp(join(tmpdir(), 'jco-metrics-canary-'));
@@ -161,50 +150,96 @@ test.concurrent.each(['lists', 'records'] as const)(
     },
 );
 
-test.concurrent('rejects missing/nonfinite metrics and reports parity independently', () => {
+test.concurrent('rejects missing/nonfinite metrics and reports parity losses', () => {
     assert.throws(() => parityLosses({ inline: {}, external: {} }));
     assert.throws(() => parityLosses({ inline: { parse: 1 }, external: {} }));
     assert.throws(() => parityLosses({ inline: { parse: 1 }, external: { parse: NaN } }));
     assert.deepEqual(parityLosses({ inline: { raw: 100 }, external: { raw: 1000 } }), ['raw']);
-    assert.deepEqual(
-        regressionLosses(
-            { inline: { raw: 100 }, external: { raw: 1000 } },
-            { inline: { raw: 100 }, external: { raw: 1000 } },
-            'size',
-        ),
-        [],
-    );
-    assert.isNotEmpty(
-        regressionLosses(
-            { inline: { raw: 2000 }, external: { raw: 2000 } },
-            { inline: { raw: 1000 }, external: { raw: 1000 } },
-            'size',
-        ),
-    );
     assert.throws(() => processInterval([1, 1, 1, NaN, 1]));
     assert.deepEqual(processInterval([1, 1, 1, 1, 1]).ci95, [1, 1]);
 });
 
 test.concurrent('relative timing gates detect external slowdowns independently of native-call speed', () => {
-    const baseline = { inline: { call: 1000 }, external: { call: 1100 } };
-    assert.deepEqual(
-        regressionLosses({ inline: { call: 2000 }, external: { call: 2200 } }, baseline, 'performance'),
-        [],
-    );
-    assert.isNotEmpty(regressionLosses({ inline: { call: 1000 }, external: { call: 3000 } }, baseline, 'performance'));
+    assert.deepEqual(parityLosses({ inline: { call: 1000 }, external: { call: 1100 } }), []);
+    assert.deepEqual(parityLosses({ inline: { call: 2000 }, external: { call: 2200 } }), []);
+    assert.deepEqual(parityLosses({ inline: { call: 1000 }, external: { call: 3000 } }), ['call']);
 });
 
-test.concurrent.each(['ci', 'filter', 'parity'] as const)('refuses protected baseline recording (%s)', async (mode) => {
+test.concurrent.each([
+    { name: 'full', args: [] },
+    { name: 'smoke', args: ['--smoke'] },
+    { name: 'parity alias', args: ['--parity'] },
+])('rejects removed recording options for $name', async ({ args }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-invalid-benchmark-option-'));
     const script = fileURLToPath(new URL('../../../scripts/bench-external-runtime.mjs', import.meta.url));
-    await expect(
-        exec(
-            process.execPath,
-            [script, '--record', ...(mode === 'filter' ? ['adder'] : mode === 'parity' ? ['--parity'] : [])],
-            {
-                env: { ...process.env, ...(mode === 'ci' ? { CI: '1' } : {}) },
-            },
-        ),
-    ).rejects.toThrow(/Recording is disabled|without filters/);
+    try {
+        await expect(
+            exec(process.execPath, [script, ...args, '--record'], {
+                env: { ...process.env, JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT: join(dir, 'output') },
+            }),
+        ).rejects.toThrow(/Unsupported benchmark option/);
+        assert.deepEqual(await readdir(dir), [], 'invalid arguments must not create run artifacts');
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test.concurrent.each([
+    { portfolio: 'full', parityAchieved: true, childCode: 0 },
+    { portfolio: 'smoke', parityAchieved: true, childCode: 0 },
+    { portfolio: 'full', parityAchieved: false, childCode: 1 },
+    { portfolio: 'smoke', parityAchieved: false, childCode: 0 },
+])('CLI preserves $portfolio reports with parity=$parityAchieved', async (scenario) => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-benchmark-reports-'));
+    const controller = new URL('../../../scripts/bench-external-runtime.mjs', import.meta.url).href;
+    const matrix = new URL('../matrix.mjs', import.meta.url).href;
+    try {
+        // Isolate the simulated measurement process from other tests' child processes.
+        await exec(process.execPath, [
+            '--input-type=module',
+            '--eval',
+            `
+            import assert from 'node:assert/strict';
+            import childProcess from 'node:child_process';
+            import { EventEmitter } from 'node:events';
+            import { syncBuiltinESMExports } from 'node:module';
+            import { readFile, writeFile } from 'node:fs/promises';
+            import { join } from 'node:path';
+            import { expectedReportIds } from ${JSON.stringify(matrix)};
+            const { portfolio, parityAchieved, childCode } = ${JSON.stringify(scenario)};
+            process.env.JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT = ${JSON.stringify(dir)};
+            childProcess.spawn = (_command, _args, { env }) => {
+                const child = new EventEmitter();
+                const ids = expectedReportIds(portfolio);
+                assert.equal(env.JCO_EXTERNAL_RUNTIME_BENCH_PORTFOLIO, portfolio);
+                const result = {
+                    schema: 3, complete: true, inputFingerprint: 'canary', parityAchieved,
+                    controls: [], expectedControls: 0, expectedReports: ids,
+                    settings: { portfolio, coverage: { mapped: [] }, processCount: 5, sampleCount: 15 },
+                    reports: Object.fromEntries(ids.map(id => [id, {
+                        size: { inline: { raw: 100, gzip: 80, brotli: 70 }, external: { raw: 100, gzip: 80, brotli: 70 } },
+                        parityLosses: { size: [] }, uncertainty: {}, timingFindings: {},
+                        memory: { inline: { valid: true }, external: { valid: true } },
+                    }])),
+                };
+                writeFile(join(env.JCO_EXTERNAL_RUNTIME_BENCH_RUN, 'result.json'), JSON.stringify(result))
+                    .then(() => child.emit('exit', childCode), error => child.emit('error', error));
+                return child;
+            };
+            syncBuiltinESMExports();
+            const { main } = await import(${JSON.stringify(controller)});
+            assert.equal(await main(portfolio === 'smoke' ? ['--smoke'] : []), parityAchieved ? 0 : 1);
+            const latest = JSON.parse(await readFile(join(process.env.JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT, 'latest.json')));
+            assert.equal(latest.status, parityAchieved ? 'complete' : 'failed');
+            const summary = JSON.parse(await readFile(join(latest.runDir, 'summary.json')));
+            assert.equal(summary.parityAchieved, parityAchieved);
+            assert.equal(summary.inputFingerprint, 'canary');
+            assert.match(await readFile(join(latest.runDir, 'summary.md'), 'utf8'), /Input fingerprint: canary/);
+            `,
+        ]);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
 });
 
 test.concurrent('rejects missing inner samples even when reported medians look valid', async () => {

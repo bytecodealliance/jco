@@ -32,9 +32,14 @@ export function scenarioIdsForPortfolio(portfolio) {
     throw new Error('Unknown external-runtime benchmark portfolio: ' + portfolio);
 }
 
+/**
+ * Select the measured matrix; all runs enforce parity.
+ * @param {string[]} args CLI options; --parity remains a compatibility alias.
+ * @returns {'full' | 'smoke'}
+ */
 export function portfolioFromArgs(args) {
-    if (args.some((arg) => !['--smoke', '--record', '--parity'].includes(arg))) {
-        throw new Error('Recording requires the complete selected matrix, without filters');
+    if (args.some((arg) => !['--smoke', '--parity'].includes(arg))) {
+        throw new Error('Unsupported benchmark option; use --smoke or --parity');
     }
     return args.includes('--smoke') ? 'smoke' : 'full';
 }
