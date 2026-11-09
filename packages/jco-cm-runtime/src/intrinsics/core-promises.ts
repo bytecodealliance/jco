@@ -14,3 +14,12 @@ export function promiseWithResolvers<T>(): {
     });
     return { promise, resolve, reject };
 }
+
+/** Match Promise resolution's object/function check without coercing primitives. */
+export function isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+    return (
+        value !== null &&
+        (typeof value === 'object' || typeof value === 'function') &&
+        typeof (value as { then?: unknown }).then === 'function'
+    );
+}

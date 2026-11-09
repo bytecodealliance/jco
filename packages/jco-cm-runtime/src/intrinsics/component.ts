@@ -1,3 +1,4 @@
+import { isPromiseLike } from './core-promises.js';
 import type {
     ComponentModule,
     ComponentDeadlockDetail,
@@ -138,11 +139,7 @@ export function trackHostOperation<T>(
         throw storeTrap.error;
     }
     const result = operation();
-    if (
-        result === null ||
-        (typeof result !== 'object' && typeof result !== 'function') ||
-        typeof (result as { then?: unknown }).then !== 'function'
-    ) {
+    if (!isPromiseLike(result)) {
         if (storeTrap.stopped) {
             throw storeTrap.error;
         }
@@ -271,6 +268,10 @@ export function setAllError(states: Pick<ComponentAsyncStates, 'values'>) {
     }
 }
 
+const TICK_DONE = 'done';
+const TICK_RESUMED = 'resumed';
+const TICK_IDLE = 'idle';
+
 export function initializeComponentAsyncStateClass(
     context: ComponentAsyncStateContext,
 ): ComponentAsyncStateConstructor {
@@ -290,11 +291,11 @@ export function initializeComponentAsyncStateClass(
 
         static TickResult = {
             // no suspended tasks remain
-            DONE: 'done',
+            DONE: TICK_DONE,
             // a suspended task was resumed (more may be ready)
-            RESUMED: 'resumed',
+            RESUMED: TICK_RESUMED,
             // suspended tasks remain but none were ready
-            IDLE: 'idle',
+            IDLE: TICK_IDLE,
         } as const;
 
         #componentIdx: number;
@@ -313,7 +314,7 @@ export function initializeComponentAsyncStateClass(
         #backpressure = 0;
         #backpressureWaiters = 0n;
 
-        #handlerMap = new Map<string, { id: bigint; fn(value: number): void; event: string }[]>();
+        #handlers: { id: bigint; fn(value: number): void; event: string }[] = [];
         #nextHandlerID = 0n;
 
         #tickLoop: ReturnType<typeof setTimeout> | null = null;
@@ -442,7 +443,7 @@ export function initializeComponentAsyncStateClass(
 
         setBackpressure(v: number) {
             this.#backpressure = v;
-            for (const handler of [...(this.#handlerMap.get('backpressure-change') ?? [])]) {
+            for (const handler of this.#handlers.filter((handler) => handler.event === 'backpressure-change')) {
                 handler.fn(v);
             }
             return this.#backpressure;
@@ -516,30 +517,13 @@ export function initializeComponentAsyncStateClass(
             }
 
             const handlerID = this.#nextHandlerID++;
-            let handlers = this.#handlerMap.get(event);
-            if (!handlers) {
-                handlers = [];
-                this.#handlerMap.set(event, handlers);
-            }
-
-            handlers.push({ id: handlerID, fn, event });
+            this.#handlers.push({ id: handlerID, fn, event });
             return handlerID;
         }
 
         removeHandler(args: { event: string; handlerID: bigint }) {
             const { event, handlerID } = args;
-            const registeredHandlers = this.#handlerMap.get(event);
-            if (!registeredHandlers) {
-                return;
-            }
-            const found = registeredHandlers.find((h) => h.id === handlerID);
-            if (!found) {
-                return;
-            }
-            this.#handlerMap.set(
-                event,
-                registeredHandlers.filter((h) => h.id !== handlerID),
-            );
+            this.#handlers = this.#handlers.filter((handler) => handler.event !== event || handler.id !== handlerID);
         }
 
         getBackpressureWaiters() {
@@ -927,15 +911,15 @@ export function initializeComponentAsyncStateClass(
                     return;
                 }
                 const result = this.tick();
-                if (storeTrap.stopped || result === ComponentAsyncState.TickResult.DONE) {
+                if (storeTrap.stopped || result === TICK_DONE) {
                     this.#tickLoop = null;
                     return;
                 }
-                if (result === ComponentAsyncState.TickResult.IDLE) {
+                if (result === TICK_IDLE) {
                     checkForDeadlock(deadlock);
                 }
                 // Let resumed microtasks drain before the next slice; otherwise poll at the idle cadence.
-                const delay = result === ComponentAsyncState.TickResult.RESUMED ? 0 : 10;
+                const delay = result === TICK_RESUMED ? 0 : 10;
                 this.#tickLoop = setTimeout(run, delay);
             };
             this.#tickLoop = setTimeout(run, 10);
@@ -952,7 +936,7 @@ export function initializeComponentAsyncStateClass(
                 if (this.isTrapped() || meta.thread.isRejected()) {
                     debugLog('[ComponentAsyncState#tick()] detected thread rejection, leaving early', { meta });
                     this.resumeThread(thread);
-                    return ComponentAsyncState.TickResult.RESUMED;
+                    return TICK_RESUMED;
                 }
 
                 if (!this.suspendedThreadReady(thread)) {
@@ -967,11 +951,11 @@ export function initializeComponentAsyncStateClass(
 
                 // Resume only one thread per tick so its current-thread
                 // register window closes before another continuation runs.
-                return ComponentAsyncState.TickResult.RESUMED;
+                return TICK_RESUMED;
             }
 
             const idle = this.#suspendedThreadsByRef.size > 0;
-            return idle ? ComponentAsyncState.TickResult.IDLE : ComponentAsyncState.TickResult.DONE;
+            return idle ? TICK_IDLE : TICK_DONE;
         }
 
         createWaitable(args?: { target?: unknown }) {

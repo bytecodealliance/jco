@@ -1,12 +1,14 @@
 import type { HandleIndexSpace, RepTableConstructor, TrapContext } from '../runtime.js';
 import { debugLog } from './core-debug.js';
+
 export function initializeRepTableClass(context: TrapContext): RepTableConstructor {
     const { RuntimeError } = context;
+    const free = Symbol('RepTable.free');
     class RepTable<T = unknown> {
         // Sentinel marking a freed slot; the freelist link for a freed slot
         // lives in the odd cell. This keeps get()/contains()/remove() on freed
         // reps well-defined (previously they returned/corrupted freelist links).
-        static FREE = Symbol('RepTable.free');
+        static FREE = free;
 
         #data: (T | number | symbol | null)[] = [0, null];
         #size = 0;
@@ -44,7 +46,7 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
                 return rep;
             }
             const placementIdx = freeIdx << 1;
-            if (this.#data[placementIdx] !== RepTable.FREE) {
+            if (this.#data[placementIdx] !== free) {
                 throw new Error('corrupt rep table freelist: head does not point at a freed slot');
             }
             this.#data[0] = this.#data[placementIdx + 1];
@@ -63,7 +65,7 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
 
             const baseIdx = rep << 1;
             const val = this.#data[baseIdx];
-            if (val === RepTable.FREE) {
+            if (val === free) {
                 return undefined;
             }
             return val as T;
@@ -77,7 +79,7 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
 
             const baseIdx = rep << 1;
             const val = this.#data[baseIdx];
-            return val !== RepTable.FREE && !!val;
+            return val !== free && !!val;
         }
 
         remove(rep: number): T {
@@ -88,10 +90,10 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
             if (this.#space !== null) {
                 const baseIdx = rep << 1;
                 const val = this.#data[baseIdx];
-                if (val === undefined || val === RepTable.FREE) {
+                if (val === undefined || val === free) {
                     throw new RuntimeError(`unknown handle index ${rep}`);
                 }
-                this.#data[baseIdx] = RepTable.FREE;
+                this.#data[baseIdx] = free;
                 this.#data[baseIdx + 1] = null;
                 this.#size -= 1;
                 this.#space.release(rep);
@@ -106,11 +108,11 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
                 throw new Error(`invalid rep [${rep}] during remove, out of range`);
             }
             const val = this.#data[baseIdx];
-            if (val === RepTable.FREE) {
+            if (val === free) {
                 throw new RuntimeError(`double removal of rep [${rep}] (already freed)`);
             }
 
-            this.#data[baseIdx] = RepTable.FREE;
+            this.#data[baseIdx] = free;
             this.#data[baseIdx + 1] = this.#data[0];
             this.#data[0] = rep;
             this.#size -= 1;
@@ -126,7 +128,7 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
             debugLog('[RepTable#clear()] args', { target: this.target });
             if (this.#space) {
                 for (let rep = 1; rep < this.#data.length / 2; rep++) {
-                    if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== RepTable.FREE) {
+                    if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== free) {
                         this.#space.release(rep);
                     }
                 }

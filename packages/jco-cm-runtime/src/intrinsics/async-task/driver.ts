@@ -7,7 +7,7 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core-debug.js';
 import { typeCheckValidI32, isThenable } from './helpers.js';
-import { unpackCallbackResult } from './callback.js';
+import { unpackValidatedCallbackResult } from './callback.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { toInt32 } from '../conversion.js';
 
@@ -35,17 +35,11 @@ export function driverLoop(
     }
     let callbackCode: number;
     let waitableSetRep: number;
-    let unpacked;
     const unpackCallback = (value: unknown) => {
         if (!typeCheckValidI32(value)) {
             throw new _context.RuntimeError('invalid callback result [' + value + '], not a number');
         }
-        unpacked = unpackCallbackResult(_context, value);
-        callbackCode = unpacked[0];
-        waitableSetRep = unpacked[1];
-        if (callbackCode < 0 || callbackCode > 3) {
-            throw new _context.RuntimeError('invalid async return value, outside callback code range');
-        }
+        [callbackCode, waitableSetRep] = unpackValidatedCallbackResult(_context, value);
     };
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
     let eventCode: number | undefined;
@@ -105,19 +99,11 @@ export function driverLoop(
                             readyFn: () => true,
                         },
                         (keepGoing) => {
-                            continueWithEvent(
-                                keepGoing
-                                    ? {
-                                          code: _context.events.NONE,
-                                          payload0: 0,
-                                          payload1: 0,
-                                      }
-                                    : {
-                                          code: _context.events.TASK_CANCELLED,
-                                          payload0: 0,
-                                          payload1: 0,
-                                      },
-                            );
+                            continueWithEvent({
+                                code: keepGoing ? _context.events.NONE : _context.events.TASK_CANCELLED,
+                                payload0: 0,
+                                payload1: 0,
+                            });
                         },
                     );
                     task.settleCompletion();
@@ -188,18 +174,18 @@ export function driverLoop(
                 }
                 return;
             }
-            if (asyncRes!.code === undefined) {
+            eventCode = asyncRes!.code;
+            if (eventCode === undefined) {
                 throw new Error('missing event code from event');
             }
-            if (asyncRes!.payload0 === undefined) {
+            index = asyncRes!.payload0;
+            if (index === undefined) {
                 throw new Error('missing payload0 from event');
             }
-            if (asyncRes!.payload1 === undefined) {
+            result = asyncRes!.payload1;
+            if (result === undefined) {
                 throw new Error('missing payload1 from event');
             }
-            eventCode = asyncRes!.code; // async event enum code
-            index = asyncRes!.payload0; // varies (e.g. idx of related waitable set)
-            result = asyncRes!.payload1; // varies (e.g. task state)
             asyncRes = null;
             debugLog('[driverLoop()] performing callback', {
                 fnName,

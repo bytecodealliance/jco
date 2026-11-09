@@ -230,11 +230,11 @@ export function initializeWaitableSetClass(
         }
 
         removeWaitable(waitable: ComponentWaitable) {
-            const existing = this.#waitables.find((w) => w === waitable);
-            if (!existing) {
+            const index = this.#waitables.indexOf(waitable);
+            if (index === -1) {
                 return undefined;
             }
-            this.#waitables = this.#waitables.filter((w) => w !== waitable);
+            this.#waitables.splice(index, 1);
             return waitable;
         }
 
@@ -249,8 +249,7 @@ export function initializeWaitableSetClass(
                 waitableSet: this,
                 waitableSetTargets: this.targets(),
             });
-            const waitable = this.#waitables.find((w) => w.hasPendingEvent());
-            return waitable !== undefined;
+            return this.#waitables.some((waitable) => waitable.hasPendingEvent());
         }
 
         getPendingEvent() {
@@ -272,32 +271,24 @@ export function initializeWaitableSetClass(
             throw new Error('no waitables had a pending event');
         }
 
+        /** Read the pending event or construct a fresh cancellation event after a wait. */
+        #eventAfterWait(keepGoing: boolean): WaitableEvent | null {
+            return keepGoing
+                ? this.getPendingEvent()
+                : { code: asyncEventCode.TASK_CANCELLED, payload0: 0, payload1: 0 };
+        }
+
         tryWait(opts: WaitableWaitOptions) {
             debugLog('[WaitableSet#tryWait()] args', { opts });
             // TODO(threads): this task should be the thread
             const { readyFn, task, cancellable } = opts;
 
-            const isReady = () => {
-                const hasPendingEvent = this.hasPendingEvent();
-                const ready = readyFn();
-                return ready && hasPendingEvent;
-            };
-            const finishWait = (keepGoing: boolean) => {
-                const event = keepGoing
-                    ? this.getPendingEvent()
-                    : {
-                          code: asyncEventCode.TASK_CANCELLED,
-                          payload0: 0,
-                          payload1: 0,
-                      };
-                return event;
-            };
-
             if (task.deliverPendingCancel({ cancellable })) {
-                return finishWait(false);
+                return this.#eventAfterWait(false);
             }
-            if (isReady()) {
-                return finishWait(true);
+            const hasPendingEvent = this.hasPendingEvent();
+            if (readyFn() && hasPendingEvent) {
+                return this.getPendingEvent();
             }
             return null;
         }
@@ -322,13 +313,7 @@ export function initializeWaitableSetClass(
                         this.decrementNumWaiting();
                         throw task.isErrored();
                     }
-                    const readyEvent = keepGoing
-                        ? this.getPendingEvent()
-                        : {
-                              code: asyncEventCode.TASK_CANCELLED,
-                              payload0: 0,
-                              payload1: 0,
-                          };
+                    const readyEvent = this.#eventAfterWait(keepGoing);
                     this.decrementNumWaiting();
                     return readyEvent;
                 },
@@ -355,13 +340,7 @@ export function initializeWaitableSetClass(
                     cancellable,
                 },
                 (keepGoing) => {
-                    const resumedEvent = keepGoing
-                        ? this.getPendingEvent()
-                        : {
-                              code: asyncEventCode.TASK_CANCELLED,
-                              payload0: 0,
-                              payload1: 0,
-                          };
+                    const resumedEvent = this.#eventAfterWait(keepGoing);
                     this.decrementNumWaiting();
                     onEvent(resumedEvent);
                 },
@@ -377,15 +356,9 @@ export function waitableSetNew(context: WaitableSetNewContext, componentIdx: num
     debugLog('[waitableSetNew()] args', { componentIdx });
 
     const state = getOrCreateAsyncState(context.lookup, componentIdx);
-    if (!state) {
-        throw new Error(`missing async state for component idx [${componentIdx}]`);
-    }
 
     const wset = new WaitableSet(componentIdx);
     const rep = state.handles.insert(wset);
-    if (typeof rep !== 'number') {
-        throw new Error(`invalid/missing waitable set rep [${rep}]`);
-    }
 
     debugLog('[waitableSetNew()] created waitable set', { componentIdx, rep });
     return rep;
@@ -579,9 +552,6 @@ export function waitableJoin(
     });
 
     const state = getOrCreateAsyncState(context.lookup, componentIdx);
-    if (!state) {
-        throw new Error(`invalid/missing async state for component instance [${componentIdx}]`);
-    }
 
     if (!state.mayLeave) {
         throw new RuntimeError('component instance is not marked as may leave, cannot join waitable');

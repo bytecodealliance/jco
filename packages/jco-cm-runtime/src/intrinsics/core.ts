@@ -1,3 +1,5 @@
+import { emptyFunc } from './js-helper.js';
+import { isPromiseLike } from './core-promises.js';
 import type {
     CoreModule,
     ComponentErrorConstructor,
@@ -77,7 +79,7 @@ export const initializeFileCompileCache: CoreModule['initializeFileCompileCache'
 };
 export const coinFlip: CoreModule['coinFlip'] = () => Math.random() > 0.5;
 // Preserve the existing range-only check, including fractional values.
-export const typeCheckValidI32: CoreModule['typeCheckValidI32'] = (value) =>
+export const typeCheckValidI32 = (value: unknown): value is number =>
     typeof value === 'number' && value >= i32Min && value <= i32Max;
 export const typeCheckAsyncFn: CoreModule['typeCheckAsyncFn'] = (constructor, value) => value instanceof constructor;
 export const base64Compile: CoreModule['base64Compile'] = (context, encoded) => {
@@ -240,12 +242,8 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
             if (!switchesTask) {
                 currentTaskMeta.current = saved;
             }
-            if (
-                result !== null &&
-                (typeof result === 'object' || typeof result === 'function') &&
-                typeof (result as { then?: unknown }).then === 'function'
-            ) {
-                Promise.resolve(result).catch(() => {});
+            if (isPromiseLike(result)) {
+                Promise.resolve(result).catch(emptyFunc);
                 throw new RuntimeError('cannot block a synchronous task before returning');
             }
             return result;
