@@ -71,7 +71,7 @@ pub(crate) enum CoreContextIntrinsic {
     InitializeFileCompileCache,
 }
 impl CoreContextIntrinsic {
-    const ALL: &'static [Self] = &[
+    const ALL: [Self; 29] = [
         Self::InitializeAsyncDeterminism,
         Self::InitializeSymbolCabiDispose,
         Self::InitializeSymbolCabiLower,
