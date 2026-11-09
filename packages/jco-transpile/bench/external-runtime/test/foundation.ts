@@ -1,13 +1,14 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { cpus, platform, arch } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { assert, test } from 'vitest';
-import { buildPair, installRuntime, optimize } from '../build.js';
+import { buildPair } from '../build.js';
+import { readRuntimeCoverage, verifyImportControls, verifyPair } from '../verify.js';
 import { bundlers, resolutions, scenarios, importControls, portfolio } from '../cases.js';
 import { measure, type Measurement } from '../measure.js';
 import {
@@ -47,7 +48,7 @@ test(
     `complete named-runtime ${portfolio} matrix`,
     async () => {
         const output = resolve(process.env.JCO_EXTERNAL_RUNTIME_BENCH_RUN!);
-        const coverage = JSON.parse(await readFile(join(here, 'coverage.json'), 'utf8'));
+        const coverage = await readRuntimeCoverage();
         const versions = Object.fromEntries(
             await Promise.all(
                 ['rolldown', 'oxc-minify', 'typescript', '@bytecodealliance/preview2-shim'].map(async (name) => [
@@ -155,86 +156,11 @@ test(
         for (const bundler of bundlers) {
             for (const resolution of resolutions) {
                 const controlDir = join(output, `controls-${bundler}-${resolution}`);
-                await mkdir(controlDir, { recursive: true });
-                await installRuntime(controlDir);
-                for (const control of importControls) {
-                    const groups = [control, ...('imports' in control ? control.imports : [])];
-                    const imports = groups
-                        .map((group) => {
-                            const specifier =
-                                resolution === 'file'
-                                    ? new URL(group.suffix + '.js', defaultRuntimeUrl).href
-                                    : '@bytecodealliance/jco-cm-runtime/' + group.suffix;
-                            return `import { ${group.names.join(', ')} } from ${JSON.stringify(specifier)};`;
-                        })
-                        .join('\n');
-                    for (const used of [false, true]) {
-                        const entry = join(controlDir, `entry-${control.id}-${used}.mjs`);
-                        await writeFile(
-                            entry,
-                            imports +
-                                '\n' +
-                                (used
-                                    ? control.setup + ` export function answer() { return ${control.answer}; }`
-                                    : 'export const answer = 42;'),
-                        );
-                        const result = await optimize(entry, bundler);
-                        const bundle = join(controlDir, `bundle-${control.id}-${used}.mjs`);
-                        await writeFile(bundle, result.code);
-                        const binding = await import(pathToFileURL(bundle).href);
-                        assert.equal(used ? binding.answer() : binding.answer, 42);
-                        if (!used) {
-                            assert.isBelow(Buffer.byteLength(result.code), 100);
-                        }
-                        let allocations;
-                        if (used) {
-                            const trace = join(controlDir, `allocations-${control.id}.json`);
-                            await exec(process.execPath, [join(here, 'trace.mjs'), pathToFileURL(bundle).href, trace]);
-                            allocations = JSON.parse(await readFile(trace, 'utf8'));
-                            const expected = Object.fromEntries(
-                                Object.keys(allocations).map((key) => [
-                                    key,
-                                    (control.allocations as Record<string, number>)[key] ?? 0,
-                                ]),
-                            );
-                            assert.deepEqual(
-                                allocations,
-                                expected,
-                                `${control.id} must initialize only selected storage`,
-                            );
-                        }
-                        controls.push({
-                            bundler,
-                            resolution,
-                            operation: control.id,
-                            used,
-                            bytes: Buffer.byteLength(result.code),
-                            modules: result.modules,
-                            allocations,
-                        });
-                    }
-                }
+                controls.push(...(await verifyImportControls(controlDir, bundler, resolution)));
 
                 for (const scenario of scenarios) {
                     const pair = await buildPair(scenario.components, bundler, resolution, output);
-                    if (scenario.id === 'strings') {
-                        assert.isTrue(
-                            pair.external.graph.contexts.some((line) => line.includes('_jcoInitializeUtf8Encoder()')),
-                        );
-                        assert.isTrue(
-                            pair.external.graph.contexts.some((line) => line.includes('_jcoInitializeUtf8Decoder()')),
-                        );
-                    }
-                    assert.deepEqual(pair.inline.wasm, pair.external.wasm);
-                    assert.deepEqual(pair.inline.fixtureDigests, pair.external.fixtureDigests);
-                    const checked = await measure(pair, true);
-                    assert.deepEqual(checked.verified, [...scenario.components]);
-                    if (scenario.id === 'empty' || scenario.id === 'noise') {
-                        assert.equal(
-                            await readFile(pair.inline.bundle, 'utf8'),
-                            await readFile(pair.external.bundle, 'utf8'),
-                        );
-                    }
+                    await verifyPair(pair, scenario);
                     graphs.push({
                         id: `${bundler}--${resolution}--${scenario.id}`,
                         bundler,

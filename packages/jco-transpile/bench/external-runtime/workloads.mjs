@@ -38,7 +38,11 @@ export async function workload(id, instance) {
             return { call: (i) => instance.scalar(i & 255), async: false };
 
         case 'empty':
-            assert.deepEqual(Object.keys(instance), []);
+            // Generated instance utilities are present even without guest exports.
+            assert.deepEqual(
+                Object.keys(instance).filter((name) => name !== '_util'),
+                [],
+            );
             return { call: undefined, async: false };
 
         case 'adder':

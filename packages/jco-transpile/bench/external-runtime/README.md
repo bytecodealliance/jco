@@ -52,13 +52,31 @@ fixture catalog; `verify` runs the separate functional tests:
 | `bench:external-runtime:parity` | Full         | Inline/external budgets from the current build; no saved baseline required |
 | `bench:external-runtime:verify` | Full         | Functional correctness and integrity checks; no timing gate                |
 
-The top-level script calls `verify` and then `parity`; it does not add another timing
-suite or run a second baseline comparison. Correctness checks intentionally overlap:
-the functional preflight verifies bundles, and the timing suite verifies its own
-freshly built bundles before measuring them. Integrity canaries also run in both
-commands. Historical baseline files can describe
-older fixture matrices and toolchains; they are selected only by an exact input
-fingerprint, not run as separate suites.
+The top-level script calls `parity`, which builds and verifies each bundle once before
+measuring it and runs the integrity canaries once. Use `verify` independently when only
+correctness checks are needed. Both entry points use `verify.ts` for coverage, import
+controls and bundle validation, and share the integrity tests. The standalone verifier
+always covers the full matrix; timing commands select either the full or smoke matrix.
+
+Historical files in `named-baselines/` are saved measurement snapshots. Each contains
+input/toolchain metadata plus measured sizes and timings. They are selected only by an
+exact input fingerprint, not run as separate suites or compared with one another.
+Because that fingerprint includes the runtime and generator being measured, changing
+their implementation selects a new snapshot. The current snapshot comparison therefore
+checks repeat runs of matching inputs, not performance changes across revisions.
+Keeping one historical snapshot would support only its matching inputs; parity runs
+need none of these files. Comparing revisions against one selected reference run would
+require separate compatibility rules for workloads, metrics and measurement settings,
+while preserving implementation identities as provenance.
+
+The run artifacts separate these roles:
+
+| Artifact                               | Purpose                                                                       |
+| -------------------------------------- | ----------------------------------------------------------------------------- |
+| `manifest.json`                        | Inputs, environment, fingerprints and built graphs for one run                |
+| `benchmark-source.json`                | Benchmark source text captured for that run                                   |
+| `result.json` / `summary.json`         | Measurements, raw samples, uncertainty and comparison outcomes                |
+| `named-baselines/<checkpointKey>.json` | Saved metadata and size/timing summaries for an exact-input repeat comparison |
 
 Run artifacts go under `bench/output/external-runtime-named/run-*`.
 `JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT` overrides the output root; `latest.json` identifies the latest run and its status.
