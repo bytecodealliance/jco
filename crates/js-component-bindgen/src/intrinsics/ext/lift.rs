@@ -14,27 +14,35 @@ use crate::{
 };
 use std::fmt::Write;
 
+/// State initializers and capability contexts for external lifting intrinsics.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum LiftContextIntrinsic {
-    Strings,
-    List,
-    Variant,
-    Flags,
-    Future,
-    Stream,
+    /// The UTF-8 and UTF-16 decoders shared by `liftFlatStringAny`.
+    LiftFlatStringAny,
+    /// Trap and endianness capabilities for `liftFlatList`.
+    LiftFlatList,
+    /// The variant scratch storage returned by `initializeLiftVariant`, shared by
+    /// `liftFlatVariant`, `liftFlatEnum`, `liftFlatOption`, and `liftFlatResult`.
+    InitializeLiftVariant,
+    /// The bigint representation setting used by `liftFlatFlags`.
+    LiftFlatFlags,
+    /// Component state and lazy future-table access for `liftFlatFuture`.
+    LiftFlatFuture,
+    /// Component state and lazy stream-table and constructor access for `liftFlatStream`.
+    LiftFlatStream,
 }
 impl LiftContextIntrinsic {
     const ALL: [Self; 6] = [
-        Self::Strings,
-        Self::List,
-        Self::Variant,
-        Self::Flags,
-        Self::Future,
-        Self::Stream,
+        Self::LiftFlatStringAny,
+        Self::LiftFlatList,
+        Self::InitializeLiftVariant,
+        Self::LiftFlatFlags,
+        Self::LiftFlatFuture,
+        Self::LiftFlatStream,
     ];
     pub(crate) fn get_global_names() -> impl Iterator<Item = &'static str> {
         Self::ALL
-            .into_iter()
+            .iter()
             .flat_map(|context| {
                 [
                     Some(context.local_name()),
@@ -45,34 +53,38 @@ impl LiftContextIntrinsic {
     }
     pub(crate) fn local_name(self) -> &'static str {
         match self {
-            Self::Strings => "_jcoLiftStringContext",
-            Self::List => "_jcoLiftListContext",
-            Self::Variant => "_jcoLiftVariantContext",
-            Self::Flags => "_jcoLiftFlagsContext",
-            Self::Future => "_jcoLiftFutureContext",
-            Self::Stream => "_jcoLiftStreamContext",
+            Self::LiftFlatStringAny => "_jcoLiftStringContext",
+            Self::LiftFlatList => "_jcoLiftListContext",
+            Self::InitializeLiftVariant => "_jcoLiftVariantContext",
+            Self::LiftFlatFlags => "_jcoLiftFlagsContext",
+            Self::LiftFlatFuture => "_jcoLiftFutureContext",
+            Self::LiftFlatStream => "_jcoLiftStreamContext",
         }
     }
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
-        (self == Self::Variant).then_some(RuntimeInitializer {
+        let (export, local_name) = match self {
+            Self::InitializeLiftVariant => ("initializeLiftVariant", "_jcoInitializeLiftVariant"),
+            _ => return None,
+        };
+        Some(RuntimeInitializer {
             suffix: "intrinsics/lift",
-            export: "initializeLiftVariant",
-            local_name: "_jcoInitializeLiftVariant",
+            export,
+            local_name,
         })
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
         match self {
-            Self::Strings => &[
+            Self::LiftFlatStringAny => &[
                 RuntimeContextIntrinsic::InitializeUtf8Decoder,
                 RuntimeContextIntrinsic::InitializeUtf16Decoder,
             ],
-            Self::List => &[
+            Self::LiftFlatList => &[
                 RuntimeContextIntrinsic::Core(
                     CoreContextIntrinsic::InitializeRuntimeErrorConstructor,
                 ),
                 RuntimeContextIntrinsic::Core(CoreContextIntrinsic::InitializeEndianness),
             ],
-            Self::Future | Self::Stream => &[
+            Self::LiftFlatFuture | Self::LiftFlatStream => &[
                 RuntimeContextIntrinsic::Component(
                     ComponentContextIntrinsic::GetOrCreateAsyncState,
                 ),
@@ -86,25 +98,27 @@ impl LiftContextIntrinsic {
     pub(crate) fn render(self, output: &mut Source, args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
         match self {
-            Self::Strings => uwriteln!(
+            Self::LiftFlatStringAny => uwriteln!(
                 output,
                 "const {local} = {{ utf8: TEXT_DECODER_UTF8, utf16: utf16Decoder }};"
             ),
-            Self::List => uwriteln!(
+            Self::LiftFlatList => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, littleEndian: isLE }};"
             ),
-            Self::Variant => uwriteln!(output, "const {local} = _jcoInitializeLiftVariant();"),
-            Self::Flags => {
+            Self::InitializeLiftVariant => {
+                uwriteln!(output, "const {local} = _jcoInitializeLiftVariant();")
+            }
+            Self::LiftFlatFlags => {
                 let as_bigint = args.transpile_opts.flags_as_bigint;
                 uwriteln!(output, "const {local} = {{ asBigInt: {as_bigint} }};");
             }
-            // Until N17/N18, look up the actual inline tables/classes at call time.
-            Self::Future => uwriteln!(
+            // Look up inline endpoint tables and constructors when the operation is called.
+            Self::LiftFlatFuture => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, getTables: () => FUTURE_TABLES, getEnd: (options) => getFutureEnd(options) }};"
             ),
-            Self::Stream => uwriteln!(
+            Self::LiftFlatStream => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, getTables: () => STREAM_TABLES, getEnd: (options) => getStreamEnd(options), getExternalStream: () => Stream }};"
             ),
@@ -118,16 +132,26 @@ pub(crate) fn import(intrinsic: LiftIntrinsic) -> RuntimeImport {
         DecodeUtf8 => Some(RuntimeContextIntrinsic::Core(
             CoreContextIntrinsic::InitializeRuntimeErrorConstructor,
         )),
-        LiftFlatStringAny => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Strings)),
+        LiftFlatStringAny => Some(RuntimeContextIntrinsic::Lift(
+            LiftContextIntrinsic::LiftFlatStringAny,
+        )),
         LiftFlatStringUtf8 => Some(RuntimeContextIntrinsic::InitializeUtf8Decoder),
         LiftFlatStringUtf16 => Some(RuntimeContextIntrinsic::InitializeUtf16Decoder),
-        LiftFlatVariant | LiftFlatEnum | LiftFlatOption | LiftFlatResult => {
-            Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Variant))
-        }
-        LiftFlatFlags => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Flags)),
-        LiftFlatList => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::List)),
-        LiftFlatFuture => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Future)),
-        LiftFlatStream => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Stream)),
+        LiftFlatVariant | LiftFlatEnum | LiftFlatOption | LiftFlatResult => Some(
+            RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::InitializeLiftVariant),
+        ),
+        LiftFlatFlags => Some(RuntimeContextIntrinsic::Lift(
+            LiftContextIntrinsic::LiftFlatFlags,
+        )),
+        LiftFlatList => Some(RuntimeContextIntrinsic::Lift(
+            LiftContextIntrinsic::LiftFlatList,
+        )),
+        LiftFlatFuture => Some(RuntimeContextIntrinsic::Lift(
+            LiftContextIntrinsic::LiftFlatFuture,
+        )),
+        LiftFlatStream => Some(RuntimeContextIntrinsic::Lift(
+            LiftContextIntrinsic::LiftFlatStream,
+        )),
         LiftFlatErrorContext => Some(RuntimeContextIntrinsic::ErrCtx(
             ErrCtxContextIntrinsic::ErrorContextNew,
         )),
