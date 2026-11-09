@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 
 export async function testLiftIntrinsics({ load }) {
-    const context = { RuntimeError: WebAssembly.RuntimeError };
+    const { initializeEndianness } = await load('intrinsics/core');
+    const context = { RuntimeError: WebAssembly.RuntimeError, littleEndian: initializeEndianness() };
     const { liftFlatU32, liftFlatList } = await load('intrinsics/lift');
     const liftCursor = { componentIdx: 0, params: [-1], useDirectParams: true };
     assert.equal(liftFlatU32(liftCursor)[0], 0xffffffff);

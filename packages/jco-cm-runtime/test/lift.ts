@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import * as lift from '../src/intrinsics/lift.js';
 import { initializeUtf8Decoder, initializeUtf16Decoder } from '../src/intrinsics/string.js';
+import { initializeEndianness } from '../src/intrinsics/core.js';
 import { create as createErrorContext } from './error-context-helpers.js';
 import { create as createComponent } from './component-helpers.js';
 import type {
@@ -191,7 +192,7 @@ test.concurrent('lists preserve direct/indirect pointer budgets, typed results a
     dv.setUint32(16, 17, true);
     dv.setUint32(20, 23, true);
     const fn = lift.liftFlatList(
-        { RuntimeError: WebAssembly.RuntimeError },
+        { RuntimeError: WebAssembly.RuntimeError, littleEndian: initializeEndianness() },
         { elemLiftFn: lift.liftFlatU32, elemSize32: 4, elemAlign32: 4, typedArray: Uint32Array },
     );
     const ctx = direct([16, 2, 99]);
@@ -207,11 +208,65 @@ test.concurrent('lists preserve direct/indirect pointer budgets, typed results a
     expect(() => fn({ ...ctx, params: [60, 2] })).toThrow(WebAssembly.RuntimeError);
     expect(() => fn({ ...ctx, params: [17, 2] })).toThrow(/not aligned/);
     const known = lift.liftFlatList(
-        { RuntimeError: Error },
+        { RuntimeError: Error, littleEndian: initializeEndianness() },
         { elemLiftFn: lift.liftFlatU32, elemSize32: 4, elemAlign32: 4, knownLen: 2 },
     );
     expect(known(direct([4, 5, 6]))[0]).toEqual([4, 5]);
 });
+test.concurrent.each([false, true])(
+    'numeric list copies preserve ownership and cursor with known length = %s',
+    (known) => {
+        const buffer = new ArrayBuffer(32);
+        new Uint32Array(buffer, 8, 2).set([17, 23]);
+        const fn = lift.liftFlatList(
+            { RuntimeError: WebAssembly.RuntimeError, littleEndian: initializeEndianness() },
+            {
+                elemLiftFn: () => {
+                    throw new Error('numeric elements must be copied together');
+                },
+                elemSize32: 4,
+                elemAlign32: 4,
+                typedArray: Uint32Array,
+                knownLen: known ? 2 : undefined,
+            },
+        );
+        const ctx = known ? indirect(buffer, 8, 24) : { ...direct([8, 2]), memory: { buffer } };
+        const [result, next] = fn(ctx);
+        expect(result).toEqual(new Uint32Array([17, 23]));
+        expect((result as Uint32Array).buffer.byteLength).toBe(8);
+        expect(next.storagePtr).toBe(known ? 16 : undefined);
+        expect(next.storageLen).toBe(known ? 24 : undefined);
+        (result as Uint32Array).fill(0);
+        expect(new Uint32Array(buffer, 8, 2)).toEqual(new Uint32Array([17, 23]));
+    },
+);
+
+test.concurrent.each([1, 4])(
+    'big-endian numeric list lifting uses element conversion only for multi-byte values (%s)',
+    (size) => {
+        const buffer = new ArrayBuffer(16);
+        const view = new DataView(buffer);
+        view.setUint32(0, 17, true);
+        view.setUint32(size, 23, true);
+        let reads = 0;
+        const fn = lift.liftFlatList(
+            { RuntimeError: WebAssembly.RuntimeError, littleEndian: false },
+            {
+                elemLiftFn: (ctx) => {
+                    reads++;
+                    return (size === 1 ? lift.liftFlatU8 : lift.liftFlatU32)(ctx);
+                },
+                elemSize32: size,
+                elemAlign32: size,
+                typedArray: size === 1 ? Uint8Array : Uint32Array,
+            },
+        );
+        const [result] = fn({ ...direct([0, 2]), memory: { buffer } });
+        expect(Array.from(result as Uint8Array | Uint32Array)).toEqual([17, 23]);
+        expect(reads).toBe(size === 1 ? 0 : 2);
+    },
+);
+
 test.concurrent('map and flags consume their original layouts and selected bigint policy', () => {
     const buffer = new ArrayBuffer(64),
         dv = new DataView(buffer);

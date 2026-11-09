@@ -17,14 +17,16 @@ use std::fmt::Write;
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum LiftContextIntrinsic {
     Strings,
+    List,
     Variant,
     Flags,
     Future,
     Stream,
 }
 impl LiftContextIntrinsic {
-    const ALL: [Self; 5] = [
+    const ALL: [Self; 6] = [
         Self::Strings,
+        Self::List,
         Self::Variant,
         Self::Flags,
         Self::Future,
@@ -44,6 +46,7 @@ impl LiftContextIntrinsic {
     pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::Strings => "_jcoLiftStringContext",
+            Self::List => "_jcoLiftListContext",
             Self::Variant => "_jcoLiftVariantContext",
             Self::Flags => "_jcoLiftFlagsContext",
             Self::Future => "_jcoLiftFutureContext",
@@ -63,6 +66,12 @@ impl LiftContextIntrinsic {
                 RuntimeContextIntrinsic::InitializeUtf8Decoder,
                 RuntimeContextIntrinsic::InitializeUtf16Decoder,
             ],
+            Self::List => &[
+                RuntimeContextIntrinsic::Core(
+                    CoreContextIntrinsic::InitializeRuntimeErrorConstructor,
+                ),
+                RuntimeContextIntrinsic::Core(CoreContextIntrinsic::InitializeEndianness),
+            ],
             Self::Future | Self::Stream => &[
                 RuntimeContextIntrinsic::Component(
                     ComponentContextIntrinsic::GetOrCreateAsyncState,
@@ -80,6 +89,10 @@ impl LiftContextIntrinsic {
             Self::Strings => uwriteln!(
                 output,
                 "const {local} = {{ utf8: TEXT_DECODER_UTF8, utf16: utf16Decoder }};"
+            ),
+            Self::List => uwriteln!(
+                output,
+                "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, littleEndian: isLE }};"
             ),
             Self::Variant => uwriteln!(output, "const {local} = _jcoInitializeLiftVariant();"),
             Self::Flags => {
@@ -112,7 +125,7 @@ pub(crate) fn import(intrinsic: LiftIntrinsic) -> RuntimeImport {
             Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Variant))
         }
         LiftFlatFlags => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Flags)),
-        LiftFlatList => Some(RuntimeContextIntrinsic::ResourceTableGet),
+        LiftFlatList => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::List)),
         LiftFlatFuture => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Future)),
         LiftFlatStream => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Stream)),
         LiftFlatErrorContext => Some(RuntimeContextIntrinsic::ErrCtx(
@@ -184,6 +197,19 @@ mod tests {
             runtime::select(false)
                 .call(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8), "decoder, bytes"),
             "_decodeUtf8(decoder, bytes)"
+        );
+    }
+
+    #[test]
+    fn numeric_lists_share_selected_endianness_and_trap_capabilities() {
+        let (source, _) = generated(&[LiftIntrinsic::LiftFlatList]);
+        assert!(source.contains("const isLE = _jcoInitializeEndianness();"));
+        assert!(source.contains(
+            "const _jcoLiftListContext = { RuntimeError: WebAssemblyRuntimeError, littleEndian: isLE };"
+        ));
+        assert_eq!(
+            runtime::select(true).call(Intrinsic::Lift(LiftIntrinsic::LiftFlatList), "meta"),
+            "_liftFlatList(_jcoLiftListContext, meta)"
         );
     }
 
