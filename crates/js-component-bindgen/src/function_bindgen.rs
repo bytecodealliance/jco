@@ -1938,8 +1938,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     StringEncoding::UTF16 => Intrinsic::String(StringIntrinsic::Utf16Decoder),
                     _ => Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8),
                 });
-                let decode_utf8 = (self.encoding == StringEncoding::UTF8)
-                    .then(|| self.intrinsic(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8)));
+                let decode_utf8 = (self.encoding == StringEncoding::UTF8).then(|| {
+                    self.intrinsic_call_prefix(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8))
+                });
                 let tmp = self.tmp();
                 uwriteln!(self.src, "var ptr{tmp} = {} >>> 0;", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {} >>> 0;", operands[1]);
@@ -1974,7 +1975,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     },
                 );
                 let decode = match decode_utf8 {
-                    Some(decode_utf8) => format!("{decode_utf8}({decoder}, {buffer})"),
+                    Some(decode_utf8) => format!("{decode_utf8}{decoder}, {buffer})"),
                     None => format!("{decoder}.decode({buffer})"),
                 };
                 uwriteln!(self.src, "var result{tmp} = {decode};");

@@ -1870,6 +1870,11 @@ export interface LiftErrorContext extends ErrorContextHandleContext {
     readonly local: ErrorContextLocalTableContext;
 }
 export interface LiftModule {
+    readonly decodeUtf8: (
+        RuntimeError: RuntimeErrorConstructor,
+        decoder: StringDecoder,
+        input: ArrayBufferLike | ArrayBufferView,
+    ) => string;
     readonly initializeLiftVariant: () => LiftVariantContext;
     readonly liftFlatBool: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
     readonly liftFlatS8: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];

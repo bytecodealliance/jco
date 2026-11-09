@@ -13,6 +13,54 @@ import type {
     LiftExternalStreamOptions,
 } from '../src/runtime.js';
 
+test.concurrent.each([
+    [[0xff], 'invalid utf-8'],
+    [[0xc0, 0x80], 'invalid utf-8'],
+    [[0xed, 0xa0, 0x80], 'invalid utf-8'],
+    [[0xf4, 0x90, 0x80, 0x80], 'invalid utf-8'],
+    [[0xe2, 0x28], 'invalid utf-8'],
+    [[0xe2, 0x82], 'incomplete utf-8 byte sequence'],
+    [[0xf0, 0x9f, 0x9a], 'incomplete utf-8 byte sequence'],
+])('UTF8 decoding traps for %j', (bytes, message) => {
+    class RuntimeError extends Error {}
+    const input = new Uint8Array([0x61, ...(bytes as number[]), 0x62]);
+    const decode = () =>
+        lift.decodeUtf8(RuntimeError, initializeUtf8Decoder(), new DataView(input.buffer, 1, input.length - 2));
+    expect(decode).toThrow(RuntimeError);
+    expect(decode).toThrow(message as string);
+});
+
+test.concurrent('UTF8 decoding preserves the codec receiver and provider errors', () => {
+    const codec = initializeUtf8Decoder();
+    const providerError = new TypeError('provider failed');
+    const decoder = {
+        fail: false,
+        decode(input: ArrayBufferLike | ArrayBufferView) {
+            expect(this).toBe(decoder);
+            if (this.fail) {
+                throw providerError;
+            }
+            return codec.decode(input);
+        },
+    };
+    const input = new TextEncoder().encode('hé 🚀');
+    expect(lift.decodeUtf8(WebAssembly.RuntimeError, decoder, input.buffer)).toBe('hé 🚀');
+    decoder.fail = true;
+    expect(() => lift.decodeUtf8(WebAssembly.RuntimeError, decoder, input)).toThrow(providerError);
+    const otherError = new Error('codec failed');
+    expect(() =>
+        lift.decodeUtf8(
+            WebAssembly.RuntimeError,
+            {
+                decode() {
+                    throw otherError;
+                },
+            },
+            new Uint8Array([0xff]),
+        ),
+    ).toThrow(otherError);
+});
+
 function direct(params: unknown[]): TaskLiftContext {
     return { componentIdx: 0, params, useDirectParams: true };
 }
