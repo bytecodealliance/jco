@@ -141,7 +141,10 @@ test.concurrent('tracked resource constructors and methods preserve their receiv
     }
 });
 
-test.concurrent('reentrant host calls keep their own invocation handles', async () => {
+// Node 22 exposes an older experimental JSPI API that cannot run this async import.
+const HAS_JSPI = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
+
+test.skipIf(!HAS_JSPI).concurrent('reentrant host calls keep their own invocation handles', async () => {
     const dir = await getTmpDir();
     try {
         const component = `(component
