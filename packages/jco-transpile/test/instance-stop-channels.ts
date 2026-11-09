@@ -11,6 +11,7 @@ import { assert, expect, suite, test } from 'vitest';
 import { parse } from '../src/wasm-tools.js';
 import { $init, generate } from '../src/component.js';
 import { getTmpDir } from './helpers.js';
+import { hasJspi } from './common.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -192,8 +193,7 @@ suite('stopping an instance', () => {
 });
 
 // Async component exports require the current JSPI API, which older Node versions lack.
-const HAS_JSPI = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
-suite.skipIf(!HAS_JSPI)('stopping an instance closes its streams and futures', () => {
+suite.skipIf(!hasJspi)('stopping an instance closes its streams and futures', () => {
     test.concurrent("a guest's writer stops, and its reader sees a shutdown error", async () => {
         const instantiate = await transpiled(WRITES_FOREVER);
         let ticks = 0;
@@ -478,7 +478,7 @@ const NO_EXPORTS = `(component)`;
 /** `feed` returns, and its task stays until the stream it reads gives it something. */
 const LINGERS = READS_FROM_HOST;
 
-suite.skipIf(!HAS_JSPI)('knowing when an instance is idle', () => {
+suite.skipIf(!hasJspi)('knowing when an instance is idle', () => {
     /** A stream of one byte, which comes when `release` is called. */
     function oneByte() {
         let release!: () => void;
@@ -643,7 +643,7 @@ suite.skipIf(!HAS_JSPI)('knowing when an instance is idle', () => {
     });
 });
 
-suite.skipIf(!HAS_JSPI)('hearing of traps', () => {
+suite.skipIf(!hasJspi)('hearing of traps', () => {
     /** Resolves with the first trap `onTrap` is given, with every one kept in `traps`. */
     function hear() {
         const traps = [];

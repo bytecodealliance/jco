@@ -13,11 +13,9 @@ import type {
     RuntimeMemory,
     TaskRegisters,
 } from '../../../jco-cm-runtime/src/runtime.js';
-import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
+import { LOCAL_TEST_COMPONENTS_DIR, hasJspi } from '../common.js';
 import { composeCallerCallee, getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
-
-const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 
 interface Probe {
     readonly createTask: (args: { componentIdx: number; isAsync: boolean }) => { task: AsyncTask; threadID: number };
