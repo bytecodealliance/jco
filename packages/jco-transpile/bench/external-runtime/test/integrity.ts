@@ -242,6 +242,59 @@ test.concurrent.each([
     }
 });
 
+test.concurrent.each([
+    { status: 'complete', report: true, expected: 'completed successfully' },
+    { status: 'failed', report: true, expected: 'Benchmark failed' },
+    { status: 'failed', report: false, expected: 'No completed measurement report' },
+    { status: 'running', report: false, expected: 'did not finish' },
+    { status: undefined, report: false, expected: 'No benchmark results were produced' },
+])('publishes run summary for status=$status, report=$report', async ({ status, report, expected }) => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-run-summary-'));
+    const script = fileURLToPath(new URL('../../../../../script/bench-runtime.mjs', import.meta.url));
+    const summaryPath = join(dir, 'github-summary.md');
+    const reportMarkdown = '## Runtime comparison\n\n| Scenario | Raw bytes |\n| --- | ---: |\n| adder | 100 |\n';
+    try {
+        await writeFile(summaryPath, 'Existing summary\n\n');
+        if (status) {
+            await writeFile(
+                join(dir, 'latest.json'),
+                JSON.stringify({
+                    status,
+                    runDir: dir,
+                    ...(status === 'failed' ? { error: 'Parity check failed' } : {}),
+                }),
+            );
+        }
+        if (report) {
+            await writeFile(join(dir, 'summary.md'), reportMarkdown);
+        }
+
+        // Summary publication must work even when dependency installation failed.
+        const env = { ...process.env, PATH: '', JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT: dir };
+        await exec(process.execPath, [script, '--summary'], {
+            cwd: dir,
+            env: { ...env, GITHUB_STEP_SUMMARY: summaryPath },
+        });
+        const summary = await readFile(summaryPath, 'utf8');
+        assert.isTrue(summary.startsWith('Existing summary\n\n# Runtime bench'));
+        assert.include(summary, expected);
+        if (report) {
+            assert.include(summary, reportMarkdown);
+        }
+        if (status === 'failed') {
+            assert.include(summary, 'Parity check failed');
+        }
+
+        const local = await exec(process.execPath, [script, '--summary'], {
+            cwd: dir,
+            env: { ...env, GITHUB_STEP_SUMMARY: '' },
+        });
+        assert.equal(local.stdout, summary.slice('Existing summary\n\n'.length));
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
 test.concurrent('rejects missing inner samples even when reported medians look valid', async () => {
     const { validateMeasurement, timingFinding } = await import('../report.js');
     assert.throws(() =>

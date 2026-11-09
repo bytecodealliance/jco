@@ -17,11 +17,21 @@ Node.js 24+, pnpm 11 and the repository's Rust toolchain. Use `--skip-build` to 
 prepared dependencies and artifacts. Run on an otherwise idle machine; Linux runs
 also audit for leftover workers before timing.
 
-The independent `external-runtime-bench` workflow runs this same script on pushes
+The independent `runtime bench` workflow runs this same script on pushes
 and pull requests to `main`, for merge groups, and through **Run workflow** in the
 GitHub Actions UI once the workflow is on the default branch. Its build and benchmark
-work runs independently of the main test workflow. Measurement artifacts are uploaded
-even when the benchmark fails.
+work runs independently of the main test workflow. It publishes the results tables
+and run status to the GitHub Actions run summary and uploads the `runtime-bench`
+artifact even when the benchmark fails. If the run ends before measurements complete,
+the summary explains that results are unavailable and points to the job logs.
+
+Print the latest report locally without running the benchmark again:
+
+```sh
+node script/bench-runtime.mjs --summary
+```
+
+The same command appends to `GITHUB_STEP_SUMMARY` when run in GitHub Actions.
 
 Build the local transpiler, Component Model runtime, and test fixtures first
 (see [transpilation tests](../../test/README.md)).
