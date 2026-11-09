@@ -6,11 +6,11 @@ import { promisify } from 'node:util';
 import { assert, expect, test } from 'vitest';
 import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
+import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, transpileBytes, writeFiles } from '../transpilation.js';
 import { composeCallerCallee } from '../p3/ported/wasmtime/component-async/common.js';
 const errorContextUrl = new URL('intrinsics/error-context.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
-const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 
 function component(encoding: string) {
     return `(component

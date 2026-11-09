@@ -4,11 +4,11 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { assert, expect, test } from 'vitest';
 import { getTmpDir } from '../helpers.js';
+import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
 
 const hostUrl = new URL('intrinsics/host.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
-const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 function fixture(name: string) {
     return fileURLToPath(new URL(`../fixtures/components/p3/${name}.wat`, import.meta.url));
 }

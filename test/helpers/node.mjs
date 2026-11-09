@@ -1,6 +1,10 @@
 import { argv, env, execArgv } from 'node:process';
 import { spawn } from 'node:child_process';
 
+// Node 22's experimental JSPI exposes the older Suspender API, which cannot
+// instantiate bindings that use promising/Suspending, even with its JSPI flag.
+export const hasJspi = typeof WebAssembly.promising === 'function' && typeof WebAssembly.Suspending === 'function';
+
 /** Execute a Node script, capture both pipes, and check its expected exit code. */
 export async function executeNodeScript(cmd, ...args) {
     if (!cmd) {

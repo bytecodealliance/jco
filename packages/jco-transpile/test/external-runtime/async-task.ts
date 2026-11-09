@@ -6,12 +6,12 @@ import { promisify } from 'node:util';
 import { assert, expect, test } from 'vitest';
 import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
+import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, transpileBytes, writeFiles } from '../transpilation.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resource-drop.wat', import.meta.url));
 const taskUrl = new URL('intrinsics/async-task.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
-const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 
 test.concurrent.for([false, true])('symmetric entry preserves its callback receiver (jspi=%s)', async (jspi, ctx) => {
     if (jspi && !hasJspi) {

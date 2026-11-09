@@ -7,6 +7,8 @@ import { ReadableStream } from 'node:stream/web';
 
 import { assert } from 'vitest';
 
+export { hasJspi } from '../../../test/helpers/node.mjs';
+
 /** Path to a linter as installed by npm-compatible tooling */
 export const LINTER_PATH = fileURLToPath(new URL('../../../node_modules/oxlint/bin/oxlint', import.meta.url));
 

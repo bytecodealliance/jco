@@ -7,14 +7,12 @@ import { promisify } from 'node:util';
 import { assert, expect, test } from 'vitest';
 
 import { getTmpDir } from '../helpers.js';
+import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/waitable-set-poll-non-set.wat', import.meta.url));
 const waitableUrl = new URL('intrinsics/waitable.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
-
-// Async canonical exports require JSPI even when component instantiation is synchronous.
-const hasJspi = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
 
 async function writeProvider(dir: string, source: string) {
     await writeFile(join(dir, 'package.json'), '{"type":"module"}');

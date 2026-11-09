@@ -2,18 +2,16 @@
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { setTimeout } from 'node:timers/promises';
 
 import { assert, test } from 'vitest';
 import ts from 'typescript-compiler-api';
 
 import { getTmpDir } from './helpers.js';
-import { transpileBytes, writeFiles } from './transpilation.js';
-import { parse } from '../src/wasm-tools.js';
+import { transpile, writeFiles } from './transpilation.js';
+import { COMPONENT_FIXTURES_DIR, hasJspi } from './common.js';
 
-const IDENTITY = `(component
-    (core module $m (func (export "run") (param i32) (result i32) (local.get 0)))
-    (core instance $i (instantiate $m))
-    (func (export "run") (param "value" u32) (result u32) (canon lift (core func $i "run"))))`;
+const FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'call-tracking');
 
 /** Compile a consumer to verify opt-in surface, argument inference and outcome narrowing. */
 async function checkTypes(dir: string, instantiation: string | undefined, enabled: boolean) {
@@ -64,7 +62,7 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
         test.concurrent(`call tracking surface (${instantiation ?? 'direct'}, enabled=${callTracking})`, async () => {
             const dir = await getTmpDir();
             try {
-                const { files } = await transpileBytes(await parse(IDENTITY), {
+                const { files } = await transpile(join(FIXTURES_DIR, 'identity.wat'), {
                     name: 'component',
                     instantiation,
                     callTracking,
@@ -101,24 +99,7 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
 test.concurrent('tracked resource constructors and methods preserve their receiver', async () => {
     const dir = await getTmpDir();
     try {
-        const component = `(component
-            (component $api
-            (type $r (resource (rep i32)))
-            (core func $new (canon resource.new $r))
-            (core module $m
-                (import "" "new" (func $new (param i32) (result i32)))
-                (func (export "new") (param i32) (result i32) (call $new (local.get 0)))
-                (func (export "get") (param i32) (result i32) (local.get 0)))
-            (core instance $i (instantiate $m (with "" (instance (export "new" (func $new))))))
-            (export $thing "thing" (type $r))
-            (func (export "[constructor]thing") (param "value" u32) (result (own $thing))
-                (canon lift (core func $i "new")))
-            (func (export "[method]thing.get") (param "self" (borrow $thing)) (result u32)
-                (canon lift (core func $i "get")))
-            )
-            (instance $api (instantiate $api))
-            (export "api" (instance $api)))`;
-        const { files } = await transpileBytes(await parse(component), {
+        const { files } = await transpile(join(FIXTURES_DIR, 'resources.wat'), {
             name: 'component',
             instantiation: 'sync',
             callTracking: true,
@@ -141,36 +122,10 @@ test.concurrent('tracked resource constructors and methods preserve their receiv
     }
 });
 
-// Node 22 exposes an older experimental JSPI API that cannot run this async import.
-const HAS_JSPI = typeof WebAssembly.Suspending === 'function' && typeof WebAssembly.promising === 'function';
-
-test.skipIf(!HAS_JSPI).concurrent('reentrant host calls keep their own invocation handles', async () => {
+test.skipIf(!hasJspi).concurrent('reentrant host calls keep their own invocation handles', async () => {
     const dir = await getTmpDir();
     try {
-        const component = `(component
-            (import "notify" (func $notify))
-            (import "wait" (func $wait async))
-            (component $outer
-                (import "notify" (func $notify))
-                (core func $notify (canon lower (func $notify)))
-                (core module $m
-                    (import "" "notify" (func $notify))
-                    (func (export "run") (result i32) (call $notify) (i32.const 7)))
-                (core instance $i (instantiate $m (with "" (instance (export "notify" (func $notify))))))
-                (func (export "run") (result u32) (canon lift (core func $i "run"))))
-            (component $inner
-                (import "wait" (func $wait async))
-                (core func $wait (canon lower (func $wait)))
-                (core module $m
-                    (import "" "wait" (func $wait))
-                    (func (export "run") (call $wait)))
-                (core instance $i (instantiate $m (with "" (instance (export "wait" (func $wait))))))
-                (func (export "run") async (canon lift (core func $i "run"))))
-            (instance $outer (instantiate $outer (with "notify" (func $notify))))
-            (instance $inner (instantiate $inner (with "wait" (func $wait))))
-            (export "outer" (instance $outer))
-            (export "inner" (instance $inner)))`;
-        const { files } = await transpileBytes(await parse(component), {
+        const { files } = await transpile(join(FIXTURES_DIR, 'reentrant.wat'), {
             name: 'component',
             instantiation: 'async',
             callTracking: true,
@@ -203,7 +158,7 @@ test.skipIf(!HAS_JSPI).concurrent('reentrant host calls keep their own invocatio
             child!.finished.then(() => {
                 childFinished = true;
             });
-            await new Promise((resolve) => setTimeout(resolve, 20));
+            await setTimeout(20);
             assert.isFalse(childFinished);
             release();
             await child!.result;

@@ -1,0 +1,5 @@
+package test:tracking;
+
+world component {
+  export run: func(value: u32) -> u32;
+}
