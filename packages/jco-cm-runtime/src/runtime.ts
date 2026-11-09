@@ -1785,12 +1785,18 @@ export interface LiftStringContext {
     readonly utf8: StringDecoder;
     readonly utf16: StringDecoder;
 }
+export interface LiftListContext extends TrapContext {
+    readonly littleEndian: boolean;
+}
 export interface LiftListMeta {
     readonly elemLiftFn: TaskLiftFn;
     readonly elemSize32: number;
     readonly elemAlign32: number;
     readonly knownLen?: number;
-    readonly typedArray?: (new (values: number[]) => unknown) | (new (values: bigint[]) => unknown);
+    readonly typedArray?: {
+        new (values: never[]): unknown;
+        new (buffer: ArrayBufferLike): unknown;
+    };
 }
 export interface LiftMapMeta {
     readonly keyLiftFn: TaskLiftFn;
@@ -1893,7 +1899,7 @@ export interface LiftModule {
     readonly liftFlatStringUTF16: (context: StringDecoder, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
     readonly liftFlatRecord: (meta: LiftRecordMeta) => TaskLiftFn;
     readonly liftFlatVariant: (context: LiftVariantContext, meta: LiftVariantMeta) => TaskLiftFn;
-    readonly liftFlatList: (context: TrapContext, meta: LiftListMeta) => TaskLiftFn;
+    readonly liftFlatList: (context: LiftListContext, meta: LiftListMeta) => TaskLiftFn;
     readonly liftFlatMap: (meta: LiftMapMeta) => TaskLiftFn;
     readonly liftFlatTuple: (meta: LiftTupleMeta) => TaskLiftFn;
     readonly liftFlatEnum: (context: LiftVariantContext, meta: LiftVariantMeta) => TaskLiftFn;

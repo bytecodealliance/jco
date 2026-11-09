@@ -15,7 +15,7 @@ import type {
     LiftFutureContext,
     LiftStreamContext,
     LiftErrorContext,
-    TrapContext,
+    LiftListContext,
     LocalErrorContext,
     StringDecoder,
     LiftFlagsContext,
@@ -711,7 +711,7 @@ export function liftFlatVariant(
 }
 
 export function liftFlatList(
-    _context: TrapContext,
+    _context: LiftListContext,
     meta: LiftListMeta,
 ): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const { elemLiftFn, elemSize32, elemAlign32, knownLen, typedArray } = meta;
@@ -741,15 +741,23 @@ export function liftFlatList(
             throw new TypeError(`list pointer [${dataPtr}] is not aligned to ${elemAlign32}`);
         }
         ctx.storagePtr! = dataPtr;
-        const val = [];
-        for (var i = 0; i < len; i++) {
-            const elemPtr = dataPtr + i * elemSize32;
-            ctx.storagePtr! = elemPtr;
-            const [res, nextCtx] = elemLiftFn(ctx);
-            val.push(res);
-            ctx = nextCtx;
+        let val: unknown;
+        if (typedArray !== undefined && (_context.littleEndian || elemSize32 === 1)) {
+            // Copy numeric elements together while keeping the result independent of guest memory.
+            ctx.storagePtr = dataPtr + len * elemSize32;
+            val = new typedArray(ctx.memory!.buffer.slice(dataPtr, ctx.storagePtr));
+        } else {
+            const values = [];
+            for (let i = 0; i < len; i++) {
+                const elemPtr = dataPtr + i * elemSize32;
+                ctx.storagePtr = elemPtr;
+                const [res, nextCtx] = elemLiftFn(ctx);
+                values.push(res);
+                ctx = nextCtx;
 
-            ctx.storagePtr! = Math.max(ctx.storagePtr!, elemPtr + elemSize32);
+                ctx.storagePtr = Math.max(ctx.storagePtr!, elemPtr + elemSize32);
+            }
+            val = listValue(values);
         }
         if (originalPtr !== null) {
             ctx.storagePtr = originalPtr;
@@ -757,7 +765,7 @@ export function liftFlatList(
         if (originalLen !== null) {
             ctx.storageLen = originalLen;
         }
-        return [listValue(val), ctx];
+        return [val, ctx];
     };
 
     return function liftFlatListInner(ctx) {
