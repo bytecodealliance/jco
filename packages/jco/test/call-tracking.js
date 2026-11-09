@@ -11,7 +11,9 @@ import { JCO_JS_PATH } from "./common.js";
 
 const execFileAsync = promisify(execFile);
 
-test("CLI forwards call tracking to transpilation and host type generation", async () => {
+// TODO(unskip): Restore after @bytecodealliance/jco-transpile releases call tracking
+// and Jco's published dependency is updated to that release.
+test.skip("CLI forwards call tracking to transpilation and host type generation", async () => {
     const dir = await mkdtemp(join(tmpdir(), "jco-call-tracking-"));
     try {
         const componentPath = join(dir, "component.wat");
