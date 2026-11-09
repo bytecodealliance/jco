@@ -342,15 +342,13 @@ mod tests {
             runtime::select(true).bind_callback(lift, "2"),
             "_liftFlatErrorContext.bind(null, _jcoErrorContextNewContext, 2)"
         );
-        for intrinsic in [Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext)] {
-            let source = generated([intrinsic]);
-            assert!(source.contains("errCtxGetLocalTable(_jcoErrorContextLocalTableContext, "));
-            assert!(source.contains("errCtxGlobalRefCountAdd(GlobalErrorContextTable, "));
-            assert!(!source.contains("errCtxGetLocalTable(componentIdx"));
-            assert!(!source.contains("errCtxGetLocalTable(ctx.componentIdx"));
-            assert!(!source.contains("errCtxGlobalRefCountAdd(errCtx"));
-        }
+
         let source = generated([Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext)]);
+        assert!(source.contains("errCtxGetLocalTable(_jcoErrorContextLocalTableContext, "));
+        assert!(source.contains("errCtxGlobalRefCountAdd(GlobalErrorContextTable, "));
+        assert!(!source.contains("errCtxGetLocalTable(componentIdx"));
+        assert!(!source.contains("errCtxGetLocalTable(ctx.componentIdx"));
+        assert!(!source.contains("errCtxGlobalRefCountAdd(errCtx"));
         assert!(source.contains("errCtxCreateLocalHandle(_jcoErrorContextHandleContext, "));
         assert!(source.contains("GlobalErrorContextTable.get()"));
     }
