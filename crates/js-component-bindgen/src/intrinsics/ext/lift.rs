@@ -102,6 +102,9 @@ impl LiftContextIntrinsic {
 pub(crate) fn import(intrinsic: LiftIntrinsic) -> RuntimeImport {
     use LiftIntrinsic::*;
     let context = match intrinsic {
+        DecodeUtf8 => Some(RuntimeContextIntrinsic::Core(
+            CoreContextIntrinsic::InitializeRuntimeErrorConstructor,
+        )),
         LiftFlatStringAny => Some(RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::Strings)),
         LiftFlatStringUtf8 => Some(RuntimeContextIntrinsic::InitializeUtf8Decoder),
         LiftFlatStringUtf16 => Some(RuntimeContextIntrinsic::InitializeUtf16Decoder),
@@ -165,6 +168,25 @@ mod tests {
         .to_string();
         (source, intrinsics)
     }
+    #[test]
+    fn utf8_decode_uses_the_selected_runtime_error_constructor() {
+        let (source, _) = generated(&[LiftIntrinsic::DecodeUtf8]);
+        assert!(source.contains(
+            "const WebAssemblyRuntimeError = _jcoInitializeRuntimeErrorConstructor(WebAssembly);"
+        ));
+        assert!(!source.contains("function _decodeUtf8("));
+        assert_eq!(
+            runtime::select(true)
+                .call(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8), "decoder, bytes"),
+            "_decodeUtf8(WebAssemblyRuntimeError, decoder, bytes)"
+        );
+        assert_eq!(
+            runtime::select(false)
+                .call(Intrinsic::Lift(LiftIntrinsic::DecodeUtf8), "decoder, bytes"),
+            "_decodeUtf8(decoder, bytes)"
+        );
+    }
+
     #[test]
     fn primitive_lifts_have_no_store_or_unused_codec_allocations() {
         let (source, intrinsics) =
