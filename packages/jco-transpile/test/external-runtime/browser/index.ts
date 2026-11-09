@@ -82,7 +82,7 @@ suite('external runtime browser', () => {
                     );
                     await writeFiles(files, { baseDir: outDir });
                     if (provider === 'custom') {
-                        await cp(CUSTOM_RUNTIME, join(outDir, 'runtime'), { recursive: true });
+                        await writeCustomRuntime(join(outDir, 'runtime'));
                     }
                     const deferred = name === 'deferred-subtask-start';
                     const result = await runBrowserCase({
