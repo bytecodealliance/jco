@@ -151,6 +151,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     for (const omitted of [
                         'class AsyncTask',
                         'class AsyncSubtask',
+                        'class FutureValue',
                         'function createNewCurrentImplicitThread(',
                         'function getCurrentTask(',
                         'getTask: (componentIdx, taskID) =>',
@@ -158,7 +159,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     ]) {
                         assert.notInclude(source, omitted);
                     }
-                    assert.include(source, 'value => value instanceof FutureValue');
+                    assert.include(source, 'const _jcoTaskFuturePredicate = () => false;');
                     assert.include(source, 'scopeCounter: _jcoResourceScopeCounterContext');
                 }
                 await writeFiles(files, { baseDir: dir });
