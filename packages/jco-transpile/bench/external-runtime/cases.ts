@@ -201,7 +201,7 @@ export const importControls = [
          a.validateResourceBorrowScope(); b.validateResourceBorrowScope(); clearCurrentTask(clearing, 0, a.id()); clearCurrentTask(clearing, 0, b.id());
         `,
         answer: 'a instanceof Task && b instanceof Task && a.id() === 1n && b.id() === 2n && shared && scopeCounter.value === 2 && Array.from(scopeTasks.keys()).length === 0 && clearing.tasks.get(0).length === 0 && clearing.taskIds.length === 0 ? 42 : 0',
-        allocations: { Map: 9, Symbol: 1 },
+        allocations: { Map: 8, Symbol: 1 },
     },
     {
         suffix: 'intrinsics/error-context',
@@ -316,7 +316,7 @@ export const importControls = [
         ],
         setup: 'const RuntimeError = Error, RepTable = initializeRepTableClass({ RuntimeError }), indexSpaces = initializeHandleIndexSpaces(), instanceFlags = initializeInstanceFlags(), storeTrap = initializeStoreTrap(), storeAsyncState = initializeStoreAsyncState(), asyncState = initializeComponentAsyncStates(); const normalization = { RuntimeError, messages: initializeCoreTrapMessages({}) }, deadlock = { RuntimeError, storeTrap, storeAsyncState, asyncState }; const State = initializeComponentAsyncStateClass({ RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, deadlock, cannotEnter: "cannot enter", Waitable: initializeWaitableClass() }); const state = getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);',
         answer: 'state instanceof State && state.handles instanceof RepTable && state.handles.get(state.handles.insert(42)) === 42 && state.getBackpressure() === 0 ? 42 : 0',
-        allocations: { Map: 6, Symbol: 1 },
+        allocations: { Map: 5, Symbol: 1 },
     },
     {
         suffix: 'intrinsics/core',

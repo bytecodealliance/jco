@@ -47,69 +47,59 @@ export const i32ToChar: ConversionModule['i32ToChar'] = (value) => {
 };
 
 export const toInt8: ConversionModule['toInt8'] = (context, value) => {
-    if (context.strict) {
-        requireValidNumericPrimitive('s8', value);
+    if (context.strict && !isInt8(value)) {
+        invalidNumericPrimitive('s8', value);
     }
-    let converted = (value as number) >>> 0;
-    converted %= 2 ** 8;
-    if (converted >= 2 ** 7) {
-        converted -= 2 ** 8;
-    }
-    return converted;
+    return ((value as number) << 24) >> 24;
 };
 
 export const toUint8: ConversionModule['toUint8'] = (context, value) => {
-    if (context.strict) {
-        requireValidNumericPrimitive('u8', value);
+    if (context.strict && !isUint8(value)) {
+        invalidNumericPrimitive('u8', value);
     }
-    return ((value as number) >>> 0) % 2 ** 8;
+    return (value as number) & 255;
 };
 
 export const toInt16: ConversionModule['toInt16'] = (context, value) => {
-    if (context.strict) {
-        requireValidNumericPrimitive('s16', value);
+    if (context.strict && !isInt16(value)) {
+        invalidNumericPrimitive('s16', value);
     }
-    let converted = (value as number) >>> 0;
-    converted %= 2 ** 16;
-    if (converted >= 2 ** 15) {
-        converted -= 2 ** 16;
-    }
-    return converted;
+    return ((value as number) << 16) >> 16;
 };
 
 export const toUint16: ConversionModule['toUint16'] = (context, value) => {
-    if (context.strict) {
-        requireValidNumericPrimitive('u16', value);
+    if (context.strict && !isUint16(value)) {
+        invalidNumericPrimitive('u16', value);
     }
-    return ((value as number) >>> 0) % 2 ** 16;
+    return (value as number) & 65535;
 };
 
 export const toInt32: ConversionModule['toInt32'] = (context, value) => {
-    if (context.strict) {
-        requireValidNumericPrimitive('s32', value);
+    if (context.strict && !isInt32(value)) {
+        invalidNumericPrimitive('s32', value);
     }
     return (value as number) >> 0;
 };
 
 export const toUint32: ConversionModule['toUint32'] = (context, value) => {
-    if (context.strict) {
-        requireValidNumericPrimitive('u32', value);
+    if (context.strict && !isUint32(value)) {
+        invalidNumericPrimitive('u32', value);
     }
     return (value as number) >>> 0;
 };
 
 export const toInt64: ConversionModule['toInt64'] = (context, value) => {
     const converted = BigInt(value as bigint);
-    if (context.strict) {
-        requireValidNumericPrimitive('s64', converted);
+    if (context.strict && !isInt64(converted)) {
+        invalidNumericPrimitive('s64', converted);
     }
     return BigInt.asIntN(64, converted);
 };
 
 export const toUint64: ConversionModule['toUint64'] = (context, value) => {
     const converted = BigInt(value as bigint);
-    if (context.strict) {
-        requireValidNumericPrimitive('u64', converted);
+    if (context.strict && !isUint64(converted)) {
+        invalidNumericPrimitive('u64', converted);
     }
     return BigInt.asUintN(64, converted);
 };
@@ -133,33 +123,25 @@ export const toResultString: ConversionModule['toResultString'] = (value) => {
 };
 
 export const isValidNumericPrimitive: ConversionModule['isValidNumericPrimitive'] = (type, value) => {
-    if (value === undefined || value === null) {
-        return false;
-    }
     switch (type) {
         case 'bool':
             return value === 0 || value === 1;
-        case 'u8':
-            return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 255;
         case 's8':
-            return typeof value === 'number' && Number.isInteger(value) && value >= -128 && value <= 127;
-        case 'u16':
-            return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 65535;
+            return isInt8(value);
+        case 'u8':
+            return isUint8(value);
         case 's16':
-            return typeof value === 'number' && Number.isInteger(value) && value >= -32768 && value <= 32767;
-        case 'u32':
-            return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 4_294_967_295;
+            return isInt16(value);
+        case 'u16':
+            return isUint16(value);
         case 's32':
-            return (
-                typeof value === 'number' &&
-                Number.isInteger(value) &&
-                value >= -2_147_483_648 &&
-                value <= 2_147_483_647
-            );
-        case 'u64':
-            return typeof value === 'bigint' && value >= 0 && value <= 18_446_744_073_709_551_615n;
+            return isInt32(value);
+        case 'u32':
+            return isUint32(value);
         case 's64':
-            return typeof value === 'bigint' && value >= -9223372036854775808n && value <= 9223372036854775807n;
+            return isInt64(value);
+        case 'u64':
+            return isUint64(value);
         case 'f32':
         case 'f64':
             return typeof value === 'number';
@@ -170,7 +152,7 @@ export const isValidNumericPrimitive: ConversionModule['isValidNumericPrimitive'
 
 export const requireValidNumericPrimitive: ConversionModule['requireValidNumericPrimitive'] = (type, value) => {
     if (!isValidNumericPrimitive(type, value)) {
-        throw new TypeError(`invalid ${type} value [${value}]`);
+        invalidNumericPrimitive(type, value);
     }
     return true;
 };
@@ -182,3 +164,19 @@ export const splitInt64: ConversionModule['splitInt64'] = (value) => {
 export const mergeInt64: ConversionModule['mergeInt64'] = (low, high) => {
     return BigInt(low | 0) | (BigInt(high | 0) << 32n);
 };
+
+// A valid integer is unchanged by truncation to its width. The type checks
+// reject non-numeric inputs before coercion; separate predicates keep unused widths out of bundles.
+const isInt8 = (value: unknown): value is number => typeof value === 'number' && value === (value << 24) >> 24;
+const isUint8 = (value: unknown): value is number => typeof value === 'number' && value === (value & 255);
+const isInt16 = (value: unknown): value is number => typeof value === 'number' && value === (value << 16) >> 16;
+const isUint16 = (value: unknown): value is number => typeof value === 'number' && value === (value & 65535);
+const isInt32 = (value: unknown): value is number => typeof value === 'number' && value === value >> 0;
+const isUint32 = (value: unknown): value is number => typeof value === 'number' && value === value >>> 0;
+const isInt64 = (value: unknown): value is bigint => typeof value === 'bigint' && value === BigInt.asIntN(64, value);
+const isUint64 = (value: unknown): value is bigint => typeof value === 'bigint' && value === BigInt.asUintN(64, value);
+
+/** Report the same conversion failure for direct and type-dispatched validation. */
+function invalidNumericPrimitive(type: string, value: unknown): never {
+    throw new TypeError(`invalid ${type} value [${value}]`);
+}

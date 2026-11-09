@@ -602,23 +602,26 @@ test.concurrent('stopping a task rejects completion before its host import retur
     }
 });
 
-test.concurrent('the async driver reports traps after a task has returned', () => {
-    const reported: unknown[] = [];
-    const store = setup({ reportTrap: (error) => reported.push(error) });
-    try {
-        const state = store.state();
-        const [task] = store.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
-        expect(task.tryEnter()).toBe(true);
-        task.resolve([]);
-        store.asyncTask.driverLoop({ componentState: state, task, callbackResult: -1 });
-        expect(reported).toHaveLength(1);
-        expect(reported[0]).toBeInstanceOf(WebAssembly.RuntimeError);
-        expect(task.isErrored()).toBe(reported[0]);
-        expect(task.isExited()).toBe(true);
-    } finally {
-        store.cleanup();
-    }
-});
+test.concurrent.each([-1, -16, 4, NaN, 2 ** 31, 'invalid'])(
+    'the async driver reports invalid callback %s after a task has returned',
+    (callbackResult) => {
+        const reported: unknown[] = [];
+        const store = setup({ reportTrap: (error) => reported.push(error) });
+        try {
+            const state = store.state();
+            const [task] = store.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+            expect(task.tryEnter()).toBe(true);
+            task.resolve([]);
+            store.asyncTask.driverLoop({ componentState: state, task, callbackResult });
+            expect(reported).toHaveLength(1);
+            expect(reported[0]).toBeInstanceOf(WebAssembly.RuntimeError);
+            expect(task.isErrored()).toBe(reported[0]);
+            expect(task.isExited()).toBe(true);
+        } finally {
+            store.cleanup();
+        }
+    },
+);
 
 test.concurrent('marking completion handled does not read a returned future', async () => {
     let reads = 0;

@@ -9,6 +9,10 @@ import { getOrCreateAsyncState, recordTrap } from '../component.js';
 import { withCurrentTaskMetaAsync } from '../task-context.js';
 import { debugLog } from '../core-debug.js';
 
+const THREAD_NOT_STARTED = 'not-started';
+const THREAD_RUNNING = 'running';
+const THREAD_COMPLETED = 'completed';
+
 export function initializeAsyncThreadClass(context: AsyncThreadClassContext): AsyncThreadConstructor {
     const { lookup: _lookup, registers: _registers } = context;
     class AsyncThread {
@@ -16,9 +20,9 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
             // Explicitly spawned (`thread.new-indirect`) threads start
             // here; the implicit thread of a task skips straight to
             // RUNNING since it is the task's own entry.
-            NOT_STARTED: 'not-started',
-            RUNNING: 'running',
-            COMPLETED: 'completed',
+            NOT_STARTED: THREAD_NOT_STARTED,
+            RUNNING: THREAD_RUNNING,
+            COMPLETED: THREAD_COMPLETED,
         } as const;
 
         // Component-instance-scoped id (the canonical ABI's
@@ -52,9 +56,9 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
             // is already running by the time it's constructed.
             if (opts.startFn) {
                 this.#startFn = opts.startFn;
-                this.#state = AsyncThread.State.NOT_STARTED;
+                this.#state = THREAD_NOT_STARTED;
             } else {
-                this.#state = AsyncThread.State.RUNNING;
+                this.#state = THREAD_RUNNING;
             }
         }
 
@@ -136,10 +140,10 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
         // does not wait for the thread to finish or even reach its first
         // suspension point.
         start() {
-            if (this.#state !== AsyncThread.State.NOT_STARTED) {
+            if (this.#state !== THREAD_NOT_STARTED) {
                 throw new Error(`cannot start thread [${this.#id}] in state [${this.#state}]`);
             }
-            this.#state = AsyncThread.State.RUNNING;
+            this.#state = THREAD_RUNNING;
             const startFn = this.#startFn!;
             this.#startFn = null;
 
@@ -153,12 +157,12 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
                 },
             })
                 .then(() => {
-                    this.#state = AsyncThread.State.COMPLETED;
+                    this.#state = THREAD_COMPLETED;
                     this.#task.removeThread(this);
                 })
                 .catch((err) => {
                     err = recordTrap(context.traps, this.#componentIdx, err);
-                    this.#state = AsyncThread.State.COMPLETED;
+                    this.#state = THREAD_COMPLETED;
                     debugLog('[AsyncThread#start()] spawned thread errored', {
                         threadID: this.#id!,
                         taskID: this.#task.id(),

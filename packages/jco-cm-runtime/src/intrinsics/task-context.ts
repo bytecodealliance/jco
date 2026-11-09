@@ -1,3 +1,4 @@
+import { isPromiseLike } from './core-promises.js';
 import type { CoreModule, TaskMeta, TaskRegisters } from '../runtime.js';
 import { debugLog } from './core-debug.js';
 
@@ -69,11 +70,7 @@ export function withCurrentTaskMetaAsync<T>(
         registers.current = previousCurrent;
         throw error;
     }
-    if (
-        result === null ||
-        (typeof result !== 'object' && typeof result !== 'function') ||
-        typeof (result as { then?: unknown }).then !== 'function'
-    ) {
+    if (!isPromiseLike(result)) {
         registers[componentIdx] = previous;
         registers.current = previousCurrent;
         return result;

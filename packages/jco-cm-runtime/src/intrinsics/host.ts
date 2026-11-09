@@ -1,3 +1,4 @@
+import { emptyFunc } from './js-helper.js';
 import type {
     HostModule,
     HostPrepareContext,
@@ -899,7 +900,7 @@ export async function syncStartCall(
         // If task.return wins the race below, retain a rejection handler on
         // the detached lifecycle while failCalleeLifecycle propagates it to
         // the task tree/store.
-        calleeLifecyclePromise.catch(() => {});
+        calleeLifecyclePromise.catch(emptyFunc);
 
         // A sync lower blocks only until task.return supplies its result, but
         // an earlier initial-invocation failure must still trap the caller.

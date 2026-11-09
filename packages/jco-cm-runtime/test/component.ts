@@ -250,3 +250,27 @@ test.concurrent.each([false, true])(
         }
     },
 );
+
+test.concurrent('backpressure dispatch snapshots handlers across registration and removal', () => {
+    const state = create().component.getOrCreateAsyncState(0);
+    const calls: string[] = [];
+    let changed = false;
+    state.registerHandler({
+        event: 'backpressure-change',
+        fn: () => {
+            calls.push('first');
+            if (!changed) {
+                changed = true;
+                state.removeHandler({ event: 'backpressure-change', handlerID: second });
+                state.registerHandler({ event: 'backpressure-change', fn: () => calls.push('third') });
+            }
+        },
+    });
+    const second = state.registerHandler({ event: 'backpressure-change', fn: () => calls.push('second') });
+    state.removeHandler({ event: 'other', handlerID: second });
+    state.setBackpressure(1);
+    expect(calls).toEqual(['first', 'second']);
+    calls.length = 0;
+    state.setBackpressure(0);
+    expect(calls).toEqual(['first', 'third']);
+});

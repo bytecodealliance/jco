@@ -62,7 +62,18 @@ test.concurrent('non-strict integer coercions retain JavaScript wrapping and err
     expect(c.toUint32(-1)).toBe(0xffffffff);
     for (const [, method] of integerTypes) {
         expect(c[method]('12.8')).toBe(12);
-        expect(c[method]({ valueOf: () => 7 })).toBe(7);
+        let coercions = 0;
+        expect(
+            c[method]({
+                valueOf: () => {
+                    coercions++;
+                    return 7;
+                },
+            }),
+        ).toBe(7);
+        expect(coercions).toBe(1);
+        expect(c[method](2 ** 40 + 7)).toBe(7);
+        expect(c[method](-(2 ** 40) + 7)).toBe(7);
         expect(c[method](null)).toBe(0);
         expect(c[method](undefined)).toBe(0);
         expect(c[method](Infinity)).toBe(0);

@@ -1,3 +1,4 @@
+import { isPromiseLike } from '../core-promises.js';
 import type {
     TaskCompatImportRuntimeContext,
     TaskLowerImportOptions,
@@ -200,10 +201,7 @@ export function lowerImportBackwardsCompat(
         }
         try {
             const result = importFn(...params);
-            const isPromise =
-                result !== null &&
-                (typeof result === 'object' || typeof result === 'function') &&
-                typeof (result as { then?: unknown }).then === 'function';
+            const isPromise = isPromiseLike(result);
             if (createdTask) {
                 createdTask.resolve([isPromise ? undefined : result]);
             }

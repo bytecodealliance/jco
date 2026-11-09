@@ -16,32 +16,36 @@ import { isThenable } from './helpers.js';
 import { disposeHostValue, lookupMemories } from '../core.js';
 import { getOrCreateAsyncState } from '../component.js';
 
+// Canonical subtask state codes are fixed across stores and providers.
+const STARTING = 0;
+const STARTED = 1;
+const RETURNED = 2;
+const CANCELLED_BEFORE_STARTED = 3;
+const CANCELLED_BEFORE_RETURNED = 4;
+type SubtaskState = 0 | 1 | 2 | 3 | 4;
+
 export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): AsyncSubtaskConstructor {
     const { lookup: _lookup, memories: _memories, disposeSymbol: _disposeSymbol, RuntimeError } = context;
     class AsyncSubtask {
         static _ID = 0n;
         static State = {
-            STARTING: 0,
-            STARTED: 1,
-            RETURNED: 2,
-            CANCELLED_BEFORE_STARTED: 3,
-            CANCELLED_BEFORE_RETURNED: 4,
+            STARTING,
+            STARTED,
+            RETURNED,
+            CANCELLED_BEFORE_STARTED,
+            CANCELLED_BEFORE_RETURNED,
         } as const;
         #id!: bigint;
-        #state: number = AsyncSubtask.State.STARTING;
+        #state: SubtaskState = STARTING;
         #componentIdx!: number;
         #parentTask!: AsyncTaskType;
         #childTask: AsyncTaskType | null = null;
-        #dropped = false;
         #cancelRequested = false;
-        #memoryIdx: number | null = null;
         #lenders: SubtaskLender[] | null = null;
         #waitable!: ComponentWaitable;
         #callbackFn: TaskCallback | null = null;
-        #callbackFnName: string | null | undefined = null;
         #postReturnFn: TaskPostReturn | null = null;
         #onProgressFn: (() => void) | null = null;
-        #pendingEventFn: (() => WaitableEvent) | null = null;
         #callMetadata: TaskCallMetadata = {};
         #resolved = false;
         #onResolveHandlers: ((value: unknown) => void)[] = [];
@@ -70,9 +74,6 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#parentTask = args.parentTask;
             if (args.childTask) {
                 this.#childTask = args.childTask;
-            }
-            if (args.memoryIdx) {
-                this.#memoryIdx = args.memoryIdx;
             }
             if (!args.waitable) {
                 throw new Error('missing/invalid waitable');
@@ -169,7 +170,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
         getParentTask() {
             return this.#parentTask;
         }
-        setCallbackFn(f?: TaskCallback | null, name?: string | null) {
+        setCallbackFn(f?: TaskCallback | null, _name?: string | null) {
             if (!f) {
                 return;
             }
@@ -177,13 +178,9 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 throw new Error('callback fn can only be set once');
             }
             this.#callbackFn = f;
-            this.#callbackFnName = name;
         }
         getCallbackFnName() {
-            if (!this.#callbackFn) {
-                return undefined;
-            }
-            return this.#callbackFn.name;
+            return this.#callbackFn?.name;
         }
         setPostReturnFn(f?: TaskPostReturn | null) {
             if (!f) {
@@ -201,7 +198,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#onProgressFn = f;
         }
         isNotStarted() {
-            return this.#state == AsyncSubtask.State.STARTING;
+            return this.#state == STARTING;
         }
         cancellationRequested() {
             return this.#cancelRequested;
@@ -250,7 +247,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 return;
             }
             this.#hostPendingResult = v;
-            if (this.#resolved && this.#state !== AsyncSubtask.State.RETURNED) {
+            if (this.#resolved && this.#state !== RETURNED) {
                 this.#disposeHostPendingResult();
             }
         }
@@ -273,9 +270,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 fnName: this.fnName,
                 args,
             });
-            if (this.#onProgressFn) {
-                this.#onProgressFn();
-            }
+            this.#onProgressFn?.();
             // Starting a nested operation is a task execution boundary.
             // In particular, a cancellation handler may synchronously
             // enter an import which then suspends in the host.  Wake a
@@ -283,7 +278,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             // async `subtask.cancel` can report BLOCKED without waiting
             // for that nested operation to finish.
             this.#parentTask.notifyProgress();
-            this.#state = AsyncSubtask.State.STARTED;
+            this.#state = STARTED;
             let result: unknown;
             // If we have been provided a helper start function as a result of
             // component fusion performed by wasmtime tooling, then we can call that helper and lifts/lowers will
@@ -303,16 +298,11 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             if (this.#resolved) {
                 return;
             }
-            if (this.#onProgressFn) {
-                this.#onProgressFn();
-            }
-            if (this.#state === AsyncSubtask.State.STARTING) {
-                this.#state = AsyncSubtask.State.CANCELLED_BEFORE_STARTED;
-            } else if (this.#state === AsyncSubtask.State.STARTED) {
-                this.#state = AsyncSubtask.State.CANCELLED_BEFORE_RETURNED;
-            } else {
+            this.#onProgressFn?.();
+            if (this.#state >= RETURNED) {
                 throw new Error('cannot reject a completed subtask');
             }
+            this.#state = this.#state === STARTING ? CANCELLED_BEFORE_STARTED : CANCELLED_BEFORE_RETURNED;
             this.#resolved = true;
             this.#hostPendingResult = null;
             this.#parentTask.removeSubtask(this);
@@ -331,23 +321,17 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             if (this.#resolved) {
                 throw new Error('subtask has already been resolved');
             }
-            if (this.#onProgressFn) {
-                this.#onProgressFn();
-            }
+            this.#onProgressFn?.();
             if (subtaskValue === null && this.#cancelRequested) {
-                if (this.#state === AsyncSubtask.State.STARTING) {
-                    this.#state = AsyncSubtask.State.CANCELLED_BEFORE_STARTED;
-                } else {
-                    if (this.#state !== AsyncSubtask.State.STARTED) {
-                        throw new Error('resolved subtask must have been started before cancellation');
-                    }
-                    this.#state = AsyncSubtask.State.CANCELLED_BEFORE_RETURNED;
+                if (this.#state >= RETURNED) {
+                    throw new Error('resolved subtask must have been started before cancellation');
                 }
+                this.#state = this.#state === STARTING ? CANCELLED_BEFORE_STARTED : CANCELLED_BEFORE_RETURNED;
             } else {
-                if (this.#state !== AsyncSubtask.State.STARTED) {
+                if (this.#state !== STARTED) {
                     throw new Error('resolved subtask must have been started before completion');
                 }
-                this.#state = AsyncSubtask.State.RETURNED;
+                this.#state = RETURNED;
                 // The host result is delivered to the guest, so it is no longer ours to dispose
                 this.#hostPendingResult = null;
             }
@@ -368,7 +352,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 this.#parentTask?.getReturnMemory() ??
                 lookupMemories(_memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
             // NOTE: cancelled resolutions carry no value, so nothing is lowered
-            const returned = this.#state === AsyncSubtask.State.RETURNED;
+            const returned = this.#state === RETURNED;
             if (
                 returned &&
                 callMetadata &&
@@ -415,23 +399,14 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             return this.#state;
         }
         isReturned() {
-            return this.#state === AsyncSubtask.State.RETURNED;
+            return this.#state === RETURNED;
         }
         getCallMetadata() {
             return this.#callMetadata;
         }
         isResolved() {
-            if (this.#state === AsyncSubtask.State.STARTING || this.#state === AsyncSubtask.State.STARTED) {
-                return false;
-            }
-            if (
-                this.#state === AsyncSubtask.State.RETURNED ||
-                this.#state === AsyncSubtask.State.CANCELLED_BEFORE_STARTED ||
-                this.#state === AsyncSubtask.State.CANCELLED_BEFORE_RETURNED
-            ) {
-                return true;
-            }
-            throw new Error('unrecognized internal Subtask state [' + this.#state + ']');
+            // Every terminal state follows STARTING and STARTED in the state enum.
+            return this.#state >= RETURNED;
         }
         addLender(handle: SubtaskLender) {
             debugLog('[AsyncSubtask#addLender()] args', { handle });
@@ -478,16 +453,12 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 childTaskFnName: this.#childTask?.entryFnName(),
                 subtaskFnName: this.fnName,
             });
-            if (!this.#waitable) {
-                throw new Error('missing/invalid inner waitable');
-            }
             if (!this.resolveDelivered()) {
                 throw new RuntimeError('cannot drop a subtask which has not yet resolved');
             }
             if (this.#waitable) {
                 this.#waitable.drop();
             }
-            this.#dropped = true;
         }
         #getComponentState() {
             const state = getOrCreateAsyncState(_lookup, this.#componentIdx);
