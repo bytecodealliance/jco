@@ -37,8 +37,6 @@ export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncSta
     deadlockCheck: null,
     pendingHostOperations: 0,
     idleWaiters: new Set(),
-    lastTask: null,
-    taskGroups: new WeakSet(),
 });
 export const initializeComponentAsyncStates: ComponentModule['initializeComponentAsyncStates'] = () => new Map();
 export const initializeCoreTrapMessages: ComponentModule['initializeCoreTrapMessages'] = (messages) =>

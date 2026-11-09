@@ -92,10 +92,6 @@ export function createNewCurrentImplicitThread<T extends AsyncTask = AsyncTask>(
         errHandling,
         callingWasmExport,
     });
-    _context.storeAsyncState.taskGroups.add(newTask.getTaskGroup());
-    if (componentIdx !== -1) {
-        _context.storeAsyncState.lastTask = newTask;
-    }
     const thread = newTask.addThread(new _context.AsyncThread({ componentIdx, task: newTask })) as ReturnType<
         T['addThread']
     >;

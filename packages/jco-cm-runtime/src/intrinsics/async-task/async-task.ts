@@ -102,7 +102,6 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         #entered = false;
         #exited = false;
         #errored: unknown = null;
-        #taskGroup: object = Object.freeze({});
 
         get storage() {
             return this.defaultThread().storage;
@@ -333,11 +332,6 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                 currentSubtask = task.getParentSubtask();
             }
             return task;
-        }
-        /** Return the root call's opaque token, shared by all descendant tasks. */
-        getTaskGroup(): object {
-            const root = this.getRootTask();
-            return root === this ? this.#taskGroup : root.getTaskGroup();
         }
         setPostReturnFn(f?: TaskPostReturn | null) {
             if (!f) {

@@ -2806,6 +2806,9 @@ pub struct RenderIntrinsicsArgs<'a> {
     /// Whether instantiation has occurred
     #[builder(default)]
     pub(crate) instantiation_occurred: bool,
+    /// Emit invocation tracking in host binding glue.
+    #[builder(default)]
+    pub(crate) call_tracking: bool,
     /// The kind of determinism to use
     #[builder(default)]
     pub(crate) determinism_profile: AsyncDeterminismProfile,

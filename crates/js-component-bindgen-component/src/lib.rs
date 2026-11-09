@@ -109,6 +109,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             &component,
             TranspileConfig::builder()
                 .opts(opts)
+                .call_tracking(options.call_tracking.unwrap_or(false))
                 .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
                 .build(),
         )
@@ -196,6 +197,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .select_world(&[ids], world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
+        let call_tracking = opts.call_tracking.unwrap_or(false);
         let opts = js_component_bindgen::TranspileOpts::builder()
             .name("component".into())
             .no_typescript(false)
@@ -220,9 +222,17 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .asmjs(false)
             .build();
 
-        let files = js_component_bindgen::generate_types(&name, resolve, world, opts)
-            .with_context(|| format!("generating types for [{}]", name))
-            .map_err(|e| format!("{e:?}"))?;
+        let files = js_component_bindgen::generate_types_with_config(
+            &name,
+            resolve,
+            world,
+            TranspileConfig::builder()
+                .opts(opts)
+                .call_tracking(call_tracking)
+                .build(),
+        )
+        .with_context(|| format!("generating types for [{}]", name))
+        .map_err(|e| format!("{e:?}"))?;
 
         Ok(files)
     }

@@ -86,6 +86,9 @@ pub struct TranspileConfig {
     /// Options shared with `transpile` and [`generate_types`].
     #[builder(default)]
     pub opts: TranspileOpts,
+    /// Emit optional host invocation tracking, independent of the runtime provider.
+    #[builder(default)]
+    pub call_tracking: bool,
     /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     /// Intrinsics are generated inline when this is `None` (the default).
@@ -98,13 +101,36 @@ pub fn generate_types(
     name: &str,
     resolve: Resolve,
     world_id: WorldId,
-    mut opts: TranspileOpts,
+    opts: TranspileOpts,
 ) -> Result<Vec<(String, Vec<u8>)>> {
-    normalize_namespace_object_options(&mut opts)?;
+    generate_types_with_config(
+        name,
+        resolve,
+        world_id,
+        TranspileConfig::builder().opts(opts).build(),
+    )
+}
+
+/// Generate declarations with optional host embedding features.
+pub fn generate_types_with_config(
+    name: &str,
+    resolve: Resolve,
+    world_id: WorldId,
+    mut config: TranspileConfig,
+) -> Result<Vec<(String, Vec<u8>)>> {
+    let opts = &mut config.opts;
+    normalize_namespace_object_options(opts)?;
     let mut files = files::Files::default();
 
-    ts_bindgen(name, &resolve, world_id, &opts, &mut files)
-        .context("failed to generate Typescript bindings")?;
+    ts_bindgen(
+        name,
+        &resolve,
+        world_id,
+        opts,
+        config.call_tracking,
+        &mut files,
+    )
+    .context("failed to generate Typescript bindings")?;
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, source) in files.iter() {
@@ -131,6 +157,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     normalize_transpile_config(&mut config)?;
     let TranspileConfig {
         mut opts,
+        call_tracking,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
     } = config;
@@ -233,6 +260,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         world_id,
         opts.clone(),
         cm_runtime_es_module.as_deref(),
+        call_tracking,
         &mut files,
     );
 
@@ -241,7 +269,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         {
             exports.extend(inferred_async_exports);
         }
-        ts_bindgen(&name, &resolve, world_id, &opts, &mut files)
+        ts_bindgen(&name, &resolve, world_id, &opts, call_tracking, &mut files)
             .context("failed to generate Typescript bindings")?;
     }
 

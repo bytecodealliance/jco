@@ -165,6 +165,7 @@ program
         'EXPERIMENTAL: async component exports (examples: "wasi:cli/run@#run", "handle")',
     )
     .option("--tracing", "emit `tracing` calls on function entry/exit")
+    .option("--call-tracking", "emit optional per-invocation guest execution tracking")
     .option(
         "--no-component-error-wrapping",
         "throw top-level result error payloads directly instead of wrapping them in ComponentError",
@@ -219,6 +220,7 @@ program
 program
     .command("types")
     .description("Generate types for the given WIT")
+    .option("--call-tracking", "include optional host invocation tracking declarations")
     .usage("<wit-path> -o <out-dir>")
     .argument("[<wit-path>]", "path to a WIT file or directory")
     .option("--name <name>", "custom output name")

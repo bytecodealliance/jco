@@ -92,6 +92,9 @@ export interface TranspilationOptions {
     /** Enable/disable tracing for debug purposes */
     tracing?: boolean;
 
+    /** Emit optional invocation handles for observing guest execution completion. */
+    callTracking?: boolean;
+
     /** Throw top-level result error payloads directly instead of wrapping them in ComponentError */
     noComponentErrorWrapping?: boolean;
 
@@ -334,6 +337,7 @@ export async function transpileBytes(
         importBindings: opts.importBindings ? { tag: opts.importBindings } : undefined,
         validLiftingOptimization: opts.validLiftingOptimization ?? false,
         tracing: opts.tracing ?? false,
+        callTracking: opts.callTracking ?? false,
         noComponentErrorWrapping: opts.noComponentErrorWrapping ?? true,
         noNodejsCompat: opts.nodejsCompat === false,
         noTypescript: opts.emitTypescriptDeclarations === false,

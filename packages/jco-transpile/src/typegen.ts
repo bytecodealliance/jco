@@ -25,6 +25,9 @@ interface TypegenOptions {
     /** Name of the component */
     name?: string;
 
+    /** Include optional host invocation tracking declarations. */
+    callTracking?: boolean;
+
     /** Name of the WIT world to use */
     worldName?: string;
 

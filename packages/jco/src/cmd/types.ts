@@ -26,6 +26,7 @@ export interface TypesOptions {
     worldName?: string;
     instantiation?: "async" | "sync";
     tlaCompat?: boolean;
+    callTracking?: boolean;
     asyncMode?: string;
     asyncImports?: string[];
     asyncExports?: string[];
@@ -173,6 +174,7 @@ export async function typesComponent(witPath: string, opts: TypesOptions): Promi
             name,
             instantiation,
             tlaCompat: opts.tlaCompat ?? false,
+            callTracking: opts.callTracking === true,
             worldName: opts.worldName,
             features,
             guest,

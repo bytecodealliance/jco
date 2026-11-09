@@ -768,9 +768,7 @@ export interface ComponentAsyncStateConstructor {
     };
 }
 export interface ComponentStoreAsyncState {
-    readonly idleWaiters: Set<{ resolve: () => void; groups?: object[] }>;
-    lastTask: { getTaskGroup(): object } | null;
-    readonly taskGroups: WeakSet<object>;
+    readonly idleWaiters: Set<() => void>;
     // Opaque host timer handle, kept portable between Node and browsers.
     deadlockCheck: unknown | null;
     pendingHostOperations: number;
@@ -1296,7 +1294,6 @@ export interface AsyncTask extends ComponentTask, WaitableTask {
     readonly setParentSubtask: (subtask: AsyncSubtask | null) => void;
     readonly getParentSubtask: () => AsyncSubtask | null;
     readonly getRootTask: () => AsyncTask;
-    readonly getTaskGroup: () => object;
     readonly setPostReturnFn: (fn?: TaskPostReturn | null) => void;
     readonly setCallbackFn: (fn?: TaskCallback | null, name?: string | null) => void;
     readonly getCallbackFnName: () => string | undefined;
@@ -1481,7 +1478,6 @@ export interface TaskClearContext<T extends TaskIdentity = AsyncTask> {
     readonly componentIdxs: number[];
 }
 export interface TaskCreateContext<T extends AsyncTask = AsyncTask> {
-    readonly storeAsyncState: Pick<ComponentStoreAsyncState, 'lastTask' | 'taskGroups'>;
     readonly AsyncThread: AsyncThreadConstructor;
     readonly AsyncTask: new (options: AsyncTaskOptions) => T;
     readonly tasks: Pick<AsyncTasksByComponent<T>, 'get' | 'set'>;

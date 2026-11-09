@@ -148,6 +148,10 @@ pub struct FunctionBindgen<'a> {
     #[builder(default)]
     pub skip_fn_call_task_management: bool,
 
+    /// Associate a generated host invocation with its private runtime task.
+    #[builder(default)]
+    pub track_call: bool,
+
     /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
 
@@ -816,6 +820,10 @@ impl FunctionBindgen<'_> {
                 .unwrap_or_default(),
         );
 
+        if self.track_call {
+            let tracking = self.intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking));
+            uwriteln!(self.src, "{tracking}.attach(_trackedCall, task);");
+        }
         if self.is_async || self.requires_async_porcelain {
             uwriteln!(
                 self.src,
