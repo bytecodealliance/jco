@@ -78,6 +78,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 await writeProvider(dir, providerSource());
                 const { files } = await transpile(fixture, {
                     name: 'component',
+                    callTracking: true,
                     instantiation,
                     minify,
                     cmRuntimeEsModule: './provider/',
@@ -104,7 +105,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 const instances = instantiation ? [await instantiate(), await instantiate()] : [bindings];
                 assert.lengthOf(provider.constructors, instances.length);
                 for (const [index, instance] of instances.entries()) {
-                    instance.run();
+                    const tracked = instance._util.calls.start(instance.run);
+                    assert.deepEqual(await tracked.finished, { status: 'completed' });
+                    assert.notProperty(provider.stores[index], 'taskGroups');
+                    assert.notProperty(provider.stores[index], 'lastTask');
                     const resource: Disposable = instance.api.make();
                     resource[Symbol.dispose]();
                     assert.strictEqual(instance.drops(), 2);
@@ -115,10 +119,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.strictEqual(provider.stores[index].pendingHostOperations, 0);
                     // The provider callback must settle waiters on this instance's selected scheduler.
                     let idle = false;
-                    provider.stores[index].idleWaiters.add({
-                        resolve: () => {
-                            idle = true;
-                        },
+                    provider.stores[index].idleWaiters.add(() => {
+                        idle = true;
                     });
                     provider.contexts[index].checkIdle();
                     assert.isTrue(idle);

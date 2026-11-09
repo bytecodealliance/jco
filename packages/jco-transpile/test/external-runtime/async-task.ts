@@ -112,7 +112,7 @@ function checkLookup(context) {
  if (!maps.includes(context.tasks) || !contexts.some(selected => selected.registers === context.registers)) throw new Error('detached task lookup');
 }
 export function createNewCurrentImplicitThread(context, options) {
- if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncTask,AsyncThread,componentIdxs,storeAsyncState,taskIds,tasks' || !classes.includes(context.AsyncTask)) throw new Error('invalid task creation');
+ if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncTask,AsyncThread,componentIdxs,taskIds,tasks' || !classes.includes(context.AsyncTask)) throw new Error('invalid task creation');
  calls.push('create'); return defaults.createNewCurrentImplicitThread(context, options);
 }
 export function clearCurrentThread(context, ...args) {
@@ -142,6 +142,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                 await writeProvider(dir, providerSource());
                 const { files } = await transpile(fixture, {
                     name: 'tasks',
+                    callTracking: true,
                     instantiation,
                     minify,
                     cmRuntimeEsModule: './provider/',
@@ -180,7 +181,9 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     const initialScopes = [...context.scopeTasks.keys()];
                     context.scopeCounter.value = 100;
                     for (let round = 1; round <= 3; round++) {
-                        instance.run();
+                        const call = instance._util.calls.start(instance.run);
+                        assert.deepEqual(await call.finished, { status: 'completed' });
+                        assert.notProperty(provider.classes[index].prototype, 'getTaskGroup');
                         assert.strictEqual(instance.drops(), round);
                         assert.isAbove(context.scopeCounter.value, 100);
                         assert.deepEqual([...context.scopeTasks.keys()], initialScopes);
