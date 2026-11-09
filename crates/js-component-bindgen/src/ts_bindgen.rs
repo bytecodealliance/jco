@@ -128,6 +128,7 @@ pub fn ts_bindgen(
     resolve: &Resolve,
     id: WorldId,
     opts: &TranspileOpts,
+    call_tracking: bool,
     files: &mut Files,
 ) -> Result<()> {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
@@ -390,6 +391,18 @@ pub fn ts_bindgen(
     }
 
     let camel = world.name.to_upper_camel_case();
+    let call_tracking_members = if call_tracking {
+        "readonly calls: {
+            /** Start a generated export without changing its result representation. */
+            start<Args extends unknown[], Result>(fn: (...args: Args) => Result, ...args: Args): { readonly result: Result; readonly finished: Promise<{ readonly status: 'completed' } | { readonly status: 'stopped' } | { readonly status: 'trapped'; readonly error: Error }> };
+            /** Start an exported resource constructor. */
+            start<Args extends unknown[], Result>(fn: new (...args: Args) => Result, ...args: Args): { readonly result: Result; readonly finished: Promise<{ readonly status: 'completed' } | { readonly status: 'stopped' } | { readonly status: 'trapped'; readonly error: Error }> };
+            /** Start an exported method with its receiver. */
+            startWithThis<Receiver, Args extends unknown[], Result>(receiver: Receiver, fn: (this: Receiver, ...args: Args) => Result, ...args: Args): { readonly result: Result; readonly finished: Promise<{ readonly status: 'completed' } | { readonly status: 'stopped' } | { readonly status: 'trapped'; readonly error: Error }> };
+        };"
+    } else {
+        ""
+    };
     let component_error = if has_result_export && !opts.no_component_error_wrapping {
         "/** Test whether a value is a declared WIT result error from this instance. */
         isComponentError(value: unknown): value is Error & { readonly payload: unknown };"
@@ -420,7 +433,7 @@ pub fn ts_bindgen(
         );
         uwriteln!(
             bindgen.src,
-            "readonly _util: {{ stop(): void; whenIdle(groups?: readonly object[]): Promise<void>; lastTaskGroup(): object | undefined; {component_error} }};"
+            "readonly _util: {{ stop(): void; whenIdle(): Promise<void>; {call_tracking_members} {component_error} }};"
         );
         uwriteln!(bindgen.src, "}}");
     } else {
@@ -432,7 +445,7 @@ pub fn ts_bindgen(
             );
             uwriteln!(
                 bindgen.src,
-                "export const _util: {{ stop(): void; whenIdle(groups?: readonly object[]): Promise<void>; lastTaskGroup(): object | undefined; {component_error} }};"
+                "export const _util: {{ stop(): void; whenIdle(): Promise<void>; {call_tracking_members} {component_error} }};"
             );
         }
     }

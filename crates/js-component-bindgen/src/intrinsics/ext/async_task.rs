@@ -246,7 +246,6 @@ impl TaskContextIntrinsic {
                 Task(Self::IsFutureValue),
             ],
             Self::CreateNewCurrentImplicitThread => &[
-                Component(ComponentContextIntrinsic::InitializeStoreAsyncState),
                 Task(Self::InitializeAsyncTaskClass),
                 Task(Self::InitializeAsyncThreadClass),
                 Task(Self::ClearCurrentThread),
@@ -358,7 +357,7 @@ impl TaskContextIntrinsic {
                 "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, isFutureValue: _jcoTaskFuturePredicate }"
             }
             Self::CreateNewCurrentImplicitThread => {
-                "AsyncTask, AsyncThread, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS, storeAsyncState: STORE_ASYNC_STATE"
+                "AsyncTask, AsyncThread, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
             }
             Self::UnpackCallbackResult => "RuntimeError: WebAssemblyRuntimeError",
             Self::TaskReturn => {

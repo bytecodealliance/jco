@@ -151,6 +151,7 @@ export interface TranspileOpts {
     asyncExports?: string[];
     validLiftingOptimization?: boolean;
     tracing?: boolean;
+    callTracking?: boolean;
     noComponentErrorWrapping?: boolean;
     nodejsCompat?: boolean;
     tlaCompat?: boolean;

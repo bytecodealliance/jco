@@ -130,6 +130,9 @@ world js-component-bindgen {
     /// Whether or not to emit `tracing` calls on function entry/exit.
     tracing: option<bool>,
 
+    /// Emit optional per-invocation guest execution tracking.
+    call-tracking: option<bool>,
+
     /// Throw top-level result error payloads directly instead of wrapping them
     /// in a generated ComponentError.
     no-component-error-wrapping: option<bool>,
@@ -219,6 +222,8 @@ world js-component-bindgen {
   }
 
   record type-generation-options {
+    /// Include optional host invocation tracking declarations.
+    call-tracking: option<bool>,
     /// wit to generate typing from
     wit: wit,
 

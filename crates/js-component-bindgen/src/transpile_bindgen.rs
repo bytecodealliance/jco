@@ -251,6 +251,8 @@ struct JsBindgen<'a> {
 
     /// Optional external Component Model runtime provider.
     cm_runtime_es_module: Option<&'a str>,
+    call_tracking: bool,
+    tracked_exports: u32,
 
     /// List of all intrinsics emitted to `src` so far.
     all_intrinsics: BTreeSet<Intrinsic>,
@@ -294,6 +296,7 @@ struct JsFunctionBindgenArgs<'a> {
     for_import: bool,
     /// The interned index of the function's result tuple type, for exports
     result_type_idx: Option<u32>,
+    tracked_export: Option<u32>,
 }
 
 impl<'a> ManagesIntrinsics for JsBindgen<'a> {
@@ -329,6 +332,7 @@ pub fn transpile_bindgen(
     id: WorldId,
     opts: TranspileOpts,
     cm_runtime_es_module: Option<&str>,
+    call_tracking: bool,
     files: &mut Files,
 ) -> TranspileBindgenResult {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
@@ -346,6 +350,8 @@ pub fn transpile_bindgen(
         host_import_modules: BTreeMap::new(),
         opts: &opts,
         cm_runtime_es_module,
+        call_tracking,
+        tracked_exports: 0,
         all_intrinsics: BTreeSet::new(),
         all_core_exported_funcs: Vec::new(),
     };
@@ -581,19 +587,17 @@ impl JsBindgen<'_> {
     ) {
         // An empty component has no runtime state to stop. Keep its utility a
         // no-op so it does not acquire an otherwise-unused external runtime.
-        let (stop_instance, when_idle, last_task_group) = if self.all_intrinsics.is_empty() {
-            (
-                "() => {}".to_string(),
-                "async () => {}".to_string(),
-                "() => undefined".to_string(),
-            )
+        let (stop_instance, when_idle) = if self.all_intrinsics.is_empty() {
+            ("() => {}".to_string(), "async () => {}".to_string())
         } else {
             (
                 self.intrinsic(Intrinsic::Component(ComponentIntrinsic::StopInstance)),
                 self.intrinsic(Intrinsic::Component(ComponentIntrinsic::WhenIdle)),
-                self.intrinsic(Intrinsic::Component(ComponentIntrinsic::LastTaskGroup)),
             )
         };
+        let call_tracking = self
+            .call_tracking
+            .then(|| self.intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking)));
         let mut output = source::Source::default();
         let mut compilation_promises = source::Source::default();
         let mut core_exported_funcs = source::Source::default();
@@ -696,13 +700,15 @@ impl JsBindgen<'_> {
             .intrinsics(&mut self.all_intrinsics)
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
             .determinism_profile(AsyncDeterminismProfile::default())
-            .transpile_opts(opts);
+            .transpile_opts(opts)
+            .call_tracking(self.call_tracking);
         #[cfg(feature = "external-runtime")]
         let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
         let js_intrinsics = render_intrinsics(render_args.build());
-        let mut util_members = format!(
-            "stop: {stop_instance}, whenIdle: {when_idle}, lastTaskGroup: {last_task_group},"
-        );
+        let mut util_members = format!("stop: {stop_instance}, whenIdle: {when_idle},");
+        if let Some(tracking) = call_tracking {
+            util_members.push_str(&format!("calls: {tracking}.publicAPI,"));
+        }
         if self.all_intrinsics.contains(&Intrinsic::ComponentError) {
             util_members.push_str(
                 "/** Test whether a value is a declared WIT result error from this instance. */
@@ -4675,6 +4681,7 @@ impl<'a> Instantiator<'a, '_> {
                     wrap_async_future_result: false,
                     for_import: true,
                     result_type_idx: None,
+                    tracked_export: None,
                 });
                 uwriteln!(
                     self.src.js,
@@ -5478,6 +5485,7 @@ impl<'a> Instantiator<'a, '_> {
             wrap_async_future_result,
             for_import,
             result_type_idx,
+            tracked_export,
         } = args;
 
         let (memory, mut realloc) =
@@ -5601,14 +5609,27 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
         }
+        if let Some(export_id) = tracked_export {
+            let tracking = self
+                .bindgen
+                .intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking));
+            uwriteln!(
+                self.src.js,
+                "const _trackedCall = {tracking}.capture({export_id});"
+            );
+        }
         if wrap_async_future_result {
             let future_value = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                 AsyncFutureIntrinsic::FutureValueClass,
             ));
-            uwriteln!(
-                self.src.js,
-                "return new {future_value}(() => (async () => {{"
-            );
+            if tracked_export.is_some() {
+                uwriteln!(self.src.js, "const _startCall = () => (async () => {{");
+            } else {
+                uwriteln!(
+                    self.src.js,
+                    "return new {future_value}(() => (async () => {{"
+                );
+            }
         }
         // Class constructors cannot be `async`, so an async exported constructor
         // runs its body in an async closure and returns the resulting promise
@@ -5654,6 +5675,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             guest_resource_class_names: None,
             skip_fn_call_task_management: false,
+            track_call: tracked_export.is_some(),
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
             external_runtime: self.bindgen.cm_runtime_es_module.is_some(),
@@ -5765,7 +5787,26 @@ impl<'a> Instantiator<'a, '_> {
         // Once visiting has completed, write the contents the `FunctionBindgen` generated to output
         self.src.js(&f.src);
         if wrap_async_future_result {
-            self.src.js("})());");
+            if tracked_export.is_some() {
+                let tracking = self
+                    .bindgen
+                    .intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking));
+                let future_value = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::FutureValueClass,
+                ));
+                uwriteln!(self.src.js, "}})();");
+                // Start the invocation without reading its future-valued result.
+                uwriteln!(
+                    self.src.js,
+                    "const _startedCall = _trackedCall ? {tracking}.observe(_trackedCall, _startCall()) : undefined;"
+                );
+                uwriteln!(
+                    self.src.js,
+                    "return new {future_value}(() => _startedCall ?? _startCall());"
+                );
+            } else {
+                self.src.js("})());");
+            }
         }
         if wrap_async_constructor {
             self.src.js("})();");
@@ -6498,6 +6539,11 @@ impl<'a> Instantiator<'a, '_> {
             }
         };
 
+        let tracked_export = self.bindgen.call_tracking.then(|| {
+            let id = self.bindgen.tracked_exports;
+            self.bindgen.tracked_exports += 1;
+            id
+        });
         // Perform bindgen
         self.bindgen(JsFunctionBindgenArgs {
             nparams: func.params.len(),
@@ -6523,6 +6569,7 @@ impl<'a> Instantiator<'a, '_> {
             wrap_async_future_result,
             for_import: false,
             result_type_idx: Some(self.types[*func_ty_idx].results.as_u32()),
+            tracked_export,
         });
         if let Some(target) = wrapped_function_target {
             let async_fn_ctor = self.bindgen.intrinsic(Intrinsic::AsyncFunctionCtor);
@@ -6540,6 +6587,27 @@ impl<'a> Instantiator<'a, '_> {
             | FunctionKind::Method(_)
             | FunctionKind::Static(_) => self.src.js(";\n"),
             FunctionKind::Constructor(_) => self.src.js("\n}\n"),
+        }
+        if let Some(export_id) = tracked_export {
+            let tracking = self
+                .bindgen
+                .intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking));
+            let target = match func.kind {
+                FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => format!(
+                    "{local_name}.prototype.{}",
+                    func.item_name().to_lower_camel_case()
+                ),
+                FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
+                    format!("{local_name}.{}", func.item_name().to_lower_camel_case())
+                }
+                _ => local_name.to_string(),
+            };
+            let construct = matches!(func.kind, FunctionKind::Constructor(_));
+            let asynchronous = (requires_async_porcelain || is_async) && !wrap_async_future_result;
+            uwriteln!(
+                self.src.js,
+                "{tracking}.register({target}, {export_id}, {construct}, {asynchronous}, {wrap_async_future_result});"
+            );
         }
     }
 }

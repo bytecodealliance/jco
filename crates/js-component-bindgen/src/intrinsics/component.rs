@@ -24,27 +24,20 @@ pub enum ComponentIntrinsic {
     /// Permanently stop this generated store and release its host resources.
     StopInstance,
 
-    /// A promise settled once no guest task is left in this generated store, or none in
-    /// the given task groups ([`Self::LastTaskGroup`]), counting a task until it has
-    /// exited, however long after returning; or once it has stopped or trapped, as nothing
-    /// more will run.
+    /// A promise settled once no guest task is left in this generated store, counting
+    /// a task until it has exited, however long after returning; or once it has stopped
+    /// or trapped, as nothing more will run.
     ///
     /// ```ts
-    /// function _whenIdle(groups?: object[]): Promise<void>;
+    /// function _whenIdle(): Promise<void>;
     /// ```
     WhenIdle,
 
-    /// The task group of the export call just made: its task and every task it transitively
-    /// called, for [`Self::WhenIdle`] to wait on. Read in the same turn as the call, before
-    /// anything else can have started.
-    ///
-    /// ```ts
-    /// function _lastTaskGroup(): object | undefined;
-    /// ```
-    LastTaskGroup,
-
     /// Settles what [`Self::WhenIdle`] gave out, if that time has come.
     CheckIdle,
+
+    /// Optional host invocation handles, independent of runtime provider state.
+    CallTracking,
 
     /// Tells the host of a trap, once however many paths it unwinds through
     ///
@@ -140,7 +133,7 @@ impl ComponentIntrinsic {
             "_whenIdle",
             "_checkIdle",
             "_isIdle",
-            "_lastTaskGroup",
+            "CALL_TRACKING",
         ]
     }
 
@@ -152,8 +145,8 @@ impl ComponentIntrinsic {
             Self::StopInstance => "_stopInstance",
             Self::ReportTrap => "_reportTrap",
             Self::WhenIdle => "_whenIdle",
-            Self::LastTaskGroup => "_lastTaskGroup",
             Self::CheckIdle => "_checkIdle",
+            Self::CallTracking => "CALL_TRACKING",
             Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
             Self::CheckForDeadlock => "_checkForDeadlock",
             Self::TrackHostOperation => "_trackHostOperation",
@@ -200,18 +193,26 @@ impl ComponentIntrinsic {
                 let scheduler = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 output.push_str(&format!(
                     r#"
-                    function {when_idle_fn}(groups) {{
-                        if (groups !== undefined) {{
-                            if (!Array.isArray(groups) || groups.some(group => !{scheduler}.taskGroups.has(group))) {{
-                                throw new TypeError('task groups must belong to this instance');
-                            }}
-                            groups = [...groups];
-                        }}
-                        if (_isIdle(groups)) {{ return Promise.resolve(); }}
-                        return new Promise((resolve) => {{ {scheduler}.idleWaiters.add({{ resolve, groups }}); }});
+                    function {when_idle_fn}() {{
+                        if (_isIdle()) {{ return Promise.resolve(); }}
+                        return new Promise((resolve) => {{ {scheduler}.idleWaiters.add(resolve); }});
                     }}
                     "#
                 ));
+            }
+
+            Self::CallTracking => {
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                let tasks =
+                    render_args.require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
+                output.push_str(
+                    &include_str!("call_tracking.js")
+                        .replace("$STORE", store)
+                        .replace("$TASKS", tasks)
+                        .replace("$RUNTIME_ERROR", runtime_error),
+                );
             }
 
             Self::CheckIdle => {
@@ -220,37 +221,29 @@ impl ComponentIntrinsic {
                 let scheduler = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 let tasks =
                     render_args.require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
+                let check_calls = if render_args.call_tracking {
+                    let tracking = render_args.require_intrinsic(Self::CallTracking);
+                    format!("{tracking}.check();")
+                } else {
+                    String::new()
+                };
                 // (host tasks, under -1, stand for a host's own work, not a guest's)
                 output.push_str(&format!(
                     r#"
-                    function _isIdle(groups) {{
+                    function _isIdle() {{
                         if ({store}.error !== null) {{ return true; }}
                         for (const [componentIdx, metas] of {tasks}) {{
-                            if (componentIdx === -1) {{ continue; }}
-                            for (const {{ task }} of metas) {{
-                                if (!groups || groups.includes(task.getTaskGroup())) {{ return false; }}
-                            }}
+                            if (componentIdx !== -1 && metas.length > 0) {{ return false; }}
                         }}
                         return true;
                     }}
                     function {check_idle_fn}() {{
-                        for (const waiter of [...{scheduler}.idleWaiters]) {{
-                            if (_isIdle(waiter.groups)) {{
-                                {scheduler}.idleWaiters.delete(waiter);
-                                waiter.resolve();
-                            }}
-                        }}
+                        {check_calls}
+                        if ({scheduler}.idleWaiters.size === 0 || !_isIdle()) {{ return; }}
+                        const waiters = [...{scheduler}.idleWaiters];
+                        {scheduler}.idleWaiters.clear();
+                        for (const resolve of waiters) {{ resolve(); }}
                     }}
-                    "#
-                ));
-            }
-
-            Self::LastTaskGroup => {
-                let last_task_group_fn = render_args.require_intrinsic(Self::LastTaskGroup);
-                let scheduler = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
-                output.push_str(&format!(
-                    r#"
-                    function {last_task_group_fn}() {{ return {scheduler}.lastTask?.getTaskGroup(); }}
                     "#
                 ));
             }
@@ -353,7 +346,7 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set(), lastTask: null, taskGroups: new WeakSet() }};"#
+                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set() }};"#
                 );
             }
 
