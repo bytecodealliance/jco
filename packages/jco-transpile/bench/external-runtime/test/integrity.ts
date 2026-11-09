@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -10,8 +10,14 @@ import { parityLosses, processInterval, regressionLosses } from '../report.js';
 import { expectedReportIds, portfolioFromArgs, scenarioIdsForPortfolio } from '../matrix.mjs';
 import { publishBaseline } from '../recording.mjs';
 import { workload } from '../workloads.mjs';
+import { sourceHashes } from '../provenance.js';
 
 const exec = promisify(execFile);
+
+test('empty workload permits instance utilities but rejects guest exports', async () => {
+    await workload('empty', { _util: { stop() {} } });
+    await expect(workload('empty', { _util: {}, unexpected() {} })).rejects.toThrow();
+});
 
 test.concurrent('full and smoke portfolios require their complete distinct matrices', () => {
     assert.equal(portfolioFromArgs([]), 'full');
@@ -299,6 +305,25 @@ test('trace main restores constructors after successful and failed probes', asyn
         `,
         ]);
         assert.isAtLeast(JSON.parse(await readFile(output, 'utf8')).Map, 1);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
+test('source provenance detects changes to either runtime and nested family mappings', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-runtime-provenance-'));
+    try {
+        await mkdir(join(dir, 'ext'));
+        const root = pathToFileURL(dir + '/');
+        for (const name of ['runtime.rs', 'inline.rs', 'ext.rs', 'ext/resource.rs']) {
+            await writeFile(join(dir, name), name);
+        }
+        const original = await sourceHashes(root);
+        assert.deepEqual(Object.keys(original), ['ext.rs', 'ext/resource.rs', 'inline.rs', 'runtime.rs']);
+        for (const name of Object.keys(original)) {
+            await writeFile(join(dir, name), name + ' changed');
+            assert.notEqual((await sourceHashes(root))[name], original[name]);
+        }
     } finally {
         await rm(dir, { recursive: true, force: true });
     }

@@ -69,9 +69,8 @@ Results: packages/jco-transpile/bench/output/external-runtime-named`);
         await run('pnpm', ['--filter', '@bytecodealliance/jco', 'run', 'build:test:components']);
     }
 
-    // Complete functional preflight before starting any timing measurements.
+    // The timed suite verifies its own bundles before measuring them.
     await run('pnpm', ['run', 'types:check:bench:external-runtime'], transpileDirectory);
-    await run('pnpm', ['run', 'bench:external-runtime:verify'], transpileDirectory);
     if (process.platform === 'linux') {
         await run(process.execPath, ['scripts/assert-external-runtime-bench-idle.mjs'], transpileDirectory);
     } else {
