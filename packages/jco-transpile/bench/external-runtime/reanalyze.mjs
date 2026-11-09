@@ -13,7 +13,7 @@ assert(
 );
 const inputSource = await readFile(input, 'utf8');
 const result = JSON.parse(inputSource);
-assert.equal(result.schema, 2);
+assert([2, 3].includes(result.schema), 'Unsupported benchmark result schema');
 assert.equal(result.complete, true);
 assertCompleteReports(result.expectedReports, result.reports);
 const hash = (source) => createHash('sha256').update(source).digest('hex');
@@ -53,8 +53,8 @@ await writeFile(
     output,
     JSON.stringify(
         {
-            schema: 1,
-            inputCheckpoint: result.checkpointKey,
+            schema: 2,
+            inputFingerprint: result.inputFingerprint ?? result.checkpointKey,
             inputSha256: hash(inputSource),
             method: 'seeded xorshift32 full-word index sampling; 10000 process-cluster resamples',
             medianConvention: 'upper middle value for even process counts, unchanged',

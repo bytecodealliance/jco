@@ -77,9 +77,8 @@ Results: packages/jco-transpile/bench/output/external-runtime-named`);
         console.log('Process auditing requires Linux /proc; ensure the machine is otherwise idle.');
     }
 
-    // Parity compares both modes from this build without requiring or recording
-    // a matching regression baseline.
-    await run('pnpm', ['run', 'bench:external-runtime:parity'], transpileDirectory);
+    // Every measurement run compares both modes from this build.
+    await run('pnpm', ['run', 'bench:external-runtime'], transpileDirectory);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

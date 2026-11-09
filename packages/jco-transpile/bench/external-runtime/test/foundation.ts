@@ -11,15 +11,7 @@ import { buildPair } from '../build.js';
 import { readRuntimeCoverage, verifyImportControls, verifyPair } from '../verify.js';
 import { bundlers, resolutions, scenarios, importControls, portfolio } from '../cases.js';
 import { measure, type Measurement } from '../measure.js';
-import {
-    median,
-    parityLosses,
-    processInterval,
-    regressionLosses,
-    timingFinding,
-    validateMeasurement,
-    type Values,
-} from '../report.js';
+import { median, parityLosses, processInterval, timingFinding, validateMeasurement, type Values } from '../report.js';
 import { assertCompleteReports } from '../matrix.mjs';
 import { sourceHashes } from '../provenance.js';
 import { defaultRuntimeUrl } from '../../../test/transpilation.js';
@@ -27,10 +19,6 @@ import { defaultRuntimeUrl } from '../../../test/transpilation.js';
 const exec = promisify(execFile);
 const hash = (value: string | Uint8Array) => createHash('sha256').update(value).digest('hex');
 const here = fileURLToPath(new URL('../', import.meta.url));
-if (process.env.JCO_EXTERNAL_RUNTIME_BENCH_RECORD === '1' && process.env.CI) {
-    throw new Error('Recording is disabled in CI');
-}
-
 const processCount = Number(process.env.JCO_EXTERNAL_RUNTIME_BENCH_PROCESSES ?? 5);
 const sampleCount = Number(process.env.JCO_EXTERNAL_RUNTIME_BENCH_SAMPLES ?? 15);
 if (![5, 10].includes(processCount) || !Number.isInteger(sampleCount) || sampleCount < 15) {
@@ -176,7 +164,7 @@ test(
         const fixtureHashes = Object.fromEntries(
             graphs.flatMap(({ pair }) => Object.entries(pair.inline.fixtureDigests)),
         );
-        const checkpointKey = hash(
+        const inputFingerprint = hash(
             JSON.stringify({
                 coverage,
                 settings,
@@ -195,9 +183,9 @@ test(
             join(output, 'manifest.json'),
             JSON.stringify(
                 {
-                    schema: 2,
+                    schema: 3,
                     status: 'built',
-                    checkpointKey,
+                    inputFingerprint,
                     environment,
                     settings,
                     fixtureHashes,
@@ -281,26 +269,6 @@ test(
             reports,
         );
 
-        // Evaluate regression and parity gates independently.
-        const baselinePath = join(here, 'named-baselines', `${checkpointKey}.json`);
-        const baselineFailures = [];
-        if (
-            process.env.JCO_EXTERNAL_RUNTIME_BENCH_RECORD !== '1' &&
-            process.env.JCO_EXTERNAL_RUNTIME_BENCH_GATE !== 'parity'
-        ) {
-            const baseline = JSON.parse(await readFile(baselinePath, 'utf8'));
-            assert.equal(baseline.checkpointKey, checkpointKey);
-            for (const [id, report] of Object.entries(reports)) {
-                for (const kind of ['size', 'performance'] as const) {
-                    baselineFailures.push(
-                        ...regressionLosses(report[kind], baseline.reports[id][kind], kind).map(
-                            (failure) => `${id}: ${failure}`,
-                        ),
-                    );
-                }
-            }
-        }
-
         const parityAchieved = Object.values(reports).every(
             (report) => parityLosses(report.size).length + parityLosses(report.performance).length === 0,
         );
@@ -308,28 +276,23 @@ test(
             join(output, 'result.json'),
             JSON.stringify(
                 {
-                    schema: 2,
+                    schema: 3,
                     complete: true,
                     expectedReports: graphs.map(({ id }) => id).sort(),
                     expectedControls: bundlers.length * resolutions.length * importControls.length * 2,
-                    checkpointKey,
-                    baselinePath,
+                    inputFingerprint,
                     environment,
                     settings,
                     fixtureHashes,
                     controls,
                     reports,
                     parityAchieved,
-                    baselineFailures,
                 },
                 null,
                 2,
             ) + '\n',
         );
-        assert.deepEqual(baselineFailures, []);
-        if (process.env.JCO_EXTERNAL_RUNTIME_BENCH_GATE === 'parity') {
-            assert.isTrue(parityAchieved, 'strict parity differs from observed baseline acceptance');
-        }
+        assert.isTrue(parityAchieved, 'external runtime exceeds inline parity budgets');
     },
     matrixTimeoutMs,
 );
