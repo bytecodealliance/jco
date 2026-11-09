@@ -56,6 +56,7 @@ Options include:
 * `--use-namespace-objects`: Exports namespace objects for WIT enums, flags, and variants. This implies `--flags-as-bigint` and cannot be combined with `--variants-inline-cases`.
 * `--enum-values-screaming-snake-case`: Represents WIT enum values as `SCREAMING_SNAKE_CASE` strings instead of their original kebab-case names.
 * `--tracing`: Emit tracing calls for all function entry and exits.
+* `--call-tracking`: Emit optional invocation handles to observe selected guest execution. See [Tracking individual calls](./advanced/call-tracking.md).
 * `--no-component-error-wrapping`: Throw the lifted error payload directly for a top-level `result::err` instead of wrapping it in a generated `ComponentError`. Jco preserves wrapping by default for compatibility.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
 
@@ -372,8 +373,8 @@ export returns. It also resolves when the instance stops or traps. See
 [Wait for guest tasks to exit](./advanced/stopping-running-instances.md#wait-for-guest-tasks-to-exit)
 for completion semantics and an orderly shutdown example.
 
-Use `_util.lastTaskGroup()` and `whenIdle(groups)` to wait for selected calls alongside
-unrelated long-lived work. See [Wait for selected calls](./advanced/stopping-running-instances.md#wait-for-selected-calls).
+With `--call-tracking`, `_util.calls.start(fn, ...args)` returns a handle with a separate
+`finished` promise for selected guest execution. See [Tracking individual calls](./advanced/call-tracking.md).
 
 ### Runtime overrides
 

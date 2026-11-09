@@ -71,6 +71,7 @@
     - [Manual Wasm instantiation with WASI overrides](./advanced/manual-wasm-instantiation-with-wasi-overrides.md)
     - [Differences with Wasmtime](./advanced/differences-with-wasmtime.md)
     - [Stopping running instances](./advanced/stopping-running-instances.md)
+    - [Tracking individual calls](./advanced/call-tracking.md)
     - [Detecting traps](./advanced/detecting-traps.md)
     - [Preview 3 streams and backpressure](./advanced/preview3-streams-and-backpressure.md)
     - [Preview 3 output flush and shutdown](./advanced/preview3-output-flush-and-shutdown.md)

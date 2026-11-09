@@ -138,25 +138,12 @@ for normal task exit first. Keep waiting and forced teardown as separate choices
 
 ## Wait for selected calls
 
-When unrelated work should keep running, use `whenIdle(groups)` to wait for selected exported
-calls and their descendant tasks. Capture each call's token with `_util.lastTaskGroup()`
-immediately after invoking the export, in the same JavaScript turn and before awaiting it:
-
-```js
-const result = instance.processRequest(request);
-const group = instance._util.lastTaskGroup();
-await result;
-await instance._util.whenIdle([group]);
-```
-
-A group includes the call's task and the tasks it invokes transitively. Unrelated long-lived
-tasks do not keep this wait pending. Group tokens are opaque and belong to their originating
-instance; invalid or foreign tokens cause `TypeError`. The group array is copied when the wait
-begins, so changing the array later does not change the selected work.
-
-Like the whole-instance wait, a group wait also resolves when the instance stops or traps.
-Waiting for one group does not stop it or the rest of the instance. Only call `stop()` afterward
-if you intend to end the unrelated work as well.
+With `--call-tracking`, use `_util.calls.start(exportedFunction, ...args)` to obtain a
+handle whose `result` preserves the call's return value and whose `finished` promise
+reports when that invocation's guest execution and descendant calls have ended.
+Unrelated long-lived calls do not keep this wait pending. See
+[Tracking individual calls](./call-tracking.md) for usage, completion outcomes, and
+stream/future consumption requirements.
 
 ## Finish work and drain output
 
