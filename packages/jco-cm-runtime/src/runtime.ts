@@ -997,6 +997,8 @@ export interface WaitableModule {
 /** Store-wide metadata; origin fields are populated by errCtxNew. */
 export interface GlobalErrorContext {
     refCount: number;
+    /** References held by lifted values that have not been lowered yet. */
+    pendingLifts?: number;
     debugMessage: string;
     localIdx?: number;
     waitableIdx?: number;
