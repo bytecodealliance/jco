@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -9,38 +9,12 @@ import { assert, expect, test } from 'vitest';
 import { getTmpDir } from '../helpers.js';
 import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/waitable-set-poll-non-set.wat', import.meta.url));
 const waitableUrl = new URL('intrinsics/waitable.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
 
-async function writeProvider(dir: string, source: string) {
-    await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-    await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    for (const suffix of [
-        'conversion',
-        'js-helper',
-        'string',
-        'webidl',
-        'resource',
-        'core',
-        'component',
-        'error-context',
-        'async-task',
-        'host',
-        'lift',
-        'lower',
-        'future',
-        'stream',
-    ]) {
-        await writeFile(
-            join(dir, 'provider/intrinsics/' + suffix + '.js'),
-            'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',
-        );
-    }
-    await writeFile(join(dir, 'provider/intrinsics/waitable.js'), source);
-}
 function providerSource() {
     return `import * as defaults from ${JSON.stringify(waitableUrl)};
 export * from ${JSON.stringify(waitableUrl)};
@@ -73,7 +47,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
         async (minify) => {
             const dir = await getTmpDir();
             try {
-                await writeProvider(dir, providerSource());
+                await writeRuntimeProvider(dir, 'waitable', providerSource());
                 const { files } = await transpile(fixture, {
                     name: 'waitable',
                     instantiation,
@@ -134,7 +108,11 @@ test.concurrent.each(['initializeWaitableClass', 'waitableSetPoll'])(
                 'waitableSetPoll',
                 'waitableSetDrop',
             ].filter((name) => name !== missing);
-            await writeProvider(dir, `export { ${names.join(', ')} } from ${JSON.stringify(waitableUrl)};`);
+            await writeRuntimeProvider(
+                dir,
+                'waitable',
+                `export { ${names.join(', ')} } from ${JSON.stringify(waitableUrl)};`,
+            );
             const { files } = await transpile(fixture, {
                 name: 'missing',
                 instantiation: 'sync',
