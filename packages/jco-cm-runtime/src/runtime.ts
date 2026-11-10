@@ -224,10 +224,28 @@ export interface DataViewCacheContext {
     view: DataView;
 }
 
+/** The selected WebAssembly implementation and the thread state that says whether a host import may block. */
+export interface ConditionalHostImportContext {
+    readonly threads: ThreadLookupContext;
+    readonly WebAssembly: {
+        readonly Instance: typeof WebAssembly.Instance;
+        readonly Suspending: new (fn: Function) => WebAssembly.ImportValue;
+    };
+}
+
 export interface JsHelperModule {
     readonly emptyFunc: (...args: unknown[]) => void;
     readonly initializeDataViewCache: () => DataViewCacheContext;
     readonly dataView: (context: DataViewCacheContext, memory: { readonly buffer: ArrayBufferLike }) => DataView;
+    readonly maybeSyncGenerator: <This, Args extends unknown[], Result>(
+        genFn: (this: This, ...args: Args) => Generator<unknown, Result, unknown>,
+    ) => (this: This, ...args: Args) => Result | Promise<Result>;
+    readonly conditionalSuspendingHostImport: (
+        context: ConditionalHostImportContext,
+        module: WebAssembly.Module,
+        componentIdx: number,
+        fn: Function,
+    ) => WebAssembly.ExportValue;
 }
 
 export type StringRealloc = (oldPtr: number, oldSize: number, alignment: number, newSize: number) => number;

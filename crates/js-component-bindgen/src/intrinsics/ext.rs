@@ -111,6 +111,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     InitializeBitcast64,
     /// The memory data-view cache returned by `initializeDataViewCache`.
     InitializeDataViewCache,
+    /// Capabilities for `conditionalSuspendingHostImport`.
+    ConditionalSuspendingHostImport,
     /// The UTF-8 decoder returned by `initializeUtf8Decoder`.
     InitializeUtf8Decoder,
     /// The UTF-16 decoder returned by `initializeUtf16Decoder`.
@@ -152,6 +154,7 @@ impl RuntimeContextIntrinsic {
             "_jcoInitializeBitcast64",
             "_jcoDataViewCacheContext",
             "_jcoInitializeDataViewCache",
+            "_jcoConditionalHostImportContext",
             "_jcoInitializeUtf8Decoder",
             "_jcoInitializeUtf16Decoder",
             "_jcoInitializeUtf8Encoder",
@@ -201,6 +204,7 @@ impl RuntimeContextIntrinsic {
             Self::InitializeBitcast32 => "_jcoBitcast32Context",
             Self::InitializeBitcast64 => "_jcoBitcast64Context",
             Self::InitializeDataViewCache => "_jcoDataViewCacheContext",
+            Self::ConditionalSuspendingHostImport => "_jcoConditionalHostImportContext",
             Self::InitializeUtf8Decoder => "TEXT_DECODER_UTF8",
             Self::InitializeUtf16Decoder => "utf16Decoder",
             Self::InitializeUtf8Encoder => "TEXT_ENCODER_UTF8",
@@ -339,6 +343,9 @@ impl RuntimeContextIntrinsic {
                 Self::Task(TaskContextIntrinsic::CreateNewCurrentImplicitThread),
                 Self::Component(ComponentContextIntrinsic::InitializeStoreTrap),
             ],
+            Self::ConditionalSuspendingHostImport => {
+                &[Self::Task(TaskContextIntrinsic::GetCurrentThread)]
+            }
             _ => &[],
         }
     }
@@ -390,6 +397,10 @@ impl RuntimeContextIntrinsic {
             Self::NumericConversion => {
                 uwriteln!(output, "const {local} = {{ strict: {strict} }};")
             }
+            Self::ConditionalSuspendingHostImport => uwriteln!(
+                output,
+                "const {local} = {{ threads: _jcoThreadLookupContext, WebAssembly }};"
+            ),
             Self::InitializeHandleIndexSpaces
             | Self::InitializeHandleTables
             | Self::InitializeCallBorrows
@@ -469,7 +480,7 @@ impl ExternalRuntime {
                 Some(resource::resource_owner_import(intrinsic))
             }
             Intrinsic::Conversion(i) => Some(conversion::import(i)),
-            Intrinsic::JsHelper(i) => js_helper::import(i),
+            Intrinsic::JsHelper(i) => Some(js_helper::import(i)),
             Intrinsic::String(i) => Some(string::import(i)),
             Intrinsic::WebIdl(i) => Some(webidl::import(i)),
             _ => None,
@@ -608,23 +619,17 @@ impl Provides<ConversionIntrinsic> for ExternalRuntime {
 
 impl Provides<JsHelperIntrinsic> for ExternalRuntime {
     fn binding(&self, intrinsic: JsHelperIntrinsic) -> IntrinsicBinding {
-        match js_helper::import(intrinsic) {
-            Some(_) => IntrinsicBinding::Imported {
-                local_name: intrinsic.name(),
-            },
-            None => InlineRuntime.binding(intrinsic),
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
         }
     }
 
     fn render(
         &self,
-        intrinsic: JsHelperIntrinsic,
-        output: &mut Source,
-        args: &RenderIntrinsicsArgs<'_>,
+        _intrinsic: JsHelperIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
     ) {
-        if js_helper::import(intrinsic).is_none() {
-            InlineRuntime.render(intrinsic, output, args);
-        }
     }
 }
 
