@@ -1056,7 +1056,8 @@ impl LowerIntrinsic {
                            {debug_log_fn}('[{lower_flat_result_fn}()] args', {{ ctx }});
 
                            const v = ctx.vals[0];
-                           const isNotResultObject = typeof v !== 'object'
+                           const isNotResultObject = v === null
+                                                     || typeof v !== 'object'
                                                      || Object.keys(v).length !== 2
                                                      || !('tag' in v)
                                                      || !('ok' === v.tag || 'err' === v.tag)

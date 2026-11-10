@@ -118,7 +118,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
             Self::ResourceTableCreateOwn => "rscTableCreateOwn",
             Self::ResourceTableGet => "rscTableGet",
-            Self::ResourceTableEnsureBorrowDrop => "rscTableTryGet",
+            Self::ResourceTableEnsureBorrowDrop => "rscTableEnsureBorrowDrop",
             Self::ResourceTableRemove => "rscTableRemove",
             Self::ResourceTransferBorrow => "resourceTransferBorrow",
             Self::ResourceTransferBorrowValidLifting => "resourceTransferBorrowValidLifting",

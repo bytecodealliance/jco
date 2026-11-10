@@ -2493,9 +2493,9 @@ impl AsyncStreamIntrinsic {
                                 if (isAsync) {{ return {async_blocked_const}; }}
 
                                 const taskMeta = {current_task_get_fn}componentIdx);
-                                if (!taskMeta) {{ throw new Error('missing current task metadata while doing stream transfer'); }}
+                                if (!taskMeta) {{ throw new Error('missing current task metadata while cancelling a stream copy'); }}
                                 const task = taskMeta.task;
-                                if (!task) {{ throw new Error('missing task while doing stream transfer'); }}
+                                if (!task) {{ throw new Error('missing task while cancelling a stream copy'); }}
                                 return task.suspendUntil({{
                                     readyFn: () => streamEnd.hasPendingEvent(),
                                 }}).then(finishCancel);

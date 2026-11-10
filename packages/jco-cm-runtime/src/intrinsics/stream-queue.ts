@@ -87,7 +87,7 @@ export function initializePendingValueQueueClass(
                         return 0;
                     }
                     const appended = this.appendReadValue(res.value);
-                    this.#done = res.done === true;
+                    this.#done = !!res.done;
                     return appended;
                 })().finally(() => {
                     this.#sourceReadPromise = null;

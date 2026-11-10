@@ -13,7 +13,8 @@ use std::fmt::Write;
 /// State initializers and capability contexts for external lifting intrinsics.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum LiftContextIntrinsic {
-    /// The UTF-8 and UTF-16 decoders shared by `liftFlatStringAny`.
+    /// The trap constructor and the UTF-8 and UTF-16 decoders shared by `liftFlatStringAny`,
+    /// `liftFlatStringUTF8`, and `liftFlatStringUTF16`.
     LiftFlatStringAny,
     /// Trap and endianness capabilities for `liftFlatList`.
     LiftFlatList,
@@ -71,6 +72,9 @@ impl LiftContextIntrinsic {
     pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
         match self {
             Self::LiftFlatStringAny => &[
+                RuntimeContextIntrinsic::Core(
+                    CoreContextIntrinsic::InitializeRuntimeErrorConstructor,
+                ),
                 RuntimeContextIntrinsic::InitializeUtf8Decoder,
                 RuntimeContextIntrinsic::InitializeUtf16Decoder,
             ],
@@ -97,7 +101,7 @@ impl LiftContextIntrinsic {
         match self {
             Self::LiftFlatStringAny => uwriteln!(
                 output,
-                "const {local} = {{ utf8: TEXT_DECODER_UTF8, utf16: utf16Decoder }};"
+                "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, utf8: TEXT_DECODER_UTF8, utf16: utf16Decoder }};"
             ),
             Self::LiftFlatList => uwriteln!(
                 output,
@@ -127,11 +131,9 @@ pub(crate) fn import(intrinsic: LiftIntrinsic) -> RuntimeImport {
         DecodeUtf8 => Some(RuntimeContextIntrinsic::Core(
             CoreContextIntrinsic::InitializeRuntimeErrorConstructor,
         )),
-        LiftFlatStringAny => Some(RuntimeContextIntrinsic::Lift(
-            LiftContextIntrinsic::LiftFlatStringAny,
-        )),
-        LiftFlatStringUtf8 => Some(RuntimeContextIntrinsic::InitializeUtf8Decoder),
-        LiftFlatStringUtf16 => Some(RuntimeContextIntrinsic::InitializeUtf16Decoder),
+        LiftFlatStringAny | LiftFlatStringUtf8 | LiftFlatStringUtf16 => Some(
+            RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::LiftFlatStringAny),
+        ),
         LiftFlatVariant | LiftFlatEnum | LiftFlatOption | LiftFlatResult => Some(
             RuntimeContextIntrinsic::Lift(LiftContextIntrinsic::InitializeLiftVariant),
         ),

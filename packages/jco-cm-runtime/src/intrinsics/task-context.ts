@@ -11,11 +11,11 @@ function validate(args: TaskMeta) {
     if (args.taskID === undefined) {
         throw new TypeError('missing task ID');
     }
-    if (args.threadID === undefined) {
-        throw new TypeError('missing thread ID');
-    }
     if (args.componentIdx === undefined) {
         throw new TypeError('missing component idx');
+    }
+    if (args.threadID === undefined) {
+        throw new TypeError('missing thread ID');
     }
 }
 

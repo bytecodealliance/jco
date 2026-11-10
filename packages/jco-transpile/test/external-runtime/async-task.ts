@@ -80,7 +80,7 @@ export function initializeAsyncSubtaskClass(context) {
  const constructor = defaults.initializeAsyncSubtaskClass(context); subclasses.push(constructor); return constructor;
 }
 export function initializeAsyncTaskClass(context) {
- if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncSubtask,FutureValue,RuntimeError,Waitable,clearing,determinism,events,lookup,postReturn,registers,scopeCounter,scopeTasks,traps') throw new Error('invalid task class capabilities');
+ if (this !== undefined || Object.keys(context).sort().join() !== 'AsyncSubtask,FutureValue,RuntimeError,Waitable,clearing,determinism,events,lookup,postReturn,registers,scopeCounter,scopeTasks,storeTrap,traps') throw new Error('invalid task class capabilities');
  if (!subclasses.includes(context.AsyncSubtask) || !maps.includes(context.clearing.tasks) || !ids.includes(context.clearing.taskIds) || !components.includes(context.clearing.componentIdxs)) throw new Error('detached task owners');
  contexts.push(context);
  futureValues.push(context.FutureValue);

@@ -2718,7 +2718,7 @@ impl AsyncTaskIntrinsic {
                                 threadID: this.#id,
                                 taskID: this.#task.id(),
                                 componentIdx: this.#componentIdx,
-                                fn: () => {{
+                                fn: async () => {{
                                     {get_or_create_async_state_fn}this.#componentIdx).throwIfInterrupted();
                                     return startFn();
                                 }},

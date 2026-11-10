@@ -1794,7 +1794,7 @@ export interface LiftVariantMeta {
 export interface LiftVariantContext {
     readonly scratch: DataView;
 }
-export interface LiftStringContext {
+export interface LiftStringContext extends TrapContext {
     readonly utf8: StringDecoder;
     readonly utf16: StringDecoder;
 }
@@ -1879,8 +1879,8 @@ export interface LiftModule {
     readonly liftFlatFloat64: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
     readonly liftFlatChar: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
     readonly liftFlatStringAny: (context: LiftStringContext, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
-    readonly liftFlatStringUTF8: (context: StringDecoder, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
-    readonly liftFlatStringUTF16: (context: StringDecoder, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatStringUTF8: (context: LiftStringContext, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
+    readonly liftFlatStringUTF16: (context: LiftStringContext, ctx: TaskLiftContext) => [unknown, TaskLiftContext];
     readonly liftFlatRecord: (meta: LiftRecordMeta) => TaskLiftFn;
     readonly liftFlatVariant: (context: LiftVariantContext, meta: LiftVariantMeta) => TaskLiftFn;
     readonly liftFlatList: (context: LiftListContext, meta: LiftListMeta) => TaskLiftFn;

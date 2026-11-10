@@ -464,7 +464,8 @@ impl HostIntrinsic {
 
                             let callerMemory;
                             if (callerMemoryIdx !== null && callerMemoryIdx !== undefined) {{
-                                callerMemory = {lookup_memories_for_component_fn}{{ componentIdx: callerComponentIdx, memoryIdx: callerMemoryIdx }});
+                                const memory = {lookup_memories_for_component_fn}{{ componentIdx: callerComponentIdx, memoryIdx: callerMemoryIdx }});
+                                callerMemory = Array.isArray(memory) ? undefined : memory;
                             }} else {{
                                 const callerMemories = {lookup_memories_for_component_fn}{{ componentIdx: callerComponentIdx }});
                                 if (callerMemories.length !== 1) {{ throw new Error(`unsupported amount of caller memories`); }}
