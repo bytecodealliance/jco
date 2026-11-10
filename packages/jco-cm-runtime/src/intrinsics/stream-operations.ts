@@ -165,12 +165,6 @@ function streamCopy(
         throw new Error('component instance is not marked as may leave');
     }
 
-    if (!_context.mayBlock && !isAsync) {
-        throw new _context.RuntimeError(
-            `only async tasks or otherwise blocking-allowed tasks my stream.${direction.copy}`,
-        );
-    }
-
     const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
     if (!(streamEnd instanceof _context.StreamEnd)) {
         throw new _context.RuntimeError(`invalid stream type, expected ${direction.end}`);

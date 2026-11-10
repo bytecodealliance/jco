@@ -170,9 +170,14 @@ impl StreamContextIntrinsic {
         match self {
             Self::InitializeStreams => &[Core(CoreContextIntrinsic::InitializeRepTableClass)],
             Self::InitializeStreamTables => &[],
-            Self::InitializeStreamEndClass => {
-                &[Core(CoreContextIntrinsic::InitializeAsyncEventCodes)]
-            }
+            Self::InitializeStreamEndClass => &[
+                Core(CoreContextIntrinsic::InitializeManagedBufferClass),
+                Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
+                Core(CoreContextIntrinsic::InitializeBufferManager),
+                Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
+                Component(ComponentContextIntrinsic::TrackHostOperation),
+                Task(TaskContextIntrinsic::GetCurrentTask),
+            ],
             Self::InitializeStreamReadableEndClass => &[
                 Stream(Self::InitializeStreamEndClass),
                 Core(CoreContextIntrinsic::InitializeManagedBufferClass),
@@ -180,8 +185,6 @@ impl StreamContextIntrinsic {
                 Core(CoreContextIntrinsic::InitializeBufferManager),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
-                Component(ComponentContextIntrinsic::TrackHostOperation),
-                Task(TaskContextIntrinsic::GetCurrentTask),
             ],
             Self::InitializeStreamWritableEndClass => &[
                 Stream(Self::InitializeStreamEndClass),
@@ -190,8 +193,6 @@ impl StreamContextIntrinsic {
                 Core(CoreContextIntrinsic::InitializeBufferManager),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
-                Component(ComponentContextIntrinsic::TrackHostOperation),
-                Task(TaskContextIntrinsic::GetCurrentTask),
             ],
             Self::InitializeInternalStreamClass => &[
                 Stream(Self::InitializeStreamReadableEndClass),
@@ -241,7 +242,6 @@ impl StreamContextIntrinsic {
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Stream(Self::GetStreamEnd),
-                Task(TaskContextIntrinsic::InitializeCurrentTaskMayBlock),
                 Core(CoreContextIntrinsic::InitializeManagedBufferClass),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
                 Stream(Self::InitializeStreamReadableEndClass),
@@ -250,7 +250,6 @@ impl StreamContextIntrinsic {
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Stream(Self::GetStreamEnd),
-                Task(TaskContextIntrinsic::InitializeCurrentTaskMayBlock),
                 Core(CoreContextIntrinsic::InitializeManagedBufferClass),
                 Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
                 Stream(Self::InitializeStreamWritableEndClass),
@@ -303,12 +302,14 @@ impl StreamContextIntrinsic {
             let arguments = match self {
                 Self::InitializeStreams => "RepTable",
                 Self::InitializeStreamTables => "",
-                Self::InitializeStreamEndClass => "ASYNC_EVENT_CODE",
+                Self::InitializeStreamEndClass => {
+                    "{ RuntimeError: WebAssemblyRuntimeError, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, taskLookup: _jcoTaskLookupContext, tracking: _jcoComponentHostOperationContext }"
+                }
                 Self::InitializeStreamReadableEndClass => {
-                    "{ RuntimeError: WebAssemblyRuntimeError, StreamEnd, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, lookup: _jcoComponentStateLookupContext, taskLookup: _jcoTaskLookupContext, tracking: _jcoComponentHostOperationContext }"
+                    "{ RuntimeError: WebAssemblyRuntimeError, StreamEnd, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, lookup: _jcoComponentStateLookupContext }"
                 }
                 Self::InitializeStreamWritableEndClass => {
-                    "{ RuntimeError: WebAssemblyRuntimeError, StreamEnd, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, lookup: _jcoComponentStateLookupContext, taskLookup: _jcoTaskLookupContext, tracking: _jcoComponentHostOperationContext }"
+                    "{ RuntimeError: WebAssemblyRuntimeError, StreamEnd, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, lookup: _jcoComponentStateLookupContext }"
                 }
                 Self::InitializeInternalStreamClass => "{ StreamReadableEnd, StreamWritableEnd }",
                 Self::InitializeExternalStreamClass => {
@@ -336,10 +337,10 @@ impl StreamContextIntrinsic {
             }
             Self::StreamNewFromLift => "HostStream, streams: STREAMS",
             Self::StreamRead => {
-                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, mayBlock: CURRENT_TASK_MAY_BLOCK, ManagedBuffer, events: ASYNC_EVENT_CODE, StreamEnd: StreamReadableEnd"
+                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, ManagedBuffer, events: ASYNC_EVENT_CODE, StreamEnd: StreamReadableEnd"
             }
             Self::StreamWrite => {
-                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, mayBlock: CURRENT_TASK_MAY_BLOCK, ManagedBuffer, events: ASYNC_EVENT_CODE, StreamEnd: StreamWritableEnd"
+                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, ManagedBuffer, events: ASYNC_EVENT_CODE, StreamEnd: StreamWritableEnd"
             }
             Self::StreamCancelRead => {
                 "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, taskLookup: _jcoTaskLookupContext, events: ASYNC_EVENT_CODE, StreamEnd: StreamReadableEnd"
@@ -565,7 +566,7 @@ mod tests {
             ));
         }
         for line in [
-            "const StreamEnd = _jcoInitializeStreamEndClass(ASYNC_EVENT_CODE);",
+            "const StreamEnd = _jcoInitializeStreamEndClass({ RuntimeError: WebAssemblyRuntimeError, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, taskLookup: _jcoTaskLookupContext, tracking: _jcoComponentHostOperationContext });",
             "const STREAM_TABLES = _jcoInitializeStreamTables();",
             "const STREAMS = _jcoInitializeStreams(RepTable);",
         ] {

@@ -51,17 +51,14 @@ export function create() {
         tasks: new Map([[0, [meta]]]),
         registers: { 0: { componentIdx: 0, taskID: 1n, threadID: 1 } },
     };
-    const StreamEnd = stream.initializeStreamEndClass(core.asyncEventCode);
-    const endpoint = {
+    const shared = {
         RuntimeError: core.RuntimeError,
-        StreamEnd,
         ManagedBuffer: core.ManagedBuffer,
         buffers: core.bufferManager,
-        lookup,
-        taskLookup,
-        tracking,
         events: core.asyncEventCode,
     };
+    const StreamEnd = stream.initializeStreamEndClass({ ...shared, taskLookup, tracking });
+    const endpoint = { ...shared, StreamEnd, lookup };
     const StreamReadableEnd = stream.initializeStreamReadableEndClass(endpoint),
         StreamWritableEnd = stream.initializeStreamWritableEndClass(endpoint);
     const InternalStream = stream.initializeInternalStreamClass({ StreamReadableEnd, StreamWritableEnd });
@@ -123,7 +120,6 @@ export function create() {
                 lookup,
                 ends,
                 taskLookup,
-                mayBlock: { value: 1 },
                 ManagedBuffer: core.ManagedBuffer,
                 events: core.asyncEventCode,
             };

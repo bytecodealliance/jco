@@ -25,7 +25,7 @@ export function genStreamHostInjectFn(
     const elemMeta = hostWriteEnd.getElemMeta();
 
     const pendingValues = new _context.PendingValueQueue(readFn, elemMeta);
-    hostWriteEnd.setSourceRebufferFn?.((items) => pendingValues.prepend(items));
+    hostWriteEnd.setSourceRebufferFn((items) => pendingValues.prepend(items));
 
     return async function generatedStreamHostInject(args: { count: number }) {
         let { count } = args;
