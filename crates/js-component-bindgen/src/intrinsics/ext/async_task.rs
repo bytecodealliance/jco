@@ -4,10 +4,7 @@ use super::{
     RuntimeImportKind, RuntimeInitializer, WaitableContextIntrinsic,
 };
 use crate::{
-    intrinsics::{
-        Intrinsic, RenderIntrinsicsArgs,
-        p3::{async_future::AsyncFutureIntrinsic, async_task::AsyncTaskIntrinsic},
-    },
+    intrinsics::{Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic},
     source::Source,
     uwriteln,
 };
@@ -46,8 +43,6 @@ pub(crate) enum TaskContextIntrinsic {
     GetCurrentTask,
     /// Shared capabilities for the `clearCurrentThread` and `clearCurrentTask` JS helpers.
     ClearCurrentThread,
-    /// The predicate which checks values against the selected `FutureValue` constructor.
-    IsFutureValue,
     /// The `initializeAsyncSubtaskClass` constructor factory; a JS helper, not a canonical operation.
     InitializeAsyncSubtaskClass,
     /// The `initializeAsyncTaskClass` constructor factory; a JS helper, not a canonical operation.
@@ -74,7 +69,7 @@ pub(crate) enum TaskContextIntrinsic {
     SymmetricSyncGuestCallExit,
 }
 impl TaskContextIntrinsic {
-    const ALL: [Self; 27] = [
+    const ALL: [Self; 26] = [
         Self::GetCurrentThread,
         Self::InitializeAsyncThreadClass,
         Self::ThreadSuspend,
@@ -89,7 +84,6 @@ impl TaskContextIntrinsic {
         Self::InitializeSymmetricSyncGuestCallStack,
         Self::GetCurrentTask,
         Self::ClearCurrentThread,
-        Self::IsFutureValue,
         Self::InitializeAsyncSubtaskClass,
         Self::InitializeAsyncTaskClass,
         Self::CreateNewCurrentImplicitThread,
@@ -130,7 +124,6 @@ impl TaskContextIntrinsic {
             Self::InitializeSymmetricSyncGuestCallStack => "SYMMETRIC_SYNC_GUEST_CALL_STACK",
             Self::GetCurrentTask => "_jcoTaskLookupContext",
             Self::ClearCurrentThread => "_jcoTaskClearContext",
-            Self::IsFutureValue => "_jcoTaskFuturePredicate",
             Self::InitializeAsyncSubtaskClass => "AsyncSubtask",
             Self::InitializeAsyncTaskClass => "AsyncTask",
             Self::CreateNewCurrentImplicitThread => "_jcoTaskCreateContext",
@@ -243,7 +236,9 @@ impl TaskContextIntrinsic {
                 RuntimeContextIntrinsic::InitializeResourceScopeTasks,
                 Task(Self::ClearCurrentThread),
                 Core(CoreContextIntrinsic::InitializeTaskRegisters),
-                Task(Self::IsFutureValue),
+                RuntimeContextIntrinsic::Future(
+                    super::FutureContextIntrinsic::InitializeFutureValueClass,
+                ),
             ],
             Self::CreateNewCurrentImplicitThread => &[
                 Task(Self::InitializeAsyncTaskClass),
@@ -302,21 +297,8 @@ impl TaskContextIntrinsic {
             _ => &[],
         }
     }
-    pub(crate) fn render(self, output: &mut Source, args: &RenderIntrinsicsArgs<'_>) {
+    pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
-        if self == Self::IsFutureValue {
-            // Contexts are emitted after dependency discovery. A task only needs
-            // the lazy future bridge when another intrinsic actually uses futures.
-            let predicate = if args.intrinsics.contains(&Intrinsic::AsyncFuture(
-                AsyncFutureIntrinsic::FutureValueClass,
-            )) {
-                "value => value instanceof FutureValue"
-            } else {
-                "() => false"
-            };
-            uwriteln!(output, "const {local} = {predicate};");
-            return;
-        }
         let properties = match self {
             Self::GetCurrentThread => {
                 "lookup: _jcoComponentStateLookupContext, registers: CURRENT_TASK_META"
@@ -354,7 +336,7 @@ impl TaskContextIntrinsic {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
             }
             Self::InitializeAsyncTaskClass => {
-                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, isFutureValue: _jcoTaskFuturePredicate }"
+                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }"
             }
             Self::CreateNewCurrentImplicitThread => {
                 "AsyncTask, AsyncThread, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
@@ -384,7 +366,6 @@ impl TaskContextIntrinsic {
             Self::SymmetricSyncGuestCallExit => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, mayBlock: CURRENT_TASK_MAY_BLOCK, stack: SYMMETRIC_SYNC_GUEST_CALL_STACK"
             }
-            Self::IsFutureValue => unreachable!(),
         };
         if let Some(init) = self.initializer() {
             let initialize = init.local_name;
@@ -672,6 +653,7 @@ pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsic
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {
     use super::*;
+    use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
     use crate::intrinsics::runtime::{self, IntrinsicBinding};
     use crate::{TranspileOpts, intrinsics::render_intrinsics};
     fn generated(selected: impl IntoIterator<Item = Intrinsic>) -> String {
@@ -768,17 +750,24 @@ mod tests {
             assert_eq!(source.matches(once).count(), 1, "{once}");
         }
         assert!(!source.contains("class FutureValue"));
-        assert!(source.contains("const _jcoTaskFuturePredicate = () => false;"));
+        assert!(
+            source.contains("const FutureValue = _jcoInitializeFutureValueClass(symbolDispose);")
+        );
     }
 
     #[test]
-    fn tasks_preserve_the_future_bridge_when_futures_are_selected() {
+    fn tasks_share_the_selected_future_value_constructor() {
         let source = generated([
             Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
             Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureValueClass),
         ]);
-        assert_eq!(source.matches("class FutureValue").count(), 1);
-        assert!(source.contains("value => value instanceof FutureValue"));
+        assert_eq!(
+            source
+                .matches("const FutureValue = _jcoInitializeFutureValueClass(symbolDispose);")
+                .count(),
+            1
+        );
+        assert!(!source.contains("value => value instanceof FutureValue"));
     }
 
     #[test]

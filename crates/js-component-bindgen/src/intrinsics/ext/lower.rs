@@ -1,13 +1,13 @@
 //! Flat lowering with selected policies, codecs and pending-family capabilities.
 use super::{
-    ComponentContextIntrinsic, CoreContextIntrinsic, ErrCtxContextIntrinsic, LiftContextIntrinsic,
-    RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind,
+    ComponentContextIntrinsic, CoreContextIntrinsic, ErrCtxContextIntrinsic,
+    FutureContextIntrinsic, LiftContextIntrinsic, RuntimeContextIntrinsic, RuntimeImport,
+    RuntimeImportKind,
 };
 use crate::{
     intrinsics::{
-        Intrinsic, RenderIntrinsicsArgs,
-        lower::LowerIntrinsic,
-        p3::{async_future::AsyncFutureIntrinsic, async_stream::AsyncStreamIntrinsic},
+        Intrinsic, RenderIntrinsicsArgs, lower::LowerIntrinsic,
+        p3::async_stream::AsyncStreamIntrinsic,
     },
     source::Source,
     uwriteln,
@@ -22,7 +22,7 @@ pub(crate) enum LowerContextIntrinsic {
     LowerFlatStringAny,
     /// Numeric policy and byte order for `lowerFlatList`.
     LowerFlatList,
-    /// Numeric policy, component state, and lazy future capabilities for `lowerFlatFuture`.
+    /// Numeric policy, component state, and selected future capabilities for `lowerFlatFuture`.
     LowerFlatFuture,
     /// Numeric policy, component state, and lazy stream capabilities for `lowerFlatStream`.
     LowerFlatStream,
@@ -59,7 +59,20 @@ impl LowerContextIntrinsic {
                 RuntimeContextIntrinsic::NumericConversion,
                 RuntimeContextIntrinsic::Core(CoreContextIntrinsic::InitializeEndianness),
             ],
-            Self::LowerFlatFuture | Self::LowerFlatStream => &[
+            Self::LowerFlatFuture => &[
+                RuntimeContextIntrinsic::NumericConversion,
+                RuntimeContextIntrinsic::Component(
+                    ComponentContextIntrinsic::GetOrCreateAsyncState,
+                ),
+                RuntimeContextIntrinsic::Core(CoreContextIntrinsic::InitializeSymbolResourceRep),
+                RuntimeContextIntrinsic::Future(FutureContextIntrinsic::InitializeFutures),
+                RuntimeContextIntrinsic::Future(
+                    FutureContextIntrinsic::InitializeNestedFutureSymbol,
+                ),
+                RuntimeContextIntrinsic::Future(FutureContextIntrinsic::CreateFuture),
+                RuntimeContextIntrinsic::Future(FutureContextIntrinsic::GenFutureHostInjectFn),
+            ],
+            Self::LowerFlatStream => &[
                 RuntimeContextIntrinsic::NumericConversion,
                 RuntimeContextIntrinsic::Component(
                     ComponentContextIntrinsic::GetOrCreateAsyncState,
@@ -84,16 +97,10 @@ impl LowerContextIntrinsic {
             Self::LowerFlatErrorContext => {
                 "numeric: _jcoStrictNumericContext, globalTable: GlobalErrorContextTable, lookup: _jcoComponentStateLookupContext, local: _jcoErrorContextLocalTableContext".to_string()
             }
-            // Resolve inline endpoint state and constructors when the operation is called.
             Self::LowerFlatFuture => {
-                let global = AsyncFutureIntrinsic::GlobalFutureMap.name();
-                let is_lowerable = AsyncFutureIntrinsic::IsFutureLowerableObject.name();
-                let create = AsyncFutureIntrinsic::CreateFuture.name();
-                let gen_host_inject = AsyncFutureIntrinsic::GenFutureHostInjectFn.name();
-                format!(
-                    "numeric: _jcoStrictNumericContext, lookup: _jcoComponentStateLookupContext, resourceRep: symbolRscRep, getGlobal: () => {global}, isLowerable: (value) => {is_lowerable}(value), create: (state, options) => {create}(state, options), genHostInject: (options) => {gen_host_inject}(options)"
-                )
+                "numeric: _jcoStrictNumericContext, lookup: _jcoComponentStateLookupContext, resourceRep: symbolRscRep, nestedSymbol: NESTED_FUTURE_SYMBOL, futures: FUTURES, creation: _jcoFutureCreateContext, injection: _jcoFutureHostInjectContext".to_string()
             }
+            // Resolve inline stream state and constructors when the operation is called.
             Self::LowerFlatStream => {
                 let global = AsyncStreamIntrinsic::GlobalStreamMap.name();
                 let external_class = AsyncStreamIntrinsic::ExternalStreamClass.name();
@@ -147,31 +154,18 @@ pub(crate) fn import(intrinsic: LowerIntrinsic) -> RuntimeImport {
     }
 }
 pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
-    match intrinsic {
-        Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture) => {
-            for dependency in [
-                AsyncFutureIntrinsic::IsFutureLowerableObject,
-                AsyncFutureIntrinsic::GlobalFutureMap,
-                AsyncFutureIntrinsic::CreateFuture,
-                AsyncFutureIntrinsic::GenFutureHostInjectFn,
-            ] {
-                args.require_intrinsic(dependency);
-            }
+    if let Intrinsic::Lower(LowerIntrinsic::LowerFlatStream) = intrinsic {
+        for dependency in [
+            AsyncStreamIntrinsic::GlobalStreamMap,
+            AsyncStreamIntrinsic::ExternalStreamClass,
+            AsyncStreamIntrinsic::InternalStreamClass,
+            AsyncStreamIntrinsic::IsStreamLowerableObject,
+            AsyncStreamIntrinsic::CreateStream,
+            AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
+            AsyncStreamIntrinsic::GenStreamHostInjectFn,
+        ] {
+            args.require_intrinsic(dependency);
         }
-        Intrinsic::Lower(LowerIntrinsic::LowerFlatStream) => {
-            for dependency in [
-                AsyncStreamIntrinsic::GlobalStreamMap,
-                AsyncStreamIntrinsic::ExternalStreamClass,
-                AsyncStreamIntrinsic::InternalStreamClass,
-                AsyncStreamIntrinsic::IsStreamLowerableObject,
-                AsyncStreamIntrinsic::CreateStream,
-                AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
-                AsyncStreamIntrinsic::GenStreamHostInjectFn,
-            ] {
-                args.require_intrinsic(dependency);
-            }
-        }
-        _ => {}
     }
 }
 #[cfg(all(test, feature = "external-runtime"))]
@@ -248,14 +242,15 @@ mod tests {
             LowerIntrinsic::LowerFlatStream,
         ]);
         for expected in [
-            "getGlobal: () => FUTURES",
+            "futures: FUTURES",
             "getGlobal: () => STREAMS",
+            "nestedSymbol: NESTED_FUTURE_SYMBOL",
             "getExternalClass: () => Stream",
             "getInternalClass: () => InternalStream",
         ] {
             assert!(source.contains(expected), "{expected}");
         }
-        assert!(intrinsics.contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::CreateFuture)));
+        assert!(source.contains("creation: _jcoFutureCreateContext"));
         assert!(intrinsics.contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::CreateStream)));
         assert!(!source.contains("function _lowerFlatFuture("));
         assert!(!source.contains("function _lowerFlatStream("));

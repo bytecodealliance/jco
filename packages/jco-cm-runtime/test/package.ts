@@ -87,6 +87,7 @@ suite('runtime package', () => {
                     'HostModule',
                     'LiftModule',
                     'LowerModule',
+                    'FutureModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -103,6 +104,7 @@ suite('runtime package', () => {
                 './intrinsics/conversion',
                 './intrinsics/core',
                 './intrinsics/error-context',
+                './intrinsics/future',
                 './intrinsics/host',
                 './intrinsics/js-helper',
                 './intrinsics/lift',

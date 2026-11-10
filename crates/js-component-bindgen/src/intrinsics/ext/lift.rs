@@ -1,13 +1,13 @@
 //! Lift helpers share selected codec/scratch owners and lazy pending-family capabilities.
 use super::{
     ComponentContextIntrinsic, CoreContextIntrinsic, ErrCtxContextIntrinsic,
-    RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind, RuntimeInitializer,
+    FutureContextIntrinsic, RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind,
+    RuntimeInitializer,
 };
 use crate::{
     intrinsics::{
-        Intrinsic, RenderIntrinsicsArgs,
-        lift::LiftIntrinsic,
-        p3::{async_future::AsyncFutureIntrinsic, async_stream::AsyncStreamIntrinsic},
+        Intrinsic, RenderIntrinsicsArgs, lift::LiftIntrinsic,
+        p3::async_stream::AsyncStreamIntrinsic,
     },
     source::Source,
     uwriteln,
@@ -26,7 +26,7 @@ pub(crate) enum LiftContextIntrinsic {
     InitializeLiftVariant,
     /// The bigint representation setting used by `liftFlatFlags`.
     LiftFlatFlags,
-    /// Component state and lazy future-table access for `liftFlatFuture`.
+    /// Component state and selected future-table access for `liftFlatFuture`.
     LiftFlatFuture,
     /// Component state and lazy stream-table and constructor access for `liftFlatStream`.
     LiftFlatStream,
@@ -84,7 +84,10 @@ impl LiftContextIntrinsic {
                 ),
                 RuntimeContextIntrinsic::Core(CoreContextIntrinsic::InitializeEndianness),
             ],
-            Self::LiftFlatFuture | Self::LiftFlatStream => &[
+            Self::LiftFlatFuture => &[RuntimeContextIntrinsic::Future(
+                FutureContextIntrinsic::GetFutureEnd,
+            )],
+            Self::LiftFlatStream => &[
                 RuntimeContextIntrinsic::Component(
                     ComponentContextIntrinsic::GetOrCreateAsyncState,
                 ),
@@ -113,11 +116,9 @@ impl LiftContextIntrinsic {
                 let as_bigint = args.transpile_opts.flags_as_bigint;
                 uwriteln!(output, "const {local} = {{ asBigInt: {as_bigint} }};");
             }
-            // Look up inline endpoint tables and constructors when the operation is called.
-            Self::LiftFlatFuture => uwriteln!(
-                output,
-                "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, getTables: () => FUTURE_TABLES, getEnd: (options) => getFutureEnd(options) }};"
-            ),
+            Self::LiftFlatFuture => {
+                uwriteln!(output, "const {local} = _jcoFutureEndLookupContext;")
+            }
             Self::LiftFlatStream => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, getTables: () => STREAM_TABLES, getEnd: (options) => getStreamEnd(options), getExternalStream: () => Stream }};"
@@ -166,17 +167,10 @@ pub(crate) fn import(intrinsic: LiftIntrinsic) -> RuntimeImport {
 }
 
 pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
-    match intrinsic {
-        Intrinsic::Lift(LiftIntrinsic::LiftFlatFuture) => {
-            args.require_intrinsic(AsyncFutureIntrinsic::GlobalFutureTableMap);
-            args.require_intrinsic(AsyncFutureIntrinsic::GetFutureEnd);
-        }
-        Intrinsic::Lift(LiftIntrinsic::LiftFlatStream) => {
-            args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
-            args.require_intrinsic(AsyncStreamIntrinsic::GetStreamEnd);
-            args.require_intrinsic(AsyncStreamIntrinsic::ExternalStreamClass);
-        }
-        _ => {}
+    if let Intrinsic::Lift(LiftIntrinsic::LiftFlatStream) = intrinsic {
+        args.require_intrinsic(AsyncStreamIntrinsic::GlobalStreamTableMap);
+        args.require_intrinsic(AsyncStreamIntrinsic::GetStreamEnd);
+        args.require_intrinsic(AsyncStreamIntrinsic::ExternalStreamClass);
     }
 }
 
@@ -293,15 +287,13 @@ mod tests {
         let (source, intrinsics) =
             generated(&[LiftIntrinsic::LiftFlatFuture, LiftIntrinsic::LiftFlatStream]);
         for retained in [
-            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
-            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GetFutureEnd),
             Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
             Intrinsic::AsyncStream(AsyncStreamIntrinsic::GetStreamEnd),
             Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
         ] {
             assert!(intrinsics.contains(&retained), "{retained:?}");
         }
-        assert!(source.contains("getTables: () => FUTURE_TABLES"));
+        assert!(source.contains("const _jcoLiftFutureContext = _jcoFutureEndLookupContext;"));
         assert!(source.contains("getTables: () => STREAM_TABLES"));
         assert!(source.contains("getExternalStream: () => Stream"));
         assert!(!source.contains("function _liftFlatFuture("));

@@ -3459,7 +3459,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let get_or_create_async_state_fn = self.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-                let gen_future_host_inject_fn = self.intrinsic(Intrinsic::AsyncFuture(
+                let gen_future_host_inject_fn = self.intrinsic_call_prefix(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::GenFutureHostInjectFn,
                 ));
                 let is_future_lowerable_object_fn = self.intrinsic(Intrinsic::AsyncFuture(
@@ -3468,8 +3468,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let nested_future_symbol = self.intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::NestedFutureSymbol,
                 ));
-                let create_future_fn =
-                    self.intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::CreateFuture));
+                let create_future_fn = self.intrinsic_call_prefix(Intrinsic::AsyncFuture(
+                    AsyncFutureIntrinsic::CreateFuture,
+                ));
 
                 // Build the lowering function for the type produced by the future
                 let type_id = &crate::dealias(self.resolve, *ty);
@@ -3608,7 +3609,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 writeEndWaitableIdx,
                                 readEnd,
                                 readEndWaitableIdx
-                            }} = {create_future_fn}(cstate{tmp}, {{
+                            }} = {create_future_fn}cstate{tmp}, {{
                                 tableIdx: {future_table_idx},
                                 elemMeta: {{
                                     liftFn: {lift_fn_js},
@@ -3626,7 +3627,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 }}
                             }});
 
-                            const hostInjectFn{tmp} = {gen_future_host_inject_fn}({{
+                            const hostInjectFn{tmp} = {gen_future_host_inject_fn}{{
                                 promise: future{tmp},
                                 stringEncoding: stringEncoding{tmp},
                                 hostWriteEnd: writeEnd,
@@ -3679,7 +3680,7 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::FutureLift { payload, ty } => {
-                let future_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncFuture(
+                let future_new_from_lift_fn = self.intrinsic_call_prefix(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureNewFromLift,
                 ));
 
@@ -3782,7 +3783,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         uwriteln!(
                             self.src,
                             r#"
-                              const {result_var} = {future_new_from_lift_fn}({{
+                              const {result_var} = {future_new_from_lift_fn}{{
                                   componentIdx: {component_idx_expr},
                                   futureTableIdx: {future_table_idx},
                                   futureEndWaitableIdx: {arg_future_end_idx},
