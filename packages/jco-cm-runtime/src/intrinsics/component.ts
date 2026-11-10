@@ -235,6 +235,7 @@ export function guardTrap<A extends unknown[], T, R>(
     };
 }
 
+/** Implements `canon backpressure.inc`. */
 export function backpressureInc(context: ComponentStateLookupContext, componentIdx: number) {
     debugLog('[backpressureInc()] args', { componentIdx });
     const state = getOrCreateAsyncState(context, componentIdx);
@@ -245,6 +246,7 @@ export function backpressureInc(context: ComponentStateLookupContext, componentI
     debugLog('[backpressureInc()] incremented', { componentIdx, newValue });
 }
 
+/** Implements `canon backpressure.dec`. */
 export function backpressureDec(context: ComponentStateLookupContext, componentIdx: number) {
     debugLog('[backpressureDec()] args', { componentIdx });
     const state = getOrCreateAsyncState(context, componentIdx);

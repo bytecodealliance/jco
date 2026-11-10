@@ -29,7 +29,8 @@ pub(crate) enum ComponentContextIntrinsic {
     TrackHostOperation,
     /// Shared capabilities for `checkMayLeave` and `guardMayLeave`.
     CheckMayLeave,
-    /// Shared capabilities for `getOrCreateAsyncState`, `backpressureInc`, and `backpressureDec`.
+    /// Shared capabilities for the `getOrCreateAsyncState` JS helper, and for `backpressureInc`
+    /// and `backpressureDec`, implementing `canon backpressure.inc` and `canon backpressure.dec`.
     GetOrCreateAsyncState,
     /// Shared capabilities for `recordTrap` and `guardTrap`.
     RecordTrap,

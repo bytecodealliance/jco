@@ -19,6 +19,10 @@ import { getCurrentTask } from '../async-task/task-operations.js';
 import { asyncBlockedCode } from '../async-task.js';
 import { createStream, getStreamEnd, removeStreamEndFromTable, addStreamEndToTable } from './state.js';
 
+/**
+ * Implements `canon stream.new`.
+ * Create a stream and pack its readable and writable indices into one i64.
+ */
 export function streamNew(_context: StreamNewContext, ctx: StreamNewOptions): bigint {
     debugLog('[streamNew()] args', { ctx });
     const { streamTableIdx, callerComponentIdx, elemMeta } = ctx;
@@ -205,6 +209,10 @@ function streamCopy(
     });
 }
 
+/**
+ * Implements `canon stream.read`.
+ * Read up to `count` values, returning a canonical result or waiting for a synchronous copy.
+ */
 export function streamRead(
     _context: StreamReadContext,
     ctx: StreamOperationOptions,
@@ -215,6 +223,10 @@ export function streamRead(
     return streamCopy(_context, READABLE, ctx, streamEndWaitableIdx, ptr, count);
 }
 
+/**
+ * Implements `canon stream.write`.
+ * Write up to `count` values, returning a canonical result or waiting for a synchronous copy.
+ */
 export function streamWrite(
     _context: StreamWriteContext,
     ctx: StreamOperationOptions,
@@ -294,6 +306,10 @@ function streamCancel(
     return finishCancel();
 }
 
+/**
+ * Implements `canon stream.cancel-read`.
+ * Cancel an active read and report its completion event.
+ */
 export function streamCancelRead(
     _context: StreamCancelReadContext,
     ctx: StreamOperationOptions,
@@ -302,6 +318,10 @@ export function streamCancelRead(
     return streamCancel(_context, READABLE, ctx, streamEndWaitableIdx);
 }
 
+/**
+ * Implements `canon stream.cancel-write`.
+ * Cancel an active write and report its completion event.
+ */
 export function streamCancelWrite(
     _context: StreamCancelWriteContext,
     ctx: StreamOperationOptions,
@@ -343,6 +363,10 @@ function streamDrop(
     streamEnd.drop();
 }
 
+/**
+ * Implements `canon stream.drop-readable`.
+ * Remove and drop the readable endpoint from its owning tables.
+ */
 export function streamDropReadable(
     _context: StreamDropReadableContext,
     ctx: StreamOperationOptions,
@@ -351,6 +375,10 @@ export function streamDropReadable(
     streamDrop(_context, READABLE, ctx, streamEndWaitableIdx);
 }
 
+/**
+ * Implements `canon stream.drop-writable`.
+ * Remove and drop the writable endpoint from its owning tables.
+ */
 export function streamDropWritable(
     _context: StreamDropWritableContext,
     ctx: StreamOperationOptions,

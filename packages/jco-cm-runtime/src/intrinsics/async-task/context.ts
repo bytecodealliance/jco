@@ -4,7 +4,7 @@ import { getCurrentTaskMeta } from '../task-context.js';
 import { getCurrentThread } from './thread-operations.js';
 import { debugLog } from '../core/debug.js';
 
-// ContextSet
+/** Implements `canon context.set`. */
 export function contextSet(
     _context: ThreadLookupContext,
     ctx: {
@@ -70,7 +70,7 @@ export function contextSet(
     task.storage[slot] = value;
 }
 
-// ContextGet
+/** Implements `canon context.get`. */
 export function contextGet(
     _context: ThreadLookupContext,
     ctx: {

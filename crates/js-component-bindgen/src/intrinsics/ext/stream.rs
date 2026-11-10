@@ -37,21 +37,21 @@ pub(crate) enum StreamContextIntrinsic {
     AddStreamEndToTable,
     /// Shared lookup capabilities for `getStreamEnd` and `streamTransfer`.
     GetStreamEnd,
-    /// Capabilities for `streamNew`.
+    /// Capabilities for `streamNew`, implementing `canon stream.new`.
     StreamNew,
     /// Capabilities for `streamNewFromLift`.
     StreamNewFromLift,
-    /// Capabilities for `streamRead`.
+    /// Capabilities for `streamRead`, implementing `canon stream.read`.
     StreamRead,
-    /// Capabilities for `streamWrite`.
+    /// Capabilities for `streamWrite`, implementing `canon stream.write`.
     StreamWrite,
-    /// Capabilities for `streamCancelRead`.
+    /// Capabilities for `streamCancelRead`, implementing `canon stream.cancel-read`.
     StreamCancelRead,
-    /// Capabilities for `streamCancelWrite`.
+    /// Capabilities for `streamCancelWrite`, implementing `canon stream.cancel-write`.
     StreamCancelWrite,
-    /// Capabilities for `streamDropReadable`.
+    /// Capabilities for `streamDropReadable`, implementing `canon stream.drop-readable`.
     StreamDropReadable,
-    /// Capabilities for `streamDropWritable`.
+    /// Capabilities for `streamDropWritable`, implementing `canon stream.drop-writable`.
     StreamDropWritable,
     /// Capabilities for `isStreamLowerableObject`.
     IsStreamLowerableObject,

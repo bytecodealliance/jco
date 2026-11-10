@@ -40,6 +40,7 @@ export const initializeErrorContextTableRegistrations: ErrorContextModule['initi
 export const initializeLocalErrorContextTables: ErrorContextModule['initializeLocalErrorContextTables'] = () =>
     new Map();
 
+/** Implements `canon error-context.new`. */
 export function errCtxNew(
     context: ErrorContextNewContext,
     args: ErrorContextNewOptions,
@@ -60,6 +61,7 @@ export function errCtxNew(
     return waitableIdx;
 }
 
+/** Implements `canon error-context.debug-message`. */
 export function errCtxDebugMessage(
     context: ErrorContextDebugContext,
     ctx: ErrorContextDebugOptions,
@@ -81,6 +83,7 @@ export function errCtxDebugMessage(
     writeStrFn(msg, outputStrPtr);
 }
 
+/** Implements `canon error-context.drop`. */
 export function errCtxDrop(context: ErrorContextDropContext, ctx: ErrorContextLocation, handle: number) {
     const { globalTable: GlobalErrorContextTable, RuntimeError } = context;
     debugLog('[errCtxDrop()] ctx', { ctx, handle });

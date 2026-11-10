@@ -4,7 +4,7 @@ import { getOrCreateAsyncState } from '../component.js';
 import { getCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';
 
-// SubtaskDrop
+/** Implements `canon subtask.drop`. */
 export function subtaskDrop(
     _context: SubtaskDropContext,
     componentIdx: number,
@@ -23,7 +23,7 @@ export function subtaskDrop(
     subtask.drop();
 }
 
-// Yield
+/** Implements `canon subtask.cancel`. */
 export function subtaskCancel(
     _context: SubtaskCancelContext,
     componentIdx: number,

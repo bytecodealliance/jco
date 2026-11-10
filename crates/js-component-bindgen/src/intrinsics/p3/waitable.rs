@@ -17,6 +17,8 @@ pub enum WaitableIntrinsic {
 
     /// Create a new waitable set
     ///
+    /// Implements `canon waitable-set.new`.
+    ///
     /// Guest code uses this to create new waitable/pollable groups of events that can be waited on.
     /// The waitable set is tied to the implicit current task
     ///
@@ -33,6 +35,8 @@ pub enum WaitableIntrinsic {
     WaitableSetNew,
 
     /// Wait on a given waitable
+    ///
+    /// Implements `canon waitable-set.wait`.
     ///
     /// Guest code uses this to wait on a waitable that has been already created
     /// The waitable set index is relevant to the implicit current task.
@@ -57,6 +61,8 @@ pub enum WaitableIntrinsic {
     WaitableSetWait,
 
     /// Poll a given waitable set
+    ///
+    /// Implements `canon waitable-set.poll`.
     ///
     /// Guest code uses this builtin to poll whether a waitable set is finished or not,
     /// yielding to other tasks while doing so.
@@ -83,6 +89,8 @@ pub enum WaitableIntrinsic {
 
     /// Drop a given waitable set
     ///
+    /// Implements `canon waitable-set.drop`.
+    ///
     /// Guest code uses this builtin to remove the waitable set in it's entirety from a component instance's tables.
     /// The component instance is known via the current task.
     ///
@@ -102,6 +110,8 @@ pub enum WaitableIntrinsic {
     RemoveWaitableSet,
 
     /// Join a given waitable set
+    ///
+    /// Implements `canon waitable.join`.
     ///
     /// Guest code uses this builtin to add a provided waitable to an existing waitable set.
     ///

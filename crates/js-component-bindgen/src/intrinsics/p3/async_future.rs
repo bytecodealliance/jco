@@ -70,6 +70,8 @@ pub enum AsyncFutureIntrinsic {
 
     /// Create a new future
     ///
+    /// Implements `canon future.new`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturenew
     ///
     /// # Intrinsic implementation function
@@ -101,6 +103,8 @@ pub enum AsyncFutureIntrinsic {
 
     /// Read from a future
     ///
+    /// Implements `canon future.read`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-futurefuturereadwrite
     ///
     /// # Intrinsic implementation function
@@ -128,6 +132,8 @@ pub enum AsyncFutureIntrinsic {
     FutureRead,
 
     /// Write to a future
+    ///
+    /// Implements `canon future.write`.
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturereadwrite
     ///
@@ -157,6 +163,8 @@ pub enum AsyncFutureIntrinsic {
 
     /// Cancel a read to a future
     ///
+    /// Implements `canon future.cancel-read`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-readread
     ///
     /// # Intrinsic implementation function
@@ -172,6 +180,8 @@ pub enum AsyncFutureIntrinsic {
     FutureCancelRead,
 
     /// Cancel a write to a future
+    ///
+    /// Implements `canon future.cancel-write`.
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-writewrite
     ///
@@ -189,6 +199,8 @@ pub enum AsyncFutureIntrinsic {
 
     /// Drop a the readable end of a Future
     ///
+    /// Implements `canon future.drop-readable`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturedrop-readablewritable
     ///
     /// # Intrinsic implementation function
@@ -203,6 +215,8 @@ pub enum AsyncFutureIntrinsic {
     FutureDropReadable,
 
     /// Drop a the writable end of a Future
+    ///
+    /// Implements `canon future.drop-writable`.
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturedrop-readablewritable
     ///

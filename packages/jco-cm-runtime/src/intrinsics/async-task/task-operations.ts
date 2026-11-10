@@ -154,7 +154,7 @@ export function createNewCurrentTask<T extends AsyncTask = AsyncTask>(
 }
 export const clearCurrentTask = clearCurrentThread;
 
-// TaskReturn
+/** Implements `canon task.return`. */
 export function taskReturn(
     _context: TaskReturnRuntimeContext,
     ctx: TaskReturnOptions,
@@ -252,7 +252,7 @@ export function taskReturn(
     task.resolve(liftedResults);
 }
 
-// TaskCancel
+/** Implements `canon task.cancel`. */
 export function taskCancel(
     _context: TaskCancelContext,
     componentIdx: number,

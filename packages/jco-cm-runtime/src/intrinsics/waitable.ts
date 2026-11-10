@@ -351,6 +351,7 @@ export function initializeWaitableSetClass(
     return WaitableSet;
 }
 
+/** Implements `canon waitable-set.new`. */
 export function waitableSetNew(context: WaitableSetNewContext, componentIdx: number) {
     const { WaitableSet } = context;
     debugLog('[waitableSetNew()] args', { componentIdx });
@@ -370,6 +371,7 @@ export function waitableSetNew(context: WaitableSetNewContext, componentIdx: num
     return rep;
 }
 
+/** Implements `canon waitable-set.wait`. */
 export function waitableSetWait(
     context: WaitableSetWaitContext,
     ctx: WaitableMemoryContext,
@@ -427,6 +429,7 @@ export function waitableSetWait(
     return storeEvent(event);
 }
 
+/** Implements `canon waitable-set.poll`. */
 export function waitableSetPoll(
     context: WaitableSetPollContext,
     ctx: WaitableMemoryContext,
@@ -495,6 +498,7 @@ export function waitableSetPoll(
     return storeEventInComponentMemory(options);
 }
 
+/** Implements `canon waitable-set.drop`. */
 export function waitableSetDrop(context: WaitableSetDropContext, componentIdx: number, waitableSetRep: number) {
     debugLog('[waitableSetDrop()] args', { componentIdx, waitableSetRep });
     const task = getCurrentTask(context.taskLookup, componentIdx);
@@ -543,6 +547,7 @@ export function removeWaitableSet(
     state.handles.remove(waitableSetRep);
 }
 
+/** Implements `canon waitable.join`. */
 export function waitableJoin(
     context: WaitableJoinContext,
     componentIdx: number,
