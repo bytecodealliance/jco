@@ -521,8 +521,6 @@ impl LowerIntrinsic {
             }
 
             Self::LowerFlatChar => {
-                let i32_to_char_fn = render_args
-                    .require_intrinsic(Intrinsic::Conversion(ConversionIntrinsic::I32ToChar));
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 output.push_str(&format!("
                     function _lowerFlatChar(ctx) {{
@@ -532,7 +530,11 @@ impl LowerIntrinsic {
                         if (rem !== 0) {{ ctx.storagePtr += (4 - rem); }}
 
                         if (ctx.vals.length !== 1) {{ throw new Error('unexpected number of vals'); }}
-                        new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, {i32_to_char_fn}(ctx.vals[0]), true);
+                        const value = ctx.vals[0];
+                        if (typeof value !== 'string') {{ throw new TypeError('char must be a string'); }}
+                        const codePoint = value.codePointAt(0);
+                        if (codePoint === undefined || codePoint >= 0xd800 && codePoint <= 0xdfff || value.length !== (codePoint > 0xffff ? 2 : 1)) {{ throw new TypeError('char must contain one Unicode scalar value'); }}
+                        new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, codePoint, true);
 
                         ctx.storagePtr += 4;
                     }}
@@ -667,7 +669,7 @@ impl LowerIntrinsic {
                     function {lower_flat_variant_fn}(meta) {{
                         const {{ variantSize32, variantAlign32, variantPayloadOffset32, caseMetas }} = meta;
 
-                        let caseLookup = {{}};
+                        const caseLookup = Object.create(null);
                         for (const [idx, meta] of caseMetas.entries()) {{
                             let tag = meta[0];
                             caseLookup[tag] = {{ discriminant: idx, meta }};
@@ -740,11 +742,16 @@ impl LowerIntrinsic {
 
                                 const list = ctx.vals[0];
                                 if (!list) {{ throw new Error("missing direct param value"); }}
+                                if (elemCount !== list.length) {{ throw new Error('list length does not match allocated storage'); }}
 
                                 const lowerCtx = {{
                                     storagePtr,
                                     memory: ctx.memory,
                                     stringEncoding: ctx.stringEncoding,
+                                    componentIdx: ctx.componentIdx,
+                                    realloc: ctx.realloc,
+                                    lowerResource: ctx.lowerResource,
+                                    vals: [],
                                 }};
                                 for (let idx = 0; idx < list.length; idx++) {{
                                     const elemPtr = storagePtr + idx * elemSize32;
@@ -764,6 +771,11 @@ impl LowerIntrinsic {
                             // a component lower?
 
                             const elems = ctx.vals[0];
+                            const totalSizeBytes = knownLen === undefined ? 8 : (size32 ?? elems.length * elemSize32);
+                            if (ctx.storageLen !== undefined && totalSizeBytes > ctx.storageLen) {{
+                                throw new Error('not enough storage remaining for list flat lower');
+                            }}
+
                             if (knownLen === undefined) {{
                                 // unknown length
                                 if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
@@ -806,11 +818,6 @@ impl LowerIntrinsic {
                             }}
 
                             // TODO(fix): special case for u8/u16/etc, we can do a direct copy
-
-                            const totalSizeBytes = elems.length * size32;
-                            if (ctx.storageLen !== undefined && totalSizeBytes > ctx.storageLen) {{
-                                throw new Error('not enough storage remaining for list flat lower');
-                            }}
                         }}
                     }}
                 "#));
@@ -980,7 +987,7 @@ impl LowerIntrinsic {
                             {debug_log_fn}('[{lower_flat_enum_fn}()] args', {{ ctx }});
 
                             const v = ctx.vals[0];
-                            const isNotEnumObject = typeof v !== 'object'
+                            const isNotEnumObject = v === null || typeof v !== 'object'
                                                       || Object.keys(v).length !== 2
                                                       || !('tag' in v);
                             if (isNotEnumObject) {{
@@ -1119,9 +1126,6 @@ impl LowerIntrinsic {
                 let gen_future_host_inject_fn = render_args.require_intrinsic(
                     Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
                 );
-                let nested_future_symbol = render_args.require_intrinsic(Intrinsic::AsyncFuture(
-                    AsyncFutureIntrinsic::NestedFutureSymbol,
-                ));
                 let create_future_fn =
                     render_args.require_intrinsic(AsyncFutureIntrinsic::CreateFuture);
 
@@ -1133,7 +1137,6 @@ impl LowerIntrinsic {
                             componentIdx,
                             futureTableIdx,
                             elemMeta,
-                            futureNestingLevel,
                         }} = meta;
 
                         return function {lower_flat_future_fn}Inner(ctx) {{
@@ -1166,40 +1169,25 @@ impl LowerIntrinsic {
 
                                 elemMeta.stringEncoding = 'utf8';
 
-                                let outermostReadEnd;
                                 // Lower one layer. A future-valued payload is lowered
                                 // recursively by elemMeta.lowerFn when this layer settles.
-                                let nestingLevel = 0;
-                                while (nestingLevel >= 0) {{
-                                    const {{ writeEnd, writeEndWaitableIdx, readEnd, readEndWaitableIdx }} = {create_future_fn}(cstate, {{
-                                        tableIdx: futureTableIdx,
-                                        elemMeta,
-                                    }});
+                                const {{ writeEnd, readEnd }} = {create_future_fn}(cstate, {{
+                                    tableIdx: futureTableIdx,
+                                    elemMeta,
+                                }});
 
-                                    const hostInjectFn = {gen_future_host_inject_fn}({{
-                                        promise: future,
-                                        stringEncoding: elemMeta.stringEncoding,
-                                        hostWriteEnd: writeEnd,
-                                    }});
-                                    readEnd.setHostInjectFn(hostInjectFn);
+                                const hostInjectFn = {gen_future_host_inject_fn}({{
+                                    promise: future,
+                                    stringEncoding: elemMeta.stringEncoding,
+                                    hostWriteEnd: writeEnd,
+                                }});
+                                readEnd.setHostInjectFn(hostInjectFn);
 
-                                    outermostReadEnd = readEnd;
-                                    future = {{
-                                        [{nested_future_symbol}]: true,
-                                        readEndWaitableIdx,
-                                        writeEndWaitableIdx,
-                                        futureTableIdx,
-                                        componentIdx,
-                                    }};
-
-                                    nestingLevel--;
-                                }}
-
-                                waitableIdx = outermostReadEnd.waitableIdx();
+                                waitableIdx = readEnd.waitableIdx();
                             }}
 
                             // Write the idx of the waitable to memory (a waiting async task or caller)
-                            if (ctx.storagePtr) {{
+                            if (ctx.storagePtr !== undefined && ctx.storagePtr !== null) {{
                                 ctx.vals[0] = waitableIdx;
                                 {lower_u32_fn}(ctx);
                             }}
@@ -1295,7 +1283,7 @@ impl LowerIntrinsic {
                             }}
 
                             // Write the idx of the waitable to memory (a waiting async task or caller)
-                            if (ctx.storagePtr) {{
+                            if (ctx.storagePtr !== undefined && ctx.storagePtr !== null) {{
                                 ctx.vals[0] = waitableIdx;
                                 {lower_u32_fn}(ctx);
                             }}
@@ -1342,41 +1330,35 @@ impl LowerIntrinsic {
                         const globalTable = {global_tbl}.get();
                         const globalErrCtx = globalTable.get(errCtxGlobalRep);
 
-                        // Clean up the previous error context, if necessary
-                        const prevComponentState = {get_or_create_async_state_fn}globalErrCtx.componentIdx);
-                        const prevLocalErrCtx = prevComponentState.handles.get(globalErrCtx.waitableIdx);
-                        if (prevLocalErrCtx.refCount === 0) {{
-                            const removed = prevComponentState.remove(globalErrCtx.waitableIdx);
-                            if (!removed) {{
-                                throw new Error(`failed to remove err ctx [${{globalErrCtx.waitableIdx}}], component [${{globalErrCtx.componentIdx}}]`);
+                        if (!globalErrCtx) {{ throw new Error('missing global error context during lower'); }}
+                        // A lifted local entry can remain until its host-owned value is lowered.
+                        // Remove only that exhausted entry, preserving other live local owners.
+                        if (globalErrCtx.componentIdx !== undefined && globalErrCtx.waitableIdx !== undefined) {{
+                            const prevComponentState = {get_or_create_async_state_fn}globalErrCtx.componentIdx);
+                            const prevLocalErrCtx = prevComponentState.handles.get(globalErrCtx.waitableIdx);
+                            if (prevLocalErrCtx && prevLocalErrCtx.refCount === 0) {{
+                                prevComponentState.handles.remove(globalErrCtx.waitableIdx);
+                                const prevLocalErrCtxTable = {get_local_tbl_fn}globalErrCtx.componentIdx, globalErrCtx.localTableIdx);
+                                prevLocalErrCtxTable.remove(globalErrCtx.localIdx);
+                                {err_ctx_global_ref_count_add_fn}errCtxGlobalRep, -1);
                             }}
-                            const prevLocalErrCtxTable = {get_local_tbl_fn}globalErrCtx.componentIdx, globalErrCtx.localTableIdx);
-                            prevLocalErrCtxTable.remove(globalErrCtx.localIdx)
                         }}
-
-                        // Insert the error context into the destination tables
                         const localErrCtxTable = {get_local_tbl_fn}componentIdx, errCtxTableIdx, {{ upsert: true }});
-
-                        let handle = localErrCtxTable.get(componentIdx, errCtxTableIdx, );
-                        if (handle === undefined) {{
-                            const {{ waitableIdx, localIdx }} = {create_local_handle_fn}
-                                componentIdx,
-                                localErrCtxTable,
-                                errCtxGlobalRep,
-                            );
-                            handle = waitableIdx;
-                        }} else {{
-                            const cstate = {get_or_create_async_state_fn}componentIdx);
-                            const localErrCtx = cstate.handles.get(handle);
-                            localErrCtx.refCount += 1;
-                            localErrCtx.componentIdx = componentIdx;
-                            localErrCtx.localIdx = errCtx.localIdx;
-                            localErrCtx.localTableIdx = errCtxTableIdx;
+                        const {{ waitableIdx: handle, localIdx }} = {create_local_handle_fn}componentIdx, localErrCtxTable, errCtxGlobalRep);
+                        globalErrCtx.componentIdx = componentIdx;
+                        globalErrCtx.waitableIdx = handle;
+                        globalErrCtx.localIdx = localIdx;
+                        globalErrCtx.localTableIdx = errCtxTableIdx;
+                        // Release the reference held by a lifted value. A value lowered again
+                        // without another lift only gains the new local handle.
+                        if (globalErrCtx.pendingLifts > 0) {{
+                            globalErrCtx.pendingLifts -= 1;
+                            {err_ctx_global_ref_count_add_fn}errCtxGlobalRep, -1);
                         }}
 
-                        {err_ctx_global_ref_count_add_fn}errCtxGlobalRep, -1);
-
-                        {lower_u32_fn}({{ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx }});
+                        const lowerCtx = {{ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx }};
+                        {lower_u32_fn}(lowerCtx);
+                        ctx.storagePtr = lowerCtx.storagePtr;
                     }}
                 "#));
             }

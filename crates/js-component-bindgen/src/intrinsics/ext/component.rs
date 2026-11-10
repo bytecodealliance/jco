@@ -500,11 +500,7 @@ mod tests {
             Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext),
         ] {
             let (source, _) = generated_intrinsics([selected]);
-            assert!(
-                source.contains(
-                    "getOrCreateAsyncState(_jcoComponentStateLookupContext, componentIdx)"
-                )
-            );
+            assert!(source.contains("getOrCreateAsyncState(_jcoComponentStateLookupContext, "));
             assert!(!source.contains("getOrCreateAsyncState(componentIdx)"));
             assert!(!source.contains("getOrCreateAsyncState(globalErrCtx.componentIdx)"));
         }

@@ -1594,6 +1594,8 @@ impl LiftIntrinsic {
                     render_args.intrinsic_call_prefix(ErrCtxIntrinsic::GetLocalTable);
                 let err_ctx_ref_count_add_fn =
                     render_args.intrinsic_call_prefix(ErrCtxIntrinsic::GlobalRefCountAdd);
+                let global_tbl =
+                    render_args.require_intrinsic(ErrCtxIntrinsic::ComponentGlobalTable);
                 let lift_flat_error_fn = self.name();
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -1629,6 +1631,9 @@ impl LiftIntrinsic {
                         // NOTE: we aovoid doing clean up eagerly here
 
                         {err_ctx_ref_count_add_fn}errCtx.globalRep);
+                        // The lifted value holds that reference until it is lowered.
+                        const globalErrCtx = {global_tbl}.get().get(errCtx.globalRep);
+                        globalErrCtx.pendingLifts = (globalErrCtx.pendingLifts ?? 0) + 1;
 
                         return [errCtx.globalRep, ctx];
                     }}
