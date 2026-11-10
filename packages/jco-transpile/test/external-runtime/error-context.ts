@@ -8,7 +8,7 @@ import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
 import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, transpileBytes, writeFiles } from '../transpilation.js';
-import { writeRuntimeProvider } from './helpers.js';
+import { writeRuntimeProvider, writeRuntimeProviderWithout } from './helpers.js';
 import { composeCallerCallee } from '../p3/ported/wasmtime/component-async/common.js';
 const errorContextUrl = new URL('intrinsics/error-context.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
@@ -179,24 +179,7 @@ test.concurrent.each([
 ])('native ESM rejects a missing error-context export: %s', async (missing) => {
     const dir = await getTmpDir();
     try {
-        const exports = [
-            'initializeGlobalErrorContextTableClass',
-            'initializeLocalErrorContextTables',
-            'initializeErrorContextTableRegistrations',
-            'errCtxNew',
-            'errCtxDebugMessage',
-            'errCtxDrop',
-            'errCtxTransfer',
-            'errCtxGetLocalTable',
-            'errCtxGlobalRefCountAdd',
-            'errCtxCreateLocalHandle',
-            'errCtxReserveGlobalRep',
-        ].filter((name) => name !== missing);
-        await writeRuntimeProvider(
-            dir,
-            'error-context',
-            `export { ${exports.join(', ')} } from ${JSON.stringify(errorContextUrl)};`,
-        );
+        await writeRuntimeProviderWithout(dir, 'error-context', missing);
         const fixture =
             missing === 'initializeGlobalErrorContextTableClass' ? GLOBAL_TABLE_COMPONENT : component('utf8');
         const { files } = await transpileBytes(await parse(fixture), {

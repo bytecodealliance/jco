@@ -8,7 +8,7 @@ import { assert, expect, test } from 'vitest';
 
 import { getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
-import { writeRuntimeProvider } from './helpers.js';
+import { writeRuntimeProvider, writeRuntimeProviderWithout } from './helpers.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resource-drop.wat', import.meta.url));
 const coreUrl = new URL('intrinsics/core.js', defaultRuntimeUrl).href;
@@ -150,12 +150,7 @@ test.concurrent.each(['initializeRepTableClass', 'withCurrentTaskMeta'])(
     async (missing) => {
         const dir = await getTmpDir();
         try {
-            const exports = Object.keys(await import(coreUrl)).filter((name) => name !== missing);
-            await writeRuntimeProvider(
-                dir,
-                'core',
-                `export { ${exports.join(', ')} } from ${JSON.stringify(coreUrl)};`,
-            );
+            await writeRuntimeProviderWithout(dir, 'core', missing);
             const { files } = await transpile(fixture, {
                 name: 'missing',
                 instantiation: 'sync',

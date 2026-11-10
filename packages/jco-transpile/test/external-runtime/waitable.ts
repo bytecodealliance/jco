@@ -9,7 +9,7 @@ import { assert, expect, test } from 'vitest';
 import { getTmpDir } from '../helpers.js';
 import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
-import { writeRuntimeProvider } from './helpers.js';
+import { writeRuntimeProvider, writeRuntimeProviderWithout } from './helpers.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/waitable-set-poll-non-set.wat', import.meta.url));
 const waitableUrl = new URL('intrinsics/waitable.js', defaultRuntimeUrl).href;
@@ -101,18 +101,7 @@ test.concurrent.each(['initializeWaitableClass', 'waitableSetPoll'])(
     async (missing) => {
         const dir = await getTmpDir();
         try {
-            const names = [
-                'initializeWaitableClass',
-                'initializeWaitableSetClass',
-                'waitableSetNew',
-                'waitableSetPoll',
-                'waitableSetDrop',
-            ].filter((name) => name !== missing);
-            await writeRuntimeProvider(
-                dir,
-                'waitable',
-                `export { ${names.join(', ')} } from ${JSON.stringify(waitableUrl)};`,
-            );
+            await writeRuntimeProviderWithout(dir, 'waitable', missing);
             const { files } = await transpile(fixture, {
                 name: 'missing',
                 instantiation: 'sync',

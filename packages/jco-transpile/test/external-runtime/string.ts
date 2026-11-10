@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
@@ -154,10 +154,10 @@ test.concurrent.each([
 ])('UTF-8 provider error identity ($errorType, $ptr, $len)', async ({ errorType, ptr, len, canonical }) => {
     const dir = await getTmpDir();
     try {
-        await writeRuntimeProvider(dir, 'string', providerSource());
         const defaults = new URL('intrinsics/string.js', defaultRuntimeUrl).href;
-        await writeFile(
-            join(dir, 'provider/intrinsics/string.js'),
+        await writeRuntimeProvider(
+            dir,
+            'string',
             `
             export * from ${JSON.stringify(defaults)};
             export const failure = new ${errorType}('provider codec failure');

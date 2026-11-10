@@ -6,7 +6,7 @@ import { assert, expect, test } from 'vitest';
 import { getTmpDir } from '../helpers.js';
 import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
-import { writeRuntimeProvider } from './helpers.js';
+import { writeRuntimeProvider, writeRuntimeProviderWithout } from './helpers.js';
 
 const hostUrl = new URL('intrinsics/host.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
@@ -145,8 +145,7 @@ test.concurrent.each([
 ])('native ESM rejects a missing selected host export: %s', async (missing, name) => {
     const dir = await getTmpDir();
     try {
-        const names = Object.keys(await import(hostUrl)).filter((name) => name !== missing);
-        await writeRuntimeProvider(dir, 'host', `export { ${names.join(', ')} } from ${JSON.stringify(hostUrl)};`);
+        await writeRuntimeProviderWithout(dir, 'host', missing);
         const { files } = await transpile(fixture(name), {
             name,
             instantiation: 'sync',

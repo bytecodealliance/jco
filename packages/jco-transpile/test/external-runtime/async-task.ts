@@ -8,7 +8,7 @@ import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
 import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, transpileBytes, writeFiles } from '../transpilation.js';
-import { writeRuntimeProvider } from './helpers.js';
+import { writeRuntimeProvider, writeRuntimeProviderWithout } from './helpers.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resource-drop.wat', import.meta.url));
 const taskUrl = new URL('intrinsics/async-task.js', defaultRuntimeUrl).href;
@@ -197,13 +197,7 @@ test.concurrent.each([
 ])('native ESM rejects a missing task export: %s', async (missing) => {
     const dir = await getTmpDir();
     try {
-        const defaults = await import(taskUrl);
-        const names = Object.keys(defaults).filter((name) => name !== missing);
-        await writeRuntimeProvider(
-            dir,
-            'async-task',
-            `export { ${names.join(', ')} } from ${JSON.stringify(taskUrl)};`,
-        );
+        await writeRuntimeProviderWithout(dir, 'async-task', missing);
         const { files } = await transpile(fixture, {
             name: 'missing',
             instantiation: 'sync',

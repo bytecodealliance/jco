@@ -8,7 +8,7 @@ import { assert, expect, test } from 'vitest';
 
 import { getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
-import { writeRuntimeProvider } from './helpers.js';
+import { writeRuntimeProvider, writeRuntimeProviderWithout } from './helpers.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resource-drop.wat', import.meta.url));
 const backpressure = fileURLToPath(
@@ -170,12 +170,7 @@ test.concurrent.each(['initializeComponentAsyncStateClass', 'getOrCreateAsyncSta
     async (missing) => {
         const dir = await getTmpDir();
         try {
-            const exports = Object.keys(await import(componentUrl)).filter((name) => name !== missing);
-            await writeRuntimeProvider(
-                dir,
-                'component',
-                `export { ${exports.join(', ')} } from ${JSON.stringify(componentUrl)};`,
-            );
+            await writeRuntimeProviderWithout(dir, 'component', missing);
             const { files } = await transpile(fixture, {
                 name: 'missing',
                 instantiation: 'sync',

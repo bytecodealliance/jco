@@ -42,14 +42,13 @@ export function toUint32(context, value) {
     calls.push(value);
     return defaultToUint32(context, value);
 }`,
-                        'runtime',
                     );
                     const { files } = await transpileBytes(await parse(ADDER), {
                         name: 'adder',
                         instantiation,
                         minify,
                         strict,
-                        cmRuntimeEsModule: './runtime/',
+                        cmRuntimeEsModule: './provider/',
                     });
                     await writeFiles(files, { baseDir: dir });
                     const source = await readFile(join(dir, 'adder.js'), 'utf8');
@@ -60,7 +59,7 @@ export function toUint32(context, value) {
                     const instantiate = () =>
                         bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {});
                     const instance = instantiation ? await instantiate() : bindings;
-                    const selected = await import(pathToFileURL(join(dir, 'runtime/intrinsics/conversion.js')).href);
+                    const selected = await import(pathToFileURL(join(dir, 'provider/intrinsics/conversion.js')).href);
                     assert.strictEqual(instance.add(1, 2), 3);
                     assert.deepEqual(selected.calls, [1, 2]);
                     assert.strictEqual(selected.contexts.size, 1);
