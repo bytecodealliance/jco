@@ -51,6 +51,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                         'export * from ' + JSON.stringify(new URL('intrinsics/lift.js', defaultRuntimeUrl).href) + ';',
                     );
                     await writeFile(
+                        join(dir, 'runtime/intrinsics/lower.js'),
+                        'export * from ' + JSON.stringify(new URL('intrinsics/lower.js', defaultRuntimeUrl).href) + ';',
+                    );
+                    await writeFile(
                         join(dir, 'runtime/intrinsics/waitable.js'),
                         'export * from ' +
                             JSON.stringify(new URL('intrinsics/waitable.js', defaultRuntimeUrl).href) +

@@ -187,10 +187,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     const TABLE_GET: Intrinsic = Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet);
-    const SAMPLES: [Intrinsic; 2] = [
-        Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn),
-        Intrinsic::Lower(LowerIntrinsic::LowerFlatBool),
-    ];
+    const SAMPLES: [Intrinsic; 1] = [Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn)];
 
     fn render_with(runtime: &dyn IntrinsicRuntime, intrinsic: Intrinsic) -> String {
         let mut intrinsics = BTreeSet::new();
