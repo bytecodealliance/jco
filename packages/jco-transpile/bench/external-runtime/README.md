@@ -87,6 +87,9 @@ the workflow uploads them as CI artifacts.
 
 All measurement runs enforce external-versus-inline budgets.
 The exact thresholds and statistical rules live in [report.ts](report.ts).
+Gzip allows 7.5% overhead plus 256 bytes; raw and Brotli sizes allow 5% plus 256 bytes.
+Parity failures list every affected scenario, resolution, and metric, with inline and external
+measurements, the budget formula, and the excess in bytes or nanoseconds and as a percentage of the budget.
 
 ## Input fingerprints
 

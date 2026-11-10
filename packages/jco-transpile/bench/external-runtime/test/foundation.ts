@@ -11,7 +11,15 @@ import { buildPair } from '../build.js';
 import { readRuntimeCoverage, verifyImportControls, verifyPair } from '../verify.js';
 import { bundlers, resolutions, scenarios, importControls, portfolio } from '../cases.js';
 import { measure, type Measurement } from '../measure.js';
-import { median, parityLosses, processInterval, timingFinding, validateMeasurement, type Values } from '../report.js';
+import {
+    median,
+    parityLosses,
+    describeParityLosses,
+    processInterval,
+    timingFinding,
+    validateMeasurement,
+    type Values,
+} from '../report.js';
 import { assertCompleteReports } from '../matrix.mjs';
 import { sourceHashes } from '../provenance.js';
 import { defaultRuntimeUrl } from '../../../test/transpilation.js';
@@ -269,9 +277,12 @@ test(
             reports,
         );
 
-        const parityAchieved = Object.values(reports).every(
-            (report) => parityLosses(report.size).length + parityLosses(report.performance).length === 0,
+        const parityFailures = Object.entries(reports).flatMap(([id, report]) =>
+            (['size', 'performance'] as const).flatMap((group) =>
+                describeParityLosses(report[group]).map((detail) => `[${id}] ${group}.${detail}`),
+            ),
         );
+        const parityAchieved = parityFailures.length === 0;
         await writeFile(
             join(output, 'result.json'),
             JSON.stringify(
@@ -292,7 +303,11 @@ test(
                 2,
             ) + '\n',
         );
-        assert.isTrue(parityAchieved, 'external runtime exceeds inline parity budgets');
+        assert.isTrue(
+            parityAchieved,
+            `external runtime exceeds inline parity budgets (${parityFailures.length} failing metrics):\n` +
+                parityFailures.join('\n'),
+        );
     },
     matrixTimeoutMs,
 );
