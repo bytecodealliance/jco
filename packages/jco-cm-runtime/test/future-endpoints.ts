@@ -1,9 +1,9 @@
 import { expect, test, vi } from 'vitest';
-import { initializeFutureValueClass } from '../src/intrinsics/future-value.js';
-import { initializeFutureEndClass } from '../src/intrinsics/future-end.js';
-import { initializeFutureReadableEndClass } from '../src/intrinsics/future-readable.js';
-import { initializeFutureWritableEndClass } from '../src/intrinsics/future-writable.js';
-import { initializeInternalFutureClass } from '../src/intrinsics/future-internal.js';
+import { initializeFutureValueClass } from '../src/intrinsics/future/value.js';
+import { initializeFutureEndClass } from '../src/intrinsics/future/end.js';
+import { initializeFutureReadableEndClass } from '../src/intrinsics/future/readable.js';
+import { initializeFutureWritableEndClass } from '../src/intrinsics/future/writable.js';
+import { initializeInternalFutureClass } from '../src/intrinsics/future/internal.js';
 import { initializeWaitableClass } from '../src/intrinsics/waitable.js';
 import { create } from './component-helpers.js';
 import type { FutureElementMetadata } from '../src/runtime.js';

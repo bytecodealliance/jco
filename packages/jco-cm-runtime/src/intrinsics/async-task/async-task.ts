@@ -17,10 +17,10 @@ import type {
     TaskSuspendOptions,
     CreateSubtaskOptions,
 } from '../../runtime.js';
-import { promiseWithResolvers } from '../core-promises.js';
+import { promiseWithResolvers } from '../core/promises.js';
 import { withCurrentTaskMeta, withCurrentTaskMetaAsync, getCurrentTaskMeta } from '../task-context.js';
 import { getOrCreateAsyncState, postReturnTrap, recordTrap } from '../component.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { coinFlip as _coinFlip } from '../core.js';
 import { clearCurrentThread } from './task-operations.js';
 

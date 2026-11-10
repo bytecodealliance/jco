@@ -2,7 +2,7 @@ import type { ThreadLookupContext, AsyncTaskModule } from '../../runtime.js';
 import { typeCheckValidI32 } from './helpers.js';
 import { getCurrentTaskMeta } from '../task-context.js';
 import { getCurrentThread } from './thread-operations.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 
 // ContextSet
 export function contextSet(

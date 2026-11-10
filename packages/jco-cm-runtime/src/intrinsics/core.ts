@@ -1,5 +1,5 @@
 import { emptyFunc } from './js-helper.js';
-import { isPromiseLike } from './core-promises.js';
+import { isPromiseLike } from './core/promises.js';
 import type {
     CoreModule,
     ComponentErrorConstructor,
@@ -13,7 +13,7 @@ import type {
 } from '../runtime.js';
 import { checkMayLeave, recordTrap, getOrCreateAsyncState } from './component.js';
 import { getCurrentThread } from './async-task/thread-operations.js';
-export { debugLog } from './core-debug.js';
+export { debugLog } from './core/debug.js';
 export { initializeRepTableClass } from './rep-table.js';
 export { initializeManagedBufferClass, initializeBufferManagerClass } from './buffers.js';
 export {
@@ -168,7 +168,7 @@ export const throwInvalidBool: CoreModule['throwInvalidBool'] = () => {
 export const throwUninitialized: CoreModule['throwUninitialized'] = () => {
     throw new TypeError('Wasm uninitialized use `await $init` first');
 };
-export { promiseWithResolvers } from './core-promises.js';
+export { promiseWithResolvers } from './core/promises.js';
 
 export const registerMemory: CoreModule['registerMemory'] = (map, args) => {
     const { componentIdx, memory, memoryIdx } = args ?? {};

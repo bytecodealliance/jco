@@ -7,8 +7,8 @@ import type {
     FutureCopyStates,
     ComponentWaitable,
     WaitableEvent,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
 
 /** Create a base endpoint constructor using the selected event codes. */
 export function initializeFutureEndClass(

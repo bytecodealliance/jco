@@ -9,7 +9,7 @@ import {
     isInt64,
     isUint64,
     invalidNumericPrimitive,
-} from './conversion-numeric.js';
+} from './conversion/numeric.js';
 
 /** Allocate only the selected scratch family, once per instantiation. */
 export const initializeBitcast32: ConversionModule['initializeBitcast32'] = () => {

@@ -10,8 +10,8 @@ import type {
     StoreEventOptions,
     RuntimeMemory,
 } from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { promiseWithResolvers } from './core-promises.js';
+import { debugLog } from './core/debug.js';
+import { promiseWithResolvers } from './core/promises.js';
 import {
     getCurrentTaskMeta,
     setCurrentTaskMeta,

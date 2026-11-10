@@ -6,8 +6,8 @@ import type {
     StreamElementMetadata,
     StreamReadableEnd,
     StreamWritableEnd,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
 export function initializeInternalStreamClass(_context: InternalStreamClassContext): InternalStreamConstructor {
     class InternalStream {
         #pendingBufferMeta: StreamPendingBufferMeta = {}; // shared between read/write ends

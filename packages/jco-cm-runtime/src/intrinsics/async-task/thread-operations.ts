@@ -5,7 +5,7 @@ import type {
     ThreadNewContext,
     AsyncThreadMeta,
 } from '../../runtime.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { getCurrentTaskMeta } from '../task-context.js';
 

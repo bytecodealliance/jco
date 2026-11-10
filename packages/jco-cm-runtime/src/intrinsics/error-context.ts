@@ -16,7 +16,7 @@ import type {
     GlobalErrorContext,
     LocalErrorContext,
 } from '../runtime.js';
-import { debugLog } from './core-debug.js';
+import { debugLog } from './core/debug.js';
 import { getOrCreateAsyncState } from './component.js';
 
 export function initializeGlobalErrorContextTableClass(

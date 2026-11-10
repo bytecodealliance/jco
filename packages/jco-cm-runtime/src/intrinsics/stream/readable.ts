@@ -6,12 +6,12 @@ import type {
     StreamInnerCopyOptions,
     StreamReadOptions,
     StreamReadResult,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { getOrCreateAsyncState } from './component.js';
-import { asyncBlockedCode } from './async-task.js';
-import { promiseWithResolvers } from './core-promises.js';
-import type { StreamEndSuperclass } from './stream-inheritance.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { getOrCreateAsyncState } from '../component.js';
+import { asyncBlockedCode } from '../async-task.js';
+import { promiseWithResolvers } from '../core/promises.js';
+import type { StreamEndSuperclass } from './inheritance.js';
 export function initializeStreamReadableEndClass(_context: StreamEndpointClassContext): StreamReadableEndConstructor {
     const StreamEnd: StreamEndSuperclass = _context.StreamEnd;
 

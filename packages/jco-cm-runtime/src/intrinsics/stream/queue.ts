@@ -4,9 +4,9 @@ import type {
     StreamReadFn,
     StreamElementMetadata,
     StreamChunk,
-} from '../runtime.js';
-import { trackHostOperation } from './component.js';
-import { disposeHostValue } from './core.js';
+} from '../../runtime.js';
+import { trackHostOperation } from '../component.js';
+import { disposeHostValue } from '../core.js';
 export function initializePendingValueQueueClass(
     tracking: ComponentHostOperationContext,
 ): PendingValueQueueConstructor {

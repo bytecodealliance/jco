@@ -7,9 +7,9 @@ import type {
     StreamReadOptions,
     StreamReadableEnd,
     StreamWritableEnd,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { getStreamEnd } from './stream-state.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { getStreamEnd } from './state.js';
 export function initializeHostStreamClass(_context: HostStreamClassContext): HostStreamConstructor {
     class HostStream {
         #componentIdx: number;

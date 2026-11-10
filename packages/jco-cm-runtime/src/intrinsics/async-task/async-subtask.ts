@@ -11,7 +11,7 @@ import type {
     AsyncSubtaskOptions,
     ComponentWaitableSet,
 } from '../../runtime.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { isThenable } from './helpers.js';
 import { disposeHostValue, lookupMemories } from '../core.js';
 import { getOrCreateAsyncState } from '../component.js';
