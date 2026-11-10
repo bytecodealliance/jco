@@ -1,4 +1,15 @@
 import type { ConversionModule } from '../runtime.js';
+import {
+    isInt8,
+    isUint8,
+    isInt16,
+    isUint16,
+    isInt32,
+    isUint32,
+    isInt64,
+    isUint64,
+    invalidNumericPrimitive,
+} from './conversion-numeric.js';
 
 /** Allocate only the selected scratch family, once per instantiation. */
 export const initializeBitcast32: ConversionModule['initializeBitcast32'] = () => {
@@ -164,19 +175,3 @@ export const splitInt64: ConversionModule['splitInt64'] = (value) => {
 export const mergeInt64: ConversionModule['mergeInt64'] = (low, high) => {
     return BigInt(low | 0) | (BigInt(high | 0) << 32n);
 };
-
-// A valid integer is unchanged by truncation to its width. The type checks
-// reject non-numeric inputs before coercion; separate predicates keep unused widths out of bundles.
-const isInt8 = (value: unknown): value is number => typeof value === 'number' && value === (value << 24) >> 24;
-const isUint8 = (value: unknown): value is number => typeof value === 'number' && value === (value & 255);
-const isInt16 = (value: unknown): value is number => typeof value === 'number' && value === (value << 16) >> 16;
-const isUint16 = (value: unknown): value is number => typeof value === 'number' && value === (value & 65535);
-const isInt32 = (value: unknown): value is number => typeof value === 'number' && value === value >> 0;
-const isUint32 = (value: unknown): value is number => typeof value === 'number' && value === value >>> 0;
-const isInt64 = (value: unknown): value is bigint => typeof value === 'bigint' && value === BigInt.asIntN(64, value);
-const isUint64 = (value: unknown): value is bigint => typeof value === 'bigint' && value === BigInt.asUintN(64, value);
-
-/** Report the same conversion failure for direct and type-dispatched validation. */
-function invalidNumericPrimitive(type: string, value: unknown): never {
-    throw new TypeError(`invalid ${type} value [${value}]`);
-}

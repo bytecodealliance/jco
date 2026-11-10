@@ -22,7 +22,17 @@ import type {
     LocalErrorContext,
 } from '../runtime.js';
 import { debugLog } from './core-debug.js';
-import { requireValidNumericPrimitive } from './conversion.js';
+import {
+    isInt8,
+    isUint8,
+    isInt16,
+    isUint16,
+    isInt32,
+    isUint32,
+    isInt64,
+    isUint64,
+    invalidNumericPrimitive,
+} from './conversion-numeric.js';
 import { utf8Encode, utf16Encode, compactUtf16Encode } from './string.js';
 import { getOrCreateAsyncState } from './component.js';
 import { errCtxGetLocalTable, errCtxGlobalRefCountAdd, errCtxCreateLocalHandle } from './error-context.js';
@@ -78,8 +88,8 @@ export function lowerFlatS8(_context: StrictNumericContext, ctx: TaskLowerContex
         throw new Error('missing memory for lower');
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('s8', ctx.vals[0]);
+    if (_context.strict && !isInt8(ctx.vals[0])) {
+        invalidNumericPrimitive('s8', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setInt8(ctx.storagePtr!, ctx.vals[0] as number);
 
@@ -93,8 +103,8 @@ export function lowerFlatU8(_context: StrictNumericContext, ctx: TaskLowerContex
         throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('u8', ctx.vals[0]);
+    if (_context.strict && !isUint8(ctx.vals[0])) {
+        invalidNumericPrimitive('u8', ctx.vals[0]);
     }
 
     if (!ctx.memory) {
@@ -120,8 +130,8 @@ export function lowerFlatS16(_context: StrictNumericContext, ctx: TaskLowerConte
         ctx.storagePtr! += 2 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('s16', ctx.vals[0]);
+    if (_context.strict && !isInt16(ctx.vals[0])) {
+        invalidNumericPrimitive('s16', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setInt16(ctx.storagePtr!, ctx.vals[0] as number, true);
 
@@ -143,8 +153,8 @@ export function lowerFlatU16(_context: StrictNumericContext, ctx: TaskLowerConte
         ctx.storagePtr! += 2 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('u16', ctx.vals[0]);
+    if (_context.strict && !isUint16(ctx.vals[0])) {
+        invalidNumericPrimitive('u16', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setUint16(ctx.storagePtr!, ctx.vals[0] as number, true);
 
@@ -163,8 +173,8 @@ export function lowerFlatS32(_context: StrictNumericContext, ctx: TaskLowerConte
         ctx.storagePtr! += 4 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('s32', ctx.vals[0]);
+    if (_context.strict && !isInt32(ctx.vals[0])) {
+        invalidNumericPrimitive('s32', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setInt32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
@@ -183,8 +193,8 @@ export function lowerFlatU32(_context: StrictNumericContext, ctx: TaskLowerConte
         ctx.storagePtr! += 4 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('u32', ctx.vals[0]);
+    if (_context.strict && !isUint32(ctx.vals[0])) {
+        invalidNumericPrimitive('u32', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setUint32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
@@ -203,8 +213,8 @@ export function lowerFlatS64(_context: StrictNumericContext, ctx: TaskLowerConte
         ctx.storagePtr! += 8 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('s64', ctx.vals[0]);
+    if (_context.strict && !isInt64(ctx.vals[0])) {
+        invalidNumericPrimitive('s64', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setBigInt64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
 
@@ -223,8 +233,8 @@ export function lowerFlatU64(_context: StrictNumericContext, ctx: TaskLowerConte
         ctx.storagePtr! += 8 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('u64', ctx.vals[0]);
+    if (_context.strict && !isUint64(ctx.vals[0])) {
+        invalidNumericPrimitive('u64', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setBigUint64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
 
@@ -243,8 +253,8 @@ export function lowerFlatFloat32(_context: StrictNumericContext, ctx: TaskLowerC
         ctx.storagePtr! += 4 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('f32', ctx.vals[0]);
+    if (_context.strict && typeof ctx.vals[0] !== 'number') {
+        invalidNumericPrimitive('f32', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setFloat32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
@@ -263,8 +273,8 @@ export function lowerFlatFloat64(_context: StrictNumericContext, ctx: TaskLowerC
         ctx.storagePtr! += 8 - rem;
     }
 
-    if (_context.strict) {
-        requireValidNumericPrimitive('f64', ctx.vals[0]);
+    if (_context.strict && typeof ctx.vals[0] !== 'number') {
+        invalidNumericPrimitive('f64', ctx.vals[0]);
     }
     new DataView(ctx.memory!.buffer).setFloat64(ctx.storagePtr!, ctx.vals[0] as number, true);
 
