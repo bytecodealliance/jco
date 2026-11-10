@@ -50,6 +50,7 @@ export function create(options: Options = {}) {
         determinism: core.asyncDeterminism,
         scopeCounter,
         scopeTasks,
+        storeTrap: component.storeTrap,
         clearing,
         registers,
         FutureValue: options.FutureValue ?? initializeFutureValueClass(core.symbolDispose),

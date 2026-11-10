@@ -348,6 +348,34 @@ test.concurrent('subtask resolution accounts for lenders exactly once and uses t
     }
 });
 
+test.concurrent('a stopped store abandons borrows a task still holds', () => {
+    const s = setup();
+    try {
+        const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+        t.addBorrowedHandle();
+        expect(() => t.validateResourceBorrowScope()).toThrow('borrow handles still remain');
+        s.component.storeTrap.stopped = true;
+        t.validateResourceBorrowScope();
+        expect(Array.from(s.resource.state.scopeTasks.keys())).toEqual([]);
+    } finally {
+        s.component.storeTrap.stopped = false;
+        s.cleanup();
+    }
+});
+
+test.concurrent('cancelling a subtask twice traps', () => {
+    const s = setup();
+    try {
+        const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+        const sub = parent.createSubtask({ componentIdx: 0, isAsync: true });
+        const rep = sub.ensureHandle();
+        sub.requestCancellation();
+        expect(() => s.asyncTask.subtaskCancel(0, false, rep)).toThrow(s.core.RuntimeError);
+    } finally {
+        s.cleanup();
+    }
+});
+
 test.concurrent('cancelling a host subtask disposes its pending result and consumes terminal status', async () => {
     const s = setup();
     try {
@@ -447,6 +475,29 @@ test.concurrent('symmetric guest calls preserve synchronous entry and restore th
                 expect(s.core.getCurrentTaskMeta()?.taskID).toBe(parent.id());
                 expect(s.asyncTask.currentTaskMayBlock.value).toBe(1);
                 expect(s.asyncTask.symmetricSyncGuestCallStack).toEqual([]);
+            },
+        });
+        finish(parent);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('a symmetric call into an async-typed function holds the callee instance', () => {
+    const s = setup();
+    try {
+        const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+        s.core.withCurrentTaskMeta({
+            taskID: parent.id(),
+            threadID: parent.defaultThread().id(),
+            componentIdx: 0,
+            fn() {
+                expect(s.asyncTask.symmetricSyncGuestCallEnter(0, true, 1, true)).toBe(1);
+                // The adapter lifts synchronously, whatever the function type.
+                expect(s.asyncTask.getCurrentTask(1)!.task.needsExclusiveLock()).toBe(true);
+                expect(s.component.getOrCreateAsyncState(1).isExclusivelyLocked()).toBe(true);
+                s.asyncTask.symmetricSyncGuestCallExit();
+                expect(s.component.getOrCreateAsyncState(1).isExclusivelyLocked()).toBe(false);
             },
         });
         finish(parent);

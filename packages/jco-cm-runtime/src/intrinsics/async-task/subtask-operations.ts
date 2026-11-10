@@ -62,7 +62,7 @@ export function subtaskCancel(
     };
     if (subtask.cancellationRequested()) {
         if (!slowOnly) {
-            throw new Error('cancellation has already been requested for this subtask');
+            throw new _context.RuntimeError('cancellation has already been requested for this subtask');
         }
         if (subtask.isResolved()) {
             return finishCancel();

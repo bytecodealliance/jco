@@ -1549,6 +1549,7 @@ export interface AsyncTaskClassContext extends TrapContext {
     readonly determinism: AsyncDeterminism;
     readonly scopeCounter: ResourceScopeCell;
     readonly scopeTasks: ResourceScopeTasks;
+    readonly storeTrap: Pick<ComponentStoreTrap, 'stopped'>;
     readonly clearing: TaskClearContext;
     readonly registers: TaskRegisters;
     /** The selected constructor supplies the store's future identity. */
