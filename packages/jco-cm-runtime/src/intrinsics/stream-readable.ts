@@ -162,16 +162,18 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     }
                 }
 
+                // A read queued behind this one has already taken the slot, and keeps it.
+                if (this.#result === newResult) {
+                    this.#result = null;
+                }
                 if (transferred > 0) {
                     const values = buffer.read(transferred);
                     const { typedArray } = this.#elemMeta;
                     const value =
                         typedArray === undefined ? (count === 1 ? values[0] : values) : new typedArray(values);
-                    this.#result = null;
                     // An option's none value is undefined, but still an item.
                     resolve({ value, done: false });
                 } else {
-                    this.#result = null;
                     resolve({ value: undefined, done: true });
                 }
             } catch (err) {

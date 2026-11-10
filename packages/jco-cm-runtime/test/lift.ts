@@ -1,7 +1,8 @@
 import { createPair as createStreamPair } from './stream-helpers.js';
 import { expect, test } from 'vitest';
 import * as lift from '../src/intrinsics/lift.js';
-import { initializeUtf8Decoder, initializeUtf16Decoder } from '../src/intrinsics/string.js';
+import { initializeUtf8Decoder } from '../src/intrinsics/string.js';
+import { stringDecoders } from './string-helpers.js';
 import { initializeEndianness } from '../src/intrinsics/core.js';
 import { create as createErrorContext } from './error-context-helpers.js';
 import { create as createFuture } from './future-helpers.js';
@@ -100,11 +101,7 @@ test.concurrent.each(primitives)(
 );
 
 test.concurrent('UTF8 and UTF16 use selected decoders for direct and indirect representations', () => {
-    const strings = {
-        RuntimeError: WebAssembly.RuntimeError,
-        utf8: initializeUtf8Decoder(),
-        utf16: initializeUtf16Decoder(),
-    };
+    const strings = stringDecoders();
     const buffer = new ArrayBuffer(64);
     new Uint8Array(buffer).set(new TextEncoder().encode('hé'), 16);
     const dv = new DataView(buffer);
@@ -137,11 +134,7 @@ test.concurrent.each([
 ] as const)(
     'a %s string at %j traps instead of reading outside memory or malformed bytes',
     (stringEncoding, at, trap) => {
-        const strings = {
-            RuntimeError: WebAssembly.RuntimeError,
-            utf8: initializeUtf8Decoder(),
-            utf16: initializeUtf16Decoder(),
-        };
+        const strings = stringDecoders();
         const buffer = new ArrayBuffer(64);
         new Uint8Array(buffer)[0] = 0xff;
         new DataView(buffer).setUint32(8, at[0], true);
@@ -335,7 +328,7 @@ test.concurrent('owned resources use their lazy class and explicit live resource
     expect(() => lift.liftFlatBorrow(0, 0, null, [], 0, 0)).toThrow(/borrowed resources is not supported/);
 });
 
-test.concurrent('future and stream bridges stay lazy, preserve endpoint identity and retain pending completions', async () => {
+test.concurrent('future lifts return the pending promise, reject unreadable ends and deliver a later write', async () => {
     const selected = createFuture();
     const state = selected.addTable(0, 2);
     const pair = createFuturePair(selected.creation, state, { tableIdx: 2, elemMeta: { align32: 4, isNumeric: true } });
@@ -362,6 +355,9 @@ test.concurrent('future and stream bridges stay lazy, preserve endpoint identity
     expect(await received).toBe(42);
     read.drop();
     pair.writeEnd.drop();
+});
+
+test.concurrent('stream lifts trap on unreadable ends and return an external stream that owns the read end', () => {
     const streams = createStreamPair(3);
     class SelectedTrap extends Error {}
     const streamLift = lift.liftFlatStream(
@@ -412,11 +408,7 @@ test.concurrent('error-context lifting transfers local ownership to the actual g
 test.concurrent.each([false, true])(
     'compact strings preserve direct=%s operands and cursor state',
     (useDirectParams) => {
-        const context = {
-            RuntimeError: WebAssembly.RuntimeError,
-            utf8: initializeUtf8Decoder(),
-            utf16: initializeUtf16Decoder(),
-        };
+        const context = stringDecoders();
         for (const [text, bytes, taggedLength] of [
             ['A\u0080ÿ', [65, 128, 255], 3],
             ['🚀', [0x3d, 0xd8, 0x80, 0xde], 0x80000002],
@@ -442,11 +434,7 @@ test.concurrent.each([false, true])(
 );
 
 test.concurrent('compact lifts retain malformed UTF16 and alignment checks', () => {
-    const context = {
-        RuntimeError: WebAssembly.RuntimeError,
-        utf8: initializeUtf8Decoder(),
-        utf16: initializeUtf16Decoder(),
-    };
+    const context = stringDecoders();
     const buffer = new ArrayBuffer(16);
     new DataView(buffer).setUint16(8, 0xd800, true);
     for (const params of [

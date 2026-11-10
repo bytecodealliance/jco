@@ -33,8 +33,7 @@ pub(crate) enum StreamContextIntrinsic {
     InitializePendingValueQueueClass,
     /// Capabilities for `createStream`.
     CreateStream,
-    /// Shared table capabilities for `addStreamEndToTable`, `deleteStreamEnd`,
-    /// and `removeStreamEndFromTable`.
+    /// Shared table capabilities for `addStreamEndToTable` and `removeStreamEndFromTable`.
     AddStreamEndToTable,
     /// Shared lookup capabilities for `getStreamEnd` and `streamTransfer`.
     GetStreamEnd,
@@ -178,15 +177,7 @@ impl StreamContextIntrinsic {
                 Component(ComponentContextIntrinsic::TrackHostOperation),
                 Task(TaskContextIntrinsic::GetCurrentTask),
             ],
-            Self::InitializeStreamReadableEndClass => &[
-                Stream(Self::InitializeStreamEndClass),
-                Core(CoreContextIntrinsic::InitializeManagedBufferClass),
-                Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
-                Core(CoreContextIntrinsic::InitializeBufferManager),
-                Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
-                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
-            ],
-            Self::InitializeStreamWritableEndClass => &[
+            Self::InitializeStreamReadableEndClass | Self::InitializeStreamWritableEndClass => &[
                 Stream(Self::InitializeStreamEndClass),
                 Core(CoreContextIntrinsic::InitializeManagedBufferClass),
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
@@ -205,7 +196,6 @@ impl StreamContextIntrinsic {
             ],
             Self::InitializeHostStreamClass => &[
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
-                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Stream(Self::GetStreamEnd),
                 Stream(Self::InitializeExternalStreamClass),
             ],
@@ -305,10 +295,7 @@ impl StreamContextIntrinsic {
                 Self::InitializeStreamEndClass => {
                     "{ RuntimeError: WebAssemblyRuntimeError, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, taskLookup: _jcoTaskLookupContext, tracking: _jcoComponentHostOperationContext }"
                 }
-                Self::InitializeStreamReadableEndClass => {
-                    "{ RuntimeError: WebAssemblyRuntimeError, StreamEnd, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, lookup: _jcoComponentStateLookupContext }"
-                }
-                Self::InitializeStreamWritableEndClass => {
+                Self::InitializeStreamReadableEndClass | Self::InitializeStreamWritableEndClass => {
                     "{ RuntimeError: WebAssemblyRuntimeError, StreamEnd, ManagedBuffer, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, lookup: _jcoComponentStateLookupContext }"
                 }
                 Self::InitializeInternalStreamClass => "{ StreamReadableEnd, StreamWritableEnd }",
@@ -316,7 +303,7 @@ impl StreamContextIntrinsic {
                     "{ disposeSymbol: symbolDispose, asyncIteratorSymbol: symbolAsyncIterator, resourceRep: symbolRscRep }"
                 }
                 Self::InitializeHostStreamClass => {
-                    "{ RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, Stream }"
+                    "{ RuntimeError: WebAssemblyRuntimeError, ends: _jcoStreamEndLookupContext, Stream }"
                 }
                 Self::InitializePendingValueQueueClass => "_jcoComponentHostOperationContext",
                 _ => unreachable!(),
@@ -326,10 +313,7 @@ impl StreamContextIntrinsic {
         }
         let properties = match self {
             Self::CreateStream => "InternalStream, streams: STREAMS, tables: STREAM_TABLES",
-            Self::AddStreamEndToTable => {
-                "StreamEnd, RuntimeError: WebAssemblyRuntimeError, tables: STREAM_TABLES, lookup: _jcoComponentStateLookupContext"
-            }
-            Self::GetStreamEnd => {
+            Self::AddStreamEndToTable | Self::GetStreamEnd => {
                 "StreamEnd, RuntimeError: WebAssemblyRuntimeError, tables: STREAM_TABLES, lookup: _jcoComponentStateLookupContext"
             }
             Self::StreamNew => {
@@ -426,11 +410,6 @@ pub(crate) fn import(intrinsic: AsyncStreamIntrinsic) -> RuntimeImport {
         ),
         AddStreamEndToTable => (
             "addStreamEndToTable",
-            StreamContextIntrinsic::AddStreamEndToTable,
-            RuntimeImportKind::Call,
-        ),
-        DeleteStreamEnd => (
-            "deleteStreamEnd",
             StreamContextIntrinsic::AddStreamEndToTable,
             RuntimeImportKind::Call,
         ),
@@ -558,7 +537,6 @@ mod tests {
             AsyncStreamIntrinsic::CreateStream,
             AsyncStreamIntrinsic::GetStreamEnd,
             AsyncStreamIntrinsic::AddStreamEndToTable,
-            AsyncStreamIntrinsic::DeleteStreamEnd,
             AsyncStreamIntrinsic::RemoveStreamEndFromTable,
             AsyncStreamIntrinsic::StreamNew,
             AsyncStreamIntrinsic::StreamNewFromLift,
@@ -573,7 +551,7 @@ mod tests {
             AsyncStreamIntrinsic::GenReadFnFromLowerableStream,
             AsyncStreamIntrinsic::GenStreamHostInjectFn,
         ];
-        assert_eq!(variants.len(), 26);
+        assert_eq!(variants.len(), 25);
         let mut intrinsics = variants.map(Intrinsic::AsyncStream).into_iter().collect();
         let opts = TranspileOpts::builder().name("streams".into()).build();
         let source = render_intrinsics(

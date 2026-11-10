@@ -11,7 +11,6 @@ export {
     createStream,
     getStreamEnd,
     addStreamEndToTable,
-    deleteStreamEnd,
     removeStreamEndFromTable,
 } from './stream-state.js';
 export {

@@ -42,10 +42,6 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
                 pendingBufferMeta: this.#pendingBufferMeta,
                 target: 'stream read end (@ init)',
                 waitable: readWaitable,
-                // Only in-component read-ends need the host inject fn if provided,
-                // as that function will *inject* a write when a read is performed
-                // from inside the guest.
-                hostInjectFn: args.hostInjectFn,
                 isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
                 notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped(),
             });
@@ -56,7 +52,6 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
                 pendingBufferMeta: this.#pendingBufferMeta,
                 target: 'stream write end (@ init)',
                 waitable: writeWaitable,
-                hostOwned: true,
                 isPeerDroppedFn: () => this.#readEnd.isDropped(),
                 notifyPeerDroppedFn: () => this.#readEnd.notifyDropped(),
             });

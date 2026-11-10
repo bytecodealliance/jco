@@ -105,8 +105,6 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
             }
             this.#pendingBufferMeta = args.pendingBufferMeta;
 
-            this.#hostInjectFn = args.hostInjectFn;
-
             if (args.isPeerDroppedFn !== undefined && typeof args.isPeerDroppedFn !== 'function') {
                 throw new TypeError('isPeerDroppedFn must be a function');
             }

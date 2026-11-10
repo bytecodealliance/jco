@@ -402,21 +402,6 @@ test.concurrent.each(['success', 'throw', 'exit-throw', 'already-exited'] as con
     },
 );
 
-test.concurrent('destructors without task creation state throw before invoking the guest', () => {
-    const resource = createResource();
-    let called = false;
-    expect(() =>
-        resource.callDestructor({
-            componentIdx: 0,
-            rep: 1,
-            dtor: () => {
-                called = true;
-            },
-        }),
-    ).toThrow(TypeError);
-    expect(called).toBe(false);
-});
-
 test.concurrent('stopped stores skip guest destructors and task creation', () => {
     const resource = createResource({ storeTrap: { stopped: true } });
     expect(

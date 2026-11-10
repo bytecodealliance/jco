@@ -2461,8 +2461,6 @@ export interface StreamEndOptions {
     readonly elemMeta: StreamElementMetadata;
     /** Shared by both ends of one stream. */
     readonly pendingBufferMeta: StreamPendingBufferMeta;
-    readonly hostInjectFn?: StreamHostInjectFn;
-    readonly hostOwned?: boolean;
     readonly isPeerDroppedFn?: () => boolean;
     readonly notifyPeerDroppedFn?: () => void;
     readonly target?: unknown;
@@ -2589,7 +2587,6 @@ export interface InternalStreamOptions {
     readonly elemMeta: StreamElementMetadata;
     readonly readWaitable: ComponentWaitable;
     readonly writeWaitable: ComponentWaitable;
-    readonly hostInjectFn?: StreamHostInjectFn;
 }
 export interface InternalStream {
     readonly elemMeta: () => StreamElementMetadata;
@@ -2629,7 +2626,7 @@ export interface ExternalStreamOptions {
     readonly isReadable: boolean;
     readonly isWritable: boolean;
     readonly writeFn?: (value: unknown) => unknown;
-    readonly readFn?: (options: StreamReadOptions) => unknown;
+    readonly readFn?: (options?: number | StreamReadOptions) => unknown;
     readonly dropFn?: () => unknown;
 }
 export interface ExternalStream {
@@ -2648,7 +2645,6 @@ export interface ExternalStreamClassContext {
     readonly resourceRep: symbol;
 }
 export interface HostStreamClassContext extends TrapContext {
-    readonly lookup: ComponentStateLookupContext;
     readonly ends: StreamEndLookupContext;
     readonly Stream: ExternalStreamConstructor;
 }
@@ -2687,7 +2683,6 @@ export interface StreamCreateContext {
 export interface StreamCreateOptions {
     readonly tableIdx: number;
     readonly elemMeta: StreamElementMetadata;
-    readonly hostInjectFn?: StreamHostInjectFn;
 }
 export interface StreamCreated {
     readonly writeEnd: StreamWritableEnd;
@@ -2715,10 +2710,6 @@ export interface StreamEndInsertion {
 export interface StreamEndRemoval {
     readonly tableIdx: number;
     readonly streamWaitableIdx: number;
-}
-export interface StreamDeleteOptions {
-    readonly tableIdx: number;
-    readonly streamEndWaitableIdx: number;
 }
 export interface StreamNewOptions {
     readonly callerComponentIdx: number;
@@ -2827,7 +2818,6 @@ export interface StreamModule {
         context: StreamTableContext,
         options: StreamEndInsertion,
     ) => { handle: number; waitableIdx: number };
-    readonly deleteStreamEnd: (context: StreamTableContext, options: StreamDeleteOptions) => StreamPayloadEnd;
     readonly removeStreamEndFromTable: (context: StreamTableContext, options: StreamEndRemoval) => StreamPayloadEnd;
     readonly streamNew: (context: StreamNewContext, options: StreamNewOptions) => bigint;
     readonly streamNewFromLift: (

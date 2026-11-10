@@ -11,7 +11,6 @@ import type {
     StreamEndLocation,
     StreamTableContext,
     StreamEndInsertion,
-    StreamDeleteOptions,
     StreamEndRemoval,
 } from '../runtime.js';
 import { debugLog } from './core-debug.js';
@@ -26,7 +25,7 @@ export function createStream(
     args: StreamCreateOptions,
 ): StreamCreated {
     debugLog('[createStream()] args', args);
-    const { tableIdx, elemMeta, hostInjectFn } = args;
+    const { tableIdx, elemMeta } = args;
     if (tableIdx === undefined) {
         throw new Error('missing table idx while adding stream');
     }
@@ -50,7 +49,6 @@ export function createStream(
         elemMeta,
         readWaitable,
         writeWaitable,
-        hostInjectFn,
     });
     stream.setGlobalStreamMapRep(_context.streams.insert(stream));
 
@@ -156,14 +154,6 @@ export function addStreamEndToTable(
     });
 
     return { handle, waitableIdx };
-}
-
-/** `removeStreamEndFromTable` under the name and option key of the stream drop operations. */
-export function deleteStreamEnd(_context: StreamTableContext, args: StreamDeleteOptions): StreamPayloadEnd {
-    return removeStreamEndFromTable(_context, {
-        tableIdx: args.tableIdx,
-        streamWaitableIdx: args.streamEndWaitableIdx,
-    });
 }
 
 export function removeStreamEndFromTable(_context: StreamTableContext, args: StreamEndRemoval): StreamPayloadEnd {

@@ -70,10 +70,8 @@ export function create() {
     const PendingValueQueue = stream.initializePendingValueQueueClass(tracking);
     const streams = stream.initializeStreams(core.RepTable),
         tables = stream.initializeStreamTables();
-    const tableContext = { tables, lookup, StreamEnd, RuntimeError: core.RuntimeError },
-        ends = { ...tableContext };
+    const ends = { tables, lookup, StreamEnd, RuntimeError: core.RuntimeError };
     const creation = { tables, streams, InternalStream };
-    const HostStream = stream.initializeHostStreamClass({ RuntimeError: core.RuntimeError, lookup, ends, Stream });
     const lowerable = {
         Stream,
         asyncIteratorSymbol: Symbol.asyncIterator,
@@ -81,7 +79,6 @@ export function create() {
         ReadableStream,
     };
     const source = { lowerable, disposeSymbol: core.symbolDispose };
-    const injection = { PendingValueQueue };
     const lower = {
         numeric: { strict: true },
         lookup,
@@ -91,28 +88,24 @@ export function create() {
         lowerable,
         creation,
         source,
-        injection,
+        injection: { PendingValueQueue },
     };
     return {
-        ...selected,
+        core,
+        component,
+        lookup,
         StreamEnd,
         StreamReadableEnd,
-        StreamWritableEnd,
-        InternalStream,
         Stream,
-        HostStream,
         PendingValueQueue,
         streams,
         tables,
-        tableContext,
         ends,
         creation,
         lowerable,
         source,
-        injection,
         lower,
         taskLookup,
-        tracking,
         /** Contexts for the canonical read, write, cancel and drop operations of each direction. */
         operations(RuntimeError: RuntimeErrorConstructor = core.RuntimeError) {
             const shared = {
@@ -140,12 +133,10 @@ export function create() {
 
 /** A store with one `u32` stream whose ends both live in `tableIdx` of component 0. */
 export function createPair(tableIdx = 2) {
-    const s = create(),
-        state = s.addTable(0, tableIdx);
-    const pair = stream.createStream(s.creation, state, { tableIdx, elemMeta: { ...scalar } });
+    const s = create();
+    const pair = stream.createStream(s.creation, s.addTable(0, tableIdx), { tableIdx, elemMeta: { ...scalar } });
     return {
         ...s,
-        state,
         pair,
         read: pair.readEnd,
         write: pair.writeEnd,
@@ -177,13 +168,15 @@ export function guestOptions(memory: { buffer: ArrayBuffer }, streamTableIdx = 2
     };
 }
 
-/** Resolves once the endpoint has published its completion event. */
-export async function eventReady(end: { hasPendingEvent(): boolean }) {
-    for (let i = 0; i < 100; i++) {
-        if (end.hasPendingEvent()) {
-            return;
-        }
-        await new Promise<void>((resolve) => setTimeout(resolve, 0));
-    }
-    throw new Error('stream did not publish its completion event');
+/** A disposable host value, and a source `next` whose read stays pending until the value is made to `arrive`. */
+export function lateValue(disposeSymbol: symbol) {
+    const disposed: unknown[] = [];
+    const value = { [disposeSymbol]: () => disposed.push(value) };
+    const pending = Promise.withResolvers<IteratorResult<unknown>>();
+    return {
+        value,
+        disposed,
+        next: () => pending.promise,
+        arrive: () => pending.resolve({ value, done: false }),
+    };
 }
