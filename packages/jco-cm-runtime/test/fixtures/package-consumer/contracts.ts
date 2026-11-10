@@ -293,3 +293,17 @@ liftModule.liftFlatStringUTF8({ strict: true }, { componentIdx: 0, params: [] })
 const invalidLiftScratch: LiftVariantContext = { scratch: [] };
 void liftContract;
 void invalidLiftScratch;
+
+import * as lower from '@bytecodealliance/jco-cm-runtime/intrinsics/lower';
+import type { LowerModule } from '@bytecodealliance/jco-cm-runtime/runtime';
+const lowerContract: RuntimeModuleContracts['intrinsics/lower'] = lower;
+const lowerModule: LowerModule = lower;
+lowerModule.lowerFlatU32(
+    { strict: false },
+    { componentIdx: 0, vals: [42], memory: { buffer: new ArrayBuffer(4) }, storagePtr: 0 },
+);
+// @ts-expect-error numeric lowerers require their explicit strictness context
+lowerModule.lowerFlatU32({ componentIdx: 0, vals: [42] });
+// @ts-expect-error selected encoder is a narrow capability, not an option bag
+lowerModule.lowerFlatStringUTF8({ strict: true }, { componentIdx: 0, vals: ['text'] });
+void lowerContract;

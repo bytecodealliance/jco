@@ -78,6 +78,10 @@
         "./intrinsics/lift": {
             "types": "./dist/intrinsics/lift.d.ts",
             "default": "./dist/intrinsics/lift.js"
+        },
+        "./intrinsics/lower": {
+            "types": "./dist/intrinsics/lower.d.ts",
+            "default": "./dist/intrinsics/lower.js"
         }
     },
     "scripts": {
