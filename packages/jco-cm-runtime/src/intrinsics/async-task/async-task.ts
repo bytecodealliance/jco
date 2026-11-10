@@ -446,7 +446,6 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                     this.#lockFreeEntry = true;
                     debugLog('[AsyncTask#enterSync()] entering without exclusive lock', {
                         taskID: this.#id,
-                        threadID: this.defaultThread().id(),
                         componentIdx: this.#componentIdx,
                     });
                 }
@@ -728,7 +727,6 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                     readyFn,
                 },
                 taskID: this.#id,
-                threadID: this.defaultThread().id(),
                 componentIdx: this.#componentIdx,
             });
             const ready = readyFn();
@@ -745,7 +743,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             // Entry can wait on backpressure before a guest register window exists.
             const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
             const thread = this.#entered
-                ? (cstate.threads.get(getCurrentTaskMeta(_registers, this.#componentIdx)?.threadID!) as
+                ? (cstate.threads.get(getCurrentTaskMeta(_registers, this.#componentIdx)!.threadID) as
                       | AsyncThreadType
                       | undefined)
                 : this.defaultThread();
@@ -761,7 +759,6 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             debugLog('[AsyncTask#deliverPendingCancel()]', {
                 args: { cancellable },
                 taskID: this.#id,
-                threadID: this.defaultThread().id(),
                 componentIdx: this.#componentIdx,
             });
             if (cancellable && this.#state === TASK_CANCEL_PENDING) {
@@ -786,7 +783,6 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         requestCancellation() {
             debugLog('[AsyncTask#requestCancellation()] args', {
                 taskID: this.#id,
-                threadID: this.defaultThread().id(),
                 componentIdx: this.#componentIdx,
                 state: this.#state,
             });

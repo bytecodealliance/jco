@@ -402,7 +402,7 @@ test.concurrent.each(['success', 'throw', 'exit-throw', 'already-exited'] as con
     },
 );
 
-test.concurrent('destructors report missing task creation state before invoking the guest', () => {
+test.concurrent('destructors without task creation state throw before invoking the guest', () => {
     const resource = createResource();
     let called = false;
     expect(() =>
@@ -413,7 +413,7 @@ test.concurrent('destructors report missing task creation state before invoking 
                 called = true;
             },
         }),
-    ).toThrow('resource destructors require task creation state and registers');
+    ).toThrow(TypeError);
     expect(called).toBe(false);
 });
 

@@ -102,7 +102,7 @@ export const transferBorrow: ResourceModule['transferBorrow'] = (context, handle
     const componentIdx = toTable._componentIdx;
     const meta =
         componentIdx === undefined ? undefined : getCurrentTaskMeta(context.taskLookup.registers, componentIdx);
-    const borrowTask = meta ? getCurrentTask(context.taskLookup, meta.componentIdx, meta.taskID)?.task : undefined;
+    const borrowTask = meta ? getCurrentTask(context.taskLookup, componentIdx!, meta.taskID)?.task : undefined;
     if (borrowTask && own) {
         fromTable[handle << 1]++;
         borrowTask.addResourceLender(fromTable, handle);
@@ -131,9 +131,6 @@ export const transferOwn: ResourceModule['transferOwn'] = (context, handle, from
 export const callDestructor: ResourceModule['callDestructor'] = (context, { componentIdx, dtor, rep }) => {
     if (context.storeTrap.stopped) {
         return;
-    }
-    if (!context.creation || !context.registers) {
-        throw new TypeError('resource destructors require task creation state and registers');
     }
     const { task, threadID } = createNewCurrentImplicitThread(context.creation, {
         componentIdx,

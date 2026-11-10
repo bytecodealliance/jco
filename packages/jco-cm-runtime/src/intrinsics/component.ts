@@ -262,7 +262,7 @@ export function getOrCreateAsyncState(context: ComponentStateLookupContext, comp
 }
 
 export function setAllError(states: Pick<ComponentAsyncStates, 'values'>) {
-    debugLog('[setAllError()]');
+    debugLog('[_ComponentStateSetAllError()]');
     for (const state of states.values()) {
         state.setErrored();
     }

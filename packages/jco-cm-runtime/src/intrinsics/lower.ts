@@ -104,7 +104,7 @@ export function lowerFlatS8(_context: StrictNumericContext, ctx: TaskLowerContex
 }
 
 export function lowerFlatU8(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatU8()] args', ctx);
+    debugLog('[_lowerFlatU8()] args', ctx);
 
     if (ctx.vals.length !== 1) {
         throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
@@ -123,7 +123,7 @@ export function lowerFlatU8(_context: StrictNumericContext, ctx: TaskLowerContex
 }
 
 export function lowerFlatS16(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatS16()] args', { ctx });
+    debugLog('[_lowerFlatS16()] args', { ctx });
 
     if (!ctx.memory) {
         throw new Error('missing memory for lower');
@@ -146,7 +146,7 @@ export function lowerFlatS16(_context: StrictNumericContext, ctx: TaskLowerConte
 }
 
 export function lowerFlatU16(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatU16()] args', { ctx });
+    debugLog('[_lowerFlatU16()] args', { ctx });
 
     if (!ctx.memory) {
         throw new Error('missing memory for lower');
@@ -169,7 +169,7 @@ export function lowerFlatU16(_context: StrictNumericContext, ctx: TaskLowerConte
 }
 
 export function lowerFlatS32(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatS32()] args', { ctx });
+    debugLog('[_lowerFlatS32()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
@@ -189,7 +189,7 @@ export function lowerFlatS32(_context: StrictNumericContext, ctx: TaskLowerConte
 }
 
 export function lowerFlatU32(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatU32()] args', { ctx });
+    debugLog('[_lowerFlatU32()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error(`expected single value to lower, got [${ctx.vals.length}]`);
@@ -209,7 +209,7 @@ export function lowerFlatU32(_context: StrictNumericContext, ctx: TaskLowerConte
 }
 
 export function lowerFlatS64(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatS64()] args', { ctx });
+    debugLog('[_lowerFlatS64()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -229,7 +229,7 @@ export function lowerFlatS64(_context: StrictNumericContext, ctx: TaskLowerConte
 }
 
 export function lowerFlatU64(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatU64()] args', { ctx });
+    debugLog('[_lowerFlatU64()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -249,7 +249,7 @@ export function lowerFlatU64(_context: StrictNumericContext, ctx: TaskLowerConte
 }
 
 export function lowerFlatFloat32(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatFloat32()] args', { ctx });
+    debugLog('[_lowerFlatFloat32()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -269,7 +269,7 @@ export function lowerFlatFloat32(_context: StrictNumericContext, ctx: TaskLowerC
 }
 
 export function lowerFlatFloat64(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatFloat64()] args', { ctx });
+    debugLog('[_lowerFlatFloat64()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -339,7 +339,7 @@ export function lowerFlatStringAny(_context: LowerStringContext, ctx: TaskLowerC
 }
 
 export function lowerFlatStringUTF16(_context: Utf16EncodingContext, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatStringUTF16()] args', { ctx });
+    debugLog('[_lowerFlatStringUTF16()] args', { ctx });
     if (!ctx.realloc) {
         throw new Error('missing realloc during flat string lower');
     }
@@ -354,7 +354,7 @@ export function lowerFlatStringUTF16(_context: Utf16EncodingContext, ctx: TaskLo
 }
 
 export function lowerFlatStringUTF8(_context: StringEncodeInto, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatStringUTF8()] args', ctx);
+    debugLog('[_lowerFlatStringUTF8()] args', ctx);
     if (!ctx.realloc) {
         throw new Error('missing realloc during flat string lower');
     }
@@ -371,7 +371,7 @@ export function lowerFlatStringUTF8(_context: StringEncodeInto, ctx: TaskLowerCo
 export function lowerFlatRecord(meta: LowerRecordMeta): TaskLowerFn {
     const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
     return function lowerFlatRecordInner(ctx) {
-        debugLog('[lowerFlatRecord()] args', { ctx });
+        debugLog('[_lowerFlatRecord()] args', { ctx });
 
         const originalPtr = ctx.storagePtr!;
         const r = ctx.vals[0] as Record<string, unknown>;
@@ -408,7 +408,7 @@ export function lowerFlatVariant(_context: StrictNumericContext, meta: LowerVari
     }
 
     return function lowerFlatVariantInner(ctx) {
-        debugLog('[lowerFlatVariant()] args', { ctx });
+        debugLog('[_lowerFlatVariant()] args', { ctx });
 
         const { tag, val } = ctx.vals[0] as { tag: string; val?: unknown };
         const variantCase = caseLookup[tag];
@@ -454,7 +454,7 @@ export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): 
     }
 
     return function lowerFlatListInner(ctx) {
-        debugLog('[lowerFlatList()] args', { ctx });
+        debugLog('[_lowerFlatList()] args', { ctx });
 
         if (ctx.useDirectParams) {
             if (ctx.params!.length < 2) {
@@ -563,7 +563,7 @@ export function lowerFlatMap(_context: StrictNumericContext, meta: LowerMapMeta)
     const { keyLowerFn, valueLowerFn, entrySize32, entryAlign32, valueOffset32 } = meta;
 
     return function lowerFlatMapInner(ctx) {
-        debugLog('[lowerFlatMap()] args', { ctx });
+        debugLog('[_lowerFlatMap()] args', { ctx });
         const map = ctx.vals[0];
         if (!(map instanceof Map)) {
             throw new TypeError('expected a Map');
@@ -613,7 +613,7 @@ export function lowerFlatMap(_context: StrictNumericContext, meta: LowerMapMeta)
 export function lowerFlatTuple(meta: LowerTupleMeta): TaskLowerFn {
     const { elemLowerMetas, size32: tupleSize32, align32: tupleAlign32 } = meta;
     return function lowerFlatTupleInner(ctx) {
-        debugLog('[lowerFlatTuple()] args', { ctx });
+        debugLog('[_lowerFlatTuple()] args', { ctx });
         const originalPtr = ctx.storagePtr!;
         const tuple = ctx.vals[0] as unknown[];
         for (const [idx, [lowerFn, size32, align32]] of elemLowerMetas.entries()) {
@@ -641,7 +641,7 @@ export function lowerFlatFlags(_context: LiftFlagsContext, meta: LiftFlagsMeta):
     const { names, align32, intSizeBytes } = meta;
 
     return function lowerFlatFlagsInner(ctx) {
-        debugLog('[lowerFlatFlags()] args', { ctx });
+        debugLog('[_lowerFlatFlags()] args', { ctx });
         if (ctx.vals.length !== 1) {
             throw new Error('unexpected number of vals');
         }
@@ -671,7 +671,7 @@ export function lowerFlatFlags(_context: LiftFlagsContext, meta: LiftFlagsMeta):
 export function lowerFlatEnum(_context: StrictNumericContext, meta: LowerVariantMeta): TaskLowerFn {
     const f = lowerFlatVariant(_context, meta);
     return function lowerFlatEnumInner(ctx) {
-        debugLog('[lowerFlatEnum()] args', { ctx });
+        debugLog('[_lowerFlatEnum()] args', { ctx });
 
         const v = ctx.vals[0];
         const isNotEnumObject = v === null || typeof v !== 'object' || Object.keys(v).length !== 2 || !('tag' in v);
@@ -687,7 +687,7 @@ export function lowerFlatOption(_context: StrictNumericContext, meta: LowerVaria
     const { payloadMaybeNull } = meta;
     const f = lowerFlatVariant(_context, meta);
     return function lowerFlatOptionInner(ctx) {
-        debugLog('[lowerFlatOption()] args', { ctx });
+        debugLog('[_lowerFlatOption()] args', { ctx });
 
         const v = ctx.vals[0];
         if (v === null || v === undefined) {
@@ -713,7 +713,7 @@ export function lowerFlatOption(_context: StrictNumericContext, meta: LowerVaria
 export function lowerFlatResult(_context: StrictNumericContext, meta: LowerVariantMeta): TaskLowerFn {
     const f = lowerFlatVariant(_context, meta);
     return function lowerFlatResultInner(ctx) {
-        debugLog('[lowerFlatResult()] args', { ctx });
+        debugLog('[_lowerFlatResult()] args', { ctx });
 
         const v = ctx.vals[0];
         const isNotResultObject =
@@ -735,7 +735,7 @@ export function lowerFlatOwn(_context: StrictNumericContext, meta: LowerOwnMeta)
     const { lowerFn, componentIdx, tableIdx } = meta;
 
     return function lowerFlatOwnInner(ctx) {
-        debugLog('[lowerFlatOwn()] args', { ctx });
+        debugLog('[_lowerFlatOwn()] args', { ctx });
 
         if (ctx.componentIdx !== componentIdx) {
             throw new Error(
@@ -755,7 +755,7 @@ export function lowerFlatOwn(_context: StrictNumericContext, meta: LowerOwnMeta)
 }
 
 export function lowerFlatBorrow(ctx: TaskLowerContext): never {
-    debugLog('[lowerFlatBorrow()] args', { ctx });
+    debugLog('[_lowerFlatBorrow()] args', { ctx });
     throw new Error('flat lower for borrowed resources is not supported!');
 }
 
@@ -763,7 +763,7 @@ export function lowerFlatFuture(_context: LowerFutureContext, meta: LowerFutureM
     const { componentIdx, futureTableIdx, elemMeta } = meta;
 
     return function lowerFlatFutureInner(ctx) {
-        debugLog('[lowerFlatFuture()] args', { ctx });
+        debugLog('[_lowerFlatFuture()] args', { ctx });
 
         let future = ctx.vals[0];
         if (!future) {
@@ -825,7 +825,7 @@ export function lowerFlatStream(_context: LowerStreamContext, meta: LowerStreamM
     const { componentIdx, streamTableIdx, elemMeta } = meta;
 
     return function lowerFlatStreamInner(ctx) {
-        debugLog('[lowerFlatStream()] args', { ctx });
+        debugLog('[_lowerFlatStream()] args', { ctx });
 
         const stream = ctx.vals[0];
         if (!stream) {
@@ -887,7 +887,7 @@ export function lowerFlatStream(_context: LowerStreamContext, meta: LowerStreamM
 }
 
 export function lowerFlatErrorContext(_context: LowerErrorContext, errCtxTableIdx: number, ctx: TaskLowerContext) {
-    debugLog('[lowerFlatErrorContext()] args', { errCtxTableIdx, ctx });
+    debugLog('[_lowerFlatErrorContext()] args', { errCtxTableIdx, ctx });
     const { memory, realloc, vals, storagePtr, storageLen, componentIdx } = ctx;
 
     const errCtxGlobalRep = vals[0] as number;

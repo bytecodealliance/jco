@@ -230,11 +230,11 @@ export function initializeWaitableSetClass(
         }
 
         removeWaitable(waitable: ComponentWaitable) {
-            const index = this.#waitables.indexOf(waitable);
-            if (index === -1) {
+            const existing = this.#waitables.find((w) => w === waitable);
+            if (!existing) {
                 return undefined;
             }
-            this.#waitables.splice(index, 1);
+            this.#waitables = this.#waitables.filter((w) => w !== waitable);
             return waitable;
         }
 
@@ -356,9 +356,15 @@ export function waitableSetNew(context: WaitableSetNewContext, componentIdx: num
     debugLog('[waitableSetNew()] args', { componentIdx });
 
     const state = getOrCreateAsyncState(context.lookup, componentIdx);
+    if (!state) {
+        throw new Error(`missing async state for component idx [${componentIdx}]`);
+    }
 
     const wset = new WaitableSet(componentIdx);
     const rep = state.handles.insert(wset);
+    if (typeof rep !== 'number') {
+        throw new Error(`invalid/missing waitable set rep [${rep}]`);
+    }
 
     debugLog('[waitableSetNew()] created waitable set', { componentIdx, rep });
     return rep;
@@ -513,7 +519,7 @@ export function removeWaitableSet(
     args: { state: Pick<ComponentAsyncState, 'handles'>; waitableSetRep: number },
 ) {
     const { RuntimeError, WaitableSet } = context;
-    debugLog('[removeWaitableSet()] args', args);
+    debugLog('[_removeWaitableSet()] args', args);
     const { state, waitableSetRep } = args;
     if (!state) {
         throw new TypeError('missing component state');
@@ -552,6 +558,9 @@ export function waitableJoin(
     });
 
     const state = getOrCreateAsyncState(context.lookup, componentIdx);
+    if (!state) {
+        throw new Error(`invalid/missing async state for component instance [${componentIdx}]`);
+    }
 
     if (!state.mayLeave) {
         throw new RuntimeError('component instance is not marked as may leave, cannot join waitable');

@@ -17,7 +17,7 @@ export function lowerImportBackwardsCompat(
     args: TaskLowerImportOptions,
     ...params: unknown[]
 ): ReturnType<AsyncTaskModule['lowerImportBackwardsCompat']> {
-    debugLog('[lowerImportBackwardsCompat()] args', { args, params });
+    debugLog('[_lowerImportBackwardsCompat()] args', { args, params });
     const {
         componentIdx,
         isAsync,
@@ -196,6 +196,7 @@ export function lowerImportBackwardsCompat(
     // Call the host in this slice so a synchronous answer stays synchronous.
     // Nonblocking tasks, including destructors, trap only on a returned promise.
     if (!isAsync && !funcTypeIsAsync && isManualAsync) {
+        debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
         if (createdTask) {
             createdTask.enterSync();
         }
@@ -222,7 +223,7 @@ export function lowerImportBackwardsCompat(
     }
     queueMicrotask(async () => {
         try {
-            debugLog('[lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
+            debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
             if (createdTask) {
                 await createdTask.enter();
             }
@@ -231,12 +232,12 @@ export function lowerImportBackwardsCompat(
                 createdTask.resolve([asyncRes]);
             }
         } catch (err) {
-            debugLog('[lowerImportBackwardsCompat()] import fn error:', err);
+            debugLog('[_lowerImportBackwardsCompat()] import fn error:', err);
             task.setErrored(err);
             task.reject(err);
         }
     });
-    debugLog('[lowerImportBackwardsCompat()] async-lowered import return', {
+    debugLog('[_lowerImportBackwardsCompat()] async-lowered import return', {
         fnName: importFn.fnName,
         componentIdx,
         subtaskID: subtask.id(),
