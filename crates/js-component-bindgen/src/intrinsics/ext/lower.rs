@@ -233,7 +233,13 @@ mod tests {
             assert!(source.contains(expected), "{expected}");
         }
         assert!(source.contains("creation: _jcoFutureCreateContext"));
-        assert_eq!(intrinsics.len(), 2);
+        // Component state calls back into functions that stay inline.
+        for inline in [
+            crate::intrinsics::component::ComponentIntrinsic::ReportTrap,
+            crate::intrinsics::component::ComponentIntrinsic::CheckIdle,
+        ] {
+            assert!(intrinsics.contains(&Intrinsic::Component(inline)));
+        }
         assert!(!source.contains("function _lowerFlatFuture("));
         assert!(!source.contains("function _lowerFlatStream("));
     }

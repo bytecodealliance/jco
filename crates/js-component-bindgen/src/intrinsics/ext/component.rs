@@ -325,21 +325,6 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
         kind,
     })
 }
-pub(crate) fn discover_dependencies(
-    intrinsic: ComponentIntrinsic,
-    args: &RenderIntrinsicsArgs<'_>,
-) {
-    if let Some(context) = import(intrinsic).and_then(|import| import.context) {
-        let mut contexts = Vec::new();
-        context.collect(&mut contexts);
-        if contexts.contains(&RuntimeContextIntrinsic::Component(
-            ComponentContextIntrinsic::InitializeComponentAsyncStateClass,
-        )) {
-            args.require_intrinsic(ComponentIntrinsic::ReportTrap);
-            args.require_intrinsic(ComponentIntrinsic::CheckIdle);
-        }
-    }
-}
 
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {

@@ -633,6 +633,8 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
         kind,
     })
 }
+/// Requires the inline functions that the contexts of `intrinsic` call back into.
+/// They stay inline in every runtime, so no context can name them as a dependency.
 pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     if let Some(import) = super::ExternalRuntime::import(intrinsic)
         && let Some(context) = import.context
@@ -648,6 +650,12 @@ pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsic
             TaskContextIntrinsic::DriverLoop,
         )) {
             args.require_intrinsic(crate::intrinsics::component::ComponentIntrinsic::ReportTrap);
+        }
+        if contexts.contains(&RuntimeContextIntrinsic::Component(
+            ComponentContextIntrinsic::InitializeComponentAsyncStateClass,
+        )) {
+            args.require_intrinsic(crate::intrinsics::component::ComponentIntrinsic::ReportTrap);
+            args.require_intrinsic(crate::intrinsics::component::ComponentIntrinsic::CheckIdle);
         }
     }
 }
