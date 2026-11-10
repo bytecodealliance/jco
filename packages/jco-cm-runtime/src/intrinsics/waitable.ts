@@ -23,6 +23,7 @@ import { debugLog } from './core/debug.js';
 import { promiseWithResolvers } from './core/promises.js';
 import { getOrCreateAsyncState } from './component.js';
 import { getCurrentTask } from './async-task/task-operations.js';
+import { isThenable } from './async-task/helpers.js';
 
 /** Fresh class identity per store, with no state or platform capability required. */
 export function initializeWaitableClass(): WaitableConstructor {
@@ -423,7 +424,7 @@ export function waitableSetWait(
     if (event === null) {
         return -1;
     }
-    if (event && 'then' in event) {
+    if (isThenable(event)) {
         return event.then(storeEvent);
     }
     return storeEvent(event);

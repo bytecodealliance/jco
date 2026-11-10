@@ -2724,7 +2724,7 @@ impl AsyncTaskIntrinsic {
                                 }});
                                 cstate.throwIfInterrupted();
                                 if (keepGoing && task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
-                                return keepGoing;
+                                return !!keepGoing;
                             }} finally {{
                                 if (reacquireLock && !cstate.exclusivelyLockedBy(task.id())) {{
                                     await cstate.acquireExclusiveLock(task.id());
