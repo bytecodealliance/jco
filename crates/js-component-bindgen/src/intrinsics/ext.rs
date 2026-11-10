@@ -36,10 +36,12 @@ pub(crate) use future::FutureContextIntrinsic;
 mod host;
 mod lift;
 mod lower;
+mod stream;
 use error_context::ErrCtxContextIntrinsic;
 use host::HostContextIntrinsic;
 use lift::LiftContextIntrinsic;
 use lower::LowerContextIntrinsic;
+use stream::StreamContextIntrinsic;
 mod waitable;
 use component::ComponentContextIntrinsic;
 use core::CoreContextIntrinsic;
@@ -75,6 +77,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     Lower(LowerContextIntrinsic),
     /// Context intrinsics for future state, endpoints, and operations.
     Future(FutureContextIntrinsic),
+    /// Context intrinsics for stream state, endpoints, and operations.
+    Stream(StreamContextIntrinsic),
     /// Capabilities for the `tableGet` resource-table helper.
     ResourceTableGet,
     /// The per-component resource handle index spaces returned by `initializeHandleIndexSpaces`.
@@ -166,6 +170,7 @@ impl RuntimeContextIntrinsic {
         .chain(LiftContextIntrinsic::get_global_names())
         .chain(LowerContextIntrinsic::get_global_names())
         .chain(FutureContextIntrinsic::get_global_names())
+        .chain(StreamContextIntrinsic::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -179,6 +184,7 @@ impl RuntimeContextIntrinsic {
             Self::Lift(context) => context.local_name(),
             Self::Lower(context) => context.local_name(),
             Self::Future(context) => context.local_name(),
+            Self::Stream(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::InitializeHandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::InitializeHandleTables => "HANDLE_TABLES",
@@ -215,6 +221,7 @@ impl RuntimeContextIntrinsic {
             Self::Lift(context) => return context.initializer(),
             Self::Lower(_) => return None,
             Self::Future(context) => return context.initializer(),
+            Self::Stream(context) => return context.initializer(),
             Self::InitializeHandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -310,6 +317,7 @@ impl RuntimeContextIntrinsic {
             Self::Lift(context) => context.dependencies(),
             Self::Lower(context) => context.dependencies(),
             Self::Future(context) => context.dependencies(),
+            Self::Stream(context) => context.dependencies(),
             Self::ResourceTableRemove => &[
                 Self::InitializeHandleIndexSpaces,
                 Self::InitializeResourceScopeTasks,
@@ -358,6 +366,7 @@ impl RuntimeContextIntrinsic {
             Self::Lift(context) => context.render(output, args),
             Self::Lower(context) => context.render(output, args),
             Self::Future(context) => context.render(output, args),
+            Self::Stream(context) => context.render(output, args),
             Self::ResourceTableRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -446,6 +455,7 @@ impl ExternalRuntime {
             return Some(import);
         }
         match intrinsic {
+            Intrinsic::AsyncStream(i) => Some(stream::import(i)),
             Intrinsic::AsyncFuture(i) => Some(future::import(i)),
             Intrinsic::Lower(i) => Some(lower::import(i)),
             Intrinsic::Lift(i) => Some(lift::import(i)),
@@ -753,11 +763,10 @@ impl Provides<LiftIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        intrinsic: LiftIntrinsic,
+        _intrinsic: LiftIntrinsic,
         _output: &mut Source,
-        args: &RenderIntrinsicsArgs<'_>,
+        _args: &RenderIntrinsicsArgs<'_>,
     ) {
-        lift::discover(intrinsic.into(), args);
     }
 }
 
@@ -769,11 +778,10 @@ impl Provides<LowerIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        intrinsic: LowerIntrinsic,
+        _intrinsic: LowerIntrinsic,
         _output: &mut Source,
-        args: &RenderIntrinsicsArgs<'_>,
+        _args: &RenderIntrinsicsArgs<'_>,
     ) {
-        lower::discover(intrinsic.into(), args);
     }
 }
 
@@ -806,30 +814,19 @@ pub(crate) fn uses_context(
     contexts.contains(&requested)
 }
 
-/// Families the external runtime does not implement yet.
-macro_rules! delegate_to_inline {
-    ($($family:ty),+ $(,)?) => {
-        $(
-            impl Provides<$family> for ExternalRuntime {
-                fn binding(&self, intrinsic: $family) -> IntrinsicBinding {
-                    InlineRuntime.binding(intrinsic)
-                }
-
-                fn render(
-                    &self,
-                    intrinsic: $family,
-                    output: &mut Source,
-                    args: &RenderIntrinsicsArgs<'_>,
-                ) {
-                    InlineRuntime.render(intrinsic, output, args);
-                }
-            }
-        )+
-    };
-}
-
-delegate_to_inline! {
-    AsyncStreamIntrinsic,
+impl Provides<AsyncStreamIntrinsic> for ExternalRuntime {
+    fn binding(&self, intrinsic: AsyncStreamIntrinsic) -> IntrinsicBinding {
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
+        }
+    }
+    fn render(
+        &self,
+        _intrinsic: AsyncStreamIntrinsic,
+        _output: &mut Source,
+        _args: &RenderIntrinsicsArgs<'_>,
+    ) {
+    }
 }
 
 impl IntrinsicRuntime for ExternalRuntime {
