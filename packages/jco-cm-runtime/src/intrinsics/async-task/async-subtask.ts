@@ -453,6 +453,9 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 childTaskFnName: this.#childTask?.entryFnName(),
                 subtaskFnName: this.fnName,
             });
+            if (!this.#waitable) {
+                throw new Error('missing/invalid inner waitable');
+            }
             if (!this.resolveDelivered()) {
                 throw new RuntimeError('cannot drop a subtask which has not yet resolved');
             }

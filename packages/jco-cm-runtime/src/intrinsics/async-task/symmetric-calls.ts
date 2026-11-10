@@ -17,7 +17,7 @@ export function symmetricSyncGuestCallEnter(
     calleeComponentIdx: number,
     syncOnly = false,
 ): ReturnType<AsyncTaskModule['symmetricSyncGuestCallEnter']> {
-    debugLog('[symmetricSyncGuestCallEnter()] args', {
+    debugLog('[_symmetricSyncGuestCallEnter()] args', {
         callerComponentIdx,
         calleeIsAsync,
         calleeComponentIdx,
@@ -30,7 +30,11 @@ export function symmetricSyncGuestCallEnter(
     if (syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()) {
         return 0;
     }
-    const callerTaskMeta = getCurrentTask(_context, callerComponentIdx);
+    const callerThreadMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+    if (!callerThreadMeta) {
+        throw new Error('missing current caller thread metadata');
+    }
+    const callerTaskMeta = getCurrentTask(_context, callerComponentIdx, callerThreadMeta.taskID);
     if (!callerTaskMeta) {
         throw new Error('missing current caller task metadata');
     }
@@ -38,6 +42,10 @@ export function symmetricSyncGuestCallEnter(
     if (!callerTask) {
         throw new Error('missing current caller task');
     }
+    if (callerThreadMeta.taskID !== callerTask.id()) {
+        throw new Error('missing current caller thread metadata');
+    }
+    const callerThreadID = callerThreadMeta.threadID;
     const subtask = callerTask.createSubtask({
         componentIdx: callerComponentIdx,
         parentTask: callerTask,
@@ -66,11 +74,6 @@ export function symmetricSyncGuestCallEnter(
     subtask.setChildTask(newTask);
     newTask.setParentSubtask(subtask);
     subtask.onStart();
-    const callerThreadMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
-    if (!callerThreadMeta || callerThreadMeta.taskID !== callerTask.id()) {
-        throw new Error('missing current caller thread metadata');
-    }
-    const callerThreadID = callerThreadMeta.threadID;
     const finishEnter = () => {
         setCurrentTaskMeta(_context.registers, {
             taskID: newTask.id(),
@@ -84,7 +87,7 @@ export function symmetricSyncGuestCallEnter(
             previousTaskMayBlock: (_context.mayBlock as TaskMutableRegister).value,
         });
         (_context.mayBlock as TaskMutableRegister).value = newTask.mayBlock() ? 1 : 0;
-        debugLog('[symmetricSyncGuestCallEnter()] finished preparing', {
+        debugLog('[_symmetricSyncGuestCallEnter()] finished preparing', {
             callerComponentIdx,
             calleeComponentIdx,
             subtaskID: subtask.id(),
@@ -127,7 +130,7 @@ export function symmetricSyncGuestCallExit(
     if (!task) {
         throw new Error('missing current caller task');
     }
-    debugLog('[symmetricSyncGuestCallExit()] exiting', {
+    debugLog('[_symmetricSyncGuestCallExit()] exiting', {
         componentIdx,
         taskID: task.id(),
         subtask: task.getParentSubtask(),

@@ -58,7 +58,7 @@ export function createNewCurrentImplicitThread<T extends AsyncTask = AsyncTask>(
     _context: TaskCreateContext<T>,
     args: CreateTaskOptions,
 ): { task: T; taskID: bigint; thread: ReturnType<T['addThread']>; threadID: number } {
-    debugLog('[createNewCurrentTask()] args', args);
+    debugLog('[createNewCurrentImplicitThread()] args', args);
     const {
         componentIdx,
         isAsync,
@@ -116,7 +116,7 @@ export function clearCurrentThread<T extends TaskIdentity = AsyncTask>(
     taskID?: bigint,
     options: { preserveTask?: boolean } = {},
 ): T | undefined {
-    debugLog('[clearCurrentTask()] args', { componentIdx, taskID });
+    debugLog('[clearCurrentThread()] args', { componentIdx, taskID });
     if (componentIdx === undefined || componentIdx === null) {
         throw new Error('missing/invalid component instance index while ending current task');
     }

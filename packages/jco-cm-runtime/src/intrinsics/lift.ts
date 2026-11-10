@@ -93,7 +93,7 @@ export const initializeLiftVariant: LiftModule['initializeLiftVariant'] = () => 
 });
 
 export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatBool()] args', { ctx });
+    debugLog('[_liftFlatBool()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -120,7 +120,7 @@ export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatS8()] args', { ctx });
+    debugLog('[_liftFlatS8()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -146,7 +146,7 @@ export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatU8()] args', { ctx });
+    debugLog('[_liftFlatU8()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -173,7 +173,7 @@ export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatS16()] args', { ctx });
+    debugLog('[_liftFlatS16()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -199,7 +199,7 @@ export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatU16()] args', { ctx });
+    debugLog('[_liftFlatU16()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -231,7 +231,7 @@ export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatS32()] args', { ctx });
+    debugLog('[_liftFlatS32()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -257,7 +257,7 @@ export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatU32()] args', { ctx });
+    debugLog('[_liftFlatU32()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -283,7 +283,7 @@ export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatS64()] args', { ctx });
+    debugLog('[_liftFlatS64()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -312,7 +312,7 @@ export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatU64()] args', { ctx });
+    debugLog('[_liftFlatU64()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -342,7 +342,7 @@ export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 }
 
 export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatFloat32()] args', { ctx });
+    debugLog('[_liftFlatFloat32()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -370,7 +370,7 @@ export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext
 }
 
 export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatFloat64()] args', { ctx });
+    debugLog('[_liftFlatFloat64()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -397,7 +397,7 @@ export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext
 }
 
 export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatChar()] args', { ctx });
+    debugLog('[_liftFlatChar()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -456,7 +456,7 @@ function requireStringInMemory(
 }
 
 export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatStringUTF8()] args', { ctx });
+    debugLog('[_liftFlatStringUTF8()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -503,7 +503,7 @@ export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftCon
 }
 
 export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatStringUTF16()] args', { ctx });
+    debugLog('[_liftFlatStringUTF16()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
@@ -552,7 +552,7 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
 export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
     return function liftFlatRecordInner(ctx) {
-        debugLog('[liftFlatRecord()] args', { ctx });
+        debugLog('[_liftFlatRecord()] args', { ctx });
 
         const originalPtr = ctx.storagePtr!;
         const res: Record<string, unknown> = {};
@@ -621,7 +621,7 @@ export function liftFlatVariant(
     } = meta;
 
     return function liftFlatVariantInner(ctx) {
-        debugLog('[liftFlatVariant()] args', { ctx });
+        debugLog('[_liftFlatVariant()] args', { ctx });
         const origUseParams = ctx.useDirectParams;
 
         let caseIdx: number;
@@ -700,11 +700,11 @@ export function liftFlatVariant(
 
         if (origUseParams) {
             if (variantFlatCount === undefined || variantFlatCount === null) {
-                debugLog('[liftFlatVariant()] variant with unknown flat count', { ctx, meta });
+                debugLog('[_liftFlatVariant()] variant with unknown flat count', { ctx, meta });
                 throw new Error('cannot lift variant with unknown flat count');
             }
             if (caseFlatCount === undefined || caseFlatCount === null) {
-                debugLog('[liftFlatVariant()] case with unknown flat count', {
+                debugLog('[_liftFlatVariant()] case with unknown flat count', {
                     ctx,
                     meta,
                     case: meta.caseMetas[caseIdx],
@@ -794,7 +794,7 @@ export function liftFlatList(
     };
 
     return function liftFlatListInner(ctx) {
-        debugLog('[liftFlatList()] args', { ctx });
+        debugLog('[_liftFlatList()] args', { ctx });
 
         let liftResults: [unknown, TaskLiftContext];
         if (knownLen !== undefined) {
@@ -888,7 +888,7 @@ export function liftFlatMap(meta: LiftMapMeta): (ctx: TaskLiftContext) => [unkno
     };
 
     return function liftFlatMapInner(ctx) {
-        debugLog('[liftFlatMap()] args', { ctx });
+        debugLog('[_liftFlatMap()] args', { ctx });
 
         let dataPtr;
         let len;
@@ -921,7 +921,7 @@ export function liftFlatMap(meta: LiftMapMeta): (ctx: TaskLiftContext) => [unkno
 export function liftFlatTuple(meta: LiftTupleMeta): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const { elemLiftFns, size32: tupleSize32, align32: tupleAlign32 } = meta;
     return function liftFlatTupleInner(ctx) {
-        debugLog('[liftFlatTuple()] args', { ctx });
+        debugLog('[_liftFlatTuple()] args', { ctx });
 
         const originalPtr = ctx.storagePtr!;
         const val = [];
@@ -980,7 +980,7 @@ export function liftFlatEnum(
     meta.isEnum = true;
     const f = liftFlatVariant(_context, meta);
     return function liftFlatEnumInner(ctx) {
-        debugLog('[liftFlatEnum()] args', { ctx });
+        debugLog('[_liftFlatEnum()] args', { ctx });
         const res = f(ctx);
         res[0] = (res[0] as { tag: string }).tag;
         return res;
@@ -994,7 +994,7 @@ export function liftFlatOption(
     const { payloadMaybeNull } = meta;
     const f = liftFlatVariant(_context, meta);
     return function liftFlatOptionInner(ctx) {
-        debugLog('[liftFlatOption()] args', { ctx });
+        debugLog('[_liftFlatOption()] args', { ctx });
         const res = f(ctx);
         if (!payloadMaybeNull) {
             const value = res[0] as { tag: string; val?: unknown };
@@ -1010,7 +1010,7 @@ export function liftFlatResult(
 ): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const f = liftFlatVariant(_context, meta);
     return function liftFlatResultInner(ctx) {
-        debugLog('[liftFlatResult()] args', { ctx });
+        debugLog('[_liftFlatResult()] args', { ctx });
         const res = f(ctx);
         const value = res[0] as { tag: string; val?: unknown };
         if (!('val' in value)) {
@@ -1027,7 +1027,7 @@ export function liftFlatFlags(
     const { names, align32, intSizeBytes } = meta;
 
     return function liftFlatFlagsInner(ctx) {
-        debugLog('[liftFlatFlags()] args', { ctx });
+        debugLog('[_liftFlatFlags()] args', { ctx });
 
         let val = _context.asBigInt ? null : {};
 
@@ -1070,7 +1070,7 @@ export function liftFlatOwn(meta: LiftOwnMeta): (ctx: TaskLiftContext) => [unkno
     const { classNameFn, createResourceFn, componentIdx, tableIdx } = meta;
 
     return function liftFlatOwnInner(ctx) {
-        debugLog('[liftFlatOwn()] args', { ctx, className: classNameFn() });
+        debugLog('[_liftFlatOwn()] args', { ctx, className: classNameFn() });
 
         if (ctx.componentIdx !== componentIdx) {
             throw new Error('invalid component for resource lift');
@@ -1093,7 +1093,7 @@ export function liftFlatBorrow(
     storagePtr: number,
     storageLen: number,
 ): never {
-    debugLog('[liftFlatBorrow()] args', { size, memory, vals, storagePtr, storageLen });
+    debugLog('[_liftFlatBorrow()] args', { size, memory, vals, storagePtr, storageLen });
     throw new Error('flat lift for borrowed resources is not supported!');
 }
 
@@ -1104,7 +1104,7 @@ export function liftFlatFuture(
     const { futureTableIdx, componentIdx } = meta;
 
     return function liftFlatFutureInner(ctx) {
-        debugLog('[liftFlatFuture()] args', { ctx });
+        debugLog('[_liftFlatFuture()] args', { ctx });
 
         const futureMeta = _context.tables[futureTableIdx];
         if (futureMeta.componentIdx !== componentIdx) {
@@ -1171,7 +1171,7 @@ export function liftFlatStream(
     const { streamTableIdx, componentIdx } = meta;
 
     return function liftFlatStreamInner(ctx) {
-        debugLog('[liftFlatStream()] args', { ctx });
+        debugLog('[_liftFlatStream()] args', { ctx });
 
         const streamMeta = _context.tables[streamTableIdx];
         if (streamMeta.componentIdx !== componentIdx) {
@@ -1254,7 +1254,7 @@ export function liftFlatErrorContext(
     errCtxTableIdx: number,
     ctx: TaskLiftContext,
 ): [unknown, TaskLiftContext] {
-    debugLog('[liftFlatErrorContext()] ctx', ctx);
+    debugLog('[_liftFlatErrorContext()] ctx', ctx);
 
     let val;
     let table;

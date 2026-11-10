@@ -47,13 +47,10 @@ export function contextSet(
               )
             : undefined;
     }
-    if (!currentThreadMeta) {
+    if (!threadMeta) {
         throw new Error(
             `missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context set`,
         );
-    }
-    if (!threadMeta) {
-        throw new Error('failed to retrieve current thread');
     }
     const task = threadMeta.thread;
     if (!task) {
@@ -63,7 +60,8 @@ export function contextSet(
         slot,
         value,
         storage: task.storage,
-        taskID: task.id(),
+        threadID: task.id(),
+        taskID: threadMeta.task.id(),
         componentIdx: task.componentIdx(),
     });
     if (slot < 0 || slot >= task.storage.length) {
@@ -111,13 +109,10 @@ export function contextGet(
               )
             : undefined;
     }
-    if (!currentThreadMeta) {
+    if (!threadMeta) {
         throw new Error(
             `missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context get`,
         );
-    }
-    if (!threadMeta) {
-        throw new Error('failed to retrieve current thread');
     }
     const task = threadMeta.thread;
     if (!task) {
@@ -126,7 +121,8 @@ export function contextGet(
     debugLog('[contextGet()] args', {
         slot,
         storage: task.storage,
-        taskID: task.id(),
+        threadID: task.id(),
+        taskID: threadMeta.task.id(),
         componentIdx: task.componentIdx(),
     });
     if (slot < 0 || slot >= task.storage.length) {

@@ -140,7 +140,7 @@ export function futureWrite(
     if (futureEnd.hasPendingEvent()) {
         const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
         if (code !== _context.events.FUTURE_WRITE) {
-            throw new Error(`mismatched event code [${code}] (expected _context.events.FUTURE_WRITE)`);
+            throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_WRITE)`);
         }
         if (index !== futureEnd.waitableIdx()) {
             throw new Error('mismatched future end index');
@@ -179,7 +179,7 @@ export function futureWrite(
                     }
                     const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
                     if (code !== _context.events.FUTURE_WRITE) {
-                        throw new Error(`mismatched event code [${code}] (expected _context.events.FUTURE_WRITE)`);
+                        throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_WRITE)`);
                     }
                     if (index !== futureEnd.waitableIdx()) {
                         throw new Error('mismatched future end index');
@@ -191,7 +191,7 @@ export function futureWrite(
 
     const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
     if (code !== _context.events.FUTURE_WRITE) {
-        throw new Error(`mismatched event code [${code}] (expected _context.events.FUTURE_WRITE)`);
+        throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_WRITE)`);
     }
     if (index !== futureEnd.waitableIdx()) {
         throw new Error('mismatched future end index');
@@ -268,7 +268,7 @@ export function futureRead(
     if (futureEnd.hasPendingEvent()) {
         const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
         if (code !== _context.events.FUTURE_READ) {
-            throw new Error(`mismatched event code [${code}] (expected _context.events.FUTURE_READ)`);
+            throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_READ)`);
         }
         if (index !== futureEnd.waitableIdx()) {
             throw new Error('mismatched future end index');
@@ -307,7 +307,7 @@ export function futureRead(
                     }
                     const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
                     if (code !== _context.events.FUTURE_READ) {
-                        throw new Error(`mismatched event code [${code}] (expected _context.events.FUTURE_READ)`);
+                        throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_READ)`);
                     }
                     if (index !== futureEnd.waitableIdx()) {
                         throw new Error('mismatched future end index');
@@ -319,7 +319,7 @@ export function futureRead(
 
     const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
     if (code !== _context.events.FUTURE_READ) {
-        throw new Error(`mismatched event code [${code}] (expected _context.events.FUTURE_READ)`);
+        throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_READ)`);
     }
     if (index !== futureEnd.waitableIdx()) {
         throw new Error('mismatched future end index');
