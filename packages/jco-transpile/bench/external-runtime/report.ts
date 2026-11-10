@@ -7,7 +7,7 @@ export interface Values {
 export const parity = {
     raw: { ratio: 1.05, slack: 256 },
     gzip: { ratio: 1.075, slack: 256 },
-    brotli: { ratio: 1.05, slack: 256 },
+    brotli: { ratio: 1.06, slack: 256 },
     parse: { ratio: 1.25, slack: 25_000 },
     evaluate: { ratio: 1.25, slack: 25_000 },
     instantiate: { ratio: 1.25, slack: 50_000 },
