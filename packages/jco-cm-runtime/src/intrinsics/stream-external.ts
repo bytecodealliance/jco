@@ -8,7 +8,6 @@ import { debugLog } from './core-debug.js';
 export function initializeExternalStreamClass(_context: ExternalStreamClassContext): ExternalStreamConstructor {
     class Stream {
         [key: symbol]: unknown;
-        #globalRep = null;
         #isReadable: boolean;
         #isWritable: boolean;
         #writeFn: ExternalStreamOptions['writeFn'];
@@ -65,28 +64,8 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
             if (!this.#isReadable) {
                 throw new Error('stream is not marked as readable and cannot be read from');
             }
-            const readOpts = this.#readOpts(opts);
-            return this.#readFn!(readOpts);
-        }
-
-        #readOpts(opts?: number | StreamReadOptions) {
-            const count =
-                opts === undefined
-                    ? 1
-                    : typeof opts === 'number'
-                      ? opts
-                      : opts && typeof opts === 'object'
-                        ? (opts.count ?? 1)
-                        : undefined;
-            const rejectLength = opts && typeof opts === 'object' ? opts.rejectLength : undefined;
-            if (count === undefined || !Number.isInteger(count) || count < (rejectLength !== undefined ? 0 : 1)) {
-                throw new TypeError(`invalid stream read count [${count}]`);
-            }
-            if (rejectLength !== undefined && (!Number.isInteger(rejectLength) || rejectLength < 0)) {
-                throw new TypeError(`invalid stream read reject length [${rejectLength}]`);
-            }
-            const dropAfterCopy = opts && typeof opts === 'object' ? opts.dropAfterCopy === true : false;
-            return { count, rejectLength, dropAfterCopy };
+            // The readable end validates the options.
+            return this.#readFn!(opts);
         }
 
         async write(...objects: unknown[]) {

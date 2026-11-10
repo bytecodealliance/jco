@@ -10,6 +10,7 @@ import {
 } from '../src/intrinsics/string.js';
 import { create as createErrorContext } from './error-context-helpers.js';
 import { create as createFuture } from './future-helpers.js';
+import { stringDecoders } from './string-helpers.js';
 import type {
     TaskLowerContext,
     TaskLowerFn,
@@ -216,7 +217,7 @@ test.concurrent('owned resources honor the explicit caller capability and reject
     expect(() => fn({ ...cursor({}), componentIdx: 1 })).toThrow(/component index mismatch/);
     expect(() => lower.lowerFlatBorrow(cursor({}))).toThrow(/borrowed resources is not supported/);
 });
-test.concurrent('future and stream lowering share live state and write handle zero-pointer results', () => {
+test.concurrent('lowering a lifted future writes its existing handle without creating another future', () => {
     const selected = createFuture();
     const { lookup } = selected;
     const resourceRep = Symbol();
@@ -240,6 +241,8 @@ test.concurrent('future and stream lowering share live state and write handle ze
     expect(fn(ctx)).toBe(17);
     expect(selected.futures.size()).toBe(1);
     expect(new DataView(ctx.memory!.buffer).getUint32(0, true)).toBe(17);
+});
+test.concurrent('lowering a lifted stream writes the handle of its existing read end', () => {
     const streams = createStreamPair(3);
     const stream: LowerStreamContext = streams.lower;
     const value = new streams.Stream({
@@ -302,18 +305,15 @@ test.concurrent.each(['A\u0080ÿ', '🚀', ''])('compact lowering roundtrips %j 
     expect(view.getUint32(0, true)).toBe(16);
     expect(view.getUint32(4, true)).toBe(value === '🚀' ? 0x80000002 : value.length);
     expect(ctx.storagePtr).toBe(8);
-    const lifted = lift.liftFlatStringAny(
-        { RuntimeError: WebAssembly.RuntimeError, utf8: initializeUtf8Decoder(), utf16: initializeUtf16Decoder() },
-        {
-            componentIdx: 0,
-            params: [],
-            useDirectParams: false,
-            memory,
-            storagePtr: 0,
-            storageLen: 8,
-            stringEncoding: 'compact-utf16',
-        },
-    );
+    const lifted = lift.liftFlatStringAny(stringDecoders(), {
+        componentIdx: 0,
+        params: [],
+        useDirectParams: false,
+        memory,
+        storagePtr: 0,
+        storageLen: 8,
+        stringEncoding: 'compact-utf16',
+    });
     expect(lifted[0]).toBe(value);
     expect(lifted[1].storagePtr).toBe(8);
 });

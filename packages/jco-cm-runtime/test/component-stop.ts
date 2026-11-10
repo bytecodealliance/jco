@@ -1,5 +1,5 @@
 import { expect, test, vi } from 'vitest';
-import { create, clearDeadlockCheck, task } from './component-helpers.js';
+import { create, clearDeadlockCheck, stopStore, task } from './component-helpers.js';
 
 test.concurrent('stopped stores reject host operations before and after reentrant shutdown', () => {
     const { component } = create();
@@ -22,11 +22,7 @@ test.concurrent('shutdown rejects a pending host operation and releases its wait
     expect(component.storeTrap.stopWaiters.size).toBe(1);
     expect(component.storeAsyncState.pendingHostOperations).toBe(1);
     const error = new WebAssembly.RuntimeError('stopped');
-    component.storeTrap.error = error;
-    component.storeTrap.stopped = true;
-    for (const reject of component.storeTrap.stopWaiters) {
-        reject(error);
-    }
+    stopStore(component, error);
     await expect(pending).rejects.toBe(error);
     expect(component.storeTrap.stopWaiters.size).toBe(0);
     expect(component.storeAsyncState.pendingHostOperations).toBe(0);

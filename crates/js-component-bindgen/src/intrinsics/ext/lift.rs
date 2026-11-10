@@ -1,4 +1,4 @@
-//! Lift helpers share selected codec/scratch owners and lazy pending-family capabilities.
+//! Lift helpers share selected codec/scratch owners and pending-family capabilities.
 use super::{
     CoreContextIntrinsic, ErrCtxContextIntrinsic, FutureContextIntrinsic, RuntimeContextIntrinsic,
     RuntimeImport, RuntimeImportKind, RuntimeInitializer, StreamContextIntrinsic,
@@ -25,7 +25,7 @@ pub(crate) enum LiftContextIntrinsic {
     LiftFlatFlags,
     /// Component state and selected future-table access for `liftFlatFuture`.
     LiftFlatFuture,
-    /// Component state and lazy stream-table and constructor access for `liftFlatStream`.
+    /// Component state, stream-table and constructor access for `liftFlatStream`.
     LiftFlatStream,
 }
 impl LiftContextIntrinsic {

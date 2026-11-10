@@ -21,7 +21,7 @@ pub(crate) enum LowerContextIntrinsic {
     LowerFlatList,
     /// Numeric policy, component state, and selected future capabilities for `lowerFlatFuture`.
     LowerFlatFuture,
-    /// Numeric policy, component state, and lazy stream capabilities for `lowerFlatStream`.
+    /// Numeric policy, component state, and stream capabilities for `lowerFlatStream`.
     LowerFlatStream,
     /// Numeric policy and error-context tables shared by `lowerFlatErrorContext`.
     LowerFlatErrorContext,
@@ -218,7 +218,7 @@ mod tests {
         );
     }
     #[test]
-    fn pending_family_contexts_preserve_lazy_classes_and_all_inline_dependencies() {
+    fn pending_family_contexts_preserve_classes_and_all_inline_dependencies() {
         let (source, intrinsics) = generated(&[
             LowerIntrinsic::LowerFlatFuture,
             LowerIntrinsic::LowerFlatStream,

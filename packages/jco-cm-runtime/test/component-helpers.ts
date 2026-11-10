@@ -69,6 +69,15 @@ export function clearDeadlockCheck(component: ComponentIntrinsics) {
     }
 }
 
+/** Stops the store with `error`, rejecting every pending host operation. */
+export function stopStore(component: ComponentIntrinsics, error: Error) {
+    component.storeTrap.error = error;
+    component.storeTrap.stopped = true;
+    for (const reject of component.storeTrap.stopWaiters) {
+        reject(error);
+    }
+}
+
 export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
     let rejected = false;
     let cancelled = false;

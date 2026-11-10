@@ -6,25 +6,18 @@ import type {
     StreamInnerCopyOptions,
 } from '../runtime.js';
 import { debugLog } from './core-debug.js';
-import { asyncBlockedCode } from './async-task.js';
-import { promiseWithResolvers } from './core-promises.js';
 import type { StreamEndSuperclass } from './stream-inheritance.js';
 export function initializeStreamWritableEndClass(_context: StreamEndpointClassContext): StreamWritableEndConstructor {
     const StreamEnd: StreamEndSuperclass = _context.StreamEnd;
 
     class StreamWritableEnd extends StreamEnd {
         #elemMeta: StreamElementMetadata;
-        // only set for the write side of a lowered read stream end
-        #isHostOwned: boolean | undefined;
-
-        #result: ReturnType<typeof promiseWithResolvers<void>> | null = null;
         #sourceRebufferFn: ((items: unknown[]) => void) | null = null;
 
         constructor(args: StreamEndOptions) {
             debugLog('[StreamWritableEnd#constructor()] args', args);
             super(args);
             this.#elemMeta = args.elemMeta;
-            this.#isHostOwned = args.hostOwned;
         }
 
         isReadable() {
@@ -56,124 +49,41 @@ export function initializeStreamWritableEndClass(_context: StreamEndpointClassCo
             return this.writeMany(data);
         }
 
+        /**
+         * Offers `values` to the reader. Every writable end is written by the host, just in time
+         * for a guest read, so a write the reader has not taken yet stays pending and is not awaited.
+         */
         async writeMany(values: unknown[], opts: { dropAfterCopy?: boolean } = {}) {
             debugLog('[StreamWritableEnd#writeMany()] args', { values });
             if (!Array.isArray(values)) {
                 throw new TypeError('writeMany values must be an array');
             }
 
-            // Wait for an existing write operation to end, if present,
-            // otherwise register this write for any future operations.
-            //
-            // NOTE: this complexity below is an attempt to sequence operations
-            // to ensure consecutive writes only wait on their direct predecessors,
-            // (i.e. write #3 must wait on write #2, *not* write #1)
-            //
-            let newResult = promiseWithResolvers<void>();
-            if (this.#result && !this.#isHostOwned) {
-                try {
-                    const p = this.#result.promise;
-                    this.#result = newResult;
-                    await p;
-                } catch (err) {
-                    debugLog('[StreamWritableEnd#writeMany()] error waiting for previous write', err);
-                    // If the previous write we were waiting on errors for any reason,
-                    // we can ignore it and attempt to continue with this write
-                    // which may also fail for a similar reason
-                }
-            } else {
-                this.#result = newResult;
+            const count = values.length;
+            const { id: bufferID, buffer } = _context.buffers.createBuffer({
+                componentIdx: -1,
+                count,
+                isReadable: true, // we need to read from this buffer later
+                isWritable: false,
+                elemMeta: this.#elemMeta,
+                data: values,
+            });
+            buffer.setTarget(`host stream write buffer (id [${bufferID}], count [${count}])`);
+
+            const copied = this.copy({
+                isAsync: true,
+                count,
+                buffer,
+                eventCode: _context.events.STREAM_WRITE,
+                componentIdx: -1,
+                dropAfterCopy: opts.dropAfterCopy === true,
+            });
+            if (this.hasPendingEvent()) {
+                // The guest read path consumes the pending event, so waiting here can deadlock.
+                Promise.resolve(copied).catch(() => {});
+                return;
             }
-            const { promise, resolve, reject } = newResult;
-
-            const data = values;
-            const count = data.length;
-
-            try {
-                const { id: bufferID, buffer } = _context.buffers.createBuffer({
-                    componentIdx: -1,
-                    count,
-                    isReadable: true, // we need to read from this buffer later
-                    isWritable: false,
-                    elemMeta: this.#elemMeta,
-                    data,
-                });
-                buffer.setTarget(
-                    `host stream write buffer (id [${bufferID}], count [${count}], data len [${data.length}])`,
-                );
-
-                let packedResult;
-                const copyPromise = this.copy({
-                    isAsync: true,
-                    count,
-                    buffer,
-                    eventCode: _context.events.STREAM_WRITE,
-                    componentIdx: -1,
-                    dropAfterCopy: opts.dropAfterCopy === true,
-                });
-                if (this.#isHostOwned && this.hasPendingEvent()) {
-                    // Host owned writes are just-in-time writes for an already pending guest read.
-                    // The guest read path consumes the pending event, so waiting here can deadlock.
-                    Promise.resolve(copyPromise).catch((err) => reject(err));
-                    this.#result = null;
-                    resolve();
-                    return await promise;
-                }
-                packedResult = await copyPromise;
-
-                // If we are dealing with a blocked component write operation, we do an immedaite wait
-                // on the host side to pause the host until the write can be completed.
-                //
-                // We do not do this if we're dealing with a host injection,
-                // (i.e. a lowered read end into a component does a read() and forces
-                // data to be read from the host side), we must signal the write is completed
-                // and we are waiting for the read.
-                //
-                //  In the host injection case, it is OK that the write is blocked, because we
-                //  know the read is about to occur (we control the writes to the stream to be
-                // just-before reads, no matter what the user does on the other end).
-                //
-                if (packedResult === asyncBlockedCode && !this.#isHostOwned) {
-                    // If the write was blocked, the pending event produced by the
-                    // read side represents the completed copy.
-
-                    await this.waitForPendingEvent();
-
-                    const event = this.getPendingEvent();
-                    if (!event) {
-                        throw new Error('missing pending event after blocked stream write');
-                    }
-
-                    const { code, payload0: index, payload1: payload } = event;
-
-                    if (code !== _context.events.STREAM_WRITE) {
-                        throw new Error(`mismatched event code [${code}] for host stream write`);
-                    }
-
-                    if (index !== this.waitableIdx()) {
-                        throw new Error('invalid stream end index');
-                    }
-                    packedResult = payload;
-
-                    const copied = packedResult >> 4;
-                    if (copied === 0 && this.isDoneState()) {
-                        reject(new Error('read end dropped during write'));
-                    }
-
-                    if (packedResult === asyncBlockedCode) {
-                        throw new Error('unexpected double block during write');
-                    }
-                }
-
-                // If the write was not blocked, we can resolve right away
-                this.#result = null;
-                resolve();
-            } catch (err) {
-                debugLog('[StreamWritableEnd#write()] error', err);
-                reject(err);
-            }
-
-            return await promise;
+            await copied;
         }
 
         /** Drains the writer's buffer into the buffer a reader left pending, or leaves the writer's pending. */

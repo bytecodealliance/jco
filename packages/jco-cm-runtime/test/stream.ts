@@ -1,7 +1,8 @@
 import { expect, suite, test } from 'vitest';
 import * as stream from '../src/intrinsics/stream.js';
 import { lowerFlatStream } from '../src/intrinsics/lower.js';
-import { create, createPair, dropPair, eventReady, guestOptions, scalar } from './stream-helpers.js';
+import { stopStore } from './component-helpers.js';
+import { create, createPair, dropPair, guestOptions, lateValue, scalar } from './stream-helpers.js';
 import type { StreamReadResult } from '../src/runtime.js';
 
 class SelectedTrap extends Error {}
@@ -62,7 +63,7 @@ suite.concurrent('stream state', () => {
         const selected = createPair(),
             foreign = createPair();
         const state = selected.addTable(0, 0);
-        const context = { ...selected.tableContext, RuntimeError: SelectedTrap };
+        const context = { ...selected.ends, RuntimeError: SelectedTrap };
         const invalidIndices = [
             selected.readIdx,
             state.handles.insert({ streamTableIdx: () => 0 }),
@@ -73,9 +74,6 @@ suite.concurrent('stream state', () => {
             expect(() => stream.getStreamEnd(context, { tableIdx: 0, streamEndWaitableIdx: index })).toThrow(
                 SelectedTrap,
             );
-            expect(() => stream.deleteStreamEnd(context, { tableIdx: 0, streamEndWaitableIdx: index })).toThrow(
-                SelectedTrap,
-            );
             expect(() => stream.removeStreamEndFromTable(context, { tableIdx: 0, streamWaitableIdx: index })).toThrow(
                 SelectedTrap,
             );
@@ -83,6 +81,34 @@ suite.concurrent('stream state', () => {
         }
         dropPair(selected.pair);
         dropPair(foreign.pair);
+    });
+
+    test('an end dropped with allowPendingEvent keeps its undelivered event', () => {
+        const s = createPair();
+        const event = { code: 1, payload0: 1, payload1: 1 };
+        s.read.setPendingEvent(() => event);
+        s.read.drop({ allowPendingEvent: true });
+        expect(s.read.getPendingEvent()).toEqual(event);
+        s.write.getPendingEvent();
+        s.write.drop();
+    });
+
+    test('waitForPendingEvent wakes for an event set later, but not in the microtask turn that set it', async () => {
+        const s = createPair();
+        let woken = false;
+        const waiting = s.read.waitForPendingEvent().then(() => {
+            woken = true;
+        });
+        s.read.setPendingEvent(() => ({ code: 1, payload0: 1, payload1: 1 }));
+        // Enough microtask turns for a wake-up that did not wait for a macrotask to be observed.
+        for (let turn = 0; turn < 10; turn++) {
+            await Promise.resolve();
+        }
+        expect(woken).toBe(false);
+        await waiting;
+        expect(s.read.hasPendingEvent()).toBe(true);
+        s.read.getPendingEvent();
+        dropPair(s.pair);
     });
 });
 
@@ -135,7 +161,7 @@ suite.concurrent('canonical stream operations', () => {
 });
 
 suite.concurrent('instance stop', () => {
-    const stopped = { code: 'ERR_COMPONENT_STOPPED', message: 'component instance has been stopped' };
+    const stopped = { code: 'ERR_COMPONENT_STOPPED' };
 
     test('a pending host read and every later read report the interruption', async () => {
         const s = createPair();
@@ -156,50 +182,52 @@ suite.concurrent('instance stop', () => {
 
     test('a host value arriving after the stop is disposed instead of queued', async () => {
         const s = create();
-        const disposed: unknown[] = [],
-            late = { [s.core.symbolDispose]: () => disposed.push(late) };
-        let release!: (value: IteratorResult<unknown>) => void;
-        const queue = new s.PendingValueQueue(() => new Promise((resolve) => (release = resolve)), scalar);
+        const late = lateValue(s.core.symbolDispose);
+        const queue = new s.PendingValueQueue(late.next, scalar);
         const read = queue.readSource();
-        const error = new s.core.RuntimeError('stopped');
-        s.component.storeTrap.error = error;
-        s.component.storeTrap.stopped = true;
-        for (const reject of s.component.storeTrap.stopWaiters) {
-            reject(error);
-        }
+        stopStore(s.component, new s.core.RuntimeError('stopped'));
         expect(await read).toBe(0);
         expect(queue.done).toBe(true);
-        release({ value: late, done: false });
+        late.arrive();
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
-        expect(disposed).toEqual([late]);
+        expect(late.disposed).toEqual([late.value]);
         expect(queue.length).toBe(0);
     });
 
     test('a host value arriving after its source was dropped is disposed instead of queued', async () => {
         const s = create();
-        const disposed: unknown[] = [],
-            late = { [s.core.symbolDispose]: () => disposed.push(late) };
-        let release!: (value: IteratorResult<unknown>) => void;
-        const source = {
-            [Symbol.asyncIterator]: () => ({
-                next: () => new Promise<IteratorResult<unknown>>((resolve) => (release = resolve)),
-            }),
-        };
+        const late = lateValue(s.core.symbolDispose);
+        const source = { [Symbol.asyncIterator]: () => ({ next: late.next }) };
         const readFn = stream.genReadFnFromLowerableStream(s.source, source);
         const queue = new s.PendingValueQueue(readFn, scalar);
         const read = queue.readSource();
         expect(readFn.dropped).toBeUndefined();
         readFn.drop!();
         expect(readFn.dropped).toBe(true);
-        release({ value: late, done: false });
+        late.arrive();
         expect(await read).toBe(0);
         expect(queue.done).toBe(true);
-        expect(disposed).toEqual([late]);
+        expect(late.disposed).toEqual([late.value]);
         expect(queue.length).toBe(0);
     });
 });
 
 suite.concurrent('host streams', () => {
+    test('a host read issued while others are queued waits behind the last of them', async () => {
+        const s = createPair();
+        await expect(s.read.read({ count: 0 })).rejects.toThrow(/invalid stream read count/);
+        const reads = [s.read.read(), s.read.read(), s.read.read()];
+        await s.write.write(1);
+        expect(await reads[0]).toEqual({ value: 1, done: false });
+        // The first read finished, but the slot still belongs to the third.
+        reads.push(s.read.read());
+        for (const value of [2, 3, 4]) {
+            await s.write.write(value);
+            expect(await reads[value - 1]).toEqual({ value, done: false });
+        }
+        dropPair(s.pair);
+    });
+
     test('host numeric chunks lower into canonical reads and finish without losing the final values', async () => {
         const s = create(),
             ops = s.operations();
@@ -213,7 +241,7 @@ suite.concurrent('host streams', () => {
         const memory = { buffer: new ArrayBuffer(32) },
             opts = guestOptions(memory);
         expect(stream.streamRead(ops.readable, opts, index, 0, 4)).toBe(0xffffffff);
-        await eventReady(read);
+        await read.waitForPendingEvent();
         const completed = read.getPendingEvent()!;
         expect(completed.payload1 >> 4).toBe(4);
         expect(Array.from({ length: 4 }, (_, i) => new DataView(memory.buffer).getUint32(i * 4, true))).toEqual([
@@ -222,25 +250,23 @@ suite.concurrent('host streams', () => {
         expect(completed.payload1 & 0xf).toBe(s.StreamEnd.CopyResult.COMPLETED);
         // The iterator reports exhaustion on the following read.
         expect(stream.streamRead(ops.readable, opts, index, 16, 1)).toBe(0xffffffff);
-        await eventReady(read);
+        await read.waitForPendingEvent();
         expect(read.getPendingEvent()!.payload1).toBe(s.StreamEnd.CopyResult.DROPPED);
         read.drop();
     });
 
     test('pending queue coalesces reads, preserves chunk offsets and returns cancelled values in order', async () => {
         const s = create();
-        let calls = 0,
-            release!: (value: IteratorResult<unknown>) => void;
+        let calls = 0;
+        const chunk = Promise.withResolvers<IteratorResult<unknown>>();
         const queue = new s.PendingValueQueue(() => {
             calls++;
-            return new Promise((resolve) => {
-                release = resolve;
-            });
+            return chunk.promise;
         }, scalar);
         const a = queue.readSource(),
             b = queue.readSource();
         expect(calls).toBe(1);
-        release({ value: new Uint8Array([1, 2, 3, 4]), done: false });
+        chunk.resolve({ value: new Uint8Array([1, 2, 3, 4]), done: false });
         expect(await a).toBe(4);
         expect(await b).toBe(4);
         const first: unknown[] = [];
@@ -254,32 +280,34 @@ suite.concurrent('host streams', () => {
         expect(s.component.storeAsyncState.pendingHostOperations).toBe(0);
     });
 
-    test('external streams use selected symbols, validate writes and dispose an in-flight read', async () => {
-        const s = createPair();
+    test('a source result whose done is truthy but not a boolean ends the queue', async () => {
+        const s = create();
+        const exhausted = { value: undefined, done: 1 } as unknown as IteratorResult<unknown>;
+        const queue = new s.PendingValueQueue(() => exhausted, scalar);
+        expect(await queue.readSource()).toBe(0);
+        expect(queue.done).toBe(true);
+    });
+
+    test('external streams use selected symbols, pass read options through and drop their source on return', async () => {
+        const s = create();
         const writes: unknown[] = [],
             drops: unknown[] = [];
         const source = new s.Stream({
             globalRep: 7,
             isReadable: true,
             isWritable: true,
-            readFn: (opts) => ({ value: opts.count, done: false }),
+            readFn: (opts) => ({ value: opts, done: false }),
             writeFn: (v) => writes.push(v),
             dropFn: () => drops.push(true),
         });
         expect((source as unknown as Record<symbol, () => unknown>)[Symbol.asyncIterator]()).toBe(source);
-        expect(await source.read({ count: 3 })).toEqual({ value: 3, done: false });
+        expect(await source.read({ count: 3 })).toEqual({ value: { count: 3 }, done: false });
         await source.write(42);
         expect(writes).toEqual([42]);
         await expect(source.write()).rejects.toThrow(/single object/);
         await expect(source.write(1, 2)).rejects.toThrow(/single object/);
-        await expect(source.read({ count: 0 })).rejects.toThrow(/count/);
         expect(await source.return()).toEqual({ done: true });
         expect(drops).toEqual([true]);
-        s.read.setPendingEvent(() => ({ code: 1, payload0: 1, payload1: 1 }));
-        s.read.drop({ allowPendingEvent: true });
-        expect(s.read.getPendingEvent()).toEqual({ code: 1, payload0: 1, payload1: 1 });
-        s.write.getPendingEvent();
-        s.write.drop();
     });
 
     test('supported source protocols retain iterator receiver and deferred disposal', async () => {
@@ -317,7 +345,7 @@ suite.concurrent('host streams', () => {
     });
 
     test('external stream writes settle with the write they started', async () => {
-        const s = createPair();
+        const s = create();
         let finish = () => {};
         const order: string[] = [];
         const sink = new s.Stream({
@@ -339,7 +367,6 @@ suite.concurrent('host streams', () => {
         await write;
         expect(order).toEqual(['written', 'settled']);
         await expect(sink.write('fail')).rejects.toThrow(/write failed/);
-        dropPair(s.pair);
     });
 
     test('host read returns the last nonzero payload before reporting the dropped writer', async () => {

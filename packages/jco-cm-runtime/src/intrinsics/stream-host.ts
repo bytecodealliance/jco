@@ -4,13 +4,11 @@ import type {
     HostStreamOptions,
     TaskLiftFn,
     TaskLowerFn,
-    ExternalStream,
     StreamReadOptions,
     StreamReadableEnd,
     StreamWritableEnd,
 } from '../runtime.js';
 import { debugLog } from './core-debug.js';
-import { getOrCreateAsyncState } from './component.js';
 import { getStreamEnd } from './stream-state.js';
 export function initializeHostStreamClass(_context: HostStreamClassContext): HostStreamConstructor {
     class HostStream {
@@ -20,8 +18,6 @@ export function initializeHostStreamClass(_context: HostStreamClassContext): Hos
 
         #payloadLiftFn: TaskLiftFn;
         #payloadLowerFn: TaskLowerFn;
-
-        #userStream: ExternalStream | undefined;
 
         #rep: number | null = null;
 
@@ -60,27 +56,14 @@ export function initializeHostStreamClass(_context: HostStreamClassContext): Hos
         }
 
         createUserStream() {
-            if (this.#userStream) {
-                return this.#userStream;
-            }
             if (this.#rep === null) {
                 throw new Error('unexpectedly missing rep for host stream');
-            }
-
-            const cstate = getOrCreateAsyncState(_context.lookup, this.#componentIdx);
-            if (!cstate) {
-                throw new Error(`missing async state for component [${this.#componentIdx}]`);
             }
 
             const streamEnd = getStreamEnd(_context.ends, {
                 tableIdx: this.#streamTableIdx,
                 streamEndWaitableIdx: this.#streamEndWaitableIdx,
             });
-            if (!streamEnd) {
-                throw new Error(
-                    `missing stream [${this.#streamEndWaitableIdx}] (table [${this.#streamTableIdx}], component [${this.#componentIdx}]`,
-                );
-            }
             if (streamEnd.isDoneState()) {
                 throw new _context.RuntimeError(
                     'cannot lift stream after being notified that the writable end dropped',
@@ -94,7 +77,7 @@ export function initializeHostStreamClass(_context: HostStreamClassContext): Hos
                 isReadable: streamEnd.isReadable(),
                 isWritable: streamEnd.isWritable(),
                 globalRep: this.#rep,
-                readFn: async (opts: StreamReadOptions) => {
+                readFn: async (opts?: number | StreamReadOptions) => {
                     return await (streamEnd as StreamReadableEnd).read(opts);
                 },
                 writeFn: async (v: unknown) => {

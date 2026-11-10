@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { create } from './host-helpers.js';
 import { clearDeadlockCheck } from './component-helpers.js';
 import type { AsyncTask, StoreEventOptions, ComponentWaitableSet, HostCallee } from '../src/runtime.js';
@@ -138,8 +138,9 @@ test.concurrent('eager direct callee returns in the same slice and restores bloc
     }
 });
 
-test.concurrent('eager callee traps reach the caller and release blocking depth', () => {
-    const s = setup();
+test.concurrent('eager callee traps are reported, reach the caller and release blocking depth', () => {
+    const reportTrap = vi.fn();
+    const s = setup({ reportTrap });
     try {
         const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
         s.core.setCurrentTaskMeta({ componentIdx: 0, taskID: parent.id(), threadID: parent.defaultThread().id() });
@@ -155,7 +156,7 @@ test.concurrent('eager callee traps reach the caller and release blocking depth'
             0,
             -1,
         );
-        const error = new Error('callee failed');
+        const error = new s.core.RuntimeError('callee failed');
         expect(() =>
             s.host.asyncStartCall(
                 startOptions,
@@ -170,6 +171,7 @@ test.concurrent('eager callee traps reach the caller and release blocking depth'
                 0,
             ),
         ).toThrow(error);
+        expect(reportTrap).toHaveBeenCalledExactlyOnceWith(error);
         expect(parent.isErrored()).toBe(error);
         expect(s.asyncTask.asyncBlockingCallDepth.value).toBe(0);
     } finally {

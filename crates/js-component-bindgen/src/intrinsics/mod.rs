@@ -1655,10 +1655,6 @@ mod tests {
                 "addStreamEndToTable",
             ),
             (
-                Intrinsic::AsyncStream(AsyncStreamIntrinsic::DeleteStreamEnd),
-                "deleteStreamEnd",
-            ),
-            (
                 Intrinsic::AsyncStream(AsyncStreamIntrinsic::RemoveStreamEndFromTable),
                 "removeStreamEndFromTable",
             ),
@@ -1685,12 +1681,9 @@ mod tests {
             assert!(intrinsics.contains(&intrinsic));
 
             for &(_, other_name) in &helpers {
-                // Dropping a stream end removes it under another name and option key.
-                let delegated =
-                    name == "deleteStreamEnd" && other_name == "removeStreamEndFromTable";
                 assert_eq!(
                     source.contains(&format!("function {other_name}(")),
-                    name == other_name || delegated,
+                    name == other_name,
                     "rendering {name} unexpectedly changed whether {other_name} was emitted",
                 );
             }
@@ -2589,7 +2582,7 @@ mod tests {
                 .find("if (streamEnd.isCopying()) {")
                 .expect("stream drop should reject an active copy");
             let removal = source
-                .find("const removedStreamEnd = deleteStreamEnd(")
+                .find("const removedStreamEnd = removeStreamEndFromTable(")
                 .expect("stream drop should remove a validated idle end");
 
             assert!(source.contains(&format!("throw new WebAssemblyRuntimeError('{error}');")));
