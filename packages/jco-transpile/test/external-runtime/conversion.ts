@@ -1,10 +1,11 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { assert, test } from 'vitest';
 import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpileBytes, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 
 const ADDER = `(component
   (core module $m
@@ -21,64 +22,10 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
             async (strict) => {
                 const dir = await getTmpDir();
                 try {
-                    await mkdir(join(dir, 'runtime/intrinsics'), { recursive: true });
-                    await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-                    await writeFile(join(dir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/component.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/component.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/error-context.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/error-context.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/async-task.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/async-task.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/host.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/host.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/lift.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/lift.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/lower.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/lower.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/future.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/future.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/waitable.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/waitable.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/core.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/resource.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/resource.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
                     const defaults = new URL('intrinsics/conversion.js', defaultRuntimeUrl).href;
-                    await writeFile(
-                        join(dir, 'runtime/intrinsics/conversion.js'),
+                    await writeRuntimeProvider(
+                        dir,
+                        'conversion',
                         `
 export * from ${JSON.stringify(defaults)};
 import { toUint32 as defaultToUint32 } from ${JSON.stringify(defaults)};
@@ -95,6 +42,7 @@ export function toUint32(context, value) {
     calls.push(value);
     return defaultToUint32(context, value);
 }`,
+                        'runtime',
                     );
                     const { files } = await transpileBytes(await parse(ADDER), {
                         name: 'adder',
