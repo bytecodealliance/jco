@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -6,38 +6,12 @@ import { assert, expect, test } from 'vitest';
 import { getTmpDir } from '../helpers.js';
 import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 
 const hostUrl = new URL('intrinsics/host.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
 function fixture(name: string) {
     return fileURLToPath(new URL(`../fixtures/components/p3/${name}.wat`, import.meta.url));
-}
-async function writeProvider(dir: string, source: string) {
-    await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-    await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    for (const suffix of [
-        'conversion',
-        'js-helper',
-        'string',
-        'webidl',
-        'resource',
-        'core',
-        'component',
-        'waitable',
-        'error-context',
-        'async-task',
-        'lift',
-        'lower',
-        'future',
-        'stream',
-    ]) {
-        await writeFile(
-            join(dir, 'provider/intrinsics/' + suffix + '.js'),
-            'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',
-        );
-    }
-    await writeFile(join(dir, 'provider/intrinsics/host.js'), source);
 }
 function providerSource() {
     return `import * as defaults from ${JSON.stringify(hostUrl)};
@@ -86,7 +60,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
         async (minify) => {
             const dir = await getTmpDir();
             try {
-                await writeProvider(dir, providerSource());
+                await writeRuntimeProvider(dir, 'host', providerSource());
                 const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/host.js')).href);
                 for (const [name, method] of [
                     ['sync-lowered-async-callee', 'syncStartCall'],
@@ -172,7 +146,7 @@ test.concurrent.each([
     const dir = await getTmpDir();
     try {
         const names = Object.keys(await import(hostUrl)).filter((name) => name !== missing);
-        await writeProvider(dir, `export { ${names.join(', ')} } from ${JSON.stringify(hostUrl)};`);
+        await writeRuntimeProvider(dir, 'host', `export { ${names.join(', ')} } from ${JSON.stringify(hostUrl)};`);
         const { files } = await transpile(fixture(name), {
             name,
             instantiation: 'sync',

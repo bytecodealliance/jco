@@ -1,4 +1,4 @@
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runInNewContext } from 'node:vm';
@@ -8,6 +8,7 @@ import { assert, test } from 'vitest';
 import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpileBytes, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 
 function echo(encoding: 'utf8' | 'utf16') {
     return `(component
@@ -57,58 +58,6 @@ export function validateGuestChar(...args) { calls.push('validateGuestChar'); re
 `;
 }
 
-async function writeProvider(dir: string) {
-    await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    await writeFile(
-        join(dir, 'provider/intrinsics/component.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/component.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/error-context.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/error-context.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/async-task.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/async-task.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/host.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/host.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/lift.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/lift.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/lower.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/lower.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/future.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/future.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/stream.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/stream.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/waitable.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/waitable.js', defaultRuntimeUrl).href) + ';',
-    );
-    await writeFile(
-        join(dir, 'provider/intrinsics/core.js'),
-        'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
-    );
-    for (const suffix of ['conversion', 'js-helper', 'resource']) {
-        await writeFile(
-            join(dir, 'provider/intrinsics/' + suffix + '.js'),
-            'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',
-        );
-    }
-    await writeFile(join(dir, 'provider/intrinsics/string.js'), providerSource());
-}
-
 for (const encoding of ['utf8', 'utf16'] as const) {
     for (const instantiation of ['sync', 'async', undefined] as const) {
         test.concurrent.each([false, true])(
@@ -116,8 +65,7 @@ for (const encoding of ['utf8', 'utf16'] as const) {
             async (minify) => {
                 const dir = await getTmpDir();
                 try {
-                    await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-                    await writeProvider(dir);
+                    await writeRuntimeProvider(dir, 'string', providerSource());
                     const { files } = await transpileBytes(await parse(echo(encoding)), {
                         name: 'strings',
                         instantiation,
@@ -175,8 +123,7 @@ for (const encoding of ['utf8', 'utf16'] as const) {
 test.concurrent('transcoding calls custom UTF-8 encoder objects', async () => {
     const dir = await getTmpDir();
     try {
-        await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-        await writeProvider(dir);
+        await writeRuntimeProvider(dir, 'string', providerSource());
         const component = await readFile(
             new URL('../fixtures/components/runtime/string-transcoding.component.wat', import.meta.url),
             'utf8',
@@ -207,8 +154,7 @@ test.concurrent.each([
 ])('UTF-8 provider error identity ($errorType, $ptr, $len)', async ({ errorType, ptr, len, canonical }) => {
     const dir = await getTmpDir();
     try {
-        await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-        await writeProvider(dir);
+        await writeRuntimeProvider(dir, 'string', providerSource());
         const defaults = new URL('intrinsics/string.js', defaultRuntimeUrl).href;
         await writeFile(
             join(dir, 'provider/intrinsics/string.js'),
@@ -264,8 +210,7 @@ test.concurrent.each(['utf8ToUtf8', 'utf8ToCompact', 'utf8ViaUtf16'])(
     async (boundary) => {
         const dir = await getTmpDir();
         try {
-            await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-            await writeProvider(dir);
+            await writeRuntimeProvider(dir, 'string', providerSource());
             const component = await readFile(
                 new URL('../fixtures/components/runtime/string-transcoding.component.wat', import.meta.url),
                 'utf8',

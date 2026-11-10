@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,38 +8,11 @@ import { assert, expect, test } from 'vitest';
 
 import { getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resource-drop.wat', import.meta.url));
 const coreUrl = new URL('intrinsics/core.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
-
-async function writeProvider(dir: string, core: string) {
-    await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-    await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    for (const suffix of [
-        'conversion',
-        'js-helper',
-        'string',
-        'webidl',
-        'resource',
-        'component',
-        'waitable',
-        'error-context',
-        'async-task',
-        'host',
-        'lift',
-        'lower',
-        'future',
-        'stream',
-    ]) {
-        await writeFile(
-            join(dir, 'provider/intrinsics/' + suffix + '.js'),
-            'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',
-        );
-    }
-    await writeFile(join(dir, 'provider/intrinsics/core.js'), core);
-}
 
 function providerSource() {
     return `import * as defaults from ${JSON.stringify(coreUrl)};
@@ -69,7 +42,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
     test.concurrent.each([false, true])(`core provider (${instantiation ?? 'direct'}, minify=%s)`, async (minify) => {
         const dir = await getTmpDir();
         try {
-            await writeProvider(dir, providerSource());
+            await writeRuntimeProvider(dir, 'core', providerSource());
             const { files } = await transpile(fixture, {
                 name: 'core',
                 instantiation,
@@ -124,7 +97,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
         async (minify) => {
             const dir = await getTmpDir();
             try {
-                await writeProvider(dir, providerSource());
+                await writeRuntimeProvider(dir, 'core', providerSource());
                 const input = join(dir, 'error.wat');
                 await writeFile(
                     input,
@@ -178,7 +151,11 @@ test.concurrent.each(['initializeRepTableClass', 'withCurrentTaskMeta'])(
         const dir = await getTmpDir();
         try {
             const exports = Object.keys(await import(coreUrl)).filter((name) => name !== missing);
-            await writeProvider(dir, `export { ${exports.join(', ')} } from ${JSON.stringify(coreUrl)};`);
+            await writeRuntimeProvider(
+                dir,
+                'core',
+                `export { ${exports.join(', ')} } from ${JSON.stringify(coreUrl)};`,
+            );
             const { files } = await transpile(fixture, {
                 name: 'missing',
                 instantiation: 'sync',

@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -8,6 +8,7 @@ import { assert, expect, test } from 'vitest';
 
 import { getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 
 const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resource-drop.wat', import.meta.url));
 const backpressure = fileURLToPath(
@@ -16,33 +17,6 @@ const backpressure = fileURLToPath(
 const componentUrl = new URL('intrinsics/component.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
 
-async function writeProvider(dir: string, source: string) {
-    await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-    await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    for (const suffix of [
-        'conversion',
-        'js-helper',
-        'string',
-        'webidl',
-        'resource',
-        'core',
-        'waitable',
-        'error-context',
-        'async-task',
-        'host',
-        'lift',
-        'lower',
-        'future',
-        'stream',
-    ]) {
-        await writeFile(
-            join(dir, 'provider/intrinsics/' + suffix + '.js'),
-            'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',
-        );
-    }
-    await writeFile(join(dir, 'provider/intrinsics/component.js'), source);
-}
 function providerSource() {
     return `import * as defaults from ${JSON.stringify(componentUrl)};
 export * from ${JSON.stringify(componentUrl)};
@@ -79,7 +53,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
         async (minify) => {
             const dir = await getTmpDir();
             try {
-                await writeProvider(dir, providerSource());
+                await writeRuntimeProvider(dir, 'component', providerSource());
                 const { files } = await transpile(fixture, {
                     name: 'component',
                     callTracking: true,
@@ -157,7 +131,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
         async (minify) => {
             const dir = await getTmpDir();
             try {
-                await writeProvider(dir, providerSource());
+                await writeRuntimeProvider(dir, 'component', providerSource());
                 const { files } = await transpile(backpressure, {
                     name: 'backpressure',
                     instantiation,
@@ -197,7 +171,11 @@ test.concurrent.each(['initializeComponentAsyncStateClass', 'getOrCreateAsyncSta
         const dir = await getTmpDir();
         try {
             const exports = Object.keys(await import(componentUrl)).filter((name) => name !== missing);
-            await writeProvider(dir, `export { ${exports.join(', ')} } from ${JSON.stringify(componentUrl)};`);
+            await writeRuntimeProvider(
+                dir,
+                'component',
+                `export { ${exports.join(', ')} } from ${JSON.stringify(componentUrl)};`,
+            );
             const { files } = await transpile(fixture, {
                 name: 'missing',
                 instantiation: 'sync',

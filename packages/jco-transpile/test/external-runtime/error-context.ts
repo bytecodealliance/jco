@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
@@ -8,6 +8,7 @@ import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
 import { hasJspi } from '../common.js';
 import { defaultRuntimeUrl, transpile, transpileBytes, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 import { composeCallerCallee } from '../p3/ported/wasmtime/component-async/common.js';
 const errorContextUrl = new URL('intrinsics/error-context.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
@@ -57,33 +58,6 @@ const GLOBAL_TABLE_COMPONENT = `(component
  (func (export "new") (result u64) (canon lift (core func $caller "new")))
 )`;
 
-async function writeProvider(dir: string, source: string) {
-    await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-    await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-    for (const suffix of [
-        'conversion',
-        'js-helper',
-        'string',
-        'webidl',
-        'resource',
-        'core',
-        'component',
-        'waitable',
-        'async-task',
-        'host',
-        'lift',
-        'lower',
-        'future',
-        'stream',
-    ]) {
-        await writeFile(
-            join(dir, 'provider/intrinsics/' + suffix + '.js'),
-            'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',
-        );
-    }
-    await writeFile(join(dir, 'provider/intrinsics/error-context.js'), source);
-}
 function providerSource() {
     return `import * as defaults from ${JSON.stringify(errorContextUrl)};
 export * from ${JSON.stringify(errorContextUrl)};
@@ -137,7 +111,7 @@ for (const encoding of ['utf8', 'utf16']) {
             async (minify) => {
                 const dir = await getTmpDir();
                 try {
-                    await writeProvider(dir, providerSource());
+                    await writeRuntimeProvider(dir, 'error-context', providerSource());
                     const { files } = await transpileBytes(await parse(component(encoding)), {
                         name: 'error-context',
                         instantiation,
@@ -218,7 +192,11 @@ test.concurrent.each([
             'errCtxCreateLocalHandle',
             'errCtxReserveGlobalRep',
         ].filter((name) => name !== missing);
-        await writeProvider(dir, `export { ${exports.join(', ')} } from ${JSON.stringify(errorContextUrl)};`);
+        await writeRuntimeProvider(
+            dir,
+            'error-context',
+            `export { ${exports.join(', ')} } from ${JSON.stringify(errorContextUrl)};`,
+        );
         const fixture =
             missing === 'initializeGlobalErrorContextTableClass' ? GLOBAL_TABLE_COMPONENT : component('utf8');
         const { files } = await transpileBytes(await parse(fixture), {
@@ -238,7 +216,7 @@ test.concurrent.skipIf(!hasJspi).each([false, true])(
     async (external) => {
         const dir = await getTmpDir();
         try {
-            await writeProvider(dir, providerSource());
+            await writeRuntimeProvider(dir, 'error-context', providerSource());
             const fixtureDir = fileURLToPath(new URL('../fixtures/components/p3/error-context/', import.meta.url));
             const composed = await composeCallerCallee({
                 callerPath: join(fixtureDir, 'async-error-context-caller.wasm'),
