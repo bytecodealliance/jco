@@ -20,7 +20,10 @@ import type {
     LowerStreamContext,
     LowerErrorContext,
     LocalErrorContext,
+    HostFuture,
 } from '../runtime.js';
+import { createFuture } from './future-state.js';
+import { isFutureLowerableObject, genFutureHostInjectFn } from './future-operations.js';
 import { debugLog } from './core-debug.js';
 import {
     isInt8,
@@ -763,7 +766,7 @@ export function lowerFlatFuture(_context: LowerFutureContext, meta: LowerFutureM
             throw new Error('missing external future value');
         }
 
-        if (!_context.isLowerable(future)) {
+        if (!isFutureLowerableObject(future)) {
             // A native async host function cannot return a thenable
             // without assimilating it. Preserve compatibility for a
             // single lowered layer by treating that result as already
@@ -774,11 +777,11 @@ export function lowerFlatFuture(_context: LowerFutureContext, meta: LowerFutureM
         let globalRep = (future as Record<symbol, unknown>)[_context.resourceRep];
         let waitableIdx;
         if (globalRep) {
-            const hostFuture = _context.getGlobal().get(globalRep as number);
+            const hostFuture = _context.futures.get(globalRep as number);
             if (!hostFuture) {
                 throw new Error(`missing host future with global rep [${globalRep}]`);
             }
-            waitableIdx = hostFuture.getFutureEndWaitableIdx();
+            waitableIdx = (hostFuture as HostFuture).getFutureEndWaitableIdx();
         } else {
             const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
             if (!cstate) {
@@ -789,12 +792,12 @@ export function lowerFlatFuture(_context: LowerFutureContext, meta: LowerFutureM
 
             // Lower one layer. A future-valued payload is lowered
             // recursively by elemMeta.lowerFn when this layer settles.
-            const { writeEnd, readEnd } = _context.create(cstate, {
+            const { writeEnd, readEnd } = createFuture(_context.creation, cstate, {
                 tableIdx: futureTableIdx,
                 elemMeta,
             });
 
-            const hostInjectFn = _context.genHostInject({
+            const hostInjectFn = genFutureHostInjectFn(_context.injection, {
                 promise: future,
                 stringEncoding: elemMeta.stringEncoding,
                 hostWriteEnd: writeEnd,

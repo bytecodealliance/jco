@@ -106,6 +106,13 @@ pub(crate) trait IntrinsicRuntime:
         }
     }
 
+    /// Begin a bound callback, preserving selected context before explicit operands.
+    fn bind_callback_prefix(&self, intrinsic: Intrinsic, has_operands: bool) -> String {
+        let bound = self.bind_callback(intrinsic, "");
+        let prefix = bound.strip_suffix(')').expect("bound callback");
+        format!("{prefix}{}", if has_operands { ", " } else { "" })
+    }
+
     /// Partially apply an intrinsic with its selected context and bound operands.
     fn bind_callback(&self, intrinsic: Intrinsic, operands: &str) -> String {
         let call = self.call(intrinsic, operands);

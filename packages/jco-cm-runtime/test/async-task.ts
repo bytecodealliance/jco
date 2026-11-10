@@ -376,16 +376,15 @@ test.concurrent('cancelling a host subtask disposes its pending result and consu
 test.concurrent('future recognition is lazy and preserves one public future layer', async () => {
     let probes = 0;
     class FutureValue implements TaskFutureValue {
+        static [Symbol.hasInstance](value: unknown) {
+            probes++;
+            return Function.prototype[Symbol.hasInstance].call(this, value);
+        }
         resolveAsValue(resolve: (value: unknown) => void) {
             resolve({ future: this });
         }
     }
-    const s = setup({
-        isFutureValue(value): value is TaskFutureValue {
-            probes++;
-            return value instanceof FutureValue;
-        },
-    });
+    const s = setup({ FutureValue });
     try {
         expect(probes).toBe(0);
         const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true, preserveFutureResult: true });
@@ -645,7 +644,7 @@ test.concurrent('marking completion handled does not read a returned future', as
             }
         }
     }
-    const store = setup({ isFutureValue: (value): value is TaskFutureValue => value instanceof FutureValue });
+    const store = setup({ FutureValue });
     try {
         const [task] = store.asyncTask.createNewCurrentTask({
             componentIdx: 0,
