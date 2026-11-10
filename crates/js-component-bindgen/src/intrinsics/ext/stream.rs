@@ -510,6 +510,31 @@ pub(crate) fn import(intrinsic: AsyncStreamIntrinsic) -> RuntimeImport {
 
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {
+    #[test]
+    fn stream_contexts_select_the_inline_functions_component_state_calls() {
+        use crate::intrinsics::{
+            Intrinsic, RenderIntrinsicsArgs, p3::async_stream::AsyncStreamIntrinsic,
+            render_intrinsics,
+        };
+        let mut intrinsics = [Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew)]
+            .into_iter()
+            .collect();
+        let opts = crate::TranspileOpts::builder()
+            .name("stream".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .external_runtime(true)
+                .build(),
+        )
+        .to_string();
+        assert!(source.contains("reportTrap: err => _reportTrap(err)"));
+        assert!(source.contains("function _reportTrap(err)"));
+        assert!(source.contains("function _checkIdle()"));
+    }
+
     use super::*;
     use crate::{
         TranspileOpts,

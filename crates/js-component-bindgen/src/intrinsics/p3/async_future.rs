@@ -1310,6 +1310,11 @@ impl AsyncFutureIntrinsic {
                     _ => unreachable!(),
                 };
 
+                // Only the readable end has a pending host read for the value to discard.
+                let promise_drop_fn = match self {
+                    Self::FutureReadableEndClass => "() => this.hostDrop(),",
+                    _ => "",
+                };
                 let host_drop_fn = match self {
                     // A host read still waiting for its write ends with the drop, rather than
                     // being a reader blocked in it, which only a guest can trap on.
@@ -1402,7 +1407,7 @@ impl AsyncFutureIntrinsic {
 
                             this.#promise = new {future_value_class}(
                                 () => this.hostRead({{ stringEncoding: 'utf8' }}),
-                                () => this.hostDrop(),
+                                {promise_drop_fn}
                             );
                             return this.#promise;
                         }}

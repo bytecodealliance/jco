@@ -274,7 +274,13 @@ mod tests {
     fn endpoint_capabilities_share_named_owners() {
         let (source, intrinsics) =
             generated(&[LiftIntrinsic::LiftFlatFuture, LiftIntrinsic::LiftFlatStream]);
-        assert_eq!(intrinsics.len(), 2);
+        // Component state calls back into functions that stay inline.
+        for inline in [
+            crate::intrinsics::component::ComponentIntrinsic::ReportTrap,
+            crate::intrinsics::component::ComponentIntrinsic::CheckIdle,
+        ] {
+            assert!(intrinsics.contains(&Intrinsic::Component(inline)));
+        }
         assert!(source.contains("const _jcoLiftFutureContext = _jcoFutureEndLookupContext;"));
         assert!(source.contains("tables: STREAM_TABLES, Stream"));
         assert!(!source.contains("getExternalStream:"));

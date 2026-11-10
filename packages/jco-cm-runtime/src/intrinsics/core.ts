@@ -222,7 +222,7 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
             ? getCurrentThread(context.threadLookup, saved.componentIdx, saved.threadID, saved.taskID)
             : null;
         const mayBlock = savedThread
-            ? (savedThread.task.mayBlock() ?? (context.mayBlock ? context.mayBlock.value : 0) !== 0)
+            ? (savedThread.task.mayBlock() ?? (context.mayBlock === false ? undefined : context.mayBlock.value) !== 0)
             : false;
         if (!saved && !mayBlock && !callsHost) {
             throw new RuntimeError('cannot block a synchronous task before returning');

@@ -676,7 +676,7 @@ impl Provides<ComponentIntrinsic> for ExternalRuntime {
         output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
-        component::discover_dependencies(intrinsic, args);
+        async_task::discover_dependencies(intrinsic.into(), args);
         if component::import(intrinsic).is_none() {
             InlineRuntime.render(intrinsic, output, args);
         }
@@ -692,10 +692,11 @@ impl Provides<WaitableIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        _intrinsic: WaitableIntrinsic,
+        intrinsic: WaitableIntrinsic,
         _output: &mut Source,
-        _args: &RenderIntrinsicsArgs<'_>,
+        args: &RenderIntrinsicsArgs<'_>,
     ) {
+        async_task::discover_dependencies(intrinsic.into(), args);
     }
 }
 
@@ -708,10 +709,11 @@ impl Provides<ErrCtxIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        _intrinsic: ErrCtxIntrinsic,
+        intrinsic: ErrCtxIntrinsic,
         _output: &mut Source,
-        _args: &RenderIntrinsicsArgs<'_>,
+        args: &RenderIntrinsicsArgs<'_>,
     ) {
+        async_task::discover_dependencies(intrinsic.into(), args);
     }
 }
 
@@ -763,10 +765,11 @@ impl Provides<LiftIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        _intrinsic: LiftIntrinsic,
+        intrinsic: LiftIntrinsic,
         _output: &mut Source,
-        _args: &RenderIntrinsicsArgs<'_>,
+        args: &RenderIntrinsicsArgs<'_>,
     ) {
+        async_task::discover_dependencies(intrinsic.into(), args);
     }
 }
 
@@ -778,10 +781,11 @@ impl Provides<LowerIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        _intrinsic: LowerIntrinsic,
+        intrinsic: LowerIntrinsic,
         _output: &mut Source,
-        _args: &RenderIntrinsicsArgs<'_>,
+        args: &RenderIntrinsicsArgs<'_>,
     ) {
+        async_task::discover_dependencies(intrinsic.into(), args);
     }
 }
 
@@ -793,10 +797,11 @@ impl Provides<AsyncFutureIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        _intrinsic: AsyncFutureIntrinsic,
+        intrinsic: AsyncFutureIntrinsic,
         _output: &mut Source,
-        _args: &RenderIntrinsicsArgs<'_>,
+        args: &RenderIntrinsicsArgs<'_>,
     ) {
+        async_task::discover_dependencies(intrinsic.into(), args);
     }
 }
 
@@ -822,10 +827,11 @@ impl Provides<AsyncStreamIntrinsic> for ExternalRuntime {
     }
     fn render(
         &self,
-        _intrinsic: AsyncStreamIntrinsic,
+        intrinsic: AsyncStreamIntrinsic,
         _output: &mut Source,
-        _args: &RenderIntrinsicsArgs<'_>,
+        args: &RenderIntrinsicsArgs<'_>,
     ) {
+        async_task::discover_dependencies(intrinsic.into(), args);
     }
 }
 
