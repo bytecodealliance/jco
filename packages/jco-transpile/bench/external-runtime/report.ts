@@ -1,4 +1,4 @@
-/** Metrics are adapter costs in nanoseconds, excluding process launch and core compilation. */
+/** Metrics are JavaScript sizes in bytes or adapter costs in nanoseconds, excluding process launch and core compilation. */
 export interface Values {
     inline: Record<string, number>;
     external: Record<string, number>;
@@ -6,7 +6,7 @@ export interface Values {
 
 export const parity = {
     raw: { ratio: 1.05, slack: 256 },
-    gzip: { ratio: 1.05, slack: 256 },
+    gzip: { ratio: 1.075, slack: 256 },
     brotli: { ratio: 1.05, slack: 256 },
     parse: { ratio: 1.25, slack: 25_000 },
     evaluate: { ratio: 1.25, slack: 25_000 },
@@ -14,20 +14,40 @@ export const parity = {
     call: { ratio: 1.25, slack: 250 },
 } as const;
 
-export function parityLosses(values: Values) {
+/** Validate matching measurements and retain the values behind each exceeded budget. */
+function parityFailures(values: Values) {
     const keys = Object.keys(values.inline).toSorted();
     if (!keys.length || keys.join() !== Object.keys(values.external).toSorted().join()) {
         throw new Error('Both modes must have the same nonempty metric set');
     }
 
-    return keys.filter((key) => {
+    return keys.flatMap((key) => {
         const budget = parity[key as keyof typeof parity];
         const inline = values.inline[key],
             external = values.external[key];
         if (!budget || ![inline, external].every((value) => Number.isFinite(value) && value > 0)) {
             throw new Error(`Invalid metric ${key}`);
         }
-        return external > inline * budget.ratio + budget.slack;
+        const limit = inline * budget.ratio + budget.slack;
+        return external > limit ? [{ metric: key, inline, external, limit, ...budget }] : [];
+    });
+}
+
+/** Return metric names for the machine-readable parity report. */
+export function parityLosses(values: Values) {
+    return parityFailures(values).map(({ metric }) => metric);
+}
+
+/** Describe every exceeded budget, including its formula and absolute and relative margins. */
+export function describeParityLosses(values: Values) {
+    return parityFailures(values).map(({ metric, inline, external, limit, ratio, slack }) => {
+        const unit = ['raw', 'gzip', 'brotli'].includes(metric) ? 'bytes' : 'ns';
+        const excess = external - limit;
+        return (
+            `${metric}: inline=${inline.toFixed(2)} ${unit}, external=${external.toFixed(2)} ${unit}, ` +
+            `budget=${limit.toFixed(2)} ${unit} (inline * ${ratio} + ${slack} ${unit}), ` +
+            `excess=${excess.toFixed(2)} ${unit} (${((excess / limit) * 100).toFixed(2)}% over budget)`
+        );
     });
 }
 

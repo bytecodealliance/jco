@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { assert, expect, test } from 'vitest';
 import { measure } from '../measure.js';
-import { parityLosses, processInterval } from '../report.js';
+import { describeParityLosses, parityLosses, processInterval } from '../report.js';
 import { expectedReportIds, portfolioFromArgs, scenarioIdsForPortfolio } from '../matrix.mjs';
 import { workload } from '../workloads.mjs';
 import { sourceHashes } from '../provenance.js';
@@ -163,6 +163,30 @@ test.concurrent('relative timing gates detect external slowdowns independently o
     assert.deepEqual(parityLosses({ inline: { call: 1000 }, external: { call: 1100 } }), []);
     assert.deepEqual(parityLosses({ inline: { call: 2000 }, external: { call: 2200 } }), []);
     assert.deepEqual(parityLosses({ inline: { call: 1000 }, external: { call: 3000 } }), ['call']);
+});
+
+test.concurrent('parity diagnostics include every failing metric, budget, unit and margin', () => {
+    const values = {
+        inline: { raw: 100, call: 1000, gzip: 100 },
+        external: { raw: 1000, call: 1800, gzip: 100 },
+    };
+    assert.deepEqual(parityLosses(values), ['call', 'raw']);
+    assert.deepEqual(describeParityLosses(values), [
+        'call: inline=1000.00 ns, external=1800.00 ns, budget=1500.00 ns (inline * 1.25 + 250 ns), excess=300.00 ns (20.00% over budget)',
+        'raw: inline=100.00 bytes, external=1000.00 bytes, budget=361.00 bytes (inline * 1.05 + 256 bytes), excess=639.00 bytes (177.01% over budget)',
+    ]);
+});
+
+test.concurrent('parity diagnostics accept the exact budget and preserve fractional overages', () => {
+    const values = { inline: { raw: 100 }, external: { raw: 361 } };
+    assert.deepEqual(describeParityLosses(values), []);
+    assert.deepEqual(parityLosses(values), []);
+
+    values.external.raw = 361.25;
+    assert.deepEqual(parityLosses(values), ['raw']);
+    assert.deepEqual(describeParityLosses(values), [
+        'raw: inline=100.00 bytes, external=361.25 bytes, budget=361.00 bytes (inline * 1.05 + 256 bytes), excess=0.25 bytes (0.07% over budget)',
+    ]);
 });
 
 test.concurrent.each([
