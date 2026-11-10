@@ -316,6 +316,32 @@ suite.concurrent('host streams', () => {
         next.drop!();
     });
 
+    test('external stream writes settle with the write they started', async () => {
+        const s = createPair();
+        let finish = () => {};
+        const order: string[] = [];
+        const sink = new s.Stream({
+            globalRep: 7,
+            isReadable: false,
+            isWritable: true,
+            writeFn: async (v) => {
+                if (v === 'fail') {
+                    throw new Error('write failed');
+                }
+                await new Promise<void>((resolve) => (finish = resolve));
+                order.push('written');
+            },
+        });
+        const write = sink.write(1).then(() => order.push('settled'));
+        await Promise.resolve();
+        expect(order).toEqual([]);
+        finish();
+        await write;
+        expect(order).toEqual(['written', 'settled']);
+        await expect(sink.write('fail')).rejects.toThrow(/write failed/);
+        dropPair(s.pair);
+    });
+
     test('host read returns the last nonzero payload before reporting the dropped writer', async () => {
         const s = createPair();
         const read = s.read.read(2);

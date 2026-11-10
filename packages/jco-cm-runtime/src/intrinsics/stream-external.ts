@@ -100,7 +100,7 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
             }
             const obj = objects[0];
 
-            this.#writeFn!(obj);
+            await this.#writeFn!(obj);
         }
 
         [_context.disposeSymbol]() {

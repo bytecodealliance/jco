@@ -608,6 +608,7 @@ impl AsyncStreamIntrinsic {
                         #componentIdx = null;
 
                         #copyState = {stream_end_class}.CopyState.IDLE;
+                        #pendingEventWaiters = [];
 
                         #dropped = false;
                         #isPeerDroppedFn;
@@ -677,6 +678,18 @@ impl AsyncStreamIntrinsic {
                                 componentIdx: this.#waitable.componentIdx(),
                             }});
                             this.#waitable.setPendingEvent(fn);
+                            for (const wake of this.#pendingEventWaiters.splice(0)) {{ wake(); }}
+                        }}
+
+                        /** Settles once an event is pending, in a later macrotask than the one that set it. */
+                        async waitForPendingEvent() {{
+                            do {{
+                                if (!this.hasPendingEvent()) {{
+                                    await new Promise((resolve) => this.#pendingEventWaiters.push(resolve));
+                                }}
+                                // The event is set from inside the peer's copy, which must unwind first.
+                                await new Promise((resolve) => setTimeout(resolve));
+                            }} while (!this.hasPendingEvent());
                         }}
 
                         hasPendingEvent() {{
@@ -1405,13 +1418,7 @@ impl AsyncStreamIntrinsic {
                                     // If the write was blocked, the pending event produced by the
                                     // read side represents the completed copy.
 
-                                    await new Promise((resolve) => {{
-                                        let waitInterval = setInterval(async () => {{
-                                            if (!this.hasPendingEvent()) {{ return; }}
-                                            clearInterval(waitInterval);
-                                            resolve();
-                                        }});
-                                    }});
+                                    await this.waitForPendingEvent();
 
                                     if (!this.hasPendingEvent()) {{
                                         throw new Error("missing pending event after blocked stream write");
@@ -1534,13 +1541,7 @@ impl AsyncStreamIntrinsic {
                                     // If the read was blocked, the pending event produced by the
                                     // write side represents the completed copy.
 
-                                    await new Promise((resolve) => {{
-                                        let waitInterval = setInterval(() => {{
-                                            if (!this.hasPendingEvent()) {{ return; }}
-                                            clearInterval(waitInterval);
-                                            resolve();
-                                        }});
-                                    }});
+                                    await this.waitForPendingEvent();
 
                                     if (!this.hasPendingEvent()) {{
                                         throw new Error("missing pending event after blocked stream read");
@@ -2178,7 +2179,7 @@ impl AsyncStreamIntrinsic {
                             }}
                             const obj = objects[0];
 
-                            this.#writeFn(obj);
+                            await this.#writeFn(obj);
                         }}
 
                         [{symbol_dispose}]() {{
@@ -2323,8 +2324,6 @@ impl AsyncStreamIntrinsic {
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-                let may_block =
-                    render_args.require_intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock);
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
                 let managed_buffer_class =
@@ -2377,10 +2376,6 @@ impl AsyncStreamIntrinsic {
 
                         const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
-
-                        if (!{may_block} && !isAsync) {{
-                            throw new {runtime_error_class}('only async tasks or otherwise blocking-allowed tasks my stream.{stream_op_fn}');
-                        }}
 
                         const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
                         if (!streamEnd) {{
