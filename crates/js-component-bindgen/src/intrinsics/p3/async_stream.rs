@@ -484,44 +484,20 @@ impl AsyncStreamIntrinsic {
             }
 
             Self::DeleteStreamEnd => {
-                let stream_end_class = render_args.require_intrinsic(Self::StreamEndClass);
-                let runtime_error_class =
-                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let delete_stream_end_fn = self.name();
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let global_stream_table_map =
-                    render_args.require_intrinsic(Self::GlobalStreamTableMap);
-                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-                );
+                let remove_stream_end_from_table_fn =
+                    render_args.require_intrinsic(Self::RemoveStreamEndFromTable);
 
+                // `removeStreamEndFromTable` under the name and option key of the stream drop operations.
                 output.push_str(&format!(
                     r#"
                     function {delete_stream_end_fn}(args) {{
                         {debug_log_fn}('[{delete_stream_end_fn}()] args', args);
-                        const {{ tableIdx, streamEndWaitableIdx }} = args;
-                        if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
-                        if (streamEndWaitableIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
-
-                        const {{ table, componentIdx }} = {global_stream_table_map}[tableIdx];
-                        const cstate = {get_or_create_async_state_fn}componentIdx);
-
-                        const streamEnd = cstate.handles.get(streamEndWaitableIdx);
-                        if (!(streamEnd instanceof {stream_end_class}) || streamEnd.streamTableIdx() !== tableIdx) {{
-                            throw new {runtime_error_class}('invalid stream end for table [' + tableIdx + ']');
-                        }}
-
-                        let removed = cstate.handles.remove(streamEnd.waitableIdx());
-                        if (!removed) {{
-                             throw new Error(`failed to remove stream end [${{streamEndWaitableIdx}}] waitable obj in component [${{componentIdx}}]`);
-                        }}
-
-                        removed = table.remove(streamEnd.handle());
-                        if (!removed) {{
-                             throw new Error(`failed to remove stream end with handle [${{streamEnd.handle()}}] from stream table [${{tableIdx}}] in component [${{componentIdx}}]`);
-                        }}
-
-                        return streamEnd;
+                        return {remove_stream_end_from_table_fn}({{
+                            tableIdx: args.tableIdx,
+                            streamWaitableIdx: args.streamEndWaitableIdx,
+                        }});
                     }}
 
                     "#,
@@ -602,11 +578,6 @@ impl AsyncStreamIntrinsic {
 
                         #waitable = null;
 
-                        #tableIdx = null; // stream table that contains the stream end
-                        #idx = null; // stream end index in the table
-
-                        #componentIdx = null;
-
                         #copyState = {stream_end_class}.CopyState.IDLE;
                         #pendingEventWaiters = [];
 
@@ -617,7 +588,7 @@ impl AsyncStreamIntrinsic {
                         target;
 
                         constructor(args) {{
-                            const {{ tableIdx, componentIdx }} = args;
+                            const {{ tableIdx }} = args;
                             if (tableIdx === undefined || typeof tableIdx !== 'number') {{
                                 throw new TypeError(`missing table idx [${{tableIdx}}]`);
                             }}
@@ -626,7 +597,6 @@ impl AsyncStreamIntrinsic {
                             }}
                             if (!args.waitable) {{ throw new Error('missing/invalid waitable'); }}
 
-                            this.#tableIdx = args.tableIdx;
                             this.#waitable = args.waitable;
 
                             if (args.isPeerDroppedFn !== undefined && typeof args.isPeerDroppedFn !== 'function') {{
@@ -641,15 +611,9 @@ impl AsyncStreamIntrinsic {
                             this.target = args.target;
                         }}
 
-                        tableIdx() {{ return this.#tableIdx; }}
-
-                        idx() {{ return this.#idx; }}
-                        setIdx(idx) {{ this.#idx = idx; }}
-
                         setTarget(tgt) {{ this.target = tgt; }}
 
                         getWaitable() {{ return this.#waitable; }}
-                        setWaitable(w) {{ this.#waitable = w; }}
 
                         setCopyState(state) {{ this.#copyState = state; }}
                         getCopyState() {{ return this.#copyState; }}
@@ -671,7 +635,6 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         setPendingEvent(fn) {{
-                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
                             {debug_log_fn}('[{stream_end_class}#setPendingEvent()]', {{
                                 waitable: this.#waitable,
                                 waitableinSet: this.#waitable.isInSet(),
@@ -693,17 +656,14 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         hasPendingEvent() {{
-                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
                             return this.#waitable.hasPendingEvent();
                         }}
 
                         isInSet() {{
-                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
                             return this.#waitable.isInSet();
                         }}
 
                         getPendingEvent() {{
-                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
                             {debug_log_fn}('[{stream_end_class}#getPendingEvent()]', {{
                                 waitable: this.#waitable,
                                 waitableinSet: this.#waitable.isInSet(),
@@ -807,21 +767,16 @@ impl AsyncStreamIntrinsic {
                             count,
                             eventCode,
                             componentIdx,
-                            skipStateCheck,
                         }} = args;
                         if (eventCode === undefined) {{ throw new Error("missing/invalid event code"); }}
 
                         let buffer = args.buffer;
-                        let bufferID = args.bufferID;
 
-                        // Only check invariants if we are *not* doing a follow-up/post-blocked read
-                        if (!skipStateCheck) {{
-                            if (this.isCopying()) {{
-                                throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
-                            }}
-                            if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
-                                throw new Error(`stream copy state is not idle`);
-                            }}
+                        if (this.isCopying()) {{
+                            throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
+                        }}
+                        if (this.getCopyState() !== {stream_end_class}.CopyState.IDLE) {{
+                            throw new Error(`stream copy state is not idle`);
                         }}
 
                         const elemMeta = args.elemMeta ?? this.getElemMeta();
@@ -844,9 +799,8 @@ impl AsyncStreamIntrinsic {
                                 isWritable: this.isReadable(),
                                 elemMeta,
                             }});
-                            bufferID = newBufferMeta.id;
                             buffer = newBufferMeta.buffer;
-                            buffer.setTarget(`component [${{componentIdx}}] {end_class_name} buffer (id [${{bufferID}}], count [${{count}}], eventCode [${{eventCode}}])`);
+                            buffer.setTarget(`component [${{componentIdx}}] {end_class_name} buffer (id [${{newBufferMeta.id}}], count [${{count}}], eventCode [${{eventCode}}])`);
                         }}
 
                         const streamEnd = this;
@@ -897,7 +851,7 @@ impl AsyncStreamIntrinsic {
                             }});
                         }};
 
-                        return {{ bufferID, buffer, onCopyFn, onCopyDoneFn }};
+                        return {{ buffer, onCopyFn, onCopyDoneFn }};
                     }}
                     "#
                 );
@@ -1126,10 +1080,7 @@ impl AsyncStreamIntrinsic {
                                  ptr,
                                  count,
                                  eventCode,
-                                 initial,
-                                 skipStateCheck,
                                  stringEncoding,
-                                 reallocFn,
                                  rejectLength,
                                  elemMeta,
                                  dropAfterCopy,
@@ -1183,9 +1134,6 @@ impl AsyncStreamIntrinsic {
                                  ptr,
                                  count,
                                  buffer: args.buffer,
-                                 bufferID: args.bufferID,
-                                 initial,
-                                 skipStateCheck,
                                  elemMeta: copyElemMeta,
                              }});
 
@@ -1367,10 +1315,6 @@ impl AsyncStreamIntrinsic {
 
                             const data = values;
                             const count = data.length;
-                            if (this.#elemMeta.stringEncoding === undefined) {{
-                                this.#elemMeta.string = 'utf8';
-                            }}
-
                             try {{
                                 const {{ id: bufferID, buffer }} = {global_buffer_manager}.createBuffer({{
                                     componentIdx: -1,
@@ -1386,7 +1330,6 @@ impl AsyncStreamIntrinsic {
                                 const copyPromise = this.copy({{
                                     isAsync: true,
                                     count,
-                                    bufferID,
                                     buffer,
                                     eventCode: {async_event_code_enum}.STREAM_WRITE,
                                     componentIdx: -1,
@@ -1420,10 +1363,6 @@ impl AsyncStreamIntrinsic {
 
                                     await this.waitForPendingEvent();
 
-                                    if (!this.hasPendingEvent()) {{
-                                        throw new Error("missing pending event after blocked stream write");
-                                    }}
-
                                     const event = this.getPendingEvent();
                                     if (!event) {{ throw new Error("missing pending event after blocked stream write"); }}
 
@@ -1450,13 +1389,6 @@ impl AsyncStreamIntrinsic {
                                 // Host owned writes were not necessarily unblocked, but are always blocked
                                 // because they happen just-before a component read (via a lowered end).
                                 //
-                                // In this case, we cant to declare the copy state back to idle
-                                // for the next write that is performed, assuming there may be more writes
-                                // to do.
-                                //
-                                // if (this.#hostOwned) {{
-                                //    this.setCopyState({stream_end_class}.CopyState.IDLE);
-                                // }}
 
                                 // If the write was not blocked, we can resolve right away
                                 this.#result = null;
@@ -1529,7 +1461,6 @@ impl AsyncStreamIntrinsic {
                                 packedResult = await this.copy({{
                                     isAsync: true,
                                     count,
-                                    bufferID,
                                     buffer,
                                     eventCode: {async_event_code_enum}.STREAM_READ,
                                     componentIdx: -1,
@@ -1542,10 +1473,6 @@ impl AsyncStreamIntrinsic {
                                     // write side represents the completed copy.
 
                                     await this.waitForPendingEvent();
-
-                                    if (!this.hasPendingEvent()) {{
-                                        throw new Error("missing pending event after blocked stream read");
-                                    }}
 
                                     const event = this.getPendingEvent();
                                     if (!event) {{ throw new Error("missing pending event after blocked stream read"); }}
@@ -1635,9 +1562,6 @@ impl AsyncStreamIntrinsic {
 
                 output.push_str(&format!(r#"
                     class {end_class_name} extends {stream_end_class} {{
-                        #copying = false;
-                        #done = false;
-
                         #elemMeta = null;
                         // held by both write and read ends
                         #pendingBufferMeta = null;
@@ -1724,7 +1648,6 @@ impl AsyncStreamIntrinsic {
                         {type_getter_impl}
 
                         isDoneState() {{ return this.getCopyState() === {stream_end_class}.CopyState.DONE; }}
-                        isCancelledState() {{ return this.getCopyState() === {stream_end_class}.CopyState.CANCELLED; }}
                         isIdleState() {{ return this.getCopyState() === {stream_end_class}.CopyState.IDLE; }}
 
                         {action_impl}
@@ -2378,9 +2301,6 @@ impl AsyncStreamIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
-                        if (!streamEnd) {{
-                            throw new {runtime_error_class}(`missing stream end [${{streamEndWaitableIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
-                        }}
                         if (!(streamEnd instanceof {stream_end_class})) {{
                             throw new {runtime_error_class}('invalid stream type, expected {stream_end_class}');
                         }}
@@ -2420,7 +2340,6 @@ impl AsyncStreamIntrinsic {
                             eventCode: {event_code},
                             componentIdx,
                             stringEncoding,
-                            realloc: getReallocFn?.(),
                             getReallocFn,
                             elemMeta,
                             deferSyncFinish,
@@ -2464,7 +2383,6 @@ impl AsyncStreamIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const streamEnd = {get_stream_end_fn}({{ streamEndWaitableIdx, tableIdx: streamTableIdx }});
-                        if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
                         if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
@@ -2529,9 +2447,6 @@ impl AsyncStreamIntrinsic {
                 } else {
                     "cannot remove busy stream"
                 };
-                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-                );
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(r#"
@@ -2542,13 +2457,7 @@ impl AsyncStreamIntrinsic {
                         const task = {current_task_get_fn}componentIdx);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        const cstate = {get_or_create_async_state_fn}componentIdx);
-                        if (!cstate) {{ throw new Error(`missing component state for component idx [${{componentIdx}}]`); }}
-
                         const streamEnd = {get_stream_end_fn}({{ tableIdx: streamTableIdx, streamEndWaitableIdx }});
-                        if (!streamEnd) {{
-                            throw new Error(`missing stream (waitable [${{streamEndWaitableIdx}}], table [${{streamTableIdx}}], component [${{componentIdx}}])`);
-                        }}
 
                         if (!(streamEnd instanceof {stream_end_class})) {{
                             throw new {runtime_error_class}('invalid stream end class, expected [{stream_end_class}]');
@@ -2754,7 +2663,7 @@ impl AsyncStreamIntrinsic {
                           const elemMeta = hostWriteEnd.getElemMeta();
 
                           const pendingValues = new {pending_value_queue_class}(readFn, elemMeta);
-                          hostWriteEnd.setSourceRebufferFn?.((items) => pendingValues.prepend(items));
+                          hostWriteEnd.setSourceRebufferFn((items) => pendingValues.prepend(items));
 
                           return async function generatedStreamHostInject(args) {{
                               let {{ count }} = args;

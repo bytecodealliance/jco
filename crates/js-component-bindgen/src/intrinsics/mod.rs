@@ -1179,8 +1179,8 @@ impl Intrinsic {
                       function {set_global_current_thread_meta_fn}(args) {{
                           if (!args) {{ throw new TypeError('args missing'); }}
                           if (args.taskID === undefined) {{ throw new TypeError('missing task ID'); }}
-                          if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
                           if (args.threadID === undefined) {{ throw new TypeError('missing thread ID'); }}
+                          if (args.componentIdx === undefined) {{ throw new TypeError('missing component idx'); }}
                           const {{ taskID, threadID, componentIdx }} = args;
                           return {global_current_thread_meta_obj}.current =
                               {global_current_thread_meta_obj}[componentIdx] = {{ threadID, taskID, componentIdx }};
@@ -1685,9 +1685,12 @@ mod tests {
             assert!(intrinsics.contains(&intrinsic));
 
             for &(_, other_name) in &helpers {
+                // Dropping a stream end removes it under another name and option key.
+                let delegated =
+                    name == "deleteStreamEnd" && other_name == "removeStreamEndFromTable";
                 assert_eq!(
                     source.contains(&format!("function {other_name}(")),
-                    name == other_name,
+                    name == other_name || delegated,
                     "rendering {name} unexpectedly changed whether {other_name} was emitted",
                 );
             }
