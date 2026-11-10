@@ -717,6 +717,7 @@ impl LowerIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_list_fn = self.name();
                 let lower_u32_fn = render_args.require_intrinsic(Self::LowerFlatU32);
+                let is_le = render_args.require_intrinsic(Intrinsic::IsLE);
 
                 output.push_str(&format!(r#"
                     function {lower_flat_list_fn}(meta) {{
@@ -727,6 +728,7 @@ impl LowerIntrinsic {
                             align32,
                             elemSize32,
                             elemAlign32,
+                            typedArray,
                         }} = meta;
 
                         if (!elemLowerFn) {{ throw new TypeError("missing/invalid element lower fn for list"); }}
@@ -790,12 +792,18 @@ impl LowerIntrinsic {
                                 const origPtr = ctx.storagePtr;
                                 ctx.storagePtr = dataPtr;
 
-                                for (const [idx, elem] of elems.entries()) {{
-                                    const elemPtr = dataPtr + idx * elemSize32;
-                                    ctx.storagePtr = elemPtr;
-                                    ctx.vals = [elem];
-                                    elemLowerFn(ctx);
-                                    ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
+                                if (typedArray !== undefined && elems instanceof typedArray && ({is_le} || elemSize32 === 1)) {{
+                                    // Copy numeric elements together; a matching typed array only holds valid values.
+                                    new Uint8Array(ctx.memory.buffer, dataPtr, elems.byteLength)
+                                        .set(new Uint8Array(elems.buffer, elems.byteOffset, elems.byteLength));
+                                }} else {{
+                                    for (const [idx, elem] of elems.entries()) {{
+                                        const elemPtr = dataPtr + idx * elemSize32;
+                                        ctx.storagePtr = elemPtr;
+                                        ctx.vals = [elem];
+                                        elemLowerFn(ctx);
+                                        ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
+                                    }}
                                 }}
 
                                 ctx.storagePtr = origPtr;
@@ -816,8 +824,6 @@ impl LowerIntrinsic {
                                     ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
                                 }}
                             }}
-
-                            // TODO(fix): special case for u8/u16/etc, we can do a direct copy
                         }}
                     }}
                 "#));

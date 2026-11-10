@@ -1944,6 +1944,11 @@ export interface LowerVariantMeta {
     readonly variantPayloadOffset32: number;
     readonly payloadMaybeNull?: boolean;
 }
+/** The numeric policy and byte order used to lower list storage. */
+export interface LowerListContext {
+    readonly numeric: StrictNumericContext;
+    readonly littleEndian: boolean;
+}
 export interface LowerListMeta {
     readonly elemLowerFn: TaskLowerFn;
     readonly knownLen?: number;
@@ -1951,6 +1956,8 @@ export interface LowerListMeta {
     readonly align32?: number;
     readonly elemSize32: number;
     readonly elemAlign32: number;
+    /** The typed array whose elements share the canonical element representation. */
+    readonly typedArray?: abstract new (...args: never[]) => ArrayBufferView;
 }
 export interface LowerMapMeta {
     readonly keyLowerFn: TaskLowerFn;
@@ -2070,7 +2077,7 @@ export interface LowerModule {
     readonly lowerFlatStringUTF8: (context: StringEncodeInto, ctx: TaskLowerContext) => void;
     readonly lowerFlatRecord: (meta: LowerRecordMeta) => TaskLowerFn;
     readonly lowerFlatVariant: (context: StrictNumericContext, meta: LowerVariantMeta) => TaskLowerFn;
-    readonly lowerFlatList: (context: StrictNumericContext, meta: LowerListMeta) => TaskLowerFn;
+    readonly lowerFlatList: (context: LowerListContext, meta: LowerListMeta) => TaskLowerFn;
     readonly lowerFlatMap: (context: StrictNumericContext, meta: LowerMapMeta) => TaskLowerFn;
     readonly lowerFlatTuple: (meta: LowerTupleMeta) => TaskLowerFn;
     readonly lowerFlatFlags: (context: LiftFlagsContext, meta: LiftFlagsMeta) => TaskLowerFn;

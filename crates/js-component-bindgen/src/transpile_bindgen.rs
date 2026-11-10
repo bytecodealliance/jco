@@ -7955,12 +7955,14 @@ pub fn gen_flat_lower_fn_js_expr(
             let elem_cabi = component_types.canonical_abi(&list_ty.element);
             let elem_align32 = elem_cabi.align32;
             let elem_size32 = elem_cabi.size32;
+            let typed_array = js_typed_array_ctor(&list_ty.element).unwrap_or("undefined");
 
             format!(
                 "{f}{{
                 elemLowerFn: {elem_ty_lower_expr},
                 elemSize32: {elem_size32},
                 elemAlign32: {elem_align32},
+                typedArray: {typed_array},
             }})"
             )
         }
