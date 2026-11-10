@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -7,6 +7,7 @@ import { assert, test } from 'vitest';
 import { parse } from '../../src/wasm-tools.js';
 import { getTmpDir } from '../helpers.js';
 import { defaultRuntimeUrl, transpileBytes, writeFiles } from '../transpilation.js';
+import { writeRuntimeProvider } from './helpers.js';
 
 const COMPONENT = `(component
   (import "webidl:js/global@0.0.1" (instance $host
@@ -27,66 +28,10 @@ for (const external of [false, true]) {
             async (minify) => {
                 const dir = await getTmpDir();
                 try {
-                    await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-                    await mkdir(join(dir, 'provider/intrinsics'), { recursive: true });
-                    await writeFile(join(dir, 'provider/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/component.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/component.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/error-context.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/error-context.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/async-task.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/async-task.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/host.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/host.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/lift.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/lift.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/lower.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/lower.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/future.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/future.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/waitable.js'),
-                        'export * from ' +
-                            JSON.stringify(new URL('intrinsics/waitable.js', defaultRuntimeUrl).href) +
-                            ';',
-                    );
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/core.js'),
-                        'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
-                    );
-                    for (const suffix of ['conversion', 'js-helper', 'string', 'resource']) {
-                        await writeFile(
-                            join(dir, 'provider/intrinsics/' + suffix + '.js'),
-                            'export * from ' +
-                                JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) +
-                                ';',
-                        );
-                    }
                     const defaults = new URL('intrinsics/webidl.js', defaultRuntimeUrl).href;
-                    await writeFile(
-                        join(dir, 'provider/intrinsics/webidl.js'),
+                    await writeRuntimeProvider(
+                        dir,
+                        'webidl',
                         `
 import * as defaults from ${JSON.stringify(defaults)};
 export const state = { calls: 0, initializations: 0, contexts: new Set() };
