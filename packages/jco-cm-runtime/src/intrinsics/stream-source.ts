@@ -45,5 +45,10 @@ export function genReadFnFromLowerableStream(context: StreamSourceContext, strea
     } else {
         throw new Error('invalid stream object, cannot generate read fn');
     }
+    const drop = readFn.drop;
+    readFn.drop = (reason) => {
+        readFn.dropped = true;
+        return drop(reason);
+    };
     return readFn;
 }

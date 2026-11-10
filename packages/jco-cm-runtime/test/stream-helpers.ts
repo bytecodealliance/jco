@@ -2,6 +2,7 @@
 import * as stream from '../src/intrinsics/stream.js';
 import { create as createComponent } from './component-helpers.js';
 import type {
+    InternalStream,
     RuntimeErrorConstructor,
     StreamElementMetadata,
     StreamPayloadEnd,
@@ -154,6 +155,10 @@ export function createPair(tableIdx = 2) {
         write: pair.writeEnd,
         readIdx: pair.readEndWaitableIdx!,
         writeIdx: pair.writeEndWaitableIdx!,
+        /** Notifies the stream the way stopping its instance does. */
+        stopInstance() {
+            (s.streams.get(pair.readEnd.globalStreamMapRep()!) as InternalStream).onInstanceStop();
+        },
     };
 }
 

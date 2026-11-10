@@ -134,6 +134,71 @@ suite.concurrent('canonical stream operations', () => {
     });
 });
 
+suite.concurrent('instance stop', () => {
+    const stopped = { code: 'ERR_COMPONENT_STOPPED', message: 'component instance has been stopped' };
+
+    test('a pending host read and every later read report the interruption', async () => {
+        const s = createPair();
+        const pending = s.read.read();
+        s.stopInstance();
+        await expect(pending).rejects.toMatchObject(stopped);
+        await expect(s.read.read()).rejects.toMatchObject(stopped);
+        expect(s.read.isDropped()).toBe(true);
+        expect(s.write.isDropped()).toBe(true);
+    });
+
+    test('a stream closed before the stop still ends normally', async () => {
+        const s = createPair();
+        s.write.drop();
+        s.stopInstance();
+        expect(await s.read.read()).toEqual({ value: undefined, done: true });
+    });
+
+    test('a host value arriving after the stop is disposed instead of queued', async () => {
+        const s = create();
+        const disposed: unknown[] = [],
+            late = { [s.core.symbolDispose]: () => disposed.push(late) };
+        let release!: (value: IteratorResult<unknown>) => void;
+        const queue = new s.PendingValueQueue(() => new Promise((resolve) => (release = resolve)), scalar);
+        const read = queue.readSource();
+        const error = new s.core.RuntimeError('stopped');
+        s.component.storeTrap.error = error;
+        s.component.storeTrap.stopped = true;
+        for (const reject of s.component.storeTrap.stopWaiters) {
+            reject(error);
+        }
+        expect(await read).toBe(0);
+        expect(queue.done).toBe(true);
+        release({ value: late, done: false });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+        expect(disposed).toEqual([late]);
+        expect(queue.length).toBe(0);
+    });
+
+    test('a host value arriving after its source was dropped is disposed instead of queued', async () => {
+        const s = create();
+        const disposed: unknown[] = [],
+            late = { [s.core.symbolDispose]: () => disposed.push(late) };
+        let release!: (value: IteratorResult<unknown>) => void;
+        const source = {
+            [Symbol.asyncIterator]: () => ({
+                next: () => new Promise<IteratorResult<unknown>>((resolve) => (release = resolve)),
+            }),
+        };
+        const readFn = stream.genReadFnFromLowerableStream(s.source, source);
+        const queue = new s.PendingValueQueue(readFn, scalar);
+        const read = queue.readSource();
+        expect(readFn.dropped).toBeUndefined();
+        readFn.drop!();
+        expect(readFn.dropped).toBe(true);
+        release({ value: late, done: false });
+        expect(await read).toBe(0);
+        expect(queue.done).toBe(true);
+        expect(disposed).toEqual([late]);
+        expect(queue.length).toBe(0);
+    });
+});
+
 suite.concurrent('host streams', () => {
     test('host numeric chunks lower into canonical reads and finish without losing the final values', async () => {
         const s = create(),

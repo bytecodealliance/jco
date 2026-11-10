@@ -6,6 +6,7 @@ import type {
     StreamChunk,
 } from '../runtime.js';
 import { trackHostOperation } from './component.js';
+import { disposeHostValue } from './core.js';
 export function initializePendingValueQueueClass(
     tracking: ComponentHostOperationContext,
 ): PendingValueQueueConstructor {
@@ -63,7 +64,28 @@ export function initializePendingValueQueueClass(
         async readSource() {
             if (!this.#sourceReadPromise) {
                 this.#sourceReadPromise = (async () => {
-                    const res = await trackHostOperation(tracking, () => this.#readFn());
+                    let hostRead: ReturnType<StreamReadFn> | undefined;
+                    let res: IteratorResult<unknown>;
+                    try {
+                        res = await trackHostOperation(tracking, () => (hostRead = this.#readFn()));
+                    } catch (err) {
+                        if (!tracking.storeTrap.stopped) {
+                            throw err;
+                        }
+                        // Stopping settled this wait, but not the host's read.
+                        Promise.resolve(hostRead).then(
+                            (late) => disposeHostValue(tracking.symbolDispose, late?.value),
+                            () => {},
+                        );
+                        this.#done = true;
+                        return 0;
+                    }
+                    // Nothing will take what arrives after the stream was dropped.
+                    if (this.#readFn.dropped) {
+                        disposeHostValue(tracking.symbolDispose, res.value);
+                        this.#done = true;
+                        return 0;
+                    }
                     const appended = this.appendReadValue(res.value);
                     this.#done = res.done === true;
                     return appended;
