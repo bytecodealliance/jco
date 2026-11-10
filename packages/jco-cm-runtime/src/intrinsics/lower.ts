@@ -11,6 +11,7 @@ import type {
     LowerFutureMeta,
     LowerStreamMeta,
     LowerStringContext,
+    LowerListContext,
     StrictNumericContext,
     StringEncodeInto,
     Utf16EncodingContext,
@@ -428,8 +429,8 @@ export function lowerFlatVariant(_context: StrictNumericContext, meta: LowerVari
     };
 }
 
-export function lowerFlatList(_context: StrictNumericContext, meta: LowerListMeta): TaskLowerFn {
-    const { elemLowerFn, knownLen, size32, elemSize32, elemAlign32 } = meta;
+export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): TaskLowerFn {
+    const { elemLowerFn, knownLen, size32, elemSize32, elemAlign32, typedArray } = meta;
 
     if (!elemLowerFn) {
         throw new TypeError('missing/invalid element lower fn for list');
@@ -494,20 +495,31 @@ export function lowerFlatList(_context: StrictNumericContext, meta: LowerListMet
             const dataPtr = ctx.realloc(0, 0, elemAlign32, elemSize32 * elems.length);
 
             ctx.vals[0] = dataPtr;
-            lowerFlatU32(_context, ctx);
+            lowerFlatU32(_context.numeric, ctx);
 
             ctx.vals[0] = elems.length;
-            lowerFlatU32(_context, ctx);
+            lowerFlatU32(_context.numeric, ctx);
 
             const origPtr = ctx.storagePtr!;
             ctx.storagePtr! = dataPtr;
 
-            for (const [idx, elem] of elems.entries()) {
-                const elemPtr = dataPtr + idx * elemSize32;
-                ctx.storagePtr! = elemPtr;
-                ctx.vals = [elem];
-                elemLowerFn(ctx);
-                ctx.storagePtr! = Math.max(ctx.storagePtr!, elemPtr + elemSize32);
+            if (
+                typedArray !== undefined &&
+                elems instanceof typedArray &&
+                (_context.littleEndian || elemSize32 === 1)
+            ) {
+                // Copy numeric elements together; a matching typed array only holds valid values.
+                new Uint8Array(ctx.memory!.buffer, dataPtr, elems.byteLength).set(
+                    new Uint8Array(elems.buffer, elems.byteOffset, elems.byteLength),
+                );
+            } else {
+                for (const [idx, elem] of elems.entries()) {
+                    const elemPtr = dataPtr + idx * elemSize32;
+                    ctx.storagePtr! = elemPtr;
+                    ctx.vals = [elem];
+                    elemLowerFn(ctx);
+                    ctx.storagePtr! = Math.max(ctx.storagePtr!, elemPtr + elemSize32);
+                }
             }
 
             ctx.storagePtr! = origPtr;
@@ -527,8 +539,6 @@ export function lowerFlatList(_context: StrictNumericContext, meta: LowerListMet
                 ctx.storagePtr! = Math.max(ctx.storagePtr!, elemPtr + elemSize32);
             }
         }
-
-        // TODO(fix): special case for u8/u16/etc, we can do a direct copy
     };
 }
 

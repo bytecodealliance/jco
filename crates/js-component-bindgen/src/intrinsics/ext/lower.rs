@@ -20,6 +20,8 @@ use std::fmt::Write;
 pub(crate) enum LowerContextIntrinsic {
     /// The UTF-8 encoder and UTF-16 encoding state shared by `lowerFlatStringAny`.
     LowerFlatStringAny,
+    /// Numeric policy and byte order for `lowerFlatList`.
+    LowerFlatList,
     /// Numeric policy, component state, and lazy future capabilities for `lowerFlatFuture`.
     LowerFlatFuture,
     /// Numeric policy, component state, and lazy stream capabilities for `lowerFlatStream`.
@@ -28,8 +30,9 @@ pub(crate) enum LowerContextIntrinsic {
     LowerFlatErrorContext,
 }
 impl LowerContextIntrinsic {
-    const ALL: [Self; 4] = [
+    const ALL: [Self; 5] = [
         Self::LowerFlatStringAny,
+        Self::LowerFlatList,
         Self::LowerFlatFuture,
         Self::LowerFlatStream,
         Self::LowerFlatErrorContext,
@@ -40,6 +43,7 @@ impl LowerContextIntrinsic {
     pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::LowerFlatStringAny => "_jcoLowerStringContext",
+            Self::LowerFlatList => "_jcoLowerListContext",
             Self::LowerFlatFuture => "_jcoLowerFutureContext",
             Self::LowerFlatStream => "_jcoLowerStreamContext",
             Self::LowerFlatErrorContext => "_jcoLowerErrorContext",
@@ -50,6 +54,10 @@ impl LowerContextIntrinsic {
             Self::LowerFlatStringAny => &[
                 RuntimeContextIntrinsic::InitializeUtf8Encoder,
                 RuntimeContextIntrinsic::InitializeUtf16Encoding,
+            ],
+            Self::LowerFlatList => &[
+                RuntimeContextIntrinsic::NumericConversion,
+                RuntimeContextIntrinsic::Core(CoreContextIntrinsic::InitializeEndianness),
             ],
             Self::LowerFlatFuture | Self::LowerFlatStream => &[
                 RuntimeContextIntrinsic::NumericConversion,
@@ -69,6 +77,9 @@ impl LowerContextIntrinsic {
         let fields = match self {
             Self::LowerFlatStringAny => {
                 "utf8: TEXT_ENCODER_UTF8, utf16: _jcoUtf16EncodingContext".to_string()
+            }
+            Self::LowerFlatList => {
+                "numeric: _jcoStrictNumericContext, littleEndian: isLE".to_string()
             }
             Self::LowerFlatErrorContext => {
                 "numeric: _jcoStrictNumericContext, globalTable: GlobalErrorContextTable, lookup: _jcoComponentStateLookupContext, local: _jcoErrorContextLocalTableContext".to_string()
@@ -104,8 +115,11 @@ pub(crate) fn import(intrinsic: LowerIntrinsic) -> RuntimeImport {
     let context = match intrinsic {
         LowerFlatBool | LowerFlatS8 | LowerFlatU8 | LowerFlatS16 | LowerFlatU16 | LowerFlatS32
         | LowerFlatU32 | LowerFlatS64 | LowerFlatU64 | LowerFlatFloat32 | LowerFlatFloat64
-        | LowerFlatVariant | LowerFlatEnum | LowerFlatOption | LowerFlatResult | LowerFlatList
-        | LowerFlatMap | LowerFlatOwn => Some(RuntimeContextIntrinsic::NumericConversion),
+        | LowerFlatVariant | LowerFlatEnum | LowerFlatOption | LowerFlatResult | LowerFlatMap
+        | LowerFlatOwn => Some(RuntimeContextIntrinsic::NumericConversion),
+        LowerFlatList => Some(RuntimeContextIntrinsic::Lower(
+            LowerContextIntrinsic::LowerFlatList,
+        )),
         LowerFlatStringAny => Some(RuntimeContextIntrinsic::Lower(
             LowerContextIntrinsic::LowerFlatStringAny,
         )),
@@ -214,6 +228,18 @@ mod tests {
         ]);
         assert!(!pure.contains("_jcoStrictNumericContext"));
         assert_eq!(intrinsics.len(), 2);
+    }
+    #[test]
+    fn lists_share_numeric_policy_and_selected_endianness() {
+        let (source, _) = generated(&[LowerIntrinsic::LowerFlatList]);
+        assert!(source.contains("const isLE = _jcoInitializeEndianness();"));
+        assert!(source.contains(
+            "const _jcoLowerListContext = { numeric: _jcoStrictNumericContext, littleEndian: isLE };"
+        ));
+        assert_eq!(
+            runtime::select(true).call(Intrinsic::Lower(LowerIntrinsic::LowerFlatList), "meta"),
+            "_lowerFlatList(_jcoLowerListContext, meta)"
+        );
     }
     #[test]
     fn pending_family_contexts_preserve_lazy_classes_and_all_inline_dependencies() {

@@ -20,6 +20,7 @@ import type {
     LocalErrorContext,
 } from '../src/runtime.js';
 const strict = { strict: true };
+const listContext = { numeric: strict, littleEndian: true };
 function cursor(value: unknown, storagePtr = 0): TaskLowerContext {
     return { componentIdx: 0, vals: [value], memory: { buffer: new ArrayBuffer(128) }, storagePtr };
 }
@@ -155,12 +156,12 @@ test.concurrent('lists preserve fixed and allocated element storage, including d
         meta = { elemLowerFn: elem, elemSize32: 1, elemAlign32: 1 };
     const fixed = cursor([17, 23]);
     fixed.storageLen = 2;
-    lower.lowerFlatList(strict, { ...meta, knownLen: 2, size32: 2, align32: 1 })(fixed);
+    lower.lowerFlatList(listContext, { ...meta, knownLen: 2, size32: 2, align32: 1 })(fixed);
     expect(Array.from(new Uint8Array(fixed.memory!.buffer, 0, 2))).toEqual([17, 23]);
     expect(fixed.storagePtr).toBe(2);
     const allocated = cursor([7, 11]);
     allocated.realloc = () => 32;
-    lower.lowerFlatList(strict, meta)(allocated);
+    lower.lowerFlatList(listContext, meta)(allocated);
     const dv = new DataView(allocated.memory!.buffer);
     expect([dv.getUint32(0, true), dv.getUint32(4, true)]).toEqual([32, 2]);
     expect(Array.from(new Uint8Array(allocated.memory!.buffer, 32, 2))).toEqual([7, 11]);
@@ -170,7 +171,7 @@ test.concurrent('lists preserve fixed and allocated element storage, including d
     direct.params = [32, 2, 99];
     direct.useDirectParams = true;
     direct.realloc = () => 64;
-    lower.lowerFlatList(strict, {
+    lower.lowerFlatList(listContext, {
         ...meta,
         elemLowerFn: (ctx) => {
             expect(ctx.componentIdx).toBe(9);
@@ -355,12 +356,14 @@ test.concurrent('lists reject mismatched direct lengths and insufficient storage
     const direct = cursor([1, 2, 3, 4, 5, 6]);
     direct.params = [32, 2];
     direct.useDirectParams = true;
-    expect(() => lower.lowerFlatList(strict, meta)(direct)).toThrow('list length does not match allocated storage');
+    expect(() => lower.lowerFlatList(listContext, meta)(direct)).toThrow(
+        'list length does not match allocated storage',
+    );
     expect(Array.from(new Uint8Array(direct.memory!.buffer, 32, 6))).toEqual([0, 0, 0, 0, 0, 0]);
 
     const fixed = cursor([9, 9, 9, 9]);
     fixed.storageLen = 2;
-    expect(() => lower.lowerFlatList(strict, { ...meta, knownLen: 4, size32: 4, align32: 1 })(fixed)).toThrow(
+    expect(() => lower.lowerFlatList(listContext, { ...meta, knownLen: 4, size32: 4, align32: 1 })(fixed)).toThrow(
         'not enough storage remaining',
     );
     expect(Array.from(new Uint8Array(fixed.memory!.buffer, 0, 4))).toEqual([0, 0, 0, 0]);
@@ -394,4 +397,35 @@ test.concurrent('an error-context lowered twice after one lift keeps both local 
     expect(global()!.refCount).toBe(1);
     errorContext.errCtxDrop({ componentIdx: 2, localTableIdx: 4 }, lowered[1]);
     expect(global()).toBeUndefined();
+});
+
+test.concurrent('numeric typed arrays are copied together and other inputs still lower per element', () => {
+    let calls = 0;
+    const meta = {
+        elemLowerFn: ((ctx) => {
+            calls++;
+            lower.lowerFlatU16(strict, ctx);
+        }) as TaskLowerFn,
+        elemSize32: 2,
+        elemAlign32: 2,
+        typedArray: Uint16Array,
+    };
+    const lowered = (value: unknown, context = listContext) => {
+        const ctx = cursor(value);
+        ctx.realloc = () => 32;
+        lower.lowerFlatList(context, meta)(ctx);
+        const view = new DataView(ctx.memory!.buffer);
+        expect([view.getUint32(0, true), view.getUint32(4, true), ctx.storagePtr]).toEqual([32, 3, 8]);
+        return [0, 2, 4].map((offset) => view.getUint16(32 + offset, true));
+    };
+    // A view into a larger buffer must only contribute its own elements.
+    const source = new Uint16Array([9, 1, 0x1234, 0xffff, 9]).subarray(1, 4);
+    expect(lowered(source)).toEqual([1, 0x1234, 0xffff]);
+    expect(calls).toBe(0);
+    expect(lowered([1, 0x1234, 0xffff])).toEqual([1, 0x1234, 0xffff]);
+    expect(calls).toBe(3);
+    // Other typed arrays and big-endian hosts keep per-element conversion.
+    expect(lowered(new Int16Array([1, 2, 3]))).toEqual([1, 2, 3]);
+    expect(lowered(source, { numeric: strict, littleEndian: false })).toEqual([1, 0x1234, 0xffff]);
+    expect(calls).toBe(9);
 });
