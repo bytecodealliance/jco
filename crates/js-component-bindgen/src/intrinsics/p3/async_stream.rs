@@ -1850,7 +1850,7 @@ impl AsyncStreamIntrinsic {
                                           return 0;
                                       }}
                                       const appended = this.appendReadValue(res.value);
-                                      this.#done = res.done;
+                                      this.#done = !!res.done;
                                       return appended;
                                   }})().finally(() => {{
                                       this.#sourceReadPromise = null;

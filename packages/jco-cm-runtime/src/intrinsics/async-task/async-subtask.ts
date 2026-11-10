@@ -12,7 +12,7 @@ import type {
     ComponentWaitableSet,
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
-import { isThenable } from './helpers.js';
+import { isPromiseLike } from '../core/promises.js';
 import { disposeHostValue, lookupMemories } from '../core.js';
 import { getOrCreateAsyncState } from '../component.js';
 
@@ -243,7 +243,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
         // delivered, the result is discarded and the thenable is disposed so the
         // host can stop pending work and release anything it produced.
         setHostPendingResult(v: unknown) {
-            if (!isThenable(v)) {
+            if (!isPromiseLike(v)) {
                 return;
             }
             this.#hostPendingResult = v;
