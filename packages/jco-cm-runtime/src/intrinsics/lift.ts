@@ -1261,6 +1261,9 @@ export function liftFlatErrorContext(
     // NOTE: we aovoid doing clean up eagerly here
 
     errCtxGlobalRefCountAdd(_context.globalTable, errCtx.globalRep);
+    // The lifted value holds that reference until it is lowered.
+    const globalErrCtx = _context.globalTable.get().get(errCtx.globalRep)!;
+    globalErrCtx.pendingLifts = (globalErrCtx.pendingLifts ?? 0) + 1;
 
     return [errCtx.globalRep, ctx];
 }
