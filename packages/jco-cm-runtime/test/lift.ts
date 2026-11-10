@@ -1,5 +1,4 @@
-import { create as createStream } from './stream-helpers.js';
-import { createStream as createStreamPair } from '../src/intrinsics/stream.js';
+import { createPair as createStreamPair } from './stream-helpers.js';
 import { expect, test } from 'vitest';
 import * as lift from '../src/intrinsics/lift.js';
 import { initializeUtf8Decoder, initializeUtf16Decoder } from '../src/intrinsics/string.js';
@@ -329,34 +328,27 @@ test.concurrent('future and stream bridges stay lazy, preserve endpoint identity
     expect(await received).toBe(42);
     read.drop();
     pair.writeEnd.drop();
-    const streams = createStream(),
-        streamState = streams.addTable(0, 3);
-    const pairStream = createStreamPair(streams.creation, streamState, {
-        tableIdx: 3,
-        elemMeta: { align32: 1, size32: 1, isNumeric: true },
-    });
+    const streams = createStreamPair(3);
     class SelectedTrap extends Error {}
     const streamLift = lift.liftFlatStream(
         { ...streams.ends, RuntimeError: SelectedTrap, Stream: streams.Stream },
         { componentIdx: 0, streamTableIdx: 3 },
     );
     expect(() => streamLift(direct([0]))).toThrow(SelectedTrap);
-    expect(() => streamLift(direct([pairStream.writeEndWaitableIdx]))).toThrow(SelectedTrap);
-    pairStream.readEnd.setCopyState(streams.StreamEnd.CopyState.ASYNC_COPYING);
-    expect(() => streamLift(direct([pairStream.readEndWaitableIdx]))).toThrow(SelectedTrap);
-    pairStream.readEnd.setCopyState(streams.StreamEnd.CopyState.IDLE);
+    expect(() => streamLift(direct([streams.writeIdx]))).toThrow(SelectedTrap);
+    streams.read.setCopyState(streams.StreamEnd.CopyState.ASYNC_COPYING);
+    expect(() => streamLift(direct([streams.readIdx]))).toThrow(SelectedTrap);
+    streams.read.setCopyState(streams.StreamEnd.CopyState.IDLE);
     const lifted = lift.liftFlatStream(
         { ...streams.ends, Stream: streams.Stream },
         { componentIdx: 0, streamTableIdx: 3 },
-    )(direct([pairStream.readEndWaitableIdx]))[0];
+    )(direct([streams.readIdx]))[0];
     expect(lifted).toBeInstanceOf(streams.Stream);
-    expect((lifted as Record<symbol, unknown>)[streams.core.symbolResourceRep]).toBe(
-        pairStream.readEnd.globalStreamMapRep(),
-    );
+    expect((lifted as Record<symbol, unknown>)[streams.core.symbolResourceRep]).toBe(streams.read.globalStreamMapRep());
     (lifted as Record<symbol, () => void>)[streams.core.symbolDispose]();
-    expect(pairStream.readEnd.isDropped()).toBe(true);
-    pairStream.writeEnd.getPendingEvent();
-    pairStream.writeEnd.drop();
+    expect(streams.read.isDropped()).toBe(true);
+    streams.write.getPendingEvent();
+    streams.write.drop();
 });
 
 test.concurrent('error-context lifting transfers local ownership to the actual global table', () => {

@@ -1,7 +1,33 @@
 // Test-only composition of selected constructors and actual shared owners.
 import * as stream from '../src/intrinsics/stream.js';
 import { create as createComponent } from './component-helpers.js';
-import type { StreamPayloadEnd, StreamTask, TaskLookupContext, AsyncTaskMeta } from '../src/runtime.js';
+import type {
+    RuntimeErrorConstructor,
+    StreamElementMetadata,
+    StreamPayloadEnd,
+    StreamTask,
+    TaskLookupContext,
+    AsyncTaskMeta,
+} from '../src/runtime.js';
+
+/** Little-endian `u32` stream elements. */
+export const scalar: StreamElementMetadata = {
+    align32: 4,
+    size32: 4,
+    isNumeric: true,
+    payloadTypeName: 'u32',
+    stringEncoding: 'utf8',
+    liftFn: (ctx) => {
+        const value = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
+        ctx.storagePtr += 4;
+        return [value, ctx];
+    },
+    lowerFn: (ctx) => {
+        new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals![0] as number, true);
+        ctx.storagePtr += 4;
+    },
+};
+
 export function create() {
     const selected = createComponent();
     const { core, component, lookup } = selected;
@@ -47,7 +73,7 @@ export function create() {
     const streams = stream.initializeStreams(core.RepTable),
         tables = stream.initializeStreamTables();
     const tableContext = { tables, lookup, StreamEnd, RuntimeError: core.RuntimeError },
-        ends = { ...tableContext, RuntimeError: core.RuntimeError };
+        ends = { ...tableContext };
     const creation = { tables, streams, InternalStream };
     const HostStream = stream.initializeHostStreamClass({ RuntimeError: core.RuntimeError, lookup, ends, Stream });
     const lowerable = {
@@ -58,6 +84,17 @@ export function create() {
     };
     const source = { lowerable, disposeSymbol: core.symbolDispose };
     const injection = { PendingValueQueue };
+    const lower = {
+        numeric: { strict: true },
+        lookup,
+        resourceRep: core.symbolResourceRep,
+        streams,
+        InternalStream,
+        lowerable,
+        creation,
+        source,
+        injection,
+    };
     return {
         ...selected,
         StreamEnd,
@@ -75,8 +112,25 @@ export function create() {
         lowerable,
         source,
         injection,
+        lower,
         taskLookup,
         tracking,
+        /** Contexts for the canonical read, write, cancel and drop operations of each direction. */
+        operations(RuntimeError: RuntimeErrorConstructor = core.RuntimeError) {
+            const shared = {
+                RuntimeError,
+                lookup,
+                ends,
+                taskLookup,
+                mayBlock: { value: 1 },
+                ManagedBuffer: core.ManagedBuffer,
+                events: core.asyncEventCode,
+            };
+            return {
+                readable: { ...shared, StreamEnd: StreamReadableEnd },
+                writable: { ...shared, StreamEnd: StreamWritableEnd },
+            };
+        },
         addTable(componentIdx: number, tableIdx: number) {
             tables[tableIdx] = {
                 componentIdx,
@@ -85,4 +139,50 @@ export function create() {
             return component.getOrCreateAsyncState(componentIdx);
         },
     };
+}
+
+/** A store with one `u32` stream whose ends both live in `tableIdx` of component 0. */
+export function createPair(tableIdx = 2) {
+    const s = create(),
+        state = s.addTable(0, tableIdx);
+    const pair = stream.createStream(s.creation, state, { tableIdx, elemMeta: { ...scalar } });
+    return {
+        ...s,
+        state,
+        pair,
+        read: pair.readEnd,
+        write: pair.writeEnd,
+        readIdx: pair.readEndWaitableIdx!,
+        writeIdx: pair.writeEndWaitableIdx!,
+    };
+}
+
+/** Drops both ends, consuming the event the writer receives for the dropped reader. */
+export function dropPair(pair: { readEnd: { drop(): void }; writeEnd: { getPendingEvent(): unknown; drop(): void } }) {
+    pair.readEnd.drop();
+    pair.writeEnd.getPendingEvent();
+    pair.writeEnd.drop();
+}
+
+/** Canonical options for an async guest operation on `scalar` elements in `memory`. */
+export function guestOptions(memory: { buffer: ArrayBuffer }, streamTableIdx = 2) {
+    return {
+        componentIdx: 0,
+        streamTableIdx,
+        isAsync: true,
+        stringEncoding: 'utf8',
+        getMemoryFn: () => memory,
+        elemMeta: scalar,
+    };
+}
+
+/** Resolves once the endpoint has published its completion event. */
+export async function eventReady(end: { hasPendingEvent(): boolean }) {
+    for (let i = 0; i < 100; i++) {
+        if (end.hasPendingEvent()) {
+            return;
+        }
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    }
+    throw new Error('stream did not publish its completion event');
 }

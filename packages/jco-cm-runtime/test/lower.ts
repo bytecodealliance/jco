@@ -1,5 +1,4 @@
-import { create as createStream } from './stream-helpers.js';
-import { createStream as createStreamPair } from '../src/intrinsics/stream.js';
+import { createPair as createStreamPair, dropPair as dropStreamPair } from './stream-helpers.js';
 import { expect, test } from 'vitest';
 import * as lower from '../src/intrinsics/lower.js';
 import * as lift from '../src/intrinsics/lift.js';
@@ -241,37 +240,20 @@ test.concurrent('future and stream lowering share live state and write handle ze
     expect(fn(ctx)).toBe(17);
     expect(selected.futures.size()).toBe(1);
     expect(new DataView(ctx.memory!.buffer).getUint32(0, true)).toBe(17);
-    const streams = createStream(),
-        state = streams.addTable(0, 3);
-    const pair = createStreamPair(streams.creation, state, {
-        tableIdx: 3,
-        elemMeta: { align32: 1, size32: 1, isNumeric: true },
-    });
-    const stream: LowerStreamContext = {
-        numeric: strict,
-        lookup: streams.lookup,
-        resourceRep: streams.core.symbolResourceRep,
-        streams: streams.streams,
-        InternalStream: streams.InternalStream,
-        lowerable: streams.lowerable,
-        creation: streams.creation,
-        source: streams.source,
-        injection: streams.injection,
-    };
+    const streams = createStreamPair(3);
+    const stream: LowerStreamContext = streams.lower;
     const value = new streams.Stream({
-            globalRep: pair.readEnd.globalStreamMapRep(),
+            globalRep: streams.read.globalStreamMapRep(),
             isReadable: true,
             isWritable: false,
-            readFn: (opts) => pair.readEnd.read(opts),
+            readFn: (opts) => streams.read.read(opts),
         }),
         streamCtx = cursor(value);
     expect(
         lower.lowerFlatStream(stream, { componentIdx: 0, streamTableIdx: 3, elemMeta: { align32: 4 } })(streamCtx),
-    ).toBe(pair.readEndWaitableIdx);
-    expect(new DataView(streamCtx.memory!.buffer).getUint32(0, true)).toBe(pair.readEndWaitableIdx);
-    pair.readEnd.drop();
-    pair.writeEnd.getPendingEvent();
-    pair.writeEnd.drop();
+    ).toBe(streams.readIdx);
+    expect(new DataView(streamCtx.memory!.buffer).getUint32(0, true)).toBe(streams.readIdx);
+    dropStreamPair(streams.pair);
 });
 test.concurrent('error-context lift/lower transfers ownership and releases exhausted local/global handles', () => {
     const { errorContext, core, lookup, component } = createErrorContext();
