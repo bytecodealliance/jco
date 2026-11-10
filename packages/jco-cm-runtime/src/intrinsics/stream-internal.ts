@@ -81,6 +81,13 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
         writeEnd() {
             return this.#writeEnd;
         }
+
+        // The instance stopped. Dropping an end settles a copy pending on either,
+        // whose event the host's polling read or write is yet to consume.
+        onInstanceStop() {
+            this.#readEnd.onInstanceStop();
+            this.#writeEnd.drop({ allowPendingEvent: true });
+        }
     }
 
     return InternalStream;

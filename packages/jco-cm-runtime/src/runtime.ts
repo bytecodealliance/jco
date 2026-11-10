@@ -2571,6 +2571,8 @@ export interface StreamPayloadEnd extends StreamEndBase {
 export interface StreamReadableEnd extends StreamPayloadEnd {
     readonly read: (options?: number | StreamReadOptions) => Promise<StreamReadResult>;
     readonly _read: (args: StreamInnerCopyOptions) => void;
+    /** Drops the end once the instance stopped; an interrupted host read then fails instead of ending. */
+    readonly onInstanceStop: () => void;
 }
 export interface StreamWritableEnd extends StreamPayloadEnd {
     readonly write: (value: unknown) => Promise<void>;
@@ -2607,6 +2609,8 @@ export interface InternalStream {
     readonly writeEnd: () => StreamWritableEnd;
     readonly globalStreamMapRep: () => number | undefined;
     readonly setGlobalStreamMapRep: (rep: number) => void;
+    /** Drops both ends once the instance stopped, failing an interrupted host read. */
+    readonly onInstanceStop: () => void;
 }
 export interface InternalStreamConstructor {
     new (args: InternalStreamOptions): InternalStream;
@@ -2664,6 +2668,8 @@ export type StreamChunk = ArrayLike<unknown> & { slice(start: number): StreamChu
 export interface StreamReadFn {
     (): IteratorResult<unknown> | PromiseLike<IteratorResult<unknown>>;
     drop?: (reason?: unknown) => unknown;
+    /** Set once `drop` was called: a value arriving later has no consumer. */
+    dropped?: boolean;
     sourceIsSync?: boolean;
 }
 export interface PendingValueQueue {

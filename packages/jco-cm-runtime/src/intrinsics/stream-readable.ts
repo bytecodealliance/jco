@@ -49,6 +49,17 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
 
         #endOfStream = false;
         #rejectedLength: number | null = null;
+        #stopError: Error | null = null;
+
+        onInstanceStop() {
+            // An ordinary close that precedes shutdown must still look like EOF.
+            if (!this.isDropped() && !this.isPeerDropped() && !this.isDoneState()) {
+                this.#stopError = Object.assign(new Error('component instance has been stopped'), {
+                    code: 'ERR_COMPONENT_STOPPED',
+                });
+            }
+            this.drop({ allowPendingEvent: true });
+        }
 
         constructor(args: StreamEndpointOptions) {
             debugLog('[StreamReadableEnd#constructor()] args', args);
@@ -151,6 +162,9 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
 
             if (this.#endOfStream) {
                 return { value: undefined, done: true };
+            }
+            if (this.#stopError) {
+                throw this.#stopError;
             }
             let { count, rejectLength, dropAfterCopy } = this.#readOpts(opts);
 
@@ -261,7 +275,15 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                 }
 
                 if (resultKind === StreamEnd.CopyResult.DROPPED) {
-                    this.#endOfStream = true;
+                    // Preserve data copied before stop, but distinguish an interrupted
+                    // host read from ordinary EOF. Guest copy results stay unchanged.
+                    if (this.#stopError) {
+                        if (transferred === 0) {
+                            throw this.#stopError;
+                        }
+                    } else {
+                        this.#endOfStream = true;
+                    }
                 }
 
                 if (transferred > 0) {
