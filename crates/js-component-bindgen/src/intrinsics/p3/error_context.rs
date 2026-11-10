@@ -78,9 +78,13 @@ pub enum ErrCtxIntrinsic {
     ComponentLocalTable,
 
     /// Create a new error context
+    ///
+    /// Implements `canon error-context.new`.
     ErrorContextNew,
 
     /// Drop an existing error context
+    ///
+    /// Implements `canon error-context.drop`.
     ///
     /// # Intrinsic implementation function
     ///
@@ -120,6 +124,8 @@ pub enum ErrCtxIntrinsic {
     ErrorContextTransfer,
 
     /// Retrieve the debug message for an existing error context
+    ///
+    /// Implements `canon error-context.debug-message`.
     ///
     /// # Intrinsic implementation function
     ///

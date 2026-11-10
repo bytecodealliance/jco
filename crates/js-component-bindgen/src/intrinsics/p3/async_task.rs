@@ -16,6 +16,8 @@ use crate::uwriteln;
 pub enum AsyncTaskIntrinsic {
     /// Set the value of a context local storage for the current task/thread
     ///
+    /// Implements `canon context.set`.
+    ///
     /// # Intrinsic implementation function
     ///
     /// The function that implements this intrinsic has the following definition:
@@ -29,6 +31,8 @@ pub enum AsyncTaskIntrinsic {
     ContextSet,
 
     /// Gets the value stored in context local storage for the current task/thread
+    ///
+    /// Implements `canon context.get`.
     ///
     /// Guest code uses this to reference internally stored context local storage,
     /// whether that is task local or thread local.
@@ -46,6 +50,8 @@ pub enum AsyncTaskIntrinsic {
     ContextGet,
 
     /// Return a value to a caller of an lifted export.
+    ///
+    /// Implements `canon task.return`.
     ///
     /// Consider the following scenario:
     ///   - Some component A is created with a async lifted export
@@ -78,6 +84,8 @@ pub enum AsyncTaskIntrinsic {
 
     /// Remove the subtask (waitable) at the given index, for a given component
     ///
+    /// Implements `canon subtask.drop`.
+    ///
     /// # Intrinsic implementation function
     ///
     /// The function that implements this intrinsic has the following definition:
@@ -90,26 +98,46 @@ pub enum AsyncTaskIntrinsic {
     SubtaskDrop,
 
     /// Suspend the current thread while leaving it ready for another scheduler turn.
+    ///
+    /// Implements `canon thread.yield`.
     ThreadYield,
     /// Suspend the current thread until an operation explicitly makes it ready.
+    ///
+    /// Implements `canon thread.suspend`.
     ThreadSuspend,
     /// Resume a suspended target and suspend the current thread until it is resumed.
+    ///
+    /// Implements `canon thread.suspend-then-resume`.
     ThreadSuspendThenResume,
     /// Resume a ready target if possible, leaving the current thread suspended; otherwise suspend normally.
+    ///
+    /// Implements `canon thread.suspend-then-promote`.
     ThreadSuspendThenPromote,
     /// Resume a suspended target while yielding the current thread.
+    ///
+    /// Implements `canon thread.yield-then-resume`.
     ThreadYieldThenResume,
     /// Resume a ready target if possible, leaving the current thread ready; otherwise yield normally.
+    ///
+    /// Implements `canon thread.yield-then-promote`.
     ThreadYieldThenPromote,
 
     /// Return the component-instance-scoped index of the current thread.
+    ///
+    /// Implements `canon thread.index`.
     ThreadIndex,
     /// Create a suspended thread whose start function is selected from a table.
+    ///
+    /// Implements `canon thread.new-indirect`.
     ThreadNewIndirect,
     /// Make a suspended thread ready to run, starting it if it has not run before.
+    ///
+    /// Implements `canon thread.resume-later`.
     ThreadResumeLater,
 
     /// Cancel the current async subtask for a given component instance
+    ///
+    /// Implements `canon subtask.cancel`.
     ///
     /// # Intrinsic implementation function
     ///
@@ -122,6 +150,8 @@ pub enum AsyncTaskIntrinsic {
     SubtaskCancel,
 
     /// Cancel the current task
+    ///
+    /// Implements `canon task.cancel`.
     ///
     /// # Intrinsic implementation function
     ///

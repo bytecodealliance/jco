@@ -92,6 +92,8 @@ pub enum ComponentIntrinsic {
 
     /// Increment the backpressure for a given component instance
     ///
+    /// Implements `canon backpressure.inc`.
+    ///
     ///
     /// The function that implements this intrinsic has the following definition:
     ///
@@ -101,6 +103,8 @@ pub enum ComponentIntrinsic {
     BackpressureInc,
 
     /// Decrement the backpressure for a given component instance
+    ///
+    /// Implements `canon backpressure.dec`.
     ///
     ///
     /// The function that implements this intrinsic has the following definition:

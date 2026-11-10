@@ -13,19 +13,22 @@ use std::fmt::Write;
 /// State initializers and capability contexts for external task and thread intrinsics.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum TaskContextIntrinsic {
-    /// Shared capabilities for `getCurrentThread`, `currentThreadOrThrow`,
-    /// `threadIndex`, `contextGet`, and `contextSet`.
+    /// Shared capabilities for the `getCurrentThread` and `currentThreadOrThrow` JS helpers,
+    /// and for `threadIndex`, `contextGet`, and `contextSet`, implementing
+    /// `canon thread.index`, `canon context.get`, and `canon context.set`.
     GetCurrentThread,
     /// The `initializeAsyncThreadClass` constructor factory; a JS helper, not a canonical operation.
     InitializeAsyncThreadClass,
     /// Shared capabilities for `asyncYield`, `threadSuspend`, `threadResumeLater`,
-    /// and the `thread*ThenResume` and `thread*ThenPromote` helpers.
+    /// and the `thread*ThenResume` and `thread*ThenPromote` functions, implementing
+    /// `canon thread.yield`, `canon thread.suspend`, `canon thread.resume-later`,
+    /// and the `canon thread.*-then-resume` and `canon thread.*-then-promote` built-ins.
     ThreadSuspend,
-    /// Capabilities for `threadNewIndirect`.
+    /// Capabilities for `threadNewIndirect`, implementing `canon thread.new-indirect`.
     ThreadNewIndirect,
     /// The WebAssembly start checks returned by `initializeThreadStartChecks`.
     InitializeThreadStartChecks,
-    /// Capabilities for `subtaskDrop`.
+    /// Capabilities for `subtaskDrop`, implementing `canon subtask.drop`.
     SubtaskDrop,
     /// The blocking-permission register returned by `initializeCurrentTaskMayBlock`.
     InitializeCurrentTaskMayBlock,
@@ -51,11 +54,11 @@ pub(crate) enum TaskContextIntrinsic {
     CreateNewCurrentImplicitThread,
     /// Capabilities for the `unpackCallbackResult` JS helper.
     UnpackCallbackResult,
-    /// Capabilities for `taskReturn`.
+    /// Capabilities for `taskReturn`, implementing `canon task.return`.
     TaskReturn,
-    /// Capabilities for the `taskCancel` JS helper.
+    /// Capabilities for `taskCancel`, implementing `canon task.cancel`.
     TaskCancel,
-    /// Capabilities for `subtaskCancel`.
+    /// Capabilities for `subtaskCancel`, implementing `canon subtask.cancel`.
     SubtaskCancel,
     /// Capabilities for the `driverLoop` JS helper.
     DriverLoop,

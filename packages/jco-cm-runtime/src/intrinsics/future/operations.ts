@@ -21,7 +21,10 @@ import { getCurrentTask } from '../async-task/task-operations.js';
 import { asyncBlockedCode } from '../async-task.js';
 import { createFuture, getFutureEnd, removeFutureEndFromTable, addFutureEndToTable } from './state.js';
 
-/** Create a future and pack its readable and writable indices into one i64. */
+/**
+ * Implements `canon future.new`.
+ * Create a future and pack its readable and writable indices into one i64.
+ */
 export function futureNew(_context: FutureNewContext, ctx: FutureNewOptions): bigint {
     debugLog('[futureNew()] args', { ctx });
     const { componentIdx, futureTableIdx, elemMeta } = ctx;
@@ -72,7 +75,10 @@ export function futureNewFromLift(_context: FutureNewFromLiftContext, ctx: Futur
     return future.createUserFuture();
 }
 
-/** Write one value, returning a canonical result or waiting for a synchronous copy. */
+/**
+ * Implements `canon future.write`.
+ * Write one value, returning a canonical result or waiting for a synchronous copy.
+ */
 export function futureWrite(
     _context: FutureWriteContext,
     ctx: FutureOperationOptions,
@@ -200,7 +206,10 @@ export function futureWrite(
     return payload;
 }
 
-/** Read one value, returning a canonical result or waiting for a synchronous copy. */
+/**
+ * Implements `canon future.read`.
+ * Read one value, returning a canonical result or waiting for a synchronous copy.
+ */
 export function futureRead(
     _context: FutureReadContext,
     ctx: FutureOperationOptions,
@@ -328,7 +337,10 @@ export function futureRead(
     return payload;
 }
 
-/** Cancel an active read and report its completion event. */
+/**
+ * Implements `canon future.cancel-read`.
+ * Cancel an active read and report its completion event.
+ */
 export function futureCancelRead(
     _context: FutureReadContext,
     ctx: FutureOperationOptions,
@@ -393,7 +405,10 @@ export function futureCancelRead(
     return finishCancel();
 }
 
-/** Cancel an active write and report its completion event. */
+/**
+ * Implements `canon future.cancel-write`.
+ * Cancel an active write and report its completion event.
+ */
 export function futureCancelWrite(
     _context: FutureWriteContext,
     ctx: FutureOperationOptions,
@@ -458,7 +473,10 @@ export function futureCancelWrite(
     return finishCancel();
 }
 
-/** Remove and drop the readable endpoint from its owning tables. */
+/**
+ * Implements `canon future.drop-readable`.
+ * Remove and drop the readable endpoint from its owning tables.
+ */
 export function futureDropReadable(
     _context: FutureDropReadableContext,
     ctx: FutureOperationOptions,
@@ -483,7 +501,10 @@ export function futureDropReadable(
     futureEnd.drop();
 }
 
-/** Remove and drop a writable endpoint after its value was written. */
+/**
+ * Implements `canon future.drop-writable`.
+ * Remove and drop a writable endpoint after its value was written.
+ */
 export function futureDropWritable(
     _context: FutureDropWritableContext,
     ctx: FutureOperationOptions,

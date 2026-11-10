@@ -37,17 +37,19 @@ pub(crate) enum FutureContextIntrinsic {
     AddFutureEndToTable,
     /// Shared lookup capabilities for `getFutureEnd` and `futureTransfer`.
     GetFutureEnd,
-    /// Capabilities for `futureNew`.
+    /// Capabilities for `futureNew`, implementing `canon future.new`.
     FutureNew,
     /// Capabilities for `futureNewFromLift`.
     FutureNewFromLift,
-    /// Shared capabilities for `futureRead` and `futureCancelRead`.
+    /// Shared capabilities for `futureRead` and `futureCancelRead`, implementing
+    /// `canon future.read` and `canon future.cancel-read`.
     FutureRead,
-    /// Shared capabilities for `futureWrite` and `futureCancelWrite`.
+    /// Shared capabilities for `futureWrite` and `futureCancelWrite`, implementing
+    /// `canon future.write` and `canon future.cancel-write`.
     FutureWrite,
-    /// Capabilities for `futureDropReadable`.
+    /// Capabilities for `futureDropReadable`, implementing `canon future.drop-readable`.
     FutureDropReadable,
-    /// Capabilities for `futureDropWritable`.
+    /// Capabilities for `futureDropWritable`, implementing `canon future.drop-writable`.
     FutureDropWritable,
     /// Capabilities for `genFutureHostInjectFn`.
     GenFutureHostInjectFn,

@@ -37,6 +37,7 @@ export function currentThreadOrThrow(context: ThreadLookupContext, componentIdx:
     return thread;
 }
 
+/** Implements `canon thread.yield`. */
 export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationOptions) {
     debugLog('[asyncYield()] args', { ctx });
     const { componentIdx, isCancellable } = ctx;
@@ -64,6 +65,7 @@ export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationO
         .then((keepGoing) => (keepGoing ? 0 : 1));
 }
 
+/** Implements `canon thread.index`. */
 export function threadIndex(_context: ThreadLookupContext, componentIdx: number) {
     const meta = getCurrentTaskMeta(_context.registers, componentIdx);
     if (!meta) {
@@ -72,6 +74,7 @@ export function threadIndex(_context: ThreadLookupContext, componentIdx: number)
     return meta.threadID;
 }
 
+/** Implements `canon thread.suspend`. */
 export async function threadSuspend(_context: ThreadControlContext, ctx: ThreadOperationOptions) {
     debugLog('[threadSuspend()] args', { ctx });
     const { componentIdx, isCancellable } = ctx;
@@ -85,6 +88,7 @@ export async function threadSuspend(_context: ThreadControlContext, ctx: ThreadO
     return keepGoing ? 0 : 1;
 }
 
+/** Implements `canon thread.new-indirect`. */
 export function threadNewIndirect(
     _context: ThreadNewContext,
     ctx: { componentIdx: number; getStartFuncTableFn: () => WebAssembly.Table },
@@ -144,6 +148,7 @@ export function threadNewIndirect(
     return newThread.id();
 }
 
+/** Implements `canon thread.resume-later`. */
 export function threadResumeLater(_context: ThreadControlContext, ctx: { componentIdx: number }, threadHandle: number) {
     const { componentIdx } = ctx;
     debugLog('[threadResumeLater()] args', { componentIdx, threadHandle });
@@ -162,6 +167,7 @@ export function threadResumeLater(_context: ThreadControlContext, ctx: { compone
     }
 }
 
+/** Implements `canon thread.suspend-then-resume`. */
 export function threadSuspendThenResume(
     _context: ThreadControlContext,
     ctx: ThreadOperationOptions,
@@ -187,6 +193,7 @@ export function threadSuspendThenResume(
     return suspension.then((keepGoing) => (keepGoing ? 0 : 1));
 }
 
+/** Implements `canon thread.yield-then-resume`. */
 export function threadYieldThenResume(_context: ThreadControlContext, ctx: ThreadOperationOptions, threadIdx: number) {
     const { componentIdx, isCancellable } = ctx;
     debugLog('[threadYieldThenResume()] args', { componentIdx, isCancellable, threadIdx });
@@ -208,6 +215,7 @@ export function threadYieldThenResume(_context: ThreadControlContext, ctx: Threa
     return suspension.then((keepGoing) => (keepGoing ? 0 : 1));
 }
 
+/** Implements `canon thread.suspend-then-promote`. */
 export function threadSuspendThenPromote(
     _context: ThreadControlContext,
     ctx: ThreadOperationOptions,
@@ -241,6 +249,7 @@ export function threadSuspendThenPromote(
     return threadSuspend(_context, ctx);
 }
 
+/** Implements `canon thread.yield-then-promote`. */
 export function threadYieldThenPromote(_context: ThreadControlContext, ctx: ThreadOperationOptions, threadIdx: number) {
     const { componentIdx, isCancellable } = ctx;
     debugLog('[threadYieldThenPromote()] args', { componentIdx, isCancellable, threadIdx });

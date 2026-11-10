@@ -73,6 +73,8 @@ pub enum AsyncStreamIntrinsic {
 
     /// Create a new stream
     ///
+    /// Implements `canon stream.new`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturenew
     ///
     /// # Intrinsic implementation function
@@ -103,6 +105,8 @@ pub enum AsyncStreamIntrinsic {
 
     /// Read from a stream
     ///
+    /// Implements `canon stream.read`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturereadwrite
     ///
     /// # Intrinsic implementation function
@@ -130,6 +134,8 @@ pub enum AsyncStreamIntrinsic {
     StreamRead,
 
     /// Write to a stream
+    ///
+    /// Implements `canon stream.write`.
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturereadwrite
     ///
@@ -159,6 +165,8 @@ pub enum AsyncStreamIntrinsic {
 
     /// Cancel a read to a stream
     ///
+    /// Implements `canon stream.cancel-read`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-readread
     ///
     /// # Intrinsic implementation function
@@ -174,6 +182,8 @@ pub enum AsyncStreamIntrinsic {
     StreamCancelRead,
 
     /// Cancel a write to a stream
+    ///
+    /// Implements `canon stream.cancel-write`.
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-writewrite
     ///
@@ -191,6 +201,8 @@ pub enum AsyncStreamIntrinsic {
 
     /// Drop a the readable end of a Stream
     ///
+    /// Implements `canon stream.drop-readable`.
+    ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturedrop-readablewritable
     ///
     /// # Intrinsic implementation function
@@ -205,6 +217,8 @@ pub enum AsyncStreamIntrinsic {
     StreamDropReadable,
 
     /// Drop a the writable end of a Stream
+    ///
+    /// Implements `canon stream.drop-writable`.
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturedrop-readablewritable
     ///
