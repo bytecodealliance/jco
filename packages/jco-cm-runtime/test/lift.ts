@@ -100,8 +100,11 @@ test.concurrent.each(primitives)(
 );
 
 test.concurrent('UTF8 and UTF16 use selected decoders for direct and indirect representations', () => {
-    const utf8 = initializeUtf8Decoder(),
-        utf16 = initializeUtf16Decoder();
+    const strings = {
+        RuntimeError: WebAssembly.RuntimeError,
+        utf8: initializeUtf8Decoder(),
+        utf16: initializeUtf16Decoder(),
+    };
     const buffer = new ArrayBuffer(64);
     new Uint8Array(buffer).set(new TextEncoder().encode('hé'), 16);
     const dv = new DataView(buffer);
@@ -110,19 +113,50 @@ test.concurrent('UTF8 and UTF16 use selected decoders for direct and indirect re
     const ctx = direct([16, 3, 99]);
     ctx.memory = { buffer };
     ctx.stringEncoding = 'utf8';
-    expect(lift.liftFlatStringAny({ utf8, utf16 }, ctx)[0]).toBe('hé');
+    expect(lift.liftFlatStringAny(strings, ctx)[0]).toBe('hé');
     expect(ctx.params).toEqual([99]);
     const fromMemory = indirect(buffer, 3);
-    expect(lift.liftFlatStringUTF8(utf8, fromMemory)[0]).toBe('hé');
+    expect(lift.liftFlatStringUTF8(strings, fromMemory)[0]).toBe('hé');
     expect(fromMemory.storagePtr).toBe(12);
     new Uint16Array(buffer, 24, 2).set([0xd83d, 0xde80]);
     const unicode = direct([24, 2]);
     unicode.memory = { buffer };
-    expect(lift.liftFlatStringUTF16(utf16, unicode)[0]).toBe('🚀');
-    expect(() => lift.liftFlatStringAny({ utf8, utf16 }, { ...ctx, stringEncoding: 'bad' })).toThrow(
+    expect(lift.liftFlatStringUTF16(strings, unicode)[0]).toBe('🚀');
+    expect(() => lift.liftFlatStringAny(strings, { ...ctx, stringEncoding: 'bad' })).toThrow(
         /unsupported string encoding/,
     );
 });
+
+test.concurrent.each([
+    ['utf8', [60, 8], /out of bounds/],
+    ['utf8', [65, 0], /out of bounds/],
+    ['utf8', [0, -1], /out of bounds/],
+    ['utf16', [60, 3], /out of bounds/],
+    ['utf16', [1, 1], /unaligned pointer/],
+    ['utf8', [0, 1], /invalid utf-8/],
+] as const)(
+    'a %s string at %j traps instead of reading outside memory or malformed bytes',
+    (stringEncoding, at, trap) => {
+        const strings = {
+            RuntimeError: WebAssembly.RuntimeError,
+            utf8: initializeUtf8Decoder(),
+            utf16: initializeUtf16Decoder(),
+        };
+        const buffer = new ArrayBuffer(64);
+        new Uint8Array(buffer)[0] = 0xff;
+        new DataView(buffer).setUint32(8, at[0], true);
+        new DataView(buffer).setUint32(12, at[1] >>> 0, true);
+        const fromParams = () =>
+            lift.liftFlatStringAny(strings, { ...direct([...at]), memory: { buffer }, stringEncoding });
+        expect(fromParams).toThrow(WebAssembly.RuntimeError);
+        expect(fromParams).toThrow(trap);
+        if (at[1] >= 0) {
+            const fromMemory = () => lift.liftFlatStringAny(strings, { ...indirect(buffer, 8), stringEncoding });
+            expect(fromMemory).toThrow(WebAssembly.RuntimeError);
+            expect(fromMemory).toThrow(trap);
+        }
+    },
+);
 
 test.concurrent('record and tuple restore their storage budgets after callbacks replace the cursor', () => {
     const field: TaskLiftFn = (ctx) => [42, { ...ctx, storagePtr: 1, storageLen: 999 }];
@@ -378,7 +412,11 @@ test.concurrent('error-context lifting transfers local ownership to the actual g
 test.concurrent.each([false, true])(
     'compact strings preserve direct=%s operands and cursor state',
     (useDirectParams) => {
-        const context = { utf8: initializeUtf8Decoder(), utf16: initializeUtf16Decoder() };
+        const context = {
+            RuntimeError: WebAssembly.RuntimeError,
+            utf8: initializeUtf8Decoder(),
+            utf16: initializeUtf16Decoder(),
+        };
         for (const [text, bytes, taggedLength] of [
             ['A\u0080ÿ', [65, 128, 255], 3],
             ['🚀', [0x3d, 0xd8, 0x80, 0xde], 0x80000002],
@@ -404,7 +442,11 @@ test.concurrent.each([false, true])(
 );
 
 test.concurrent('compact lifts retain malformed UTF16 and alignment checks', () => {
-    const context = { utf8: initializeUtf8Decoder(), utf16: initializeUtf16Decoder() };
+    const context = {
+        RuntimeError: WebAssembly.RuntimeError,
+        utf8: initializeUtf8Decoder(),
+        utf16: initializeUtf16Decoder(),
+    };
     const buffer = new ArrayBuffer(16);
     new DataView(buffer).setUint16(8, 0xd800, true);
     for (const params of [

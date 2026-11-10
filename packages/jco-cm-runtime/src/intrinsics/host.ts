@@ -396,6 +396,7 @@ export function asyncStartCall(
     const handleCalleeError = (err: unknown) => {
         preparedTask.endFirstSlice();
         debugLog('[asyncStartCall()] initial subtask callee run failed', err);
+        _context.driver.reportTrap?.(err as Error);
         // NOTE: a good place to reject the parent task, if rejection API is enabled
         // subtask.reject(err);
         // subtask.getParentTask().reject(err);

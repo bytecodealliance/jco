@@ -303,7 +303,7 @@ test.concurrent.each(['A\u0080ÿ', '🚀', ''])('compact lowering roundtrips %j 
     expect(view.getUint32(4, true)).toBe(value === '🚀' ? 0x80000002 : value.length);
     expect(ctx.storagePtr).toBe(8);
     const lifted = lift.liftFlatStringAny(
-        { utf8: initializeUtf8Decoder(), utf16: initializeUtf16Decoder() },
+        { RuntimeError: WebAssembly.RuntimeError, utf8: initializeUtf8Decoder(), utf16: initializeUtf16Decoder() },
         {
             componentIdx: 0,
             params: [],

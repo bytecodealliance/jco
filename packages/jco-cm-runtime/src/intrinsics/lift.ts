@@ -14,12 +14,12 @@ import type {
     LiftStreamMeta,
     LiftVariantContext,
     LiftStringContext,
+    RuntimeMemory,
     LiftFutureContext,
     LiftStreamContext,
     LiftErrorContext,
     LiftListContext,
     LocalErrorContext,
-    StringDecoder,
     LiftFlagsContext,
 } from '../runtime.js';
 import { getStreamEnd } from './stream-state.js';
@@ -425,9 +425,9 @@ export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
 export function liftFlatStringAny(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     switch (ctx.stringEncoding) {
         case 'utf8':
-            return liftFlatStringUTF8(_context.utf8, ctx);
+            return liftFlatStringUTF8(_context, ctx);
         case 'utf16':
-            return liftFlatStringUTF16(_context.utf16, ctx);
+            return liftFlatStringUTF16(_context, ctx);
         case 'compact-utf16': {
             const [ptr, ptrCtx] = liftFlatU32(ctx);
             const [len, newCtx] = liftFlatU32(ptrCtx);
@@ -438,7 +438,24 @@ export function liftFlatStringAny(_context: LiftStringContext, ctx: TaskLiftCont
     }
 }
 
-export function liftFlatStringUTF8(_context: StringDecoder, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+/** Traps on a string whose code units are misaligned or not wholly inside the memory. */
+function requireStringInMemory(
+    RuntimeError: LiftStringContext['RuntimeError'],
+    memory: RuntimeMemory,
+    offset: number,
+    codeUnits: number,
+    unitSize: number,
+) {
+    if (offset % unitSize !== 0) {
+        throw new RuntimeError('wasm trap: unaligned pointer');
+    }
+    const byteLength = memory.buffer.byteLength;
+    if (offset > byteLength || codeUnits < 0 || codeUnits > Math.floor((byteLength - offset) / unitSize)) {
+        throw new RuntimeError('string pointer/length out of bounds of memory');
+    }
+}
+
+export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     debugLog('[liftFlatStringUTF8()] args', { ctx });
     let val;
 
@@ -459,7 +476,8 @@ export function liftFlatStringUTF8(_context: StringDecoder, ctx: TaskLiftContext
         if (!Number.isSafeInteger(len)) {
             throw new Error('invalid len');
         }
-        val = _context.decode(new DataView(ctx.memory!.buffer, offset, len));
+        requireStringInMemory(_context.RuntimeError, ctx.memory!, offset, len, 1);
+        val = decodeUtf8(_context.RuntimeError, _context.utf8, new DataView(ctx.memory!.buffer, offset, len));
         ctx.params = ctx.params.slice(2);
         return [val, ctx];
     }
@@ -473,7 +491,8 @@ export function liftFlatStringUTF8(_context: StringDecoder, ctx: TaskLiftContext
     const start = dv.getUint32(ctx.storagePtr!, true);
     const codeUnits = dv.getUint32(ctx.storagePtr! + 4, true);
 
-    val = _context.decode(new Uint8Array(ctx.memory!.buffer, start, codeUnits));
+    requireStringInMemory(_context.RuntimeError, ctx.memory!, start, codeUnits, 1);
+    val = decodeUtf8(_context.RuntimeError, _context.utf8, new Uint8Array(ctx.memory!.buffer, start, codeUnits));
 
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
@@ -483,7 +502,7 @@ export function liftFlatStringUTF8(_context: StringDecoder, ctx: TaskLiftContext
     return [val, ctx];
 }
 
-export function liftFlatStringUTF16(_context: StringDecoder, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     debugLog('[liftFlatStringUTF16()] args', { ctx });
     let val;
 
@@ -504,7 +523,8 @@ export function liftFlatStringUTF16(_context: StringDecoder, ctx: TaskLiftContex
         if (!Number.isSafeInteger(len)) {
             throw new Error('invalid len');
         }
-        val = _context.decode(new DataView(ctx.memory!.buffer, offset, len * 2));
+        requireStringInMemory(_context.RuntimeError, ctx.memory!, offset, len, 2);
+        val = _context.utf16.decode(new DataView(ctx.memory!.buffer, offset, len * 2));
         ctx.params = ctx.params.slice(2);
         return [val, ctx];
     }
@@ -518,7 +538,8 @@ export function liftFlatStringUTF16(_context: StringDecoder, ctx: TaskLiftContex
     const start = dv.getUint32(ctx.storagePtr!, true);
     const codeUnits = dv.getUint32(ctx.storagePtr! + 4, true);
 
-    val = _context.decode(new DataView(ctx.memory!.buffer, start, codeUnits * 2));
+    requireStringInMemory(_context.RuntimeError, ctx.memory!, start, codeUnits, 2);
+    val = _context.utf16.decode(new DataView(ctx.memory!.buffer, start, codeUnits * 2));
 
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
