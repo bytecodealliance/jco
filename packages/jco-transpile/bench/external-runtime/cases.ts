@@ -235,7 +235,7 @@ export const importControls = [
          const clearing = { tasks: initializeTasksByComponent(), taskIds: initializeCurrentTaskIds(), componentIdxs: initializeCurrentComponentIdxs() };
          const registers = {}, traps = { RuntimeError, registers, lookup };
          const AsyncThread = initializeAsyncThreadClass({ registers, lookup, traps });
-         const Task = initializeAsyncTaskClass({ RuntimeError, traps, postReturn: { RuntimeError, lookup, stackOverflow: "stack", uncaughtException: "uncaught" }, AsyncSubtask, Waitable, lookup, events: initializeAsyncEventCodes(), determinism: 'deterministic', scopeCounter, scopeTasks, clearing, registers, FutureValue: initializeFutureValueClass(disposeSymbol) });
+         const Task = initializeAsyncTaskClass({ RuntimeError, traps, postReturn: { RuntimeError, lookup, stackOverflow: "stack", uncaughtException: "uncaught" }, AsyncSubtask, Waitable, lookup, events: initializeAsyncEventCodes(), determinism: 'deterministic', scopeCounter, scopeTasks, storeTrap: { stopped: false }, clearing, registers, FutureValue: initializeFutureValueClass(disposeSymbol) });
          const creation = { ...clearing, AsyncTask: Task, AsyncThread }, [a] = createNewCurrentTask(creation, { componentIdx: 0 }), [b] = createNewCurrentTask(creation, { componentIdx: 0 });
          const shared = scopeTasks.get(a.resourceScopeId()) === a && scopeTasks.get(b.resourceScopeId()) === b;
          a.validateResourceBorrowScope(); b.validateResourceBorrowScope(); clearCurrentTask(clearing, 0, a.id()); clearCurrentTask(clearing, 0, b.id());
