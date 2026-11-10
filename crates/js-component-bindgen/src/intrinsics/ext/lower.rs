@@ -75,12 +75,16 @@ impl LowerContextIntrinsic {
                     ComponentContextIntrinsic::GetOrCreateAsyncState,
                 ),
                 RuntimeContextIntrinsic::Core(CoreContextIntrinsic::InitializeSymbolResourceRep),
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::Streams),
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::InternalClass),
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::Lowerable),
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::Creation),
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::Source),
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::Inject),
+                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::InitializeStreams),
+                RuntimeContextIntrinsic::Stream(
+                    StreamContextIntrinsic::InitializeInternalStreamClass,
+                ),
+                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::IsStreamLowerableObject),
+                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::CreateStream),
+                RuntimeContextIntrinsic::Stream(
+                    StreamContextIntrinsic::GenReadFnFromLowerableStream,
+                ),
+                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::GenStreamHostInjectFn),
             ],
             Self::LowerFlatErrorContext => &[
                 RuntimeContextIntrinsic::NumericConversion,

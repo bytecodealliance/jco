@@ -84,8 +84,10 @@ impl LiftContextIntrinsic {
                 FutureContextIntrinsic::GetFutureEnd,
             )],
             Self::LiftFlatStream => &[
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::Lookup),
-                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::ExternalClass),
+                RuntimeContextIntrinsic::Stream(StreamContextIntrinsic::GetStreamEnd),
+                RuntimeContextIntrinsic::Stream(
+                    StreamContextIntrinsic::InitializeExternalStreamClass,
+                ),
             ],
             _ => &[],
         }
