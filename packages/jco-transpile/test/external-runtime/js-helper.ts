@@ -42,19 +42,18 @@ export function dataView(context, memory) {
     contexts.get(context).add(view);
     return view;
 }`,
-                    'runtime',
                 );
                 const { files } = await transpileBytes(await parse(PAIR), {
                     name: 'pair',
                     instantiation,
                     minify,
-                    cmRuntimeEsModule: './runtime/',
+                    cmRuntimeEsModule: './provider/',
                 });
                 await writeFiles(files, { baseDir: dir });
                 const binding = await import(pathToFileURL(join(dir, 'pair.js')).href);
                 const load = (name: string) => new WebAssembly.Module(files[name]);
                 const first = instantiation ? await binding.instantiate(load, {}) : binding;
-                const selected = await import(pathToFileURL(join(dir, 'runtime/intrinsics/js-helper.js')).href);
+                const selected = await import(pathToFileURL(join(dir, 'provider/intrinsics/js-helper.js')).href);
                 assert.deepEqual(first.echo(42, 7), [42, 7]);
                 const [context] = selected.contexts.keys();
                 const before = context.view;
