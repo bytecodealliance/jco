@@ -43,6 +43,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         FutureValue,
         scopeCounter: _scopeCounter,
         scopeTasks: _scopeTasks,
+        storeTrap: _storeTrap,
     } = context;
     class AsyncTask {
         static _ID = 0n;
@@ -227,6 +228,14 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         }
         validateResourceBorrowScope() {
             if (this.#resourceScopeExited) {
+                return;
+            }
+            // Stopping abandons guest stacks, including borrows they
+            // have not had a chance to drop. This is not a normal return.
+            if (_storeTrap.stopped) {
+                this.#resourceLenders = [];
+                this.#resourceScopeExited = true;
+                _scopeTasks.delete(this.#resourceScopeId);
                 return;
             }
             if (this.#resourceBorrowCount !== 0) {

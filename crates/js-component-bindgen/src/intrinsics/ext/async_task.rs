@@ -234,6 +234,7 @@ impl TaskContextIntrinsic {
                 Core(CoreContextIntrinsic::InitializeAsyncDeterminism),
                 RuntimeContextIntrinsic::InitializeResourceScopeCounter,
                 RuntimeContextIntrinsic::InitializeResourceScopeTasks,
+                Component(ComponentContextIntrinsic::InitializeStoreTrap),
                 Task(Self::ClearCurrentThread),
                 Core(CoreContextIntrinsic::InitializeTaskRegisters),
                 RuntimeContextIntrinsic::Future(
@@ -336,7 +337,7 @@ impl TaskContextIntrinsic {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
             }
             Self::InitializeAsyncTaskClass => {
-                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }"
+                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }"
             }
             Self::CreateNewCurrentImplicitThread => {
                 "AsyncTask, AsyncThread, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"

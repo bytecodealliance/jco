@@ -60,6 +60,9 @@ export function symmetricSyncGuestCallEnter(
         callingWasmExport: !!calleeIsAsync,
     });
     newTask.setFuncTypeIsAsync(!!calleeIsAsync);
+    // This symmetric adapter uses a synchronous canonical lift,
+    // even when the component function type itself is async.
+    newTask.setCalleeIsAsync(false);
     subtask.setChildTask(newTask);
     newTask.setParentSubtask(subtask);
     subtask.onStart();
