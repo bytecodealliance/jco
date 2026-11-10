@@ -158,39 +158,12 @@ export function addStreamEndToTable(
     return { handle, waitableIdx };
 }
 
+/** `removeStreamEndFromTable` under the name and option key of the stream drop operations. */
 export function deleteStreamEnd(_context: StreamTableContext, args: StreamDeleteOptions): StreamPayloadEnd {
-    debugLog('[deleteStreamEnd()] args', args);
-    const { tableIdx, streamEndWaitableIdx } = args;
-    if (tableIdx === undefined) {
-        throw new Error('missing table idx while removing stream end');
-    }
-    if (streamEndWaitableIdx === undefined) {
-        throw new Error('missing stream idx while removing stream end');
-    }
-
-    const { table, componentIdx } = _context.tables[tableIdx];
-    const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
-
-    const streamEnd = cstate.handles.get(streamEndWaitableIdx) as StreamPayloadEnd | undefined;
-    if (!(streamEnd instanceof _context.StreamEnd) || streamEnd.streamTableIdx() !== tableIdx) {
-        throw new _context.RuntimeError(`invalid stream end for table [${tableIdx}]`);
-    }
-
-    let removed = cstate.handles.remove(streamEnd.waitableIdx()!);
-    if (!removed) {
-        throw new Error(
-            `failed to remove stream end [${streamEndWaitableIdx}] waitable obj in component [${componentIdx}]`,
-        );
-    }
-
-    removed = table.remove(streamEnd.handle()!);
-    if (!removed) {
-        throw new Error(
-            `failed to remove stream end with handle [${streamEnd.handle()}] from stream table [${tableIdx}] in component [${componentIdx}]`,
-        );
-    }
-
-    return streamEnd;
+    return removeStreamEndFromTable(_context, {
+        tableIdx: args.tableIdx,
+        streamWaitableIdx: args.streamEndWaitableIdx,
+    });
 }
 
 export function removeStreamEndFromTable(_context: StreamTableContext, args: StreamEndRemoval): StreamPayloadEnd {
