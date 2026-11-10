@@ -2791,7 +2791,6 @@ export interface StreamCancelWriteContext extends StreamCancelContext {
     readonly StreamEnd: StreamWritableEndConstructor;
 }
 export interface StreamDropContext extends TrapContext {
-    readonly lookup: ComponentStateLookupContext;
     readonly ends: StreamEndLookupContext;
     readonly taskLookup: TaskLookupContext<FutureTask>;
 }

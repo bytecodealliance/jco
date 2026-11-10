@@ -273,14 +273,12 @@ impl StreamContextIntrinsic {
             ],
             Self::StreamDropReadable => &[
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
-                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Stream(Self::GetStreamEnd),
                 Task(TaskContextIntrinsic::GetCurrentTask),
                 Stream(Self::InitializeStreamReadableEndClass),
             ],
             Self::StreamDropWritable => &[
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
-                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Stream(Self::GetStreamEnd),
                 Task(TaskContextIntrinsic::GetCurrentTask),
                 Stream(Self::InitializeStreamWritableEndClass),
@@ -350,10 +348,10 @@ impl StreamContextIntrinsic {
                 "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, taskLookup: _jcoTaskLookupContext, events: ASYNC_EVENT_CODE, StreamEnd: StreamWritableEnd"
             }
             Self::StreamDropReadable => {
-                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, taskLookup: _jcoTaskLookupContext, StreamEnd: StreamReadableEnd"
+                "RuntimeError: WebAssemblyRuntimeError, ends: _jcoStreamEndLookupContext, taskLookup: _jcoTaskLookupContext, StreamEnd: StreamReadableEnd"
             }
             Self::StreamDropWritable => {
-                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, ends: _jcoStreamEndLookupContext, taskLookup: _jcoTaskLookupContext, StreamEnd: StreamWritableEnd"
+                "RuntimeError: WebAssemblyRuntimeError, ends: _jcoStreamEndLookupContext, taskLookup: _jcoTaskLookupContext, StreamEnd: StreamWritableEnd"
             }
             Self::IsStreamLowerableObject => {
                 "Stream, asyncIteratorSymbol: symbolAsyncIterator, iteratorSymbol: symbolIterator, ReadableStream: _PlatformReadableStream"

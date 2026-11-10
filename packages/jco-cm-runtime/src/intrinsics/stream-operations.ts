@@ -17,13 +17,7 @@ import { debugLog } from './core-debug.js';
 import { getOrCreateAsyncState } from './component.js';
 import { getCurrentTask } from './async-task/task-operations.js';
 import { asyncBlockedCode } from './async-task.js';
-import {
-    createStream,
-    getStreamEnd,
-    deleteStreamEnd,
-    removeStreamEndFromTable,
-    addStreamEndToTable,
-} from './stream-state.js';
+import { createStream, getStreamEnd, removeStreamEndFromTable, addStreamEndToTable } from './stream-state.js';
 
 export function streamNew(_context: StreamNewContext, ctx: StreamNewOptions): bigint {
     debugLog('[streamNew()] args', { ctx });
@@ -98,19 +92,49 @@ export function streamNewFromLift(_context: StreamNewFromLiftContext, ctx: Strea
     return stream.createUserStream();
 }
 
-export function streamRead(
-    _context: StreamReadContext,
+/** What differs between the readable-end and writable-end form of an operation. */
+interface StreamDirection {
+    /** The end class a context of this direction selects as its `StreamEnd`. */
+    readonly end: 'StreamReadableEnd' | 'StreamWritableEnd';
+    readonly event: 'STREAM_READ' | 'STREAM_WRITE';
+    readonly copy: 'streamRead' | 'streamWrite';
+    readonly cancel: 'streamCancelRead' | 'streamCancelWrite';
+    readonly drop: 'streamDropReadable' | 'streamDropWritable';
+    readonly busyDrop: string;
+}
+const READABLE: StreamDirection = {
+    end: 'StreamReadableEnd',
+    event: 'STREAM_READ',
+    copy: 'streamRead',
+    cancel: 'streamCancelRead',
+    drop: 'streamDropReadable',
+    busyDrop: 'cannot remove busy stream',
+};
+const WRITABLE: StreamDirection = {
+    end: 'StreamWritableEnd',
+    event: 'STREAM_WRITE',
+    copy: 'streamWrite',
+    cancel: 'streamCancelWrite',
+    drop: 'streamDropWritable',
+    busyDrop: 'cannot drop busy stream',
+};
+
+// In the operations below `_context.StreamEnd` is the end class of one direction,
+// while the lookup in `_context.ends` only knows the base class: the `instanceof`
+// that follows each lookup is what rejects, say, a read on a writable end.
+
+function streamCopy(
+    _context: StreamReadContext | StreamWriteContext,
+    direction: StreamDirection,
     ctx: StreamOperationOptions,
     streamEndWaitableIdx: number,
     ptr: number,
     count: number,
 ): number | Promise<number> {
-    debugLog('[streamRead()] args', { ctx, streamEndWaitableIdx, ptr, count });
+    debugLog(`[${direction.copy}()] args`, { ctx, streamEndWaitableIdx, ptr, count });
     const {
         componentIdx,
-        memoryIdx,
         getMemoryFn,
-        reallocIdx,
         getReallocFn,
         stringEncoding,
         isAsync,
@@ -120,8 +144,6 @@ export function streamRead(
         deferSyncFinish,
     } = ctx;
 
-    void memoryIdx;
-    void reallocIdx;
     if (componentIdx === undefined) {
         throw new TypeError('missing/invalid component idx');
     }
@@ -144,22 +166,14 @@ export function streamRead(
     }
 
     if (!_context.mayBlock && !isAsync) {
-        throw new _context.RuntimeError('only async tasks or otherwise blocking-allowed tasks my stream.streamRead');
+        throw new _context.RuntimeError(
+            `only async tasks or otherwise blocking-allowed tasks my stream.${direction.copy}`,
+        );
     }
 
     const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
-    if (!streamEnd) {
-        throw new _context.RuntimeError(
-            `missing stream end [${streamEndWaitableIdx}] (table [${streamTableIdx}], component [${componentIdx}])`,
-        );
-    }
     if (!(streamEnd instanceof _context.StreamEnd)) {
-        throw new _context.RuntimeError('invalid stream type, expected _context.StreamEnd');
-    }
-    if (streamEnd.streamTableIdx() !== streamTableIdx) {
-        throw new Error(
-            `stream end table idx [${streamEnd.streamTableIdx()}] != operation table idx [${streamTableIdx}]`,
-        );
+        throw new _context.RuntimeError(`invalid stream type, expected ${direction.end}`);
     }
     if (streamEnd.isDoneState()) {
         const message = streamEnd.isWritable()
@@ -188,14 +202,23 @@ export function streamRead(
         memory,
         ptr,
         count,
-        eventCode: _context.events.STREAM_READ,
+        eventCode: _context.events[direction.event],
         componentIdx,
         stringEncoding,
-        realloc: getReallocFn?.(),
         getReallocFn,
         elemMeta,
         deferSyncFinish,
     });
+}
+
+export function streamRead(
+    _context: StreamReadContext,
+    ctx: StreamOperationOptions,
+    streamEndWaitableIdx: number,
+    ptr: number,
+    count: number,
+): number | Promise<number> {
+    return streamCopy(_context, READABLE, ctx, streamEndWaitableIdx, ptr, count);
 }
 
 export function streamWrite(
@@ -205,97 +228,76 @@ export function streamWrite(
     ptr: number,
     count: number,
 ): number | Promise<number> {
-    debugLog('[streamWrite()] args', { ctx, streamEndWaitableIdx, ptr, count });
-    const {
-        componentIdx,
-        memoryIdx,
-        getMemoryFn,
-        reallocIdx,
-        getReallocFn,
-        stringEncoding,
-        isAsync,
-        streamTableIdx,
-        elemMeta,
-        syncFastOnly,
-        deferSyncFinish,
-    } = ctx;
+    return streamCopy(_context, WRITABLE, ctx, streamEndWaitableIdx, ptr, count);
+}
 
-    void memoryIdx;
-    void reallocIdx;
-    if (componentIdx === undefined) {
-        throw new TypeError('missing/invalid component idx');
-    }
-    if (streamTableIdx === undefined) {
-        throw new TypeError('missing/invalid stream table idx');
-    }
-    if (streamEndWaitableIdx === undefined) {
-        throw new TypeError('missing/invalid stream end idx');
-    }
-
-    // pointers at or above 2GiB come in as negative values
-    ptr >>>= 0;
-
-    // count may come in as u32::MAX which is mangled by JS into a negative value
-    count = Math.min(count >>> 0, _context.ManagedBuffer.MAX_LENGTH);
+function streamCancel(
+    _context: StreamCancelReadContext | StreamCancelWriteContext,
+    direction: StreamDirection,
+    ctx: StreamOperationOptions,
+    streamEndWaitableIdx: number,
+): number | Promise<number> {
+    debugLog(`[${direction.cancel}()] args`, { ctx, streamEndWaitableIdx });
+    const { streamTableIdx, isAsync, componentIdx } = ctx;
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!cstate.mayLeave) {
         throw new Error('component instance is not marked as may leave');
     }
 
-    if (!_context.mayBlock && !isAsync) {
-        throw new _context.RuntimeError('only async tasks or otherwise blocking-allowed tasks my stream.streamWrite');
-    }
-
-    const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
-    if (!streamEnd) {
-        throw new _context.RuntimeError(
-            `missing stream end [${streamEndWaitableIdx}] (table [${streamTableIdx}], component [${componentIdx}])`,
-        );
-    }
+    const streamEnd = getStreamEnd(_context.ends, { streamEndWaitableIdx, tableIdx: streamTableIdx });
     if (!(streamEnd instanceof _context.StreamEnd)) {
-        throw new _context.RuntimeError('invalid stream type, expected _context.StreamEnd');
-    }
-    if (streamEnd.streamTableIdx() !== streamTableIdx) {
-        throw new Error(
-            `stream end table idx [${streamEnd.streamTableIdx()}] != operation table idx [${streamTableIdx}]`,
-        );
-    }
-    if (streamEnd.isDoneState()) {
-        const message = streamEnd.isWritable()
-            ? 'cannot write to stream after being notified that the readable end dropped'
-            : 'cannot read from stream after being notified that the writable end dropped';
-        throw new _context.RuntimeError(message);
+        throw new Error(`invalid stream end, expected value of type [${direction.end}]`);
     }
 
-    // Validate before copy can return early for a dropped peer.
-    const memory = getMemoryFn?.();
-    _context.ManagedBuffer.validateGuestBuffer(memory, ptr, count, elemMeta ?? streamEnd.getElemMeta());
-
-    // A synchronous canonical operation is exposed through a
-    // plain Wasm fast path so an already-queued event can be
-    // consumed without entering JSPI. If it would block, the
-    // generated conditional trampoline retries on its
-    // suspending slow path.
-    if (syncFastOnly && !streamEnd.hasPendingEvent() && !streamEnd.isPeerDropped() && !streamEnd.hasPendingBuffer()) {
-        // -2 tells the conditional trampoline to take its suspending
-        // slow path (a synchronous copy must block, never report BLOCKED).
-        return 0xfffffffe;
+    if (!streamEnd.isCopying()) {
+        throw new _context.RuntimeError('stream end is not copying, cannot cancel');
     }
 
-    return streamEnd.copy({
-        isAsync,
-        memory,
-        ptr,
-        count,
-        eventCode: _context.events.STREAM_WRITE,
-        componentIdx,
-        stringEncoding,
-        realloc: getReallocFn?.(),
-        getReallocFn,
-        elemMeta,
-        deferSyncFinish,
-    });
+    streamEnd.setCopyState(_context.StreamEnd.CopyState.CANCELLING_COPY);
+
+    const finishCancel = () => {
+        const event = streamEnd.getPendingEvent()!;
+        const { code, payload0: index, payload1: payload } = event;
+        if (streamEnd.isCopying()) {
+            throw new Error(`stream end (idx [${streamEndWaitableIdx}]) is still in copying state`);
+        }
+        if (code !== _context.events[direction.event]) {
+            throw new Error(`unexpected event code [${code}], expected [ASYNC_EVENT_CODE.${direction.event}]`);
+        }
+        if (index !== streamEnd.waitableIdx()) {
+            throw new Error('event index does not match stream end');
+        }
+
+        debugLog(`[${direction.cancel}()] successful cancel`, { ctx, streamEndWaitableIdx, streamEnd, event });
+        return payload;
+    };
+
+    if (!streamEnd.hasPendingEvent()) {
+        streamEnd.cancel();
+
+        if (!streamEnd.hasPendingEvent()) {
+            if (isAsync) {
+                return asyncBlockedCode;
+            }
+
+            const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
+            if (!taskMeta) {
+                throw new Error('missing current task metadata while cancelling a stream copy');
+            }
+            const task = taskMeta.task;
+            if (!task) {
+                throw new Error('missing task while cancelling a stream copy');
+            }
+            return task
+                .suspendUntil({
+                    readyFn: () => streamEnd.hasPendingEvent(),
+                })
+                .then(finishCancel);
+        }
+    }
+
+    return finishCancel();
 }
 
 export function streamCancelRead(
@@ -303,70 +305,7 @@ export function streamCancelRead(
     ctx: StreamOperationOptions,
     streamEndWaitableIdx: number,
 ): number | Promise<number> {
-    debugLog('[streamCancelRead()] args', { ctx, streamEndWaitableIdx });
-    const { streamTableIdx, isAsync, componentIdx } = ctx;
-
-    const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
-    if (!cstate.mayLeave) {
-        throw new Error('component instance is not marked as may leave');
-    }
-
-    const streamEnd = getStreamEnd(_context.ends, { streamEndWaitableIdx, tableIdx: streamTableIdx });
-    if (!streamEnd) {
-        throw new _context.RuntimeError('missing stream end with idx [' + streamEndWaitableIdx + ']');
-    }
-    if (!(streamEnd instanceof _context.StreamEnd)) {
-        throw new Error('invalid stream end, expected value of type [StreamReadableEnd]');
-    }
-
-    if (!streamEnd.isCopying()) {
-        throw new _context.RuntimeError('stream end is not copying, cannot cancel');
-    }
-
-    streamEnd.setCopyState(_context.StreamEnd.CopyState.CANCELLING_COPY);
-
-    const finishCancel = () => {
-        const event = streamEnd.getPendingEvent()!;
-        const { code, payload0: index, payload1: payload } = event;
-        if (streamEnd.isCopying()) {
-            throw new Error(`stream end (idx [${streamEndWaitableIdx}]) is still in copying state`);
-        }
-        if (code !== _context.events.STREAM_READ) {
-            throw new Error(`unexpected event code [${code}], expected [_context.events.STREAM_READ]`);
-        }
-        if (index !== streamEnd.waitableIdx()) {
-            throw new Error('event index does not match stream end');
-        }
-
-        debugLog('[streamCancelRead()] successful cancel', { ctx, streamEndWaitableIdx, streamEnd, event });
-        return payload;
-    };
-
-    if (!streamEnd.hasPendingEvent()) {
-        streamEnd.cancel();
-
-        if (!streamEnd.hasPendingEvent()) {
-            if (isAsync) {
-                return asyncBlockedCode;
-            }
-
-            const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
-            if (!taskMeta) {
-                throw new Error('missing current task metadata while doing stream transfer');
-            }
-            const task = taskMeta.task;
-            if (!task) {
-                throw new Error('missing task while doing stream transfer');
-            }
-            return task
-                .suspendUntil({
-                    readyFn: () => streamEnd.hasPendingEvent(),
-                })
-                .then(finishCancel);
-        }
-    }
-
-    return finishCancel();
+    return streamCancel(_context, READABLE, ctx, streamEndWaitableIdx);
 }
 
 export function streamCancelWrite(
@@ -374,70 +313,40 @@ export function streamCancelWrite(
     ctx: StreamOperationOptions,
     streamEndWaitableIdx: number,
 ): number | Promise<number> {
-    debugLog('[streamCancelWrite()] args', { ctx, streamEndWaitableIdx });
-    const { streamTableIdx, isAsync, componentIdx } = ctx;
+    return streamCancel(_context, WRITABLE, ctx, streamEndWaitableIdx);
+}
 
-    const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
-    if (!cstate.mayLeave) {
-        throw new Error('component instance is not marked as may leave');
+function streamDrop(
+    _context: StreamDropReadableContext | StreamDropWritableContext,
+    direction: StreamDirection,
+    ctx: StreamOperationOptions,
+    streamEndWaitableIdx: number,
+): void {
+    debugLog(`[${direction.drop}()] args`, { ctx, streamEndWaitableIdx });
+    const { streamTableIdx, componentIdx } = ctx;
+
+    const task = getCurrentTask(_context.taskLookup, componentIdx);
+    if (!task) {
+        throw new Error('invalid/missing async task');
     }
 
-    const streamEnd = getStreamEnd(_context.ends, { streamEndWaitableIdx, tableIdx: streamTableIdx });
-    if (!streamEnd) {
-        throw new _context.RuntimeError('missing stream end with idx [' + streamEndWaitableIdx + ']');
-    }
+    const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
     if (!(streamEnd instanceof _context.StreamEnd)) {
-        throw new Error('invalid stream end, expected value of type [StreamWritableEnd]');
+        throw new _context.RuntimeError(`invalid stream end class, expected [${direction.end}]`);
     }
 
-    if (!streamEnd.isCopying()) {
-        throw new _context.RuntimeError('stream end is not copying, cannot cancel');
+    if (streamEnd.isCopying()) {
+        throw new _context.RuntimeError(direction.busyDrop);
     }
 
-    streamEnd.setCopyState(_context.StreamEnd.CopyState.CANCELLING_COPY);
-
-    const finishCancel = () => {
-        const event = streamEnd.getPendingEvent()!;
-        const { code, payload0: index, payload1: payload } = event;
-        if (streamEnd.isCopying()) {
-            throw new Error(`stream end (idx [${streamEndWaitableIdx}]) is still in copying state`);
-        }
-        if (code !== _context.events.STREAM_WRITE) {
-            throw new Error(`unexpected event code [${code}], expected [_context.events.STREAM_WRITE]`);
-        }
-        if (index !== streamEnd.waitableIdx()) {
-            throw new Error('event index does not match stream end');
-        }
-
-        debugLog('[streamCancelWrite()] successful cancel', { ctx, streamEndWaitableIdx, streamEnd, event });
-        return payload;
-    };
-
-    if (!streamEnd.hasPendingEvent()) {
-        streamEnd.cancel();
-
-        if (!streamEnd.hasPendingEvent()) {
-            if (isAsync) {
-                return asyncBlockedCode;
-            }
-
-            const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
-            if (!taskMeta) {
-                throw new Error('missing current task metadata while doing stream transfer');
-            }
-            const task = taskMeta.task;
-            if (!task) {
-                throw new Error('missing task while doing stream transfer');
-            }
-            return task
-                .suspendUntil({
-                    readyFn: () => streamEnd.hasPendingEvent(),
-                })
-                .then(finishCancel);
-        }
+    const removedStreamEnd = removeStreamEndFromTable(_context.ends, {
+        tableIdx: streamTableIdx,
+        streamWaitableIdx: streamEndWaitableIdx,
+    });
+    if (removedStreamEnd !== streamEnd) {
+        throw new Error('removed stream end does not match validated stream end');
     }
-
-    return finishCancel();
+    streamEnd.drop();
 }
 
 export function streamDropReadable(
@@ -445,39 +354,7 @@ export function streamDropReadable(
     ctx: StreamOperationOptions,
     streamEndWaitableIdx: number,
 ): void {
-    debugLog('[streamDropReadable()] args', { ctx, streamEndWaitableIdx });
-    const { streamTableIdx, componentIdx } = ctx;
-
-    const task = getCurrentTask(_context.taskLookup, componentIdx);
-    if (!task) {
-        throw new Error('invalid/missing async task');
-    }
-
-    const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
-    if (!cstate) {
-        throw new Error(`missing component state for component idx [${componentIdx}]`);
-    }
-
-    const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
-    if (!streamEnd) {
-        throw new Error(
-            `missing stream (waitable [${streamEndWaitableIdx}], table [${streamTableIdx}], component [${componentIdx}])`,
-        );
-    }
-
-    if (!(streamEnd instanceof _context.StreamEnd)) {
-        throw new _context.RuntimeError('invalid stream end class, expected [StreamReadableEnd]');
-    }
-
-    if (streamEnd.isCopying()) {
-        throw new _context.RuntimeError('cannot remove busy stream');
-    }
-
-    const removedStreamEnd = deleteStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
-    if (removedStreamEnd !== streamEnd) {
-        throw new Error('removed stream end does not match validated stream end');
-    }
-    streamEnd.drop();
+    streamDrop(_context, READABLE, ctx, streamEndWaitableIdx);
 }
 
 export function streamDropWritable(
@@ -485,39 +362,7 @@ export function streamDropWritable(
     ctx: StreamOperationOptions,
     streamEndWaitableIdx: number,
 ): void {
-    debugLog('[streamDropWritable()] args', { ctx, streamEndWaitableIdx });
-    const { streamTableIdx, componentIdx } = ctx;
-
-    const task = getCurrentTask(_context.taskLookup, componentIdx);
-    if (!task) {
-        throw new Error('invalid/missing async task');
-    }
-
-    const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
-    if (!cstate) {
-        throw new Error(`missing component state for component idx [${componentIdx}]`);
-    }
-
-    const streamEnd = getStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
-    if (!streamEnd) {
-        throw new Error(
-            `missing stream (waitable [${streamEndWaitableIdx}], table [${streamTableIdx}], component [${componentIdx}])`,
-        );
-    }
-
-    if (!(streamEnd instanceof _context.StreamEnd)) {
-        throw new _context.RuntimeError('invalid stream end class, expected [StreamWritableEnd]');
-    }
-
-    if (streamEnd.isCopying()) {
-        throw new _context.RuntimeError('cannot drop busy stream');
-    }
-
-    const removedStreamEnd = deleteStreamEnd(_context.ends, { tableIdx: streamTableIdx, streamEndWaitableIdx });
-    if (removedStreamEnd !== streamEnd) {
-        throw new Error('removed stream end does not match validated stream end');
-    }
-    streamEnd.drop();
+    streamDrop(_context, WRITABLE, ctx, streamEndWaitableIdx);
 }
 
 export function streamTransfer(
