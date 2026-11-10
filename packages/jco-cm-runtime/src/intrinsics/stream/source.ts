@@ -1,5 +1,5 @@
-import type { StreamLowerableContext, StreamSourceContext, StreamReadFn } from '../runtime.js';
-import { disposeHostValue } from './core.js';
+import type { StreamLowerableContext, StreamSourceContext, StreamReadFn } from '../../runtime.js';
+import { disposeHostValue } from '../core.js';
 
 export function isStreamLowerableObject(context: StreamLowerableContext, obj: unknown): boolean {
     if (obj === null || typeof obj !== 'object') {

@@ -1,5 +1,5 @@
 import type { SubtaskDropContext, AsyncTaskModule, SubtaskCancelContext } from '../../runtime.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { getCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';

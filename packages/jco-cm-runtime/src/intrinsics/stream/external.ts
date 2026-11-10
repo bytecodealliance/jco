@@ -3,8 +3,8 @@ import type {
     ExternalStreamConstructor,
     ExternalStreamOptions,
     StreamReadOptions,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
 export function initializeExternalStreamClass(_context: ExternalStreamClassContext): ExternalStreamConstructor {
     class Stream {
         [key: symbol]: unknown;

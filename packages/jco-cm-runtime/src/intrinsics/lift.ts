@@ -22,9 +22,9 @@ import type {
     LocalErrorContext,
     LiftFlagsContext,
 } from '../runtime.js';
-import { getStreamEnd } from './stream-state.js';
-import { getFutureEnd } from './future-state.js';
-import { debugLog } from './core-debug.js';
+import { getStreamEnd } from './stream/state.js';
+import { getFutureEnd } from './future/state.js';
+import { debugLog } from './core/debug.js';
 import { compactUtf16Decode } from './string.js';
 import { i32ToChar } from './conversion.js';
 import { getOrCreateAsyncState } from './component.js';

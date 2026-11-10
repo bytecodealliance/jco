@@ -4,9 +4,9 @@ import type {
     StreamElementMetadata,
     StreamEndOptions,
     StreamInnerCopyOptions,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import type { StreamEndSuperclass } from './stream-inheritance.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import type { StreamEndSuperclass } from './inheritance.js';
 export function initializeStreamWritableEndClass(_context: StreamEndpointClassContext): StreamWritableEndConstructor {
     const StreamEnd: StreamEndSuperclass = _context.StreamEnd;
 

@@ -6,8 +6,8 @@ import type {
     FutureElementMetadata,
     FutureReadableEnd,
     FutureWritableEnd,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
 
 /** Create future pairs using the selected readable and writable constructors. */
 export function initializeInternalFutureClass(_context: InternalFutureClassContext): InternalFutureConstructor {

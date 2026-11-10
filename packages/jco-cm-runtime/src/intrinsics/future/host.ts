@@ -5,10 +5,10 @@ import type {
     FutureValue,
     TaskLiftFn,
     TaskLowerFn,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { getOrCreateAsyncState } from './component.js';
-import { getFutureEnd } from './future-state.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { getOrCreateAsyncState } from '../component.js';
+import { getFutureEnd } from './state.js';
 
 /** Create host wrappers that look up endpoints in the selected future tables. */
 export function initializeHostFutureClass(_context: HostFutureClassContext): HostFutureConstructor {

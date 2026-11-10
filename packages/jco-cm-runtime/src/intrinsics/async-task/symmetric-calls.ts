@@ -4,7 +4,7 @@ import type {
     TaskMutableRegister,
     TaskSymmetricExitContext,
 } from '../../runtime.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
 import { getCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';

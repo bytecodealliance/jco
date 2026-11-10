@@ -12,12 +12,12 @@ import type {
     StreamDropReadableContext,
     StreamDropWritableContext,
     StreamEndLookupContext,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { getOrCreateAsyncState } from './component.js';
-import { getCurrentTask } from './async-task/task-operations.js';
-import { asyncBlockedCode } from './async-task.js';
-import { createStream, getStreamEnd, removeStreamEndFromTable, addStreamEndToTable } from './stream-state.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { getOrCreateAsyncState } from '../component.js';
+import { getCurrentTask } from '../async-task/task-operations.js';
+import { asyncBlockedCode } from '../async-task.js';
+import { createStream, getStreamEnd, removeStreamEndFromTable, addStreamEndToTable } from './state.js';
 
 export function streamNew(_context: StreamNewContext, ctx: StreamNewOptions): bigint {
     debugLog('[streamNew()] args', { ctx });

@@ -4,8 +4,8 @@ import type {
     FutureValueBox,
     FutureValueResolve,
     FutureValueReject,
-} from '../runtime.js';
-import { disposeHostValue } from './core.js';
+} from '../../runtime.js';
+import { disposeHostValue } from '../core.js';
 
 /** Keep each store's constructor and private brand together. */
 export function initializeFutureValueClass(disposeSymbol: symbol): FutureValueConstructor {

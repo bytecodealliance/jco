@@ -10,7 +10,7 @@ import type {
     ManagedBufferConstructor,
     BufferManagerConstructor,
 } from '../runtime.js';
-import { debugLog } from './core-debug.js';
+import { debugLog } from './core/debug.js';
 import { tableFlag, tableRemove, tableCreateOwn } from './resource.js';
 
 export function initializeManagedBufferClass(context: ResourceBufferContext): ManagedBufferConstructor {

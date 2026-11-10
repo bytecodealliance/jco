@@ -7,7 +7,7 @@ import type {
 } from '../../runtime.js';
 import { getOrCreateAsyncState, recordTrap } from '../component.js';
 import { withCurrentTaskMetaAsync } from '../task-context.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 
 const THREAD_NOT_STARTED = 'not-started';
 const THREAD_RUNNING = 'running';

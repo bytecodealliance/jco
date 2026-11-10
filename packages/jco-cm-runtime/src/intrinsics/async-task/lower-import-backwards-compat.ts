@@ -1,15 +1,15 @@
-import { isPromiseLike } from '../core-promises.js';
+import { isPromiseLike } from '../core/promises.js';
 import type {
     TaskCompatImportRuntimeContext,
     TaskLowerImportOptions,
     AsyncTaskModule,
     AsyncTask as AsyncTaskType,
 } from '../../runtime.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
 import { getCurrentTaskMeta, clearCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
-import { promiseWithResolvers } from '../core-promises.js';
+import { promiseWithResolvers } from '../core/promises.js';
 
 // LowerImportBackwardsCompat
 export function lowerImportBackwardsCompat(

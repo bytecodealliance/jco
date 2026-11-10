@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { initializeFutureValueClass } from '../src/intrinsics/future-value.js';
+import { initializeFutureValueClass } from '../src/intrinsics/future/value.js';
 import type { FutureValue } from '../src/runtime.js';
 
 // Awaited<T> recursively unwraps thenables, while this ABI deliberately exposes one layer.

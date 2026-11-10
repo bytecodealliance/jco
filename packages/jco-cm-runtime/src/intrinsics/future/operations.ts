@@ -13,13 +13,13 @@ import type {
     FutureHostInjectContext,
     FutureHostInjectOptions,
     FutureHostInjectFn,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { getErrorPayload, disposeHostValue } from './core.js';
-import { getOrCreateAsyncState, trackHostOperation } from './component.js';
-import { getCurrentTask } from './async-task/task-operations.js';
-import { asyncBlockedCode } from './async-task.js';
-import { createFuture, getFutureEnd, removeFutureEndFromTable, addFutureEndToTable } from './future-state.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { getErrorPayload, disposeHostValue } from '../core.js';
+import { getOrCreateAsyncState, trackHostOperation } from '../component.js';
+import { getCurrentTask } from '../async-task/task-operations.js';
+import { asyncBlockedCode } from '../async-task.js';
+import { createFuture, getFutureEnd, removeFutureEndFromTable, addFutureEndToTable } from './state.js';
 
 /** Create a future and pack its readable and writable indices into one i64. */
 export function futureNew(_context: FutureNewContext, ctx: FutureNewOptions): bigint {

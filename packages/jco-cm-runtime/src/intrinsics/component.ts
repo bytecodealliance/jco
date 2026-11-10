@@ -1,4 +1,4 @@
-import { isPromiseLike } from './core-promises.js';
+import { isPromiseLike } from './core/promises.js';
 import type {
     ComponentModule,
     ComponentDeadlockDetail,
@@ -19,8 +19,8 @@ import type {
     ComponentTask,
     RepTable as RepTableType,
 } from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { promiseWithResolvers } from './core-promises.js';
+import { debugLog } from './core/debug.js';
+import { promiseWithResolvers } from './core/promises.js';
 import { getHandleIndexSpace } from './resource.js';
 
 export const initializeInstanceFlags: ComponentModule['initializeInstanceFlags'] = () => new Map();

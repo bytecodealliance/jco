@@ -1,6 +1,6 @@
 import type {
-    FutureEndpointClassContext,
-    FutureWritableEndConstructor,
+    FutureReadableClassContext,
+    FutureReadableEndConstructor,
     FutureEndpointOptions,
     FutureHostInjectFn,
     FutureElementMetadata,
@@ -8,20 +8,17 @@ import type {
     FutureCopyOptions,
     FutureGuestCopyOptions,
     FutureHostReadOptions,
-    FutureHostWriteOptions,
-    FutureValueBox,
-} from '../runtime.js';
-import type { FutureEndSuperclass } from './future-inheritance.js';
-import { debugLog } from './core-debug.js';
+} from '../../runtime.js';
+import type { FutureEndSuperclass } from './inheritance.js';
+import { debugLog } from '../core/debug.js';
+import { getOrCreateAsyncState } from '../component.js';
 
-/** Create writable endpoints sharing the selected buffers and constructor identities. */
-export function initializeFutureWritableEndClass(_context: FutureEndpointClassContext): FutureWritableEndConstructor {
+/** Create readable endpoints sharing the selected buffers, state, and constructor identities. */
+export function initializeFutureReadableEndClass(_context: FutureReadableClassContext): FutureReadableEndConstructor {
     const FutureEnd: FutureEndSuperclass = _context.FutureEnd;
     const { FutureValue } = _context;
 
-    class FutureWritableEnd extends FutureEnd {
-        // Only the readable endpoint implements this hook; promise() is guarded by endpoint direction.
-        declare hostRead: (args: FutureHostReadOptions) => Promise<FutureValueBox>;
+    class FutureReadableEnd extends FutureEnd {
         #globalFutureMapRep?: number;
         #futureTableIdx: number;
         #isHostOwned?: boolean;
@@ -33,7 +30,7 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
         target: unknown;
 
         constructor(args: FutureEndpointOptions) {
-            debugLog('[FutureWritableEnd#constructor()] args', args);
+            debugLog('[FutureReadableEnd#constructor()] args', args);
             super(args);
 
             if (!args.elemMeta) {
@@ -51,10 +48,10 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
         }
 
         isReadable() {
-            return false;
+            return true;
         }
         isWritable() {
-            return true;
+            return false;
         }
 
         setTarget(tgt: unknown) {
@@ -84,7 +81,7 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
         setWaitableIdx(idx: number) {
             const w = this.getWaitable();
             w.setIdx(idx);
-            w.setTarget(`waitable for FutureWritableEnd (waitable [${idx}])`);
+            w.setTarget(`waitable for FutureReadableEnd (waitable [${idx}])`);
         }
 
         handle() {
@@ -108,7 +105,10 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
             // NOTE: we return a "thenable" here to ensure that simply lifting the future does
             // not trigger a host read.
 
-            this.#promise = new FutureValue(() => this.hostRead({ stringEncoding: 'utf8' }));
+            this.#promise = new FutureValue(
+                () => this.hostRead({ stringEncoding: 'utf8' }),
+                () => this.hostDrop(),
+            );
             return this.#promise;
         }
 
@@ -117,23 +117,17 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
             this.resetAndNotifyPending(FutureEnd.CopyResult.CANCELLED);
         }
 
-        _write(args: FutureCopyOptions) {
+        _read(args: FutureCopyOptions) {
             const { buffer, onCopyDoneFn, componentIdx } = args;
             if (!buffer) {
-                throw new Error('missing buffer for future write');
-            }
-
-            if (buffer.remaining() !== 1) {
-                throw new Error('invalid remaining capacity for pending buffer');
+                throw new Error('missing buffer for future read');
             }
 
             if (this.isDropped()) {
-                throw new Error('cannot write to dropped future');
+                throw new Error('cannot read from dropped future');
             }
-
-            if (this.isPeerDropped()) {
-                onCopyDoneFn(FutureEnd.CopyResult.DROPPED);
-                return;
+            if (buffer.remaining() !== 1) {
+                throw new Error(`invalid remaining values in buffer (expecetd one, received [${buffer.remaining()}]`);
             }
 
             const meta = this.getPendingBufferMeta();
@@ -144,7 +138,7 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
                 this.setPendingBufferMeta({
                     buffer,
                     componentIdx,
-                    isWrite: true,
+                    isWrite: false,
                     onCopyDoneFn,
                 });
                 return;
@@ -159,13 +153,14 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
             }
 
             const transferResources = buffer.componentIdx() !== -1 && meta.buffer.componentIdx() !== -1;
-            meta.buffer.write(buffer.read(1, { transferResources }), { transferResources });
+            buffer.write(meta.buffer.read(1, { transferResources }), { transferResources });
             this.resetAndNotifyPending(FutureEnd.CopyResult.COMPLETED);
             onCopyDoneFn(FutureEnd.CopyResult.COMPLETED);
         }
 
-        guestWrite(args: FutureGuestCopyOptions) {
-            debugLog('[FutureWritableEnd#guestWrite()] args', args);
+        // TODO: rename, guestRead also handles host reads (when data is present)...
+        guestRead(args: FutureGuestCopyOptions) {
+            debugLog('[FutureReadableEnd#guestRead()] args', args);
             const { componentIdx, stringEncoding, memory, realloc, ptr, data } = args;
 
             const elemMeta = {
@@ -208,42 +203,65 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
                 } else {
                     this.setCopyState(FutureEnd.CopyState.IDLE);
                 }
-                return { code: _context.events.FUTURE_WRITE, payload0: this.waitableIdx()!, payload1: res };
+                return { code: _context.events.FUTURE_READ, payload0: this.waitableIdx()!, payload1: res };
             };
 
+            const isReadableEnd = this.isReadable();
             const onCopyDoneFn = (res: number) => {
+                if (res === FutureEnd.CopyResult.DROPPED && isReadableEnd) {
+                    throw new Error('cannot read from a dropped future');
+                }
                 this.setPendingEvent(() => futureEvent(res));
             };
 
-            this._write({
+            // Before performing this read, if we're dealing with a host-controlled
+            // future, start injecting the write. The injection may depend on sibling
+            // guest work running, so cleanup is attached without awaiting here; the
+            // canonical read must be able to return BLOCKED first.
+            let injectedWritePromise;
+            if (this.#hostInjectFn) {
+                injectedWritePromise = this.#hostInjectFn({ count: 1 });
+            }
+
+            this._read({
                 buffer,
                 onCopyDoneFn,
                 componentIdx,
             });
 
+            if (injectedWritePromise) {
+                injectedWritePromise.then(
+                    (cleanupFn) => cleanupFn(),
+                    (err) =>
+                        this.setPendingEvent(() => {
+                            throw err;
+                        }),
+                );
+            }
+
             return { buffer };
         }
 
-        async hostWrite(args: FutureHostWriteOptions) {
-            const { stringEncoding, value, getReallocFn } = args;
+        async hostRead(args: FutureHostReadOptions) {
+            if (_context.storeTrap.stopped) {
+                throw _context.storeTrap.error;
+            }
+            const { stringEncoding } = args;
 
-            const { buffer } = await this.guestWrite({
+            const { buffer } = await this.guestRead({
                 stringEncoding,
-                getReallocFn,
-                // TODO: support sync host writes
                 isAsync: true,
-                data: [value],
+                data: [],
                 componentIdx: -1,
             });
 
-            void buffer;
             if (!this.hasPendingEvent()) {
                 this.setCopyState(FutureEnd.CopyState.ASYNC_COPYING);
 
                 // Wait for the write to complete
                 await new Promise<void>((resolve) => {
                     let waitInterval = setInterval(() => {
-                        if (!this.hasPendingEvent()) {
+                        if (!this.hasPendingEvent() && !this.isDropped()) {
                             return;
                         }
                         clearInterval(waitInterval);
@@ -252,26 +270,56 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
                 });
 
                 if (!this.hasPendingEvent()) {
-                    throw new Error('missing pending event after blocked future write');
+                    throw new Error('future dropped while being read');
                 }
             }
 
             const { code, payload0: index, payload1: payload } = this.getPendingEvent()!;
-            if (code !== _context.events.FUTURE_WRITE) {
-                throw new Error(`mismatched event code [${code}] for host future write`);
+
+            if (code !== _context.events.FUTURE_READ) {
+                throw new Error(`mismatched event code [${code}] for host future read`);
             }
             if (index !== this.waitableIdx()) {
                 throw new Error('mismatched future end index');
             }
-            // Whether the value was delivered to the reader (rather than the reader being dropped)
-            return payload === FutureEnd.CopyResult.COMPLETED;
+
+            if (payload === FutureEnd.CopyResult.DROPPED && _context.storeTrap.stopped) {
+                throw _context.storeTrap.error;
+            }
+
+            const vs = buffer.read(1);
+            if (vs.length !== 1) {
+                throw new Error('multiple results from future');
+            }
+
+            // The copy event is published from inside the guest's current
+            // callback slice.
+            //
+            // Here we avoid exposing the lifted value to host code
+            // until that slice has returned and released the instance lock, because
+            // the consumer could immediately make a synchronous call on the lifted value
+            // (e.g. if it's a resource)
+            const componentIdx = this.getWaitable().componentIdx();
+            if (componentIdx !== -1) {
+                await getOrCreateAsyncState(_context.lookup, componentIdx!).waitForExclusiveRelease();
+            }
+
+            return { value: vs[0] };
+        }
+
+        /** A host may discard its pending read without trapping the guest. */
+        hostDrop() {
+            if (this.isDropped()) {
+                return;
+            }
+            const meta = this.getPendingBufferMeta();
+            if (meta.buffer && !meta.isWrite) {
+                this.resetPendingBufferMeta();
+            }
+            this.drop();
         }
 
         drop() {
-            if (this.isWritable() && !this.isDoneState()) {
-                throw new _context.RuntimeError('cannot drop future write end without first writing a value');
-            }
-
             super.drop();
             // Let a host-provided future know if its value was discarded
             this.#hostInjectFn?.drop?.();
@@ -286,5 +334,5 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
         }
     }
 
-    return FutureWritableEnd;
+    return FutureReadableEnd;
 }

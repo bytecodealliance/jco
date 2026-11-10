@@ -12,11 +12,11 @@ import type {
     ComponentWaitable,
     StreamEvent,
     StreamCleanup,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { trackHostOperation } from './component.js';
-import { getCurrentTask } from './async-task/task-operations.js';
-import { asyncBlockedCode } from './async-task.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { trackHostOperation } from '../component.js';
+import { getCurrentTask } from '../async-task/task-operations.js';
+import { asyncBlockedCode } from '../async-task.js';
 
 /**
  * Everything both ends of a stream share: table identity, copy state, the buffer

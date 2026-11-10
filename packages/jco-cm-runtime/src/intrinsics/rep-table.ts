@@ -1,5 +1,5 @@
 import type { HandleIndexSpace, RepTableConstructor, TrapContext } from '../runtime.js';
-import { debugLog } from './core-debug.js';
+import { debugLog } from './core/debug.js';
 
 export function initializeRepTableClass(context: TrapContext): RepTableConstructor {
     const { RuntimeError } = context;

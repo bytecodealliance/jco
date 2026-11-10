@@ -13,7 +13,7 @@ import type {
     TaskIdentity,
 } from '../../runtime.js';
 import { getCurrentTaskMeta, withCurrentTaskMeta } from '../task-context.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 
 // GetCurrentTask

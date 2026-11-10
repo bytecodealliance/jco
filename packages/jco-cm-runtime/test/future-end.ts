@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { initializeFutureEndClass } from '../src/intrinsics/future-end.js';
+import { initializeFutureEndClass } from '../src/intrinsics/future/end.js';
 import { initializeWaitableClass } from '../src/intrinsics/waitable.js';
 import { initializeAsyncEventCodes } from '../src/intrinsics/core.js';
 import { createTestIntrinsics } from './core-test-helpers.js';

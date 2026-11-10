@@ -1,6 +1,6 @@
 // Test-only composition of actual selected owners and operation-specific views.
 import * as operations from '../src/intrinsics/async-task.js';
-import { initializeFutureValueClass } from '../src/intrinsics/future-value.js';
+import { initializeFutureValueClass } from '../src/intrinsics/future/value.js';
 import { initializeResourceScopeCounter, callDestructor } from '../src/intrinsics/resource.js';
 import type { AsyncTaskClassContext, TaskMutableRegister, ResourceDestructorArgs } from '../src/runtime.js';
 import { create as createWaitable } from './waitable-test-helpers.js';

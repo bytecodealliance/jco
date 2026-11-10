@@ -12,9 +12,9 @@ import type {
     StreamTableContext,
     StreamEndInsertion,
     StreamEndRemoval,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { getOrCreateAsyncState } from './component.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { getOrCreateAsyncState } from '../component.js';
 export const initializeStreams = (RepTable: RepTableConstructor): StreamGlobalMap =>
     new RepTable({ target: 'global stream map' });
 export const initializeStreamTables = (): StreamTables => ({});

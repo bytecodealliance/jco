@@ -23,12 +23,12 @@ import type {
     HostFuture,
     HostStream,
 } from '../runtime.js';
-import { createStream } from './stream-state.js';
-import { isStreamLowerableObject, genReadFnFromLowerableStream } from './stream-source.js';
-import { genStreamHostInjectFn } from './stream-injection.js';
-import { createFuture } from './future-state.js';
-import { isFutureLowerableObject, genFutureHostInjectFn } from './future-operations.js';
-import { debugLog } from './core-debug.js';
+import { createStream } from './stream/state.js';
+import { isStreamLowerableObject, genReadFnFromLowerableStream } from './stream/source.js';
+import { genStreamHostInjectFn } from './stream/injection.js';
+import { createFuture } from './future/state.js';
+import { isFutureLowerableObject, genFutureHostInjectFn } from './future/operations.js';
+import { debugLog } from './core/debug.js';
 import {
     isInt8,
     isUint8,
@@ -39,7 +39,7 @@ import {
     isInt64,
     isUint64,
     invalidNumericPrimitive,
-} from './conversion-numeric.js';
+} from './conversion/numeric.js';
 import { utf8Encode, utf16Encode, compactUtf16Encode } from './string.js';
 import { getOrCreateAsyncState } from './component.js';
 import { errCtxGetLocalTable, errCtxGlobalRefCountAdd, errCtxCreateLocalHandle } from './error-context.js';

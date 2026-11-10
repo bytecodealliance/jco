@@ -1,6 +1,6 @@
-import { isPromiseLike } from './core-promises.js';
+import { isPromiseLike } from './core/promises.js';
 import type { CoreModule, TaskMeta, TaskRegisters } from '../runtime.js';
-import { debugLog } from './core-debug.js';
+import { debugLog } from './core/debug.js';
 
 export const initializeTaskRegisters: CoreModule['initializeTaskRegisters'] = () => ({});
 

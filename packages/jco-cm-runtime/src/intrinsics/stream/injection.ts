@@ -3,7 +3,7 @@ import type {
     StreamHostInjectOptions,
     StreamHostInjectFn,
     StreamReadableEndConstructor,
-} from '../runtime.js';
+} from '../../runtime.js';
 
 export function genStreamHostInjectFn(
     _context: StreamHostInjectContext,

@@ -12,9 +12,9 @@ import type {
     FutureEndRemoval,
     FuturePayloadEnd,
     ComponentAsyncState,
-} from '../runtime.js';
-import { debugLog } from './core-debug.js';
-import { getOrCreateAsyncState } from './component.js';
+} from '../../runtime.js';
+import { debugLog } from '../core/debug.js';
+import { getOrCreateAsyncState } from '../component.js';
 export const initializeFutures = (RepTable: RepTableConstructor): FutureGlobalMap =>
     new RepTable({ target: 'global future map' });
 export const initializeFutureTables = (): FutureTables => ({});

@@ -6,7 +6,7 @@ import { stringDecoders } from './string-helpers.js';
 import { initializeEndianness } from '../src/intrinsics/core.js';
 import { create as createErrorContext } from './error-context-helpers.js';
 import { create as createFuture } from './future-helpers.js';
-import { createFuture as createFuturePair } from '../src/intrinsics/future-state.js';
+import { createFuture as createFuturePair } from '../src/intrinsics/future/state.js';
 import type { TaskLiftContext, TaskLiftFn, LiftVariantMeta, LiftFutureContext } from '../src/runtime.js';
 
 test.concurrent.each([

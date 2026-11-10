@@ -5,7 +5,7 @@ import type {
     AsyncTaskModule,
     WaitableEvent,
 } from '../../runtime.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { typeCheckValidI32, isThenable } from './helpers.js';
 import { unpackValidatedCallbackResult } from './callback.js';
 import { getOrCreateAsyncState } from '../component.js';

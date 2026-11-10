@@ -1,9 +1,9 @@
 import type { TaskLowerImportRuntimeContext, TaskLowerImportOptions, AsyncTaskModule } from '../../runtime.js';
-import { debugLog } from '../core-debug.js';
+import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
 import { getCurrentTaskMeta, withCurrentTaskMetaAsync, withCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';
-import { promiseWithResolvers } from '../core-promises.js';
+import { promiseWithResolvers } from '../core/promises.js';
 
 // LowerImport
 export function lowerImport(
