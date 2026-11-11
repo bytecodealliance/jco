@@ -67,6 +67,35 @@ task-named variants remain available for exhaustive matches. This feature is
 independent of `external-runtime`; it controls the public Rust names and does
 not change the generated JavaScript.
 
+### Bundling the jco runtime
+
+The opt-in `embedded-cm-runtime` Cargo feature replaces the inline intrinsics
+with jco's Component Model runtime, `@bytecodealliance/jco-cm-runtime`.
+With the feature enabled, and unless `cm_runtime_es_module` selects an external provider,
+`transpile` and `transpile_with_config` bundle that runtime into the bindings:
+
+- the bindings import no runtime, so consumers install nothing extra;
+- only the runtime code the component reaches is kept;
+- other imports, such as the component's own, stay external.
+
+Bundling uses Oxc directly in Rust, so it also runs inside the bindgen Wasm
+component used by jco's JavaScript API and CLI, which enables the feature.
+The feature brings in the Oxc dependencies and the runtime's source text;
+without it the crate generates inline intrinsics as before.
+Selecting an external provider works the same way with or without it.
+
+The crate ships the runtime it bundles under `runtime/`:
+
+- `runtime-all.js` holds every runtime module in one file;
+- `runtime-export-map.tsv` maps each public export to its name in that file.
+
+Both are generated from `packages/jco-cm-runtime` and committed,
+so the crate builds without a JavaScript toolchain.
+After changing that package, regenerate them with
+`pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime`;
+`check:embedded-runtime` verifies that the committed files are current.
+Rolldown runs only for that step.
+
 # License
 
 This project is licensed under the Apache 2.0 license with the LLVM exception.

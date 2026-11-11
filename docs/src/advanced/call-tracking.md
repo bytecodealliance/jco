@@ -104,7 +104,7 @@ indefinitely. Tracking neither cancels a call nor prevents new calls. Whole-inst
 
 ## Runtime compatibility and cost
 
-Tracking lives in generated binding glue and works with inline intrinsics and external
+Tracking lives in generated binding glue and works with the bundled runtime and external
 runtime providers. It reuses the existing task ancestry and idle-notification contracts;
 providers need no additional task methods, scheduler fields, modules, or feature flag.
 A provider that already correctly implements those lifecycle contracts can be used

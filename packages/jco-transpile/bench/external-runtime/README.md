@@ -1,6 +1,7 @@
 # Named runtime benchmarks
 
-These benchmarks compare inline intrinsics with named exports from the external runtime.
+These benchmarks compare bindings that bundle the runtime (`inline`) with bindings
+that import its named exports (`external`).
 Each run builds both modes from the same revision and fixtures.
 
 ## Running

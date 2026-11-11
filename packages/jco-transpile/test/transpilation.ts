@@ -9,6 +9,13 @@ export * from '../src/index.js';
 /** The workspace runtime, which `JCO_TEST_RUNTIME=external` selects. */
 export const defaultRuntimeUrl = new URL('../../jco-cm-runtime/dist/', import.meta.url);
 
+/**
+ * A runtime base for tests that assert on the text of generated bindings.
+ * Bindings that import their runtime are emitted exactly as generated, whereas
+ * bundling the runtime in reprints them.
+ */
+export const unlinkedRuntimeBase = defaultRuntimeUrl.href;
+
 const selected: { mode: string; base: string | undefined } = selectRuntime(env, defaultRuntimeUrl);
 
 /** The suite's runtime mode: `inline`, `external` or `custom`. */
@@ -20,7 +27,7 @@ export const externalRuntime = runtimeBase !== undefined;
 
 /**
  * Apply the suite's runtime mode without changing production defaults.
- * An explicit cmRuntimeEsModule (including undefined for inline-only codegen
+ * An explicit cmRuntimeEsModule (including undefined for bundled-runtime codegen
  * assertions) takes precedence. The selected base also resolves from isolated
  * temporary dirs.
  */

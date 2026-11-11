@@ -115,23 +115,23 @@ test.concurrent.each(['initializeWaitableClass', 'waitableSetPoll'])(
     },
 );
 
-test.concurrent.skipIf(!hasJspi).each([false, true])(
-    'generated waitable mismatch diagnostics (external=%s)',
-    async (external) => {
+test.concurrent.skipIf(!hasJspi)(
+    'generated waitable mismatch diagnostics',
+    // The probe names bindings that only unlinked bindings are sure to keep.
+    async () => {
         const dir = await getTmpDir();
         try {
             const { files } = await transpile(fixture, {
                 name: 'diagnostic',
-                cmRuntimeEsModule: external ? defaultRuntimeUrl.href : undefined,
+                cmRuntimeEsModule: defaultRuntimeUrl.href,
             });
-            const context = external ? '_jcoWaitableSetPollContext, ' : '';
             files['diagnostic.js'] = new TextEncoder().encode(
                 new TextDecoder().decode(files['diagnostic.js']) +
                     `
 export function testPollMismatch() {
  const previous = ASYNC_TASKS_BY_COMPONENT_IDX.get(0);
  ASYNC_TASKS_BY_COMPONENT_IDX.set(0, [{ id: 111n, componentIdx: 77, task: { id: () => 111n } }]);
- try { return waitableSetPoll(${context}{ componentIdx: 0 }, 1, 0); }
+ try { return waitableSetPoll(_jcoWaitableSetPollContext, { componentIdx: 0 }, 1, 0); }
  finally {
   if (previous === undefined) ASYNC_TASKS_BY_COMPONENT_IDX.delete(0);
   else ASYNC_TASKS_BY_COMPONENT_IDX.set(0, previous);

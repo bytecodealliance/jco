@@ -3,7 +3,7 @@
 Build the local transpiler and fixtures with the usual workspace build before
 running these suites.
 
-Run the tests with the default inline runtime:
+Run the tests with the default runtime, which the transpiler bundles into bindings:
 
 ```sh
 pnpm --filter @bytecodealliance/jco-transpile test
@@ -65,7 +65,7 @@ runtime, so they need it built in every mode.
 named by `JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE`. Use that module's `transpile` and `transpileBytes`
 exports in tests; `setupAsyncTest` uses them too. The normal mode is `inline`.
 Explicit `cmRuntimeEsModule` options override the suite selection, including
-`undefined` for assertions specifically about inline code generation.
+`undefined` for assertions specifically about bindings that bundle the runtime.
 
 Node tests use an absolute file URL so generated modules in temporary
 directories can resolve the provider. Browser tests serve a copy of the runtime

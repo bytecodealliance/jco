@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 
 import { assert, suite, test } from 'vitest';
 
-import { transpile, writeFiles } from '../transpilation.js';
+import { transpile, unlinkedRuntimeBase, writeFiles } from '../transpilation.js';
 import { EXTENDED_TEST_COMPONENTS_DIR } from '../common.js';
 import { getTmpDir } from '../helpers.js';
 
@@ -31,7 +31,10 @@ suite('jco issue 1887', () => {
         const outputDir = await getTmpDir();
 
         try {
-            const { files } = await transpile(componentPath, { name: 'out' });
+            const { files } = await transpile(componentPath, {
+                name: 'out',
+                cmRuntimeEsModule: unlinkedRuntimeBase,
+            });
             const source = new TextDecoder().decode(files['out.js']);
             assert.match(
                 source,

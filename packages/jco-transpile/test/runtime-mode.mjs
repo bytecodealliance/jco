@@ -39,7 +39,7 @@ export function resolveCustomRuntimeBase(base) {
 
 /**
  * Select the runtime a suite runs against from `JCO_TEST_RUNTIME`:
- * - `inline` (the default) renders intrinsics into generated bindings;
+ * - `inline` (the default) bundles the transpiler's own runtime into generated bindings;
  * - `external` imports them from the workspace runtime at `localRuntimeUrl`;
  * - `custom` imports them from the base named by `JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE`.
  */

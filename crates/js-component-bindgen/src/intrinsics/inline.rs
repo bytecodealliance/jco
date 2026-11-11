@@ -4,6 +4,9 @@ use super::runtime::{IntrinsicBinding, IntrinsicRuntime, Provides};
 use super::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 
+// TODO(breaking): remove this runtime and the inline `render` functions of every
+// intrinsic at the next major release, once the `embedded-cm-runtime` feature's
+// bundled runtime is the only source of intrinsics.
 #[derive(Debug, Default, Copy, Clone)]
 pub(crate) struct InlineRuntime;
 

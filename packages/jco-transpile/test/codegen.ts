@@ -6,7 +6,7 @@ import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { assert, describe, expect, suite, test } from 'vitest';
 
-import { transpile, transpileBytes, writeFiles } from './transpilation.js';
+import { transpile, transpileBytes, unlinkedRuntimeBase, writeFiles } from './transpilation.js';
 import { componentEmbed, componentNew, parse } from '../src/wasm-tools.js';
 
 import { COMPONENT_FIXTURES_DIR, LOCAL_TEST_COMPONENTS_DIR, getDefaultComponentFixtures } from './common.js';
@@ -88,7 +88,7 @@ suite(`Naming`, () => {
 
         const bindingsSource = new TextDecoder().decode(files['resource-naming.js']);
 
-        assert.isOk(bindingsSource.includes('class Thing$1{'));
+        assert.match(bindingsSource, /class Thing\$1\s*\{/);
         assert.isOk(bindingsSource.includes('Thing: Thing$1'));
     });
 
@@ -484,25 +484,21 @@ suite('Trap detection', () => {
 suite('--strict', () => {
     test.concurrent('does not add checks when disabled', async () => {
         const bytes = await readFile(join(COMPONENT_FIXTURES_DIR, 'adder.component.wasm'));
-        const { files } = await transpileBytes(bytes, { name: 'adder' });
+        const { files } = await transpileBytes(bytes, { name: 'adder', cmRuntimeEsModule: unlinkedRuntimeBase });
         const bindingsSource = new TextDecoder().decode(files['adder.js']);
-        assert.isFalse(
-            bindingsSource.includes("_requireValidNumericPrimitive('u32', val)"),
-            'numeric primitive check shoudl not be included',
-        );
+        assert.include(bindingsSource, 'const _jcoStrictNumericContext = { strict: false };');
     });
 
     test.concurrent('adds checks when enabled', async () => {
         const bytes = await readFile(join(COMPONENT_FIXTURES_DIR, 'adder.component.wasm'));
-        const { files } = await transpileBytes(bytes, { name: 'adder', strict: true, cmRuntimeEsModule: undefined });
+        const { files } = await transpileBytes(bytes, {
+            name: 'adder',
+            strict: true,
+            cmRuntimeEsModule: unlinkedRuntimeBase,
+        });
         const bindingsSource = new TextDecoder().decode(files['adder.js']);
-        // Somewhat brittle, but we're looking for a *specific* call in the body of `toUint32(val)` below:
-        assert.isOk(
-            bindingsSource.includes(
-                "_requireValidNumericPrimitive('u32', val)",
-                'numeric primitive check should be included',
-            ),
-        );
+        // The runtime's numeric conversions validate their operand when this context is strict.
+        assert.include(bindingsSource, 'const _jcoStrictNumericContext = { strict: true };');
     });
 
     // Regression test for https://github.com/bytecodealliance/jco/issues/402.

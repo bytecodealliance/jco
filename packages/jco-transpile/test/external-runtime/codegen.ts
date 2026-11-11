@@ -176,12 +176,15 @@ suite('external runtime codegen', () => {
         }
     });
 
-    test.concurrent('keeps inline output self-contained and transpilation independent of runtime installation', async () => {
+    test.concurrent('keeps default output self-contained and transpilation independent of runtime installation', async () => {
         const manifest = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
         assert.notProperty(manifest.dependencies, '@bytecodealliance/jco-cm-runtime');
         const { files } = await transpile(resourceFixture, { name: 'component', cmRuntimeEsModule: undefined });
         const source = new TextDecoder().decode(files['component.js']);
-        assert.include(source, 'function rscTableGet(table, handle)');
+        // The runtime is bundled in rather than imported.
+        assert.include(source, '__jcoEmbeddedRuntime$tableGet');
+        assert.notInclude(source, '@bytecodealliance/jco-cm-runtime');
+        assert.notMatch(source, /^import /m);
         assert.notInclude(source, '_jcoRuntime');
         const external = await transpile(resourceFixture, {
             name: 'component',

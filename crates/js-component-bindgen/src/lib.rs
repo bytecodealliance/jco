@@ -11,6 +11,8 @@ use wit_component::DecodedWasm;
 use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
 
 mod core;
+#[cfg(feature = "embedded-cm-runtime")]
+mod embedded_runtime;
 mod files;
 mod transpile_bindgen;
 mod ts_bindgen;
@@ -136,7 +138,9 @@ pub struct TranspileConfig {
     pub type_generation: TypeGenerationConfig,
     /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
-    /// Intrinsics are generated inline when this is `None` (the default).
+    /// Intrinsics are generated inline when this is `None` (the default),
+    /// unless the `embedded-cm-runtime` Cargo feature is enabled: the runtime
+    /// shipped with this crate is then bundled into the generated bindings.
     /// Requires the `external-runtime` Cargo feature.
     #[cfg(feature = "external-runtime")]
     pub cm_runtime_es_module: Option<String>,
@@ -212,6 +216,15 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     } = config;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
+    // TODO(breaking): bundle the runtime unconditionally at the next major release,
+    // and remove the inline intrinsics that it stands in for here.
+    // Without an external provider, bindings are generated against the runtime
+    // shipped with this crate, which is then bundled into them.
+    #[cfg(feature = "embedded-cm-runtime")]
+    let bundle_runtime = cm_runtime_es_module.is_none();
+    #[cfg(feature = "embedded-cm-runtime")]
+    let cm_runtime_es_module =
+        cm_runtime_es_module.or_else(|| Some(embedded_runtime::PACKAGE.to_string()));
     let name = opts.name.clone();
     let mut files = files::Files::default();
 
@@ -334,6 +347,17 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
     for (name, source) in files.iter() {
+        #[cfg(feature = "embedded-cm-runtime")]
+        if bundle_runtime && name.ends_with(".js") {
+            let source = std::str::from_utf8(source)
+                .with_context(|| format!("generated module {name} is not UTF-8"))?;
+            if let Some(linked) = embedded_runtime::link(source)
+                .with_context(|| format!("failed to bundle the runtime into {name}"))?
+            {
+                files_out.push((name.to_string(), linked.into_bytes()));
+                continue;
+            }
+        }
         files_out.push((name.to_string(), source.to_vec()));
     }
     Ok(Transpiled {
@@ -744,6 +768,15 @@ mod tests {
         )
         .unwrap();
         let direct_source = generated_javascript(&direct);
+        // Without a selected provider the intrinsics are self-contained: bundled from
+        // the shipped runtime when that feature is enabled, and rendered inline otherwise.
+        #[cfg(feature = "embedded-cm-runtime")]
+        {
+            assert!(direct_source.contains("__jcoEmbeddedRuntime$tableGet"));
+            assert!(!direct_source.contains(crate::embedded_runtime::PACKAGE));
+            assert!(!direct_source.contains("\nimport "));
+        }
+        #[cfg(not(feature = "embedded-cm-runtime"))]
         assert!(direct_source.contains("function rscTableGet(table, handle)"));
         assert!(!direct_source.contains("_jcoRuntimeProvider"));
 

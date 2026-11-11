@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { assert, expect, suite, test } from 'vitest';
 
-import { transpileBytes } from './transpilation.js';
+import { transpileBytes, unlinkedRuntimeBase } from './transpilation.js';
 import { generateHostTypes } from '../src/typegen.js';
 import { componentEmbed, componentNew } from '../src/wasm-tools.js';
 import { getTmpDir, setupAsyncTest } from './helpers.js';
@@ -15,7 +15,10 @@ suite('namespace objects', async () => {
     const component = await componentNew(await componentEmbed({ witPath, dummy: true }));
 
     test('exports namespace objects for variants, enums, and flags', async () => {
-        const defaultResult = await transpileBytes(component, { name: 'default' });
+        const defaultResult = await transpileBytes(component, {
+            name: 'default',
+            cmRuntimeEsModule: unlinkedRuntimeBase,
+        });
         const defaultSource = Buffer.from(defaultResult.files['default.js']).toString();
         assert.notInclude(defaultSource, 'const Direction = Object.freeze({');
         assert.notInclude(defaultSource, 'const Y = Object.freeze({');
@@ -24,6 +27,7 @@ suite('namespace objects', async () => {
         const result = await transpileBytes(component, {
             name: 'namespace-objects',
             useNamespaceObjects: true,
+            cmRuntimeEsModule: unlinkedRuntimeBase,
         });
         const source = Buffer.from(result.files['namespace-objects.js']).toString();
         const declarations = Buffer.from(result.files['interfaces/exports/test-namespace-objects-api.d.ts']).toString();
