@@ -3,10 +3,9 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { assert, test } from 'vitest';
-import ts from 'typescript-compiler-api';
 
 import { COMPONENT_FIXTURES_DIR } from './common.js';
-import { getTmpDir } from './helpers.js';
+import { caught, getTmpDir, loadTranspiledComponent, typeCheck } from './helpers.js';
 import { transpileBytes, writeFiles } from './transpilation.js';
 import { parse } from '../src/wasm-tools.js';
 
@@ -42,46 +41,21 @@ async function checkTypes(dir: string, instantiation: 'async' | 'sync' | undefin
             }
         }`,
     );
-    const program = ts.createProgram([consumer], {
-        noEmit: true,
-        strict: true,
-        types: [],
-        target: ts.ScriptTarget.ESNext,
-        module: ts.ModuleKind.NodeNext,
-    });
-    assert.deepEqual(
-        ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-        [],
-    );
-}
-
-/** Catch a thrown or rejected value without relying on any error properties. */
-async function caught(call: () => unknown): Promise<unknown> {
-    try {
-        await call();
-    } catch (error) {
-        return error;
-    }
-    assert.fail('expected a declared error or trap');
+    assert.deepEqual(typeCheck([consumer]), []);
 }
 
 for (const instantiation of [undefined, 'sync', 'async'] as const) {
     for (const minify of [false, true]) {
         test.concurrent(`isComponentError identifies declared errors (instantiation=${instantiation}, minify=${minify})`, async () => {
-            const dir = await getTmpDir();
+            const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'post-return-traps/result-async.wat'), 'utf8');
+            const loaded = await loadTranspiledComponent(await parse(wat), {
+                instantiation,
+                noComponentErrorWrapping: false,
+                minify,
+            });
+            const { dir } = loaded;
             try {
-                const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'post-return-traps/result-async.wat'), 'utf8');
-                const { files } = await transpileBytes(await parse(wat), {
-                    name: 'component',
-                    instantiation,
-                    noComponentErrorWrapping: false,
-                    minify,
-                });
-                await writeFiles(files, { baseDir: dir });
-                await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-                const module = await import(pathToFileURL(join(dir, 'component.js')).href);
-                const getCoreModule = (path: string) => new WebAssembly.Module(files[path]);
-                const instance: Component = instantiation ? await module.instantiate(getCoreModule, {}) : module;
+                const instance: Component = loaded.instance;
                 const { isComponentError } = instance._util;
                 assert.isFunction(isComponentError);
                 assert.notProperty(instance._util, 'ComponentError');
@@ -113,7 +87,7 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
                 }
 
                 if (instantiation) {
-                    const second: Component = await module.instantiate(getCoreModule, {});
+                    const second: Component = await loaded.instantiate();
                     assert.isFalse(second._util.isComponentError(declared));
                     const secondError = await caught(() => second.runSync(1, 0));
                     assert.isTrue(second._util.isComponentError(secondError));
@@ -129,7 +103,7 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
                     await checkTypes(dir, instantiation);
                 }
             } finally {
-                await rm(dir, { recursive: true, force: true });
+                await loaded.cleanup();
             }
         });
     }

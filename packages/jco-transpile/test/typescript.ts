@@ -5,11 +5,10 @@ import { join } from 'node:path';
 import { fileURLToPath, URL } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
-import ts from 'typescript-compiler-api';
 
 import { componentNew, componentEmbed } from '../src/wasm-tools.js';
 import { transpileBytes, generateGuestTypes } from './transpilation.js';
-import { getTmpDir } from './helpers.js';
+import { getTmpDir, typeCheck } from './helpers.js';
 
 const typescriptFixturesDir = fileURLToPath(new URL('./fixtures/typescript/', import.meta.url));
 
@@ -39,18 +38,7 @@ suite(`TypeScript`, async () => {
                         return testFile;
                     }),
                 );
-                const program = ts.createProgram(testFiles, {
-                    noEmit: true,
-                    strict: true,
-                    types: [],
-                    target: ts.ScriptTarget.ESNext,
-                    module: ts.ModuleKind.NodeNext,
-                });
-                const diagnostics = ts.getPreEmitDiagnostics(program);
-                assert.deepStrictEqual(
-                    diagnostics.map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-                    [],
-                );
+                assert.deepStrictEqual(typeCheck(testFiles), []);
             } finally {
                 await rm(dir, { recursive: true, force: true });
             }

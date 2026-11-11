@@ -893,6 +893,105 @@ export function runTSCodegen(args) {
     return TS_CODEGEN_PROMISE;
 }
 
+/** Directory that holds the output of tests, from which the dependencies of this package resolve. */
+const TEST_OUTPUT_DIR = fileURLToPath(new URL('./output', import.meta.url));
+
+/**
+ * Transpile a component into a new directory and load it, whichever way it is instantiated.
+ *
+ * The directory is inside this package, so that a component that is not transpiled
+ * for instantiation can import the WASI shims.
+ *
+ * @param bytes - the component
+ * @param options - transpilation options; the transpiled component is named `component`
+ * @param imports - imports to instantiate the component with, when it is transpiled for instantiation
+ * @returns the loaded component and the directory that holds its transpiled files
+ */
+export async function loadTranspiledComponent(
+    bytes: Uint8Array,
+    options: TranspilationOptions = {},
+    imports: object = {},
+) {
+    await mkdir(TEST_OUTPUT_DIR, { recursive: true });
+    const dir = await mkdtemp(join(TEST_OUTPUT_DIR, 'component-'));
+    const { files } = await transpileBytes(bytes, { name: 'component', ...options });
+    await writeFiles(files, { baseDir: dir });
+    await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
+    const module = await import(pathToFileURL(join(dir, 'component.js')).href);
+    const getCoreModule = (path: string) => new WebAssembly.Module(files[path]);
+    /** Instantiate the component again, or return its module when it is not transpiled for instantiation. */
+    const instantiate = async () => (options.instantiation ? await module.instantiate(getCoreModule, imports) : module);
+    return {
+        dir,
+        instance: await instantiate(),
+        instantiate,
+        cleanup: () => rm(dir, { recursive: true, force: true }),
+    };
+}
+
+/**
+ * Type-check TypeScript files in strict mode, without emitting anything.
+ *
+ * @param files - paths of the files to check
+ * @returns the messages of the diagnostics that the compiler reports, if any
+ */
+export function typeCheck(files: string[]): string[] {
+    const program = ts.createProgram(files, {
+        noEmit: true,
+        strict: true,
+        types: [],
+        target: ts.ScriptTarget.ESNext,
+        module: ts.ModuleKind.NodeNext,
+    });
+    return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+}
+
+/**
+ * Type-check generated declaration files,
+ * along with modules from `fixtures/typescript` that use them.
+ *
+ * @param files - generated files, keyed by relative path
+ * @param fixtures - names of the modules under `fixtures/typescript` to check against the declarations
+ * @returns the messages of the diagnostics that the compiler reports, if any
+ */
+export async function typeCheckGenerated(
+    files: Record<string, Uint8Array>,
+    fixtures: string[] = [],
+): Promise<string[]> {
+    const dir = await getTmpDir();
+    try {
+        await writeFiles(files, { baseDir: dir });
+        const modules = await Promise.all(
+            fixtures.map(async (fixture) => {
+                const module = join(dir, fixture);
+                await cp(fileURLToPath(new URL(`./fixtures/typescript/${fixture}`, import.meta.url)), module);
+                return module;
+            }),
+        );
+        const declarations = Object.keys(files)
+            .filter((file) => file.endsWith('.d.ts'))
+            .map((file) => join(dir, file));
+        return typeCheck([...modules, ...declarations]);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+}
+
+/**
+ * Catch a thrown or rejected value without relying on any error properties.
+ *
+ * @param call - function that is expected to throw, or to return a promise that rejects
+ * @returns the thrown value, or the reason of the rejection
+ */
+export async function caught(call: () => unknown): Promise<unknown> {
+    try {
+        await call();
+    } catch (error) {
+        return error;
+    }
+    assert.fail('expected the call to throw or reject');
+}
+
 export async function fileExists(p) {
     return stat(p)
         .then((f) => f.isFile())
