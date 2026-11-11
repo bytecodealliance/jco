@@ -2,7 +2,7 @@ import { env } from 'node:process';
 
 import { transpile as transpileFile, transpileBytes as transpileBuffer } from '../src/transpile.js';
 import type { TranspilationOptions } from '../src/transpile.js';
-import { selectRuntime } from '../../../test/helpers/runtime-mode.mjs';
+import { selectRuntime } from './runtime-mode.mjs';
 
 export * from '../src/index.js';
 
