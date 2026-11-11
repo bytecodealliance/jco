@@ -263,6 +263,12 @@ suite('Type Generation', () => {
             read('interfaces/exports/test-versioned-things-0-3-0.d.ts'),
             "readonly $brand: 'test:versioned/things@0.3#thing';",
         );
+
+        // Only one of the versions is exported under the short name of the interface.
+        const world = read('versions.d.ts');
+        assert.include(world, "export * as things from './interfaces/exports/test-versioned-things-0-2-3.js';");
+        assert.strictEqual(world.split('export * as things ').length - 1, 1);
+
         assert.deepStrictEqual(await typeCheckGenerated(host, ['resource-versions.mts']), []);
     });
 

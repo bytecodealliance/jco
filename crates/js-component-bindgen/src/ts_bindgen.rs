@@ -9,7 +9,7 @@ use log::debug;
 use wit_bindgen_core::wit_parser::{
     Case, Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, PackageName, Record,
     Resolve, Result_, Stability, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant,
-    WorldId, WorldItem, WorldKey,
+    World, WorldId, WorldItem, WorldKey,
 };
 
 use crate::files::Files;
@@ -560,6 +560,7 @@ pub fn ts_bindgen(
 
     let mut funcs = Vec::new();
     let mut has_result_export = false;
+    let export_aliases = interface_export_aliases(resolve, world);
 
     for (name, export) in world.exports.iter() {
         match export {
@@ -610,10 +611,24 @@ pub fn ts_bindgen(
                     .values()
                     .any(|func| get_thrown_type(resolve, func.result).is_some());
                 bindgen.export_interface(resolve, export_name, *id, files, instantiation);
-                // Also export the interface name as a type alias
+                // Also export the interface under its short name, when the bindings do
                 let alt_export_name = iface_name.to_lower_camel_case();
-                if alt_export_name != export_name {
+                if alt_export_name != export_name
+                    && export_aliases
+                        .get(&alt_export_name)
+                        .is_some_and(|owner| owner == export_name)
+                {
                     bindgen.export_interface(resolve, &alt_export_name, *id, files, instantiation);
+                } else if !instantiation {
+                    // The interface still has declarations of its own, which the
+                    // exports of the world do not refer to.
+                    bindgen.generate_interface(
+                        export_name,
+                        resolve,
+                        *id,
+                        files,
+                        GeneratedTypeMeta { is_export: true },
+                    );
                 }
             }
             WorldItem::Type { .. } => unimplemented!("type exports"),
@@ -2467,6 +2482,37 @@ impl<'a> TsInterface<'a> {
         class.class_docs = class_docs;
         class.resource_brand = resource_brand(self.resolve, id);
     }
+}
+
+/// The interface exports of a world that are also exported under the short
+/// name of their interface, by that short name.
+///
+/// The bindings export an interface under its short name unless another export
+/// has that name. Of the exports that share a short name, such as the versions
+/// of one interface, the first in the order of their names has it.
+fn interface_export_aliases(resolve: &Resolve, world: &World) -> BTreeMap<String, String> {
+    let export_names: BTreeSet<String> = world
+        .exports
+        .keys()
+        .map(|key| match key {
+            WorldKey::Name(name) => name.to_lower_camel_case(),
+            WorldKey::Interface(interface) => resolve.id_of(*interface).unwrap_or_default(),
+        })
+        .collect();
+    let mut aliases = BTreeMap::new();
+    for export_name in &export_names {
+        if !export_name.contains('/') {
+            continue;
+        }
+        let Some((_, _, interface_name)) = parse_world_key(export_name) else {
+            continue;
+        };
+        let alias = interface_name.to_lower_camel_case();
+        if !export_names.contains(&alias) && !aliases.contains_key(&alias) {
+            aliases.insert(alias, export_name.clone());
+        }
+    }
+    aliases
 }
 
 /// The name that identifies a resource to the type checker.
