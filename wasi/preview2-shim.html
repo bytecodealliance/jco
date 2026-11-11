@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4e876952.js";
+            window.path_to_searchindex_js = "../searchindex-0b150aa5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-332598f4.js"></script>
@@ -240,9 +240,9 @@ from host code, on both builds.</li>
 </ul>
 <h2 id="supported-platforms"><a class="header" href="#supported-platforms">Supported platforms</a></h2>
 <h3 id="nodejs"><a class="header" href="#nodejs">Node.js</a></h3>
-<p>The Node.js build gives a component host filesystem, environment, and network access by default,
-matching the behaviour of ordinary Node.js libraries. It is tested against the Wasmtime WASI
-conformance suite.</p>
+<p>The Node.js build gives a component no filesystem access by default: there are no preopens until
+the application configures them. The host’s environment variables and network are available by
+default. It is tested against the Wasmtime WASI conformance suite.</p>
 <h3 id="browsers"><a class="header" href="#browsers">Browsers</a></h3>
 <p>The browser build is capability-safe: clocks and randomness use Web APIs, stdout and stderr write
 to the console, stdin is closed, outbound HTTP delegates to <code>fetch</code>, filesystem preopens are empty

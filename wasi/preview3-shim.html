@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-4e876952.js";
+            window.path_to_searchindex_js = "../searchindex-0b150aa5.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-332598f4.js"></script>
@@ -289,7 +289,8 @@ host-provided values that a guest discards.</li>
 </ul>
 <h2 id="supported-platforms"><a class="header" href="#supported-platforms">Supported platforms</a></h2>
 <h3 id="nodejs"><a class="header" href="#nodejs">Node.js</a></h3>
-<p>The Node.js build gives a component host filesystem, environment, and network access by default.
+<p>The Node.js build gives a component no filesystem access until preopens are configured. The host’s
+environment variables and network are available by default.
 Standard streams and filesystem operations run in a worker so that blocking host I/O never stalls
 the event loop that drives the component’s asynchronous exports.</p>
 <h3 id="browsers"><a class="header" href="#browsers">Browsers</a></h3>
