@@ -155,9 +155,18 @@ fn transpile(args: TranspileArgs) -> Result<()> {
             "{}",
             WORKSPACE_DIR.join("packages/jco/dist/jco.js").display()
         );
+        // These are the defaults of `jco opt`, plus the saturating float-to-int
+        // conversions that Rust emits for WebAssembly targets.
+        let wasm_opt_args = [
+            "-Oz",
+            "--low-memory-unused",
+            "--enable-bulk-memory",
+            "--enable-nontrapping-float-to-int",
+            "--strip-debug",
+        ];
         cmd!(
             sh,
-            "node {jco_script_path} opt {component_path} -o {component_path}"
+            "node {jco_script_path} opt {component_path} -o {component_path} -- {wasm_opt_args...}"
         )
         .read()?;
         adapted_component = fs::read(component_path)?;
