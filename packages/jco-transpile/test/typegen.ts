@@ -213,14 +213,19 @@ suite('Type Generation', () => {
         assert.include(hostOnly, 'static open(): Promise<Connection> | Connection;');
         assert.include(read(host, 'async-returns.d.ts'), '"default"(): Promise<number> | number,');
 
-        // An interface that the world also exports shares its declaration with the
-        // functions that the component provides, which always return promises.
+        // The import side of an interface that the world also exports is declared separately.
         assert.include(
             read(host, 'interfaces/test-async-returns-shared.d.ts'),
+            'export function echo(value: string): Promise<string> | string;',
+        );
+
+        // The host calls the functions that the component exports, which always return promises.
+        assert.include(
+            read(host, 'interfaces/exports/test-async-returns-shared.d.ts'),
             'export function echo(value: string): Promise<string>;',
         );
         assert.include(
-            read(host, 'interfaces/test-async-returns-guest-only.d.ts'),
+            read(host, 'interfaces/exports/test-async-returns-guest-only.d.ts'),
             'export function run(): Promise<number>;',
         );
         assert.deepStrictEqual(await typeCheckDeclarations(host), []);
@@ -231,6 +236,69 @@ suite('Type Generation', () => {
         assert.include(guestHostOnly, 'export function fetch(key: string): Promise<string>;');
         assert.include(guestHostOnly, 'read(): Promise<number | undefined>;');
         assert.deepStrictEqual(await typeCheckDeclarations(guest), []);
+    });
+
+    test.concurrent.each([
+        {
+            name: 'host',
+            generate: generateHostTypes,
+            // Specifiers of the types interface, as seen from each side of another interface
+            typesFromImportSide: './test-interface-sides-types.js',
+            typesFromExportSide: './test-interface-sides-types.js',
+            importedTypesFromExportSide: '../test-interface-sides-types.js',
+            sinkReexport: './exports/test-interface-sides-sink.js',
+            disposableSide: 'interfaces/exports/test-interface-sides-types.d.ts',
+            implementedSide: 'interfaces/test-interface-sides-types.d.ts',
+        },
+        {
+            name: 'guest',
+            generate: generateGuestTypes,
+            typesFromImportSide: 'test:interface-sides/types',
+            typesFromExportSide: 'jco:exports/test:interface-sides/types',
+            importedTypesFromExportSide: 'test:interface-sides/types',
+            sinkReexport: 'jco:exports/test:interface-sides/sink',
+            disposableSide: 'interfaces/test-interface-sides-types.d.ts',
+            implementedSide: 'interfaces/exports/test-interface-sides-types.d.ts',
+        },
+    ])('the import and export sides of an interface are declared separately ($name)', async (sides) => {
+        const fixture = `${WIT_FIXTURE_DIR}/interface-sides.wit`;
+        const read = (files: Record<string, Uint8Array>, name: string) => Buffer.from(files[name]).toString();
+
+        const both = await sides.generate(fixture, { worldName: 'test:interface-sides/both-sides' });
+        assert.sameMembers(Object.keys(both), [
+            'both-sides.d.ts',
+            'interfaces/test-interface-sides-types.d.ts',
+            'interfaces/test-interface-sides-store.d.ts',
+            'interfaces/exports/test-interface-sides-types.d.ts',
+            'interfaces/exports/test-interface-sides-store.d.ts',
+        ]);
+        // Only the side that receives resources from the component model disposes of them.
+        assert.include(read(both, sides.disposableSide), 'export class Shape implements Disposable {');
+        assert.include(read(both, sides.implementedSide), 'export class Shape {');
+        // Each side of an interface uses the types of the same side of another.
+        assert.include(
+            read(both, 'interfaces/test-interface-sides-store.d.ts'),
+            `export type Shape = import('${sides.typesFromImportSide}').Shape;`,
+        );
+        assert.include(
+            read(both, 'interfaces/exports/test-interface-sides-store.d.ts'),
+            `export type Shape = import('${sides.typesFromExportSide}').Shape;`,
+        );
+        assert.deepStrictEqual(await typeCheckDeclarations(both), []);
+
+        // An exported interface uses the import side of an interface that the world does not export.
+        const exportOnly = await sides.generate(fixture, { worldName: 'test:interface-sides/export-only' });
+        assert.include(
+            read(exportOnly, 'interfaces/exports/test-interface-sides-sink.d.ts'),
+            `export type Shape = import('${sides.importedTypesFromExportSide}').Shape;`,
+        );
+        // The export side of an interface that the world only exports stays
+        // reachable where the declaration of the interface used to be.
+        assert.include(
+            read(exportOnly, 'interfaces/test-interface-sides-sink.d.ts'),
+            `export * from '${sides.sinkReexport}';`,
+        );
+        assert.deepStrictEqual(await typeCheckDeclarations(exportOnly), []);
     });
 
     test('host declarations leave world-level function imports to the import object', async () => {
@@ -275,7 +343,7 @@ suite('Type Generation', () => {
         );
         const files = await generate(witPath, { worldName: 'example:resources/resources' });
         for (const name of ['first', 'second']) {
-            const source = Buffer.from(files[`interfaces/example-resources-${name}.d.ts`]).toString();
+            const source = Buffer.from(files[`interfaces/exports/example-resources-${name}.d.ts`]).toString();
             assert.include(source, 'export type Value = number;');
             assert.include(source, 'export type ValueAlias = Value;');
             assert.include(source, 'export type TokenAlias = Token;');
@@ -291,7 +359,7 @@ suite('Type Generation', () => {
 
     test.concurrent.each([
         { name: 'host', generate: generateHostTypes, specifier: './example-resources-bridge.js' },
-        { name: 'guest', generate: generateGuestTypes, specifier: 'example:resources/bridge' },
+        { name: 'guest', generate: generateGuestTypes, specifier: 'jco:exports/example:resources/bridge' },
     ])(
         'renamed aliases keep their defining interface through alias chains ($name)',
         async ({ generate, specifier }) => {
@@ -299,7 +367,7 @@ suite('Type Generation', () => {
                 new URL('./fixtures/components/runtime/same-named-resources/world.wit', import.meta.url),
             );
             const files = await generate(witPath, { worldName: 'example:resources/alias-chains' });
-            const source = Buffer.from(files['interfaces/example-resources-forwarded.d.ts']).toString();
+            const source = Buffer.from(files['interfaces/exports/example-resources-forwarded.d.ts']).toString();
             assert.include(source, `export type Token = import('${specifier}').FirstToken;`);
             assert.include(source, `export type OtherToken = import('${specifier}').SecondToken;`);
             assert.include(source, `export type Value = import('${specifier}').FirstValue;`);
@@ -310,15 +378,19 @@ suite('Type Generation', () => {
         const files = await generateHostTypes(`${JCO_WIT_FIXTURE_DIR}/flavorful`, {
             worldName: 'test:flavorful/flavorful',
         });
-        assert.strictEqual(Object.keys(files).length, 2);
-        assert.strictEqual(Object.keys(files)[0], 'flavorful.d.ts');
-        assert.strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
+        assert.sameMembers(Object.keys(files), [
+            'flavorful.d.ts',
+            'interfaces/test-flavorful-test.d.ts',
+            'interfaces/exports/test-flavorful-test.d.ts',
+        ]);
         assert.ok(
-            Buffer.from(files[Object.keys(files)[0]]).includes(
-                "export * as test from './interfaces/test-flavorful-test.js'",
+            Buffer.from(files['flavorful.d.ts']).includes(
+                "export * as test from './interfaces/exports/test-flavorful-test.js'",
             ),
         );
-        assert.ok(Buffer.from(files[Object.keys(files)[1]]).includes('export type ListInAlias = '));
+        for (const file of ['interfaces/test-flavorful-test.d.ts', 'interfaces/exports/test-flavorful-test.d.ts']) {
+            assert.ok(Buffer.from(files[file]).includes('export type ListInAlias = '));
+        }
     });
 
     test('type generation (guest)', async () => {
@@ -326,10 +398,22 @@ suite('Type Generation', () => {
             worldName: 'test:flavorful/flavorful',
             guest: true,
         });
-        assert.strictEqual(Object.keys(files).length, 2);
-        assert.strictEqual(Object.keys(files)[1], 'interfaces/test-flavorful-test.d.ts');
-        assert.ok(Buffer.from(files[Object.keys(files)[0]]).includes("declare module 'test:flavorful/flavorful' {"));
-        assert.ok(Buffer.from(files[Object.keys(files)[1]]).includes("declare module 'test:flavorful/test' {"));
+        assert.sameMembers(Object.keys(files), [
+            'flavorful.d.ts',
+            'interfaces/test-flavorful-test.d.ts',
+            'interfaces/exports/test-flavorful-test.d.ts',
+        ]);
+        assert.ok(Buffer.from(files['flavorful.d.ts']).includes("declare module 'test:flavorful/flavorful' {"));
+        assert.ok(
+            Buffer.from(files['interfaces/test-flavorful-test.d.ts']).includes(
+                "declare module 'test:flavorful/test' {",
+            ),
+        );
+        assert.ok(
+            Buffer.from(files['interfaces/exports/test-flavorful-test.d.ts']).includes(
+                "declare module 'jco:exports/test:flavorful/test' {",
+            ),
+        );
     });
 
     // https://github.com/bytecodealliance/jco/issues/624
@@ -448,7 +532,7 @@ suite('Type Generation', () => {
         const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/issue-926`, {
             worldName: 'test:issue-926/issue-926',
         });
-        const declaration = Buffer.from(files['interfaces/test-issue-926-operations.d.ts']).toString();
+        const declaration = Buffer.from(files['interfaces/exports/test-issue-926-operations.d.ts']).toString();
 
         // The `create` and `edit` cases would be declared as `OperationCreate` and
         // `OperationEdit`, the names of the records they carry, so they are inlined.
@@ -466,7 +550,7 @@ suite('Type Generation', () => {
             worldName: 'test:issue-926/issue-926',
             variantsInlineCases: true,
         });
-        const declaration = Buffer.from(files['interfaces/test-issue-926-operations.d.ts']).toString();
+        const declaration = Buffer.from(files['interfaces/exports/test-issue-926-operations.d.ts']).toString();
 
         assert.include(
             declaration,

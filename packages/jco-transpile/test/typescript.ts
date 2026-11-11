@@ -130,7 +130,7 @@ suite(`TypeScript`, async () => {
         );
 
         const exportedInterfaceDtsSource = new TextDecoder().decode(
-            files['interfaces/test-disposable-resources-exported-resources.d.ts'],
+            files['interfaces/exports/test-disposable-resources-exported-resources.d.ts'],
         );
         assert(
             [`export class Transaction implements Disposable {`, `[Symbol.dispose](): void;`].every((s) =>
@@ -169,7 +169,7 @@ suite(`TypeScript`, async () => {
         );
 
         const exportedInterfaceDtsSource = new TextDecoder().decode(
-            files['interfaces/test-disposable-resources-exported-resources.d.ts'],
+            files['interfaces/exports/test-disposable-resources-exported-resources.d.ts'],
         );
         assert(
             [`export class Transaction implements Disposable {`, `[Symbol.dispose](): void;`].every(
@@ -285,7 +285,7 @@ suite(`TypeScript`, async () => {
     test.concurrent(`sync lowered async fn returns Promse<T> (guest-types)`, async () => {
         const witPath = fileURLToPath(new URL(`./fixtures/wit/async-flat-param-adder/test.wit`, import.meta.url));
         const files = await generateGuestTypes(witPath);
-        const interfaceDtsSource = new TextDecoder().decode(files['interfaces/test1-test2-test3.d.ts']);
+        const interfaceDtsSource = new TextDecoder().decode(files['interfaces/exports/test1-test2-test3.d.ts']);
         assert(interfaceDtsSource.includes('test4(a: number, b: number): Promise<number>'), 'test4 returns a Promise');
     });
 });

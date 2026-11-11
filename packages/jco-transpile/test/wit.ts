@@ -325,10 +325,13 @@ export const COMPONENT_FIXTURES_DIR = suite('WIT', async () => {
             asyncExports: ['example:node-fetch/simple-request#get-json'],
             allFeatures: true,
         });
-        assert.strictEqual(Object.keys(files).length, 2);
-        assert.deepEqual(Object.keys(files), ['component.d.ts', 'interfaces/example-node-fetch-simple-request.d.ts']);
+        assert.sameMembers(Object.keys(files), [
+            'component.d.ts',
+            'interfaces/example-node-fetch-simple-request.d.ts',
+            'interfaces/exports/example-node-fetch-simple-request.d.ts',
+        ]);
         assert.ok(
-            Buffer.from(files['interfaces/example-node-fetch-simple-request.d.ts']).includes(
+            Buffer.from(files['interfaces/exports/example-node-fetch-simple-request.d.ts']).includes(
                 'export function getJson(url: string): Promise<Response>',
             ),
         );

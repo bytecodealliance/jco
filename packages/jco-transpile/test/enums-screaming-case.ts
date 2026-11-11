@@ -51,7 +51,7 @@ suite('screaming-case enums', () => {
             assert.throws(() => runtime.instance.api.roundtrip('value-a'), /not one of the cases/);
             assert.notProperty(runtime.instance.api, 'Status');
 
-            const declarations = await readFile(join(runtime.esModuleOutputDir, 'interfaces/api.d.ts'), 'utf8');
+            const declarations = await readFile(join(runtime.esModuleOutputDir, 'interfaces/exports/api.d.ts'), 'utf8');
             assert.match(declarations, /export type Status = ['"]VALUE_A['"] \| ['"]HTTP_ERROR['"];/);
         } finally {
             await runtime.cleanup();
@@ -127,7 +127,7 @@ suite('screaming-case enums', () => {
             enumValuesScreamingSnakeCase: true,
             useNamespaceObjects: true,
         });
-        const declarations = Buffer.from(files['interfaces/test-namespace-objects-api.d.ts']).toString();
+        const declarations = Buffer.from(files['interfaces/exports/test-namespace-objects-api.d.ts']).toString();
         assert.match(declarations, /export type Direction = ['"]NORTH['"] \| ['"]SOUTH['"];/);
         assert.match(declarations, /readonly North: ['"]NORTH['"],/);
     });
