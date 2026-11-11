@@ -1,0 +1,29 @@
+package test:async-returns;
+
+interface host-only {
+  resource connection {
+    read: async func() -> option<u32>;
+    open: static async func() -> connection;
+    close: func();
+  }
+
+  fetch: async func(key: string) -> result<string, string>;
+  notify: async func();
+  now: func() -> u64;
+}
+
+interface shared {
+  echo: async func(value: string) -> string;
+}
+
+interface guest-only {
+  run: async func() -> u32;
+}
+
+world async-returns {
+  import host-only;
+  import shared;
+  import ping: async func() -> u32;
+  export shared;
+  export guest-only;
+}
