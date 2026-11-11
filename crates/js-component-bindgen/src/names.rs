@@ -107,6 +107,41 @@ pub fn to_js_identifier(goal_name: &str) -> String {
     }
 }
 
+/// Name of the static member of a JS resource class that holds the WIT
+/// static function `item_name`.
+///
+/// A class cannot have a static member named `prototype`,
+/// so that function is held by the member `prototype_` instead.
+pub fn static_member_name(item_name: &str) -> String {
+    let name = item_name.to_lower_camel_case();
+    if name == "prototype" {
+        "prototype_".to_string()
+    } else {
+        name
+    }
+}
+
+/// Name of the function expression that implements the class member `name`.
+///
+/// A member can be named after a reserved word, or after `arguments` or `eval`,
+/// but strict mode code cannot bind a function to any of those names.
+pub fn function_expression_name(name: &str) -> String {
+    if is_js_reserved_word(name) || matches!(name, "arguments" | "eval") {
+        format!("${name}")
+    } else {
+        name.to_string()
+    }
+}
+
+/// Whether assigning to the static member `name` of a class throws.
+///
+/// These members are either read-only on a class,
+/// or inherited accessors that reject every write,
+/// so they have to be made writable before they are assigned.
+pub fn is_readonly_class_static(name: &str) -> bool {
+    matches!(name, "name" | "length" | "caller" | "arguments")
+}
+
 pub fn is_valid_js_identifier(s: &str) -> bool {
     let mut chars = s.chars();
     if let Some(char) = chars.next() {

@@ -53,7 +53,8 @@ use crate::intrinsics::{
     render_intrinsics, runtime, runtime::IntrinsicRuntime,
 };
 use crate::names::{
-    LocalNames, is_js_reserved_word, js_string_literal, maybe_quote_id, maybe_quote_member,
+    LocalNames, function_expression_name, is_readonly_class_static, js_string_literal,
+    maybe_quote_id, maybe_quote_member, static_member_name,
 };
 use crate::{
     FunctionIdentifier, ManagesIntrinsics, core, get_thrown_type, is_async_fn,
@@ -1611,6 +1612,17 @@ impl<'a> Instantiator<'a, '_> {
             }}"
             );
             self.defined_resource_classes.insert(local_name.to_string());
+        }
+    }
+
+    /// Make the static member `member_name` of a resource class assignable,
+    /// when a class does not let that member be assigned as it is.
+    fn make_class_static_writable(&mut self, local_name: &str, member_name: &str) {
+        if is_readonly_class_static(member_name) {
+            uwriteln!(
+                self.src.js,
+                "\nObject.defineProperty({local_name}, '{member_name}', {{ writable: true, configurable: true }});"
+            );
         }
     }
 
@@ -4613,7 +4625,7 @@ impl<'a> Instantiator<'a, '_> {
                 format!(
                     "{}.{}",
                     self.imported_resource_name(*import_index, resource_id),
-                    func.item_name().to_lower_camel_case()
+                    static_member_name(func.item_name())
                 ),
                 CallType::Standard,
             ),
@@ -4622,7 +4634,7 @@ impl<'a> Instantiator<'a, '_> {
                 format!(
                     "{}.{}",
                     self.imported_resource_name(*import_index, resource_id),
-                    func.item_name().to_lower_camel_case()
+                    static_member_name(func.item_name())
                 ),
                 CallType::AsyncStandard,
             ),
@@ -6514,7 +6526,7 @@ impl<'a> Instantiator<'a, '_> {
                 func.item_name().to_lower_camel_case()
             ),
             FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
-                format!("{local_name}.{}", func.item_name().to_lower_camel_case())
+                format!("{local_name}.{}", static_member_name(func.item_name()))
             }
             FunctionKind::Constructor(_) => {
                 unreachable!("constructors cannot return futures")
@@ -6560,24 +6572,17 @@ impl<'a> Instantiator<'a, '_> {
                 uwrite!(
                     self.src.js,
                     "\n{local_name}.prototype.{method_name} = {maybe_async}function {}",
-                    if !is_js_reserved_word(&method_name) {
-                        method_name.to_string()
-                    } else {
-                        format!("${method_name}")
-                    }
+                    function_expression_name(&method_name)
                 );
             }
             FunctionKind::Static(_) => {
                 self.ensure_local_resource_class(local_name.to_string());
-                let method_name = func.item_name().to_lower_camel_case();
+                let method_name = static_member_name(func.item_name());
+                self.make_class_static_writable(local_name, &method_name);
                 uwrite!(
                     self.src.js,
                     "\n{local_name}.{method_name} = {maybe_async}function {}",
-                    if !is_js_reserved_word(&method_name) {
-                        method_name.to_string()
-                    } else {
-                        format!("${method_name}")
-                    }
+                    function_expression_name(&method_name)
                 );
             }
             FunctionKind::Constructor(_) => {
@@ -6600,11 +6605,7 @@ impl<'a> Instantiator<'a, '_> {
             FunctionKind::AsyncMethod(_) => {
                 self.ensure_local_resource_class(local_name.to_string());
                 let method_name = func.item_name().to_lower_camel_case();
-                let fn_name = if !is_js_reserved_word(&method_name) {
-                    method_name.to_string()
-                } else {
-                    format!("${method_name}")
-                };
+                let fn_name = function_expression_name(&method_name);
                 uwrite!(
                     self.src.js,
                     "\n{local_name}.prototype.{method_name} = {maybe_async}function {fn_name}",
@@ -6612,12 +6613,9 @@ impl<'a> Instantiator<'a, '_> {
             }
             FunctionKind::AsyncStatic(_) => {
                 self.ensure_local_resource_class(local_name.to_string());
-                let method_name = func.item_name().to_lower_camel_case();
-                let fn_name = if !is_js_reserved_word(&method_name) {
-                    method_name.to_string()
-                } else {
-                    format!("${method_name}")
-                };
+                let method_name = static_member_name(func.item_name());
+                self.make_class_static_writable(local_name, &method_name);
+                let fn_name = function_expression_name(&method_name);
                 uwrite!(
                     self.src.js,
                     "\n{local_name}.{method_name} = {maybe_async}function {fn_name}",
@@ -6685,7 +6683,7 @@ impl<'a> Instantiator<'a, '_> {
                     func.item_name().to_lower_camel_case()
                 ),
                 FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
-                    format!("{local_name}.{}", func.item_name().to_lower_camel_case())
+                    format!("{local_name}.{}", static_member_name(func.item_name()))
                 }
                 _ => local_name.to_string(),
             };
