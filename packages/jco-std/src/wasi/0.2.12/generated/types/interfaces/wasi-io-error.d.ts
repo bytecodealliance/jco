@@ -18,8 +18,6 @@ declare module 'wasi:io/error@0.2.12' {
   * 
   * The set of functions which can "downcast" an `error` into a more
   * concrete type is open.
-  *
-  * @since 0.2.0
   */
   export class Error implements Disposable {
     /**
@@ -38,8 +36,6 @@ declare module 'wasi:io/error@0.2.12' {
     * It may change across platforms, hosts, or other implementation
     * details. Parsing this string is a major platform-compatibility
     * hazard.
-    *
-    * @since 0.2.0
     */
     toDebugString(): string;
     [Symbol.dispose](): void;
