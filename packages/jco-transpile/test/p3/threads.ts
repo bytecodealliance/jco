@@ -83,7 +83,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Threads (WASI P3)', 
         assert.notInclude(source, '_getGlobalCurrentThreadMeta(task.componentIdx()).threadID');
         assert.match(
             source,
-            /const \{ task, threadID \} = createNewCurrentImplicitThread\((?:_jcoTaskCreateContext, )?\{/,
+            /(?:const|let) \{\s*task,\s*threadID\s*\} = createNewCurrentImplicitThread\((?:_jcoTaskCreateContext, )?\{/,
         );
         assert.match(
             source,

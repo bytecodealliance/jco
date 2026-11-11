@@ -20,6 +20,50 @@ members = [
 edition = "2024"
 version = "1.10.0"
 
+# Debug builds of the bindgen bundle the runtime on every transpile, which is
+# several times slower unless the JavaScript toolchain is optimized.
+[profile.dev.package.oxc_allocator]
+opt-level = 2
+
+[profile.dev.package.oxc_ast]
+opt-level = 2
+
+[profile.dev.package.oxc_ast_visit]
+opt-level = 2
+
+[profile.dev.package.oxc_codegen]
+opt-level = 2
+
+[profile.dev.package.oxc_data_structures]
+opt-level = 2
+
+[profile.dev.package.oxc_ecmascript]
+opt-level = 2
+
+[profile.dev.package.oxc_mangler]
+opt-level = 2
+
+[profile.dev.package.oxc_minifier]
+opt-level = 2
+
+[profile.dev.package.oxc_parser]
+opt-level = 2
+
+[profile.dev.package.oxc_semantic]
+opt-level = 2
+
+[profile.dev.package.oxc_span]
+opt-level = 2
+
+[profile.dev.package.oxc_str]
+opt-level = 2
+
+[profile.dev.package.oxc_syntax]
+opt-level = 2
+
+[profile.dev.package.oxc_traverse]
+opt-level = 2
+
 [profile.release]
 codegen-units = 1
 debug = false

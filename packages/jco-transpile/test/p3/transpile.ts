@@ -4,7 +4,7 @@ import { join, basename } from 'node:path';
 
 import { suite, test, assert } from 'vitest';
 
-import { transpile, transpileBytes } from '../transpilation.js';
+import { transpile, transpileBytes, unlinkedRuntimeBase } from '../transpilation.js';
 import { parse } from '../../src/wasm-tools.js';
 
 import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
@@ -125,7 +125,7 @@ suite('Transpile (WASI P3)', () => {
     test('uses the core signature for sync-lowered async imports', async () => {
         const componentPath = join(P3_COMPONENT_FIXTURES_DIR, 'sync-lowered-async-import.wat');
         const component = await parse(await readFile(componentPath, 'utf8'));
-        const { files } = await transpileBytes(component);
+        const { files } = await transpileBytes(component, { cmRuntimeEsModule: unlinkedRuntimeBase });
         const decoder = new TextDecoder();
         const source = Object.entries(files)
             .filter(([name]) => name.endsWith('.js'))

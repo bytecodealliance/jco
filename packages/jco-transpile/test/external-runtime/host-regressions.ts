@@ -70,7 +70,9 @@ function observeConstructor(source: string) {
     return source;
 }
 
-async function withProbe(external: boolean, check: (probe: Probe) => void) {
+// Probes name bindings that only unlinked bindings are sure to keep, so they run
+// against the runtime's modules; bundled bindings link that same code.
+async function withProbe(check: (probe: Probe) => void) {
     const dir = await getTmpDir();
     let probe: Probe | undefined;
     try {
@@ -82,7 +84,7 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
         const { files } = await transpile(component, {
             name: 'host-regression',
             instantiation: 'sync',
-            cmRuntimeEsModule: external ? defaultRuntimeUrl.href : undefined,
+            cmRuntimeEsModule: defaultRuntimeUrl.href,
         });
         let source = observeConstructor(new TextDecoder().decode(files['host-regression.js']));
         const tree = ts.createSourceFile('probe.js', source, ts.ScriptTarget.Latest, true);
@@ -103,9 +105,9 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
             source.slice(0, object.getStart(tree)) +
             `{
             __test: {
-                createTask: ${external ? 'createNewCurrentImplicitThread.bind(void 0, _jcoTaskCreateContext)' : 'createNewCurrentImplicitThread'},
-                prepare: ${external ? '_prepareCall.bind(void 0, _jcoHostPrepareContext)' : '_prepareCall'},
-                start: ${external ? '_asyncStartCall.bind(void 0, _jcoHostAsyncStartContext)' : '_asyncStartCall'},
+                createTask: createNewCurrentImplicitThread.bind(void 0, _jcoTaskCreateContext),
+                prepare: _prepareCall.bind(void 0, _jcoHostPrepareContext),
+                start: _asyncStartCall.bind(void 0, _jcoHostAsyncStartContext),
                 tasks: ASYNC_TASKS_BY_COMPONENT_IDX, constructorArgs: __hostTaskArgs,
                 registers: CURRENT_TASK_META, State: ComponentAsyncState, states: ASYNC_STATE,
                 memories: GLOBAL_COMPONENT_MEMORY_MAP,
@@ -142,120 +144,112 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
     }
 }
 
-for (const external of [false, true]) {
-    test.concurrent.skipIf(!hasJspi).each([0, 1, 2])(
-        'generated prepare normalizes all encoding operands (%s, external=' + external + ')',
-        async (encoding) => {
-            await withProbe(external, (probe) => {
-                const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
-                probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
-                probe.prepare(
-                    3,
-                    () => undefined,
-                    (...params: unknown[]) => params,
-                    () => {},
-                    99,
-                    100,
-                    7,
-                    1,
-                    encoding,
-                    -2,
-                    17,
-                    23,
-                    8,
-                );
-                const child = probe.tasks.get(100)!.at(-1)!.task;
-                const expected = ['utf8', 'utf16', 'compact-utf16'][encoding];
-                assert.deepEqual(
-                    [
-                        child.getParentSubtask()!.getCallMetadata()!.stringEncoding,
-                        child.subtaskMeta.stringEncoding,
-                        probe.constructorArgs.at(-1)!.stringEncoding,
-                    ],
-                    [expected, expected, expected],
-                );
-                assert.deepEqual(child.getCalleeParams(), [17, 23]);
-            });
-        },
-    );
+test.concurrent.skipIf(!hasJspi).each([0, 1, 2])(
+    'generated prepare normalizes all encoding operands (%s)',
+    async (encoding) => {
+        await withProbe((probe) => {
+            const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
+            probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
+            probe.prepare(
+                3,
+                () => undefined,
+                (...params: unknown[]) => params,
+                () => {},
+                99,
+                100,
+                7,
+                1,
+                encoding,
+                -2,
+                17,
+                23,
+                8,
+            );
+            const child = probe.tasks.get(100)!.at(-1)!.task;
+            const expected = ['utf8', 'utf16', 'compact-utf16'][encoding];
+            assert.deepEqual(
+                [
+                    child.getParentSubtask()!.getCallMetadata()!.stringEncoding,
+                    child.subtaskMeta.stringEncoding,
+                    probe.constructorArgs.at(-1)!.stringEncoding,
+                ],
+                [expected, expected, expected],
+            );
+            assert.deepEqual(child.getCalleeParams(), [17, 23]);
+        });
+    },
+);
 
-    test.concurrent.skipIf(!hasJspi)(
-        'generated prepare captures actual return memory (external=' + external + ')',
-        async () => {
-            await withProbe(external, (probe) => {
-                const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
-                probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
-                const memory: RuntimeMemory = { buffer: new ArrayBuffer(32) };
-                let reads = 0;
-                probe.prepare(
-                    3,
-                    () => {
-                        reads++;
-                        return memory;
-                    },
-                    () => [],
-                    () => {},
-                    99,
-                    100,
-                    7,
-                    1,
-                    0,
-                    -2,
-                    8,
-                );
-                const child = probe.tasks.get(100)!.at(-1)!.task;
-                assert.strictEqual(child.getReturnMemory(), memory);
-                assert.strictEqual(reads, 1);
-            });
-        },
-    );
+test.concurrent.skipIf(!hasJspi)('generated prepare captures actual return memory', async () => {
+    await withProbe((probe) => {
+        const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
+        probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
+        const memory: RuntimeMemory = { buffer: new ArrayBuffer(32) };
+        let reads = 0;
+        probe.prepare(
+            3,
+            () => {
+                reads++;
+                return memory;
+            },
+            () => [],
+            () => {},
+            99,
+            100,
+            7,
+            1,
+            0,
+            -2,
+            8,
+        );
+        const child = probe.tasks.get(100)!.at(-1)!.task;
+        assert.strictEqual(child.getReturnMemory(), memory);
+        assert.strictEqual(reads, 1);
+    });
+});
 
-    test.concurrent.skipIf(!hasJspi)(
-        'generated host result lowering selects registered memory (external=' + external + ')',
-        async () => {
-            await withProbe(external, (probe) => {
-                const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
-                probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
-                const memory: RuntimeMemory = { buffer: new ArrayBuffer(32) };
-                probe.memories.set(99, { '2': { componentIdx: 99, memoryIdx: 2, memory } });
-                probe.prepare(
-                    null,
-                    () => null,
-                    () => [],
-                    () => {},
-                    99,
-                    100,
-                    0,
-                    0,
-                    0,
-                    -2,
-                    4,
-                );
-                const child = probe.tasks.get(100)!.at(-1)!.task;
-                assert.isTrue(Reflect.deleteProperty(child.getParentSubtask()!.getCallMetadata()!, 'returnFn'));
-                let lowered: { memory: unknown; vals: unknown; ptr: unknown } | undefined;
-                child.setReturnLowerFns([
-                    (context) => {
-                        lowered = { memory: context.memory, vals: context.vals, ptr: context.storagePtr };
-                        if (context.memory === memory) {
-                            new DataView(memory.buffer).setUint32(context.storagePtr!, 42, true);
-                        }
-                    },
-                ]);
-                const status = probe.start(
-                    { getCallbackFn: () => null, getPostReturnFn: () => null },
-                    Object.assign(() => 42, { _jcoMaySuspend: false }),
-                    0,
-                    1,
-                    0,
-                );
-                assert.strictEqual(status, 2);
-                assert.isDefined(lowered);
-                assert.strictEqual(lowered!.memory, memory);
-                assert.deepEqual(lowered!.vals, [42]);
-                assert.strictEqual(lowered!.ptr, 4);
-                assert.strictEqual(new DataView(memory.buffer).getUint32(4, true), 42);
-            });
-        },
-    );
-}
+test.concurrent.skipIf(!hasJspi)('generated host result lowering selects registered memory', async () => {
+    await withProbe((probe) => {
+        const { task: parent, threadID } = probe.createTask({ componentIdx: 99, isAsync: true });
+        probe.registers[99] = { componentIdx: 99, taskID: parent.id(), threadID };
+        const memory: RuntimeMemory = { buffer: new ArrayBuffer(32) };
+        probe.memories.set(99, { '2': { componentIdx: 99, memoryIdx: 2, memory } });
+        probe.prepare(
+            null,
+            () => null,
+            () => [],
+            () => {},
+            99,
+            100,
+            0,
+            0,
+            0,
+            -2,
+            4,
+        );
+        const child = probe.tasks.get(100)!.at(-1)!.task;
+        assert.isTrue(Reflect.deleteProperty(child.getParentSubtask()!.getCallMetadata()!, 'returnFn'));
+        let lowered: { memory: unknown; vals: unknown; ptr: unknown } | undefined;
+        child.setReturnLowerFns([
+            (context) => {
+                lowered = { memory: context.memory, vals: context.vals, ptr: context.storagePtr };
+                if (context.memory === memory) {
+                    new DataView(memory.buffer).setUint32(context.storagePtr!, 42, true);
+                }
+            },
+        ]);
+        const status = probe.start(
+            { getCallbackFn: () => null, getPostReturnFn: () => null },
+            Object.assign(() => 42, { _jcoMaySuspend: false }),
+            0,
+            1,
+            0,
+        );
+        assert.strictEqual(status, 2);
+        assert.isDefined(lowered);
+        assert.strictEqual(lowered!.memory, memory);
+        assert.deepEqual(lowered!.vals, [42]);
+        assert.strictEqual(lowered!.ptr, 4);
+        assert.strictEqual(new DataView(memory.buffer).getUint32(4, true), 42);
+    });
+});

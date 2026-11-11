@@ -183,55 +183,53 @@ test.concurrent.each(['initializeComponentAsyncStateClass', 'getOrCreateAsyncSta
         }
     },
 );
-test.concurrent.each([false, true])(
-    'generated backpressure waiters wake only at zero (external=%s)',
-    async (external) => {
-        const dir = await getTmpDir();
-        try {
-            const { files } = await transpile(fixture, {
-                name: 'component',
-                cmRuntimeEsModule: external ? defaultRuntimeUrl.href : undefined,
-            });
-            // Expose the generated helper to exercise the same class in both modes.
-            files['component.js'] = new TextEncoder().encode(
-                new TextDecoder().decode(files['component.js']) +
-                    '\nexport { getOrCreateAsyncState as testGetState };\n' +
-                    (external ? 'export { _jcoComponentStateLookupContext as testContext };\n' : ''),
-            );
-            await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-            await writeFiles(files, { baseDir: dir });
-            const bindings = await import(pathToFileURL(join(dir, 'component.js')).href);
-            const state = external ? bindings.testGetState(bindings.testContext, 99) : bindings.testGetState(99);
-            state.setBackpressure(2);
-            let reentered = false;
-            state.registerHandler({
-                event: 'backpressure-change',
-                fn: (bp: number) => {
-                    if (bp === 0 && !reentered) {
-                        reentered = true;
-                        state.setBackpressure(0);
-                    }
-                },
-            });
-            let completed = 0;
-            const waits = [state.waitForBackpressure(), state.waitForBackpressure()].map((p) =>
-                p.then(() => {
-                    completed++;
-                }),
-            );
-            await new Promise((resolve) => setTimeout(resolve, 5));
-            assert.strictEqual(completed, 0);
-            state.decrementBackpressure();
-            await Promise.resolve();
-            assert.strictEqual(completed, 0);
-            state.decrementBackpressure();
-            await Promise.all(waits);
-            assert.strictEqual(completed, 2);
-            assert.strictEqual(state.getBackpressureWaiters(), 0n);
-            state.setBackpressure(0);
-            assert.strictEqual(state.getBackpressureWaiters(), 0n);
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
-    },
-);
+test.concurrent('generated backpressure waiters wake only at zero', async () => {
+    // The probe names bindings that only unlinked bindings are sure to keep.
+    const dir = await getTmpDir();
+    try {
+        const { files } = await transpile(fixture, {
+            name: 'component',
+            cmRuntimeEsModule: defaultRuntimeUrl.href,
+        });
+        // Expose the generated helper and its context to drive the state class directly.
+        files['component.js'] = new TextEncoder().encode(
+            new TextDecoder().decode(files['component.js']) +
+                '\nexport { getOrCreateAsyncState as testGetState };\n' +
+                'export { _jcoComponentStateLookupContext as testContext };\n',
+        );
+        await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
+        await writeFiles(files, { baseDir: dir });
+        const bindings = await import(pathToFileURL(join(dir, 'component.js')).href);
+        const state = bindings.testGetState(bindings.testContext, 99);
+        state.setBackpressure(2);
+        let reentered = false;
+        state.registerHandler({
+            event: 'backpressure-change',
+            fn: (bp: number) => {
+                if (bp === 0 && !reentered) {
+                    reentered = true;
+                    state.setBackpressure(0);
+                }
+            },
+        });
+        let completed = 0;
+        const waits = [state.waitForBackpressure(), state.waitForBackpressure()].map((p) =>
+            p.then(() => {
+                completed++;
+            }),
+        );
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        assert.strictEqual(completed, 0);
+        state.decrementBackpressure();
+        await Promise.resolve();
+        assert.strictEqual(completed, 0);
+        state.decrementBackpressure();
+        await Promise.all(waits);
+        assert.strictEqual(completed, 2);
+        assert.strictEqual(state.getBackpressureWaiters(), 0n);
+        state.setBackpressure(0);
+        assert.strictEqual(state.getBackpressureWaiters(), 0n);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});

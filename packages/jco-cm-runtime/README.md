@@ -10,7 +10,8 @@ npm install @bytecodealliance/jco-cm-runtime
 jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime
 ```
 
-Without the option, intrinsics remain inline. Neither `jco` nor `jco-transpile`
+Without the option, the transpiler bundles the parts of this runtime that the
+bindings use into them, and they import no runtime. Neither `jco` nor `jco-transpile`
 needs a concrete runtime installed to transpile. Resolution happens when the
 bindings are loaded or bundled.
 

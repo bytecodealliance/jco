@@ -210,12 +210,11 @@ test.concurrent.each([
     }
 });
 
-test.concurrent.each([false, true])(
-    'initialization imports retire their task with named owners (external=%s)',
-    async (external) => {
-        const dir = await getTmpDir();
-        try {
-            const component = `(component
+test.concurrent('initialization imports retire their task with named owners', async () => {
+    // The probe names bindings that only unlinked bindings are sure to keep.
+    const dir = await getTmpDir();
+    try {
+        const component = `(component
  (import "host" (instance $host (export "echo" (func (param "value" u32) (result u32)))))
  (core func $echo (canon lower (func $host "echo")))
  (core module $m
@@ -224,18 +223,17 @@ test.concurrent.each([false, true])(
  (core instance $m (instantiate $m (with "" (instance (export "echo" (func $echo))))))
  (func (export "echo") (param "value" u32) (result u32) (canon lift (core func $m "echo")))
 )`;
-            const { files } = await transpileBytes(await parse(component), {
-                name: 'init',
-                map: { host: './host.js' },
-                cmRuntimeEsModule: external ? defaultRuntimeUrl.href : undefined,
-            });
-            const context = external ? '_jcoTaskCompatImportContext, ' : '';
-            files['init.js'] = new TextEncoder().encode(
-                new TextDecoder().decode(files['init.js']) +
-                    `
+        const { files } = await transpileBytes(await parse(component), {
+            name: 'init',
+            map: { host: './host.js' },
+            cmRuntimeEsModule: defaultRuntimeUrl.href,
+        });
+        files['init.js'] = new TextEncoder().encode(
+            new TextDecoder().decode(files['init.js']) +
+                `
 export function testInitialization() {
  INSTANCE_FLAGS.set(99, { value: 1 });
- const result = _lowerImportBackwardsCompat(${context}{
+ const result = _lowerImportBackwardsCompat(_jcoTaskCompatImportContext, {
   componentIdx: 99, isAsync: false, funcTypeIsAsync: false, getMemoryFn: () => undefined,
   importFn(value) {
    ASYNC_TASKS_BY_COMPONENT_IDX.get(99).at(-1).task.currentSubtask().onResolve(value);
@@ -246,15 +244,14 @@ export function testInitialization() {
  return result;
 }
 `,
-            );
-            await writeFile(join(dir, 'package.json'), '{"type":"module"}');
-            await writeFile(join(dir, 'host.js'), 'export const echo = value => value;\n');
-            await writeFiles(files, { baseDir: dir });
-            const bindings = await import(pathToFileURL(join(dir, 'init.js')).href);
-            assert.strictEqual(bindings.testInitialization(), 23);
-            assert.strictEqual(bindings.echo(42), 42);
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
-    },
-);
+        );
+        await writeFile(join(dir, 'package.json'), '{"type":"module"}');
+        await writeFile(join(dir, 'host.js'), 'export const echo = value => value;\n');
+        await writeFiles(files, { baseDir: dir });
+        const bindings = await import(pathToFileURL(join(dir, 'init.js')).href);
+        assert.strictEqual(bindings.testInitialization(), 23);
+        assert.strictEqual(bindings.echo(42), 42);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});

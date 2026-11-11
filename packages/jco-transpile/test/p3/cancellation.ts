@@ -242,7 +242,7 @@ suite('subtask cancellation', () => {
         try {
             const source = await readFile(setup.esModuleOutputPath, 'utf8');
             const taskMapDeclaration =
-                /const ASYNC_TASKS_BY_COMPONENT_IDX = (?:new Map\(\)|_jcoInitializeTasksByComponent\(\));/.exec(
+                /(?:const|let) ASYNC_TASKS_BY_COMPONENT_IDX = (?:new Map(?:\(\))?|_jcoInitializeTasksByComponent\(\));/.exec(
                     source,
                 )?.[0];
             assert.isDefined(taskMapDeclaration, 'missing actual task-map owner declaration');
