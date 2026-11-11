@@ -3,8 +3,7 @@ import { fire } from "@bytecodealliance/jco-std/wasi/0.2.6/http/adapters/hono/se
 
 const app = new Hono();
 app.get("/", async (c) => {
-  const resp = await fetch("https://example.com");
-  await new Promise((r) => setTimeout(r, 500));
+  const resp = await fetch(c.req.query("upstream"));
   return c.text(`status: ${resp.status}`);
 });
 

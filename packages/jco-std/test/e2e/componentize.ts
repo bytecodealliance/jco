@@ -1,8 +1,7 @@
 import { join } from "node:path";
 import { fileURLToPath, URL } from "node:url";
 
-import { componentize as componentizeCurrent } from "@bytecodealliance/componentize-js";
-import { componentize as componentizeLegacy } from "@bytecodealliance/componentize-js-0-19-3";
+import { componentizeCurrent, componentizeLegacy } from "./helpers/componentize.js";
 import { rolldown } from "rolldown";
 import { assert, suite, test } from "vitest";
 

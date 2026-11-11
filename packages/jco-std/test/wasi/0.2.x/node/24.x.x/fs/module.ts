@@ -29,7 +29,25 @@ describe("node:fs module contract", () => {
     expect(typeof fs.realpathSync.native).toBe(typeof nodeFs.realpathSync.native);
   });
 
-  test.concurrent("pins Linux/WASI constants to Node 24 values", () => {
-    expect(fs.constants).toEqual(nodeFs.constants);
+  test.concurrent("preserves the legacy zero-valued open hints", () => {
+    expect(fs.constants).toMatchObject({
+      UV_FS_O_RANDOM: 0,
+      UV_FS_O_SEQUENTIAL: 0,
+      UV_FS_O_SHORT_LIVED: 0,
+      UV_FS_O_TEMPORARY: 0,
+    });
   });
+
+  test
+    .runIf(process.platform === "linux" && process.versions.node === "24.20.0")
+    .concurrent("pins Linux/WASI constants to Node 24 values", () => {
+      // These existing Jco exports remain available even though Node 24 does not expose them.
+      expect(fs.constants).toEqual({
+        ...nodeFs.constants,
+        UV_FS_O_RANDOM: 0,
+        UV_FS_O_SEQUENTIAL: 0,
+        UV_FS_O_SHORT_LIVED: 0,
+        UV_FS_O_TEMPORARY: 0,
+      });
+    });
 });

@@ -743,6 +743,7 @@ jobs:
   test-js-workspace-packages:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         workspace:
           - jco-std
@@ -751,6 +752,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          # jco-std's differential tests target this exact Node release.
+          node-version: "24.20.0"
 
       - name: Install Rust
         run: rustup update stable --no-self-update
@@ -778,18 +784,22 @@ jobs:
         run: |
           pnpm install
 
+      - name: Build preview2-shim
+        run: pnpm --filter '@bytecodealliance/preview2-shim' --fail-if-no-match run build
+
+      - name: Install browser for plugin tests
+        if: ${{ matrix.workspace == 'rolldown-plugin-jco' }}
+        run: pnpm run test:setup:puppeteer
+
       - name: Build workspace dependencies and package
         run: |
-          if [ "${{ matrix.workspace }}" = "jco-std" ]; then
-            pnpm --filter "packages/jco-transpile" run build
-            pnpm --filter "packages/${{ matrix.workspace }}" run build
-          else
-            pnpm --filter "packages/${{ matrix.workspace }}" run build
-          fi
+          pnpm --filter '@bytecodealliance/${{ matrix.workspace }}' --fail-if-no-match run build
 
-      - name: run test on workspace
+      - name: Run workspace tests
+        env:
+          TEST_PUPPETEER_LAUNCH_ARGS: --no-sandbox
         run: |
-          pnpm --filter "packages/${{ matrix.workspace }}" run test
+          pnpm --filter '@bytecodealliance/${{ matrix.workspace }}' --fail-if-no-match run test
 
   examples:
     needs:

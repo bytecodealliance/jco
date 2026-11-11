@@ -122,6 +122,7 @@ test.concurrent.each(["untrusted", "hostname", "custom", "permissive", "empty-en
     }
     const { api, host } = setup();
     let client: TlsSocket | undefined;
+    let handshakeTimer: ReturnType<typeof setTimeout> | undefined;
     try {
       client = api.connect({
         port: address.port,
@@ -137,7 +138,9 @@ test.concurrent.each(["untrusted", "hostname", "custom", "permissive", "empty-en
       const outcome = new Promise<string>((resolve, reject) => {
         client!.once("error", (error: Error & { code: string }) => resolve(error.code));
         client!.once("secureConnect", () => resolve("connected"));
-        setTimeout(() => reject(new Error("handshake timeout")), 5000).unref();
+        client!.once("close", () => reject(new Error("TLS socket closed before handshake")));
+        // Componentization in other workers can saturate a small CI runner during the handshake.
+        handshakeTimer = setTimeout(() => reject(new Error("handshake timeout")), 30_000);
       });
       if (mode === "empty-end") {
         client.end();
@@ -152,10 +155,11 @@ test.concurrent.each(["untrusted", "hostname", "custom", "permissive", "empty-en
               : "connected",
       );
     } finally {
+      clearTimeout(handshakeTimer);
       client?.destroy();
       host.dispose();
       await new Promise<void>((resolve) => peer.close(() => resolve()));
     }
   },
-  10_000,
+  40_000,
 );
