@@ -1,0 +1,32 @@
+package test:stability@0.2.0;
+
+interface items {
+  /// A stable record.
+  @since(version = 0.1.0)
+  record stable-record {
+    value: u32,
+  }
+
+  @since(version = 0.1.0)
+  @deprecated(version = 0.2.0)
+  enum old-enum {
+    first,
+  }
+
+  /// Reads the record.
+  @since(version = 0.1.0)
+  read: func() -> stable-record;
+
+  @since(version = 0.1.0)
+  @deprecated(version = 0.2.0)
+  old: func() -> old-enum;
+
+  @unstable(feature = experimental-items)
+  experimental: func();
+
+  plain: func();
+}
+
+world stability {
+  import items;
+}

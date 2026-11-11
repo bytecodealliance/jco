@@ -8,7 +8,8 @@ use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use log::debug;
 use wit_bindgen_core::wit_parser::{
     Case, Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
-    Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem, WorldKey,
+    Stability, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem,
+    WorldKey,
 };
 
 use crate::files::Files;
@@ -223,6 +224,8 @@ struct TsInterface<'a> {
     interface_file_stems: Rc<InterfaceFileStems>,
     /// The names bound by the declarations of the module being generated.
     names: Rc<ModuleNames>,
+    /// JSDoc tags for the stability of the item that is declared next.
+    stability_tags: Vec<String>,
     has_constructor: bool,
     needs_ty_option: bool,
     needs_ty_result: bool,
@@ -1207,6 +1210,7 @@ impl<'a> TsInterface<'a> {
             is_root,
             interface_file_stems: Rc::clone(interface_file_stems),
             names: Rc::default(),
+            stability_tags: Vec::new(),
             is_guest,
             flags_as_bigint,
             variants_inline_cases,
@@ -1286,18 +1290,35 @@ impl<'a> TsInterface<'a> {
         (self.src, self.references)
     }
 
+    /// Write a documentation comment with the text `docs`, followed by the
+    /// tags of the stability that [`Self::stability`] set for the item, if any.
     fn docs_raw(&mut self, docs: &str) {
+        let stability_tags = std::mem::take(&mut self.stability_tags);
         self.src.push_str("/**\n");
         for line in docs.lines() {
             self.src.push_str(&format!(" * {line}\n"));
+        }
+        if !docs.is_empty() && !stability_tags.is_empty() {
+            self.src.push_str(" *\n");
+        }
+        for tag in stability_tags {
+            self.src.push_str(&format!(" * {tag}\n"));
         }
         self.src.push_str(" */\n");
     }
 
     fn docs(&mut self, docs: &Docs) {
-        if let Some(docs) = &docs.contents {
-            self.docs_raw(docs);
+        match &docs.contents {
+            Some(docs) => self.docs_raw(docs),
+            None if !self.stability_tags.is_empty() => self.docs_raw(""),
+            None => {}
         }
+    }
+
+    /// Set the stability of the item that is declared next. The next
+    /// documentation comment carries it as JSDoc tags.
+    fn stability(&mut self, stability: &Stability) {
+        self.stability_tags = stability_tags(stability);
     }
 
     fn types(&mut self, iface_id: InterfaceId) {
@@ -1305,6 +1326,7 @@ impl<'a> TsInterface<'a> {
 
         for (name, id) in iface.types.iter() {
             let ty = &self.resolve.types[*id];
+            self.stability(&ty.stability);
             match &ty.kind {
                 TypeDefKind::Record(record) => self.type_record(*id, name, record, &ty.docs),
                 TypeDefKind::Flags(flags) => self.type_flags(*id, name, flags, &ty.docs),
@@ -1331,6 +1353,8 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Handle(_) => todo!("types for handle"),
                 TypeDefKind::Map(key, value) => self.type_map(*id, name, key, value, &ty.docs),
             }
+            // A declaration without a documentation comment leaves the tags unused.
+            self.stability_tags.clear();
         }
     }
 
@@ -1521,7 +1545,9 @@ impl<'a> TsInterface<'a> {
         meta: &GeneratedTypeMeta,
     ) {
         let iface = self.iface_for(func, meta);
+        iface.stability(&func.stability);
         iface.docs(&func.docs);
+        iface.stability_tags.clear();
 
         let out_name = if default {
             "default".to_string()
@@ -2039,6 +2065,28 @@ impl<'a> TsInterface<'a> {
             )
         });
     }
+}
+
+/// The JSDoc block tags that describe the stability of a WIT item: `@since` for
+/// a stable item, `@experimental` for one gated by a feature, and `@deprecated`
+/// for either once it is deprecated.
+fn stability_tags(stability: &Stability) -> Vec<String> {
+    let (introduction, deprecated) = match stability {
+        Stability::Unknown => return Vec::new(),
+        Stability::Stable { since, deprecated } => (format!("@since {since}"), deprecated),
+        Stability::Unstable {
+            feature,
+            deprecated,
+        } => (
+            format!("@experimental Gated by the WIT feature `{feature}`."),
+            deprecated,
+        ),
+    };
+    let mut tags = vec![introduction];
+    if let Some(version) = deprecated {
+        tags.push(format!("@deprecated since {version}"));
+    }
+    tags
 }
 
 /// Render the name of a method or static function of a class declaration.
