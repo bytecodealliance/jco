@@ -1,0 +1,28 @@
+package jco:test-components;
+
+// Resource functions named after members that a JS class reserves.
+interface static-names {
+  resource thing {
+    constructor();
+    prototype: static func() -> u32;
+    name: static func() -> u32;
+    length: static func() -> u32;
+    arguments: static func() -> u32;
+    caller: static func() -> u32;
+  }
+
+  resource other {
+    constructor();
+    prototype: func() -> u32;
+  }
+}
+
+world resource-static-names-exports {
+  export static-names;
+}
+
+world resource-static-names-imports {
+  import static-names;
+  // Returns the sum of the results of every static function of `thing`.
+  export run: func() -> u32;
+}
