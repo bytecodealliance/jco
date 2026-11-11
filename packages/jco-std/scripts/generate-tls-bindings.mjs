@@ -1,7 +1,8 @@
-// Generate bindings for the documented local TLS contract.
-import { generateGuestTypes, writeFiles } from "@bytecodealliance/jco-transpile";
+// Generate bindings for the documented local TLS contract with the workspace backend.
+import { env } from "node:process";
+import { generateGuestTypes, writeFiles } from "../../jco-transpile/dist/index.js";
 const files = await generateGuestTypes("wit/tls-0.2.0-draft", {
-  outDir: "src/wasi/0.2.12/generated/types/tls",
+  outDir: env.OUTPUT_DIR_PATH ?? "src/wasi/0.2.12/generated/types/tls",
 });
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();

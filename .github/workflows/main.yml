@@ -99,6 +99,11 @@ jobs:
       - name: Build jco-transpile
         run: pnpm --filter '@bytecodealliance/jco-transpile' run build
 
+      - name: Verify jco-std generated declarations
+        run: |
+          pnpm --filter '@bytecodealliance/jco-std' --fail-if-no-match run build:ts
+          pnpm --filter '@bytecodealliance/jco-std' --fail-if-no-match exec vitest run -c test/vitest.ts test/e2e/generated-types.ts
+
       - name: Upload jco-transpile vendor
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
