@@ -1,4 +1,4 @@
-import { typegenOptions } from "./typegen-options.js";
+import { typegenOptions, type TypegenOptions } from "./typegen-options.js";
 
 import {
     $init,
@@ -6,14 +6,20 @@ import {
     generateTypes as _generateTypes,
 } from "@bytecodealliance/jco-transpile/component";
 
-export async function generate(...args: Parameters<typeof _generate>) {
-    args[1] = { ...args[1], ...typegenOptions(args[1]) };
-    return callBindgen(() => _generate(...args));
+/** Generate bindings while preserving Jco's declaration compatibility defaults. */
+export async function generate(
+    component: Parameters<typeof _generate>[0],
+    options: Parameters<typeof _generate>[1] & TypegenOptions,
+) {
+    return callBindgen(() => _generate(component, { ...options, ...typegenOptions(options) }));
 }
 
-export async function generateTypes(...args: Parameters<typeof _generateTypes>) {
-    args[1] = { ...args[1], ...typegenOptions(args[1]) };
-    return callBindgen(() => _generateTypes(...args));
+/** Generate declarations with options supported independently of the installed backend version. */
+export async function generateTypes(
+    name: Parameters<typeof _generateTypes>[0],
+    options: Parameters<typeof _generateTypes>[1] & TypegenOptions,
+) {
+    return callBindgen(() => _generateTypes(name, { ...options, ...typegenOptions(options) }));
 }
 
 async function callBindgen<T>(run: () => T): Promise<T> {

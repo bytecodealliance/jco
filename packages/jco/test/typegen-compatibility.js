@@ -1,13 +1,65 @@
-import { mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, readFile, rm, cp, realpath, symlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { generateHostTypes } from "@bytecodealliance/jco-transpile";
 import ts from "typescript-compiler-api";
-import { assert, test } from "vitest";
+import { assert, test, beforeAll, afterAll } from "vitest";
 
-import { types, transpile, componentEmbed, componentNew, parse } from "../src/api.js";
+import { executeNodeScript as exec } from "../../../test/helpers/node.mjs";
+
+let types, transpile, componentEmbed, componentNew, parse, generateHostTypes, generate, generateTypes;
+let installDir, jcoPath;
+
+beforeAll(async () => {
+    installDir = await mkdtemp(join(tmpdir(), "jco-unpublished-typegen-"));
+    const jcoDir = fileURLToPath(new URL("../", import.meta.url));
+    const transpileDir = fileURLToPath(new URL("../../jco-transpile/", import.meta.url));
+    const installedJco = join(installDir, "jco");
+    const installedTranspile = join(installDir, "jco-transpile");
+    const linkType = process.platform === "win32" ? "junction" : "dir";
+
+    // Jco normally consumes the published transpiler. Install the workspace sources
+    // with the freshly built backend to test the next dependency upgrade in isolation.
+    await mkdir(installedTranspile);
+    for (const name of ["src", "package.json", "tsconfig.json"]) {
+        await cp(join(transpileDir, name), join(installedTranspile, name), { recursive: true });
+    }
+    await cp(join(jcoDir, "obj"), join(installedTranspile, "vendor"), { recursive: true });
+    await symlink(
+        await realpath(join(transpileDir, "node_modules")),
+        join(installedTranspile, "node_modules"),
+        linkType,
+    );
+    await exec(join(jcoDir, "node_modules/typescript/bin/tsc"), "-p", installedTranspile);
+
+    await mkdir(installedJco);
+    for (const name of ["dist", "src", "lib", "package.json"]) {
+        await cp(join(jcoDir, name), join(installedJco, name), { recursive: true });
+    }
+    const manifest = JSON.parse(await readFile(join(jcoDir, "package.json"), "utf8"));
+    for (const name of Object.keys(manifest.dependencies)) {
+        const source =
+            name === "@bytecodealliance/jco-transpile"
+                ? installedTranspile
+                : await realpath(join(jcoDir, "node_modules", name));
+        const destination = join(installedJco, "node_modules", name);
+        await mkdir(dirname(destination), { recursive: true });
+        await symlink(source, destination, linkType);
+    }
+    ({ types, transpile, componentEmbed, componentNew, parse } = await import(
+        pathToFileURL(join(installedJco, "dist/api.js")).href
+    ));
+    ({ generate, generateTypes } = await import(pathToFileURL(join(installedJco, "dist/browser.js")).href));
+    ({ generateHostTypes } = await import(pathToFileURL(join(installedTranspile, "dist/index.js")).href));
+    jcoPath = join(installedJco, "dist/jco.js");
+});
+
+afterAll(async () => {
+    if (installDir) {
+        await rm(installDir, { recursive: true, force: true });
+    }
+});
 
 const resources = `package compat:resources;
 interface api {
@@ -234,7 +286,6 @@ test("separate declarations can be enabled without nominal resources", async () 
 });
 
 test("Jco component API applies compatibility defaults and opt-ins", async () => {
-    const { generate, generateTypes } = await import("../src/browser.js");
     const component = await componentNew(await componentEmbed({ witSource: errors, dummy: true }));
     for (const typedErrorClasses of [undefined, true]) {
         const generated = await generateTypes("component", {
@@ -258,7 +309,6 @@ test("Jco component API applies compatibility defaults and opt-ins", async () =>
 
 for (const command of ["types", "guest-types", "transpile"]) {
     test(`Jco ${command} CLI exposes declaration opt-ins`, async () => {
-        const { exec, jcoPath } = await import("./helpers.js");
         const dir = await mkdtemp(join(tmpdir(), "jco-cli-compat-"));
         try {
             const input = join(dir, command === "transpile" ? "input.wasm" : "input.wit");
