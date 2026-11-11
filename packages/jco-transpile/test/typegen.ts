@@ -415,6 +415,38 @@ suite('Type Generation', () => {
         assert.deepStrictEqual(await typeCheckDeclarations(files), []);
     });
 
+    test('async functions that return a future document their two awaitable layers', async () => {
+        const opts = { worldName: 'test:async-futures/async-futures' };
+        const fixture = `${WIT_FIXTURE_DIR}/async-futures.wit`;
+        // Compare without indentation, which differs between the declarations of a world and of an interface
+        const read = (files: Record<string, Uint8Array>, name: string) =>
+            Buffer.from(files[name])
+                .toString()
+                .split('\n')
+                .map((line) => line.trim())
+                .join('\n');
+        const note = [
+            '* @returns A promise of the future, not of its value: each `await` unwraps one of the two layers.',
+            '* TypeScript types the first `await` as the value already, whereas `.then()` is typed layer by layer.',
+            '*/',
+        ].join('\n');
+
+        // The note is for the functions that a host calls on the component.
+        const host = await generateHostTypes(fixture, opts);
+        const hostExports = read(host, 'interfaces/exports/test-async-futures-deliveries.d.ts');
+        assert.include(hostExports, `${note}\nexport function later(): Promise<PromiseLike<string>`);
+        assert.include(read(host, 'async-futures.d.ts'), `${note}\nexport function later(): `);
+        // Neither a function that returns no future, nor one that is not async, has two layers.
+        assert.strictEqual(hostExports.split('@returns').length - 1, 1);
+        assert.notInclude(read(host, 'interfaces/test-async-futures-deliveries.d.ts'), '@returns');
+        assert.deepStrictEqual(await typeCheckDeclarations(host), []);
+
+        const guest = await generateGuestTypes(fixture, opts);
+        for (const source of Object.values(guest)) {
+            assert.notInclude(Buffer.from(source).toString(), '@returns');
+        }
+    });
+
     test('host declarations leave world-level function imports to the import object', async () => {
         const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
             worldName: 'test:declaration-names/world-imports-world',

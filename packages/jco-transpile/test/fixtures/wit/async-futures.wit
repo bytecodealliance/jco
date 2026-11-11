@@ -1,0 +1,14 @@
+package test:async-futures;
+
+interface deliveries {
+  /// Starts a delivery.
+  later: async func() -> future<string>;
+  now: async func() -> string;
+  pending: func() -> future<string>;
+}
+
+world async-futures {
+  import deliveries;
+  export deliveries;
+  export later: async func() -> future<u32>;
+}

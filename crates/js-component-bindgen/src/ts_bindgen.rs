@@ -1528,6 +1528,41 @@ impl<'a> TsInterface<'a> {
         }
     }
 
+    /// The lines of the JSDoc tag for the result of an async function that a
+    /// host calls and that returns a `future`.
+    ///
+    /// The bindings return a promise of the future, and keep the promise from
+    /// resolving to the value of the future instead. TypeScript cannot express
+    /// this: it types an `await` as unwrapping every promise at once.
+    fn future_result_tag(
+        &self,
+        func: &Function,
+        requires_async_porcelain: bool,
+        meta: &GeneratedTypeMeta,
+    ) -> Vec<String> {
+        let is_host_call = !self.is_guest && meta.is_export();
+        let returns_promise = requires_async_porcelain || func.kind.is_async();
+        let returns_future = matches!(
+            func.result,
+            Some(Type::Id(id))
+                if matches!(
+                    self.resolve.types[dealias(self.resolve, id)].kind,
+                    TypeDefKind::Future(_)
+                )
+        );
+        if !(is_host_call && returns_promise && returns_future) {
+            return Vec::new();
+        }
+        vec![
+            "@returns A promise of the future, not of its value: \
+             each `await` unwraps one of the two layers."
+                .to_string(),
+            "TypeScript types the first `await` as the value already, \
+             whereas `.then()` is typed layer by layer."
+                .to_string(),
+        ]
+    }
+
     /// The JSDoc tag for what a function throws on account of the error of
     /// its `result`, if it returns one.
     ///
@@ -1802,6 +1837,7 @@ impl<'a> TsInterface<'a> {
     ) {
         let host_implemented = self.host_implemented;
         let throws_tag = self.throws_tag(func, meta);
+        let future_result_tag = self.future_result_tag(func, requires_async_porcelain, meta);
         let iface = self.iface_for(func, meta);
 
         let out_name = if default {
@@ -1837,6 +1873,7 @@ impl<'a> TsInterface<'a> {
 
         iface.stability(&func.stability);
         iface.doc_tags.extend(throws_tag);
+        iface.doc_tags.extend(future_result_tag);
         iface.docs(&func.docs);
         iface.doc_tags.clear();
 
