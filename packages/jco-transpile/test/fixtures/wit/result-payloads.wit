@@ -1,0 +1,21 @@
+package test:result-payloads;
+
+interface payloads {
+  record outcomes {
+    neither: result,
+    only-err: result<_, string>,
+    only-ok: result<u32>,
+    both: result<u32, string>,
+    optional-ok: result<option<u32>, string>,
+  }
+
+  type named = result<_, string>;
+
+  check: func(outcomes: outcomes, items: list<result<_, string>>) -> named;
+  nested: func() -> option<result>;
+}
+
+world result-payloads {
+  import payloads;
+  export payloads;
+}

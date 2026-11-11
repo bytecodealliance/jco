@@ -40,8 +40,15 @@ fn ts_option_type_alias(name: &str) -> String {
 /// TypeScript declaration for the `Result<T, E>` helper type alias used to
 /// represent WIT `result<T, E>` values. Emitted at the top level for the same
 /// reason as [`ts_option_type_alias`].
+///
+/// An arm without a payload (e.g. the `ok` arm of `result<_, E>`) is typed with `void`,
+/// and its `val` is optional so that `{ tag: 'ok' }` is a complete value.
 fn ts_result_type_alias(name: &str) -> String {
-    format!("export type {name}<T, E> = {{ tag: 'ok', val: T }} | {{ tag: 'err', val: E }};\n")
+    format!(
+        "export type {name}<T, E> = \
+         ([T] extends [void] ? {{ tag: 'ok', val?: T }} : {{ tag: 'ok', val: T }}) | \
+         ([E] extends [void] ? {{ tag: 'err', val?: E }} : {{ tag: 'err', val: E }});\n"
+    )
 }
 
 /// The names that the declarations of one generated module bind.
