@@ -46,7 +46,17 @@ export const validateHostChar: StringModule['validateHostChar'] = (value) => {
     if (typeof value !== 'string') {
         throw new TypeError('must be a string');
     }
-    return value.codePointAt(0);
+
+    const codePoint = value.codePointAt(0);
+    if (
+        codePoint === undefined ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+        value.length !== (codePoint > 0xffff ? 2 : 1)
+    ) {
+        throw new TypeError('not a valid char');
+    }
+
+    return codePoint;
 };
 export const toUint32: ConversionModule['toUint32'] = (context, value) => {
     if (context.strict && (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0xffffffff)) {

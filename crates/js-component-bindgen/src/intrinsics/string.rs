@@ -270,7 +270,13 @@ impl StringIntrinsic {
                 r#"
                   function {name}(s) {{
                       if (typeof s !== 'string') {{ throw new TypeError(`must be a string`); }}
-                      return s.codePointAt(0);
+                      const codePoint = s.codePointAt(0);
+                      if (codePoint === undefined ||
+                          (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+                          s.length !== (codePoint > 0xffff ? 2 : 1)) {{
+                          throw new TypeError(`not a valid char`);
+                      }}
+                      return codePoint;
                   }}
                 "#
             ),
