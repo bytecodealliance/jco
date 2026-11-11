@@ -1,43 +1,11 @@
 import { Buffer } from 'node:buffer';
-import { copyFile, rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { suite, test, assert } from 'vitest';
-import ts from 'typescript-compiler-api';
 
-import { getTmpDir, JCO_WIT_FIXTURE_DIR, WIT_FIXTURE_DIR } from './helpers.js';
+import { JCO_WIT_FIXTURE_DIR, typeCheckGenerated, WIT_FIXTURE_DIR } from './helpers.js';
 
 import { generateGuestTypes, generateHostTypes } from '../src/typegen.js';
-import { writeFiles } from '../src/common.js';
-
-/**
- * Type-check generated declaration files with the TypeScript compiler.
- *
- * @param files - generated declaration files, keyed by relative path
- * @returns the messages of the diagnostics the compiler reports, if any
- */
-async function typeCheckDeclarations(files: Record<string, Uint8Array>): Promise<string[]> {
-    const dir = await getTmpDir();
-    try {
-        await writeFiles(files, { baseDir: dir });
-
-        const program = ts.createProgram(
-            Object.keys(files).map((file) => join(dir, file)),
-            {
-                noEmit: true,
-                strict: true,
-                types: [],
-                target: ts.ScriptTarget.ESNext,
-                module: ts.ModuleKind.NodeNext,
-            },
-        );
-
-        return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-}
 
 suite('Type Generation', () => {
     test.concurrent.each(
@@ -65,7 +33,7 @@ suite('Type Generation', () => {
         ]),
     )('declarations type-check ($worldName, $name)', async ({ wit, worldName, generate }) => {
         const files = await generate(wit, { worldName });
-        assert.deepStrictEqual(await typeCheckDeclarations(files), []);
+        assert.deepStrictEqual(await typeCheckGenerated(files), []);
     });
 
     test.concurrent.each([
@@ -149,7 +117,7 @@ suite('Type Generation', () => {
         const world = trim('stability.d.ts');
         assert.include(world, '/**\n* @since 0.1.0\n* @deprecated since 0.2.0\n*/\nexport interface Legacy {');
         assert.strictEqual(world.split('@deprecated').length - 1, 1);
-        assert.deepStrictEqual(await typeCheckDeclarations(files), []);
+        assert.deepStrictEqual(await typeCheckGenerated(files), []);
     });
 
     test('world-level function imports are declared as default exports for guests', async () => {
@@ -172,47 +140,8 @@ suite('Type Generation', () => {
         );
 
         // A guest module importing each function must type-check against the declarations.
-        const dir = await getTmpDir();
-        try {
-            await writeFiles(files, { baseDir: dir });
-            const testFile = join(dir, 'world-imports.mts');
-            await copyFile(new URL('./fixtures/typescript/world-imports.mts', import.meta.url), testFile);
-            const program = ts.createProgram([testFile, join(dir, 'world-imports-world.d.ts')], {
-                noEmit: true,
-                strict: true,
-                types: [],
-                target: ts.ScriptTarget.ESNext,
-                module: ts.ModuleKind.NodeNext,
-            });
-            assert.deepStrictEqual(
-                ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-                [],
-            );
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
+        assert.deepStrictEqual(await typeCheckGenerated(files, ['world-imports.mts']), []);
     });
-
-    /** Type-check a guest module from the fixtures against generated guest declarations. */
-    async function typeCheckGuestModule(files: Record<string, Uint8Array>, fixture: string): Promise<string[]> {
-        const dir = await getTmpDir();
-        try {
-            await writeFiles(files, { baseDir: dir });
-            const testFile = join(dir, fixture);
-            await copyFile(new URL(`./fixtures/typescript/${fixture}`, import.meta.url), testFile);
-            const declarations = Object.keys(files).map((name) => join(dir, name));
-            const program = ts.createProgram([testFile, ...declarations], {
-                noEmit: true,
-                strict: true,
-                types: [],
-                target: ts.ScriptTarget.ESNext,
-                module: ts.ModuleKind.NodeNext,
-            });
-            return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
-    }
 
     test('generic code narrows the Result helper type by default', async () => {
         const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/result-payloads.wit`, {
@@ -221,7 +150,7 @@ suite('Type Generation', () => {
         const source = Buffer.from(files['interfaces/test-result-payloads-payloads.d.ts']).toString();
         assert.include(source, "export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };");
         assert.include(source, 'onlyErr: Result<void, string>,');
-        assert.deepStrictEqual(await typeCheckGuestModule(files, 'result-generic.mts'), []);
+        assert.deepStrictEqual(await typeCheckGenerated(files, ['result-generic.mts']), []);
     });
 
     test('result arms without a payload do not require a value when their payloads are optional', async () => {
@@ -237,7 +166,7 @@ suite('Type Generation', () => {
         assert.include(source, "([E] extends [void] ? { tag: 'err', val?: E } : { tag: 'err', val: E })");
 
         // A guest module building such results must type-check against the declarations.
-        assert.deepStrictEqual(await typeCheckGuestModule(files, 'result-payloads.mts'), []);
+        assert.deepStrictEqual(await typeCheckGenerated(files, ['result-payloads.mts']), []);
     });
 
     test.concurrent.each([
@@ -286,7 +215,7 @@ suite('Type Generation', () => {
             read(both, 'interfaces/exports/test-interface-sides-store.d.ts'),
             `export type Shape = import('${sides.typesFromExportSide}').Shape;`,
         );
-        assert.deepStrictEqual(await typeCheckDeclarations(both), []);
+        assert.deepStrictEqual(await typeCheckGenerated(both), []);
 
         // An exported interface uses the import side of an interface that the world does not export.
         const exportOnly = await sides.generate(fixture, { worldName: 'test:interface-sides/export-only' });
@@ -300,33 +229,8 @@ suite('Type Generation', () => {
             read(exportOnly, 'interfaces/test-interface-sides-sink.d.ts'),
             `export * from '${sides.sinkReexport}';`,
         );
-        assert.deepStrictEqual(await typeCheckDeclarations(exportOnly), []);
+        assert.deepStrictEqual(await typeCheckGenerated(exportOnly), []);
     });
-
-    /**
-     * Type check a fixture module against declarations generated for a host.
-     *
-     * @param files - Generated declaration files, by path.
-     * @param fixture - Name of the module under `fixtures/typescript`.
-     */
-    async function typeCheckHostModule(files: Record<string, Uint8Array>, fixture: string): Promise<string[]> {
-        const dir = await getTmpDir();
-        try {
-            await writeFiles(files, { baseDir: dir });
-            const testFile = join(dir, fixture);
-            await copyFile(new URL(`./fixtures/typescript/${fixture}`, import.meta.url), testFile);
-            const program = ts.createProgram([testFile], {
-                noEmit: true,
-                strict: true,
-                types: [],
-                target: ts.ScriptTarget.ESNext,
-                module: ts.ModuleKind.NodeNext,
-            });
-            return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
-    }
 
     test('resources that the bindings provide are nominal types', async () => {
         const opts = { worldName: 'test:interface-sides/both-sides' };
@@ -344,7 +248,7 @@ suite('Type Generation', () => {
 
         // A host module must type-check against the declarations, apart from
         // the look-alike resources that it marks as errors.
-        assert.deepStrictEqual(await typeCheckHostModule(host, 'resource-brands.mts'), []);
+        assert.deepStrictEqual(await typeCheckGenerated(host, ['resource-brands.mts']), []);
     });
 
     test('resources of semver compatible versions of an interface are the same type', async () => {
@@ -359,7 +263,7 @@ suite('Type Generation', () => {
             read('interfaces/exports/test-versioned-things-0-3-0.d.ts'),
             "readonly $brand: 'test:versioned/things@0.3#thing';",
         );
-        assert.deepStrictEqual(await typeCheckHostModule(host, 'resource-versions.mts'), []);
+        assert.deepStrictEqual(await typeCheckGenerated(host, ['resource-versions.mts']), []);
     });
 
     test('the errors of results are documented and typed', async () => {
@@ -399,14 +303,14 @@ suite('Type Generation', () => {
         assert.include(hostImports, `@throws {ErrorCode} ${thrown}`);
         assert.include(hostImports, `@throws {undefined} ${thrown}`);
         assert.notInclude(hostImports, 'export class ErrorCodeError');
-        assert.deepStrictEqual(await typeCheckDeclarations(host), []);
+        assert.deepStrictEqual(await typeCheckGenerated(host), []);
 
         // A guest has no error classes, as its runtime provides none.
         const guest = await generateGuestTypes(fixture, opts);
         assert.include(read(guest, importSide), `@throws {Error & { payload: ErrorCode }} ${caught}`);
         assert.include(read(guest, exportSide), `@throws {ErrorCode} ${thrown}`);
         assert.notInclude(read(guest, importSide), 'export class ErrorCodeError');
-        assert.deepStrictEqual(await typeCheckDeclarations(guest), []);
+        assert.deepStrictEqual(await typeCheckGenerated(guest), []);
 
         // No function without a result has the tag.
         for (const source of [hostExports, hostImports]) {
@@ -429,7 +333,7 @@ suite('Type Generation', () => {
         assert.include(source, 'value is globalThis.Error & { readonly payload: unknown }');
         assert.include(source, 'imports: globalThis.Record<string, any>');
         assert.include(source, '): ShadowedWorldGlobalsWorld | globalThis.Promise<ShadowedWorldGlobalsWorld>;');
-        assert.deepStrictEqual(await typeCheckDeclarations(files), []);
+        assert.deepStrictEqual(await typeCheckGenerated(files), []);
     });
 
     test('async functions that return a future document their two awaitable layers', async () => {
@@ -456,7 +360,7 @@ suite('Type Generation', () => {
         // Neither a function that returns no future, nor one that is not async, has two layers.
         assert.strictEqual(hostExports.split('@returns').length - 1, 1);
         assert.notInclude(read(host, 'interfaces/test-async-futures-deliveries.d.ts'), '@returns');
-        assert.deepStrictEqual(await typeCheckDeclarations(host), []);
+        assert.deepStrictEqual(await typeCheckGenerated(host), []);
 
         const guest = await generateGuestTypes(fixture, opts);
         for (const source of Object.values(guest)) {
@@ -473,7 +377,7 @@ suite('Type Generation', () => {
         assert.include(source, 'export interface ImportObject {');
         assert.include(source, 'export type Option<T> = ');
         assert.include(source, 'export type Result<T, E> = ');
-        assert.deepStrictEqual(await typeCheckDeclarations(files), []);
+        assert.deepStrictEqual(await typeCheckGenerated(files), []);
     });
 
     test('host declarations leave world-level function imports to the import object', async () => {
@@ -681,25 +585,7 @@ suite('Type Generation', () => {
 
         // Check the public type contract without depending on declaration formatting
         // or spelling (for example, intersections that add optional disposal).
-        const dir = await getTmpDir();
-        try {
-            await writeFiles(files, { baseDir: dir });
-            const testFile = join(dir, 'named-async-types.mts');
-            await copyFile(new URL('./fixtures/typescript/named-async-types.mts', import.meta.url), testFile);
-            const program = ts.createProgram([testFile], {
-                noEmit: true,
-                strict: true,
-                types: [],
-                target: ts.ScriptTarget.ESNext,
-                module: ts.ModuleKind.NodeNext,
-            });
-            assert.deepStrictEqual(
-                ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-                [],
-            );
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
+        assert.deepStrictEqual(await typeCheckGenerated(files, ['named-async-types.mts']), []);
     });
 
     // https://github.com/bytecodealliance/jco/issues/926

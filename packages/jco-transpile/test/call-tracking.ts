@@ -5,9 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { setTimeout } from 'node:timers/promises';
 
 import { assert, test } from 'vitest';
-import ts from 'typescript-compiler-api';
 
-import { getTmpDir } from './helpers.js';
+import { getTmpDir, typeCheck } from './helpers.js';
 import { transpile, writeFiles } from './transpilation.js';
 import { COMPONENT_FIXTURES_DIR, hasJspi } from './common.js';
 
@@ -44,17 +43,7 @@ async function checkTypes(dir: string, instantiation: string | undefined, enable
         instance._util.whenIdle([]);
     `,
     );
-    const program = ts.createProgram([consumer], {
-        noEmit: true,
-        strict: true,
-        types: [],
-        target: ts.ScriptTarget.ESNext,
-        module: ts.ModuleKind.NodeNext,
-    });
-    assert.deepEqual(
-        ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-        [],
-    );
+    assert.deepEqual(typeCheck([consumer]), []);
 }
 
 for (const instantiation of [undefined, 'sync', 'async'] as const) {
