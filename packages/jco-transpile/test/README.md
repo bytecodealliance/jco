@@ -25,19 +25,63 @@ the corresponding LTS and extended suites. CI runs the transpilation test matrix
 with the inline and external runtime modes.
 
 Run the same tests against any other runtime that provides the same modules by
-naming its module base:
+naming its module base in `JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE`.
+The base is the location that holds the runtime's `runtime` module, with its
+`intrinsics/*` modules beside it.
+It takes one of these forms:
+
+- A directory relative to the working directory.
+  `pnpm --filter` runs the script in `packages/jco-transpile`, so a relative
+  path starts there:
+
+    ```sh
+    JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE=../../../my-runtime/dist \
+        pnpm --filter @bytecodealliance/jco-transpile test:custom-runtime
+    ```
+
+- An absolute directory:
+
+    ```sh
+    JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE=/home/me/my-runtime/dist \
+        pnpm --filter @bytecodealliance/jco-transpile test:custom-runtime
+    ```
+
+- A `file:` URL, used as given:
+
+    ```sh
+    JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE=file:///home/me/my-runtime/dist/ \
+        pnpm --filter @bytecodealliance/jco-transpile test:custom-runtime
+    ```
+
+- The name of a package installed where `packages/jco-transpile` can resolve it.
+  The package must export a `runtime` subpath; the base becomes the directory
+  that holds the module it resolves to:
+
+    ```sh
+    pnpm --filter @bytecodealliance/jco-transpile add --save-dev @my-scope/my-runtime
+    JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE=@my-scope/my-runtime \
+        pnpm --filter @bytecodealliance/jco-transpile test:custom-runtime
+    ```
+
+- An HTTP(S) URL, used as given.
+  Node does not import modules over HTTP(S) on its own, so this form needs a
+  module loader that does, supplied through `NODE_OPTIONS`:
+
+    ```sh
+    NODE_OPTIONS='--import ./my-https-loader.mjs' \
+    JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE=https://example.com/my-runtime/dist/ \
+        pnpm --filter @bytecodealliance/jco-transpile test:custom-runtime
+    ```
+
+To run part of a suite, pass the test files after the script name:
 
 ```sh
-JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE=./path/to/runtime/dist \
-    pnpm --filter @bytecodealliance/jco-transpile test:custom-runtime
+JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE=/home/me/my-runtime/dist \
+    pnpm --filter @bytecodealliance/jco-transpile test:custom-runtime test/resources.ts test/p3
 ```
 
-`JCO_TEST_RUNTIME_CUSTOM_MODULE_BASE` accepts:
-
-- a directory, resolved against the working directory;
-- a `file:` or HTTP(S) URL, used as given;
-- the name of an installed package, resolved from the working directory to the
-  directory that holds its `runtime` module.
+Browser tests serve the runtime from the test server, so they need one of the
+directory or `file:` forms.
 
 The `test:lts:custom-runtime` and `test:extended:custom-runtime` commands run the
 other suites. Tests under `test/external-runtime` wrap modules of the workspace
