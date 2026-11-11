@@ -20,11 +20,20 @@ import { componentize as componentizeGuest } from '@bytecodealliance/componentiz
 
 import { transpileBytes, writeFiles } from './transpilation.js';
 import type { TranspilationOptions } from '../src/transpile.js';
-import { ensureWitFilesystemPreopen } from '../src/preopens.js';
+import { _addPreopen, preopens } from '@bytecodealliance/preview2-shim/filesystem';
 
-/** Componentize's splicer shares the shim and needs a root mount before its first WIT read. */
+/**
+ * Componentize's splicer uses the shim's global filesystem and needs a root mount
+ * before its first WIT read. Jco's own tools no longer provide one as a side effect.
+ */
 export const componentize: typeof componentizeGuest = (...args: unknown[]) => {
-    ensureWitFilesystemPreopen();
+    if (preopens.getDirectories().length === 0) {
+        // The package declarations describe browser file data; Node uses a host path.
+        (_addPreopen as (virtualPath: string, hostPath: string) => void)(
+            '/',
+            process.platform === 'win32' ? '//' : '/',
+        );
+    }
     return Reflect.apply(componentizeGuest, undefined, args) as ReturnType<typeof componentizeGuest>;
 };
 

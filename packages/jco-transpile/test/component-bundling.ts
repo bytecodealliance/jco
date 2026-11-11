@@ -21,4 +21,14 @@ suite('the component build, for bundlers', () => {
             assert.include(source, `new URL('../vendor/${name}', import.meta.url)`);
         }
     });
+
+    test.concurrent('names every wasm-tools core module it can be asked for', async () => {
+        const source = await read('../dist/wasm-tools-component.js');
+        const vendor = await readdir(new URL('../vendor/', import.meta.url));
+        const modules = vendor.filter((name) => /^wasm-tools\.core\d*\.wasm$/.test(name));
+        assert.isNotEmpty(modules);
+        for (const name of modules) {
+            assert.include(source, `new URL('../vendor/${name}', import.meta.url)`);
+        }
+    });
 });
