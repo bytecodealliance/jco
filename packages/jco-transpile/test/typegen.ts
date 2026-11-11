@@ -11,7 +11,163 @@ import { getTmpDir, JCO_WIT_FIXTURE_DIR, WIT_FIXTURE_DIR } from './helpers.js';
 import { generateGuestTypes, generateHostTypes } from '../src/typegen.js';
 import { writeFiles } from '../src/common.js';
 
+/**
+ * Type-check generated declaration files with the TypeScript compiler.
+ *
+ * @param files - generated declaration files, keyed by relative path
+ * @returns the messages of the diagnostics the compiler reports, if any
+ */
+async function typeCheckDeclarations(files: Record<string, Uint8Array>): Promise<string[]> {
+    const dir = await getTmpDir();
+    try {
+        await writeFiles(files, { baseDir: dir });
+
+        const program = ts.createProgram(
+            Object.keys(files).map((file) => join(dir, file)),
+            {
+                noEmit: true,
+                strict: true,
+                types: [],
+                target: ts.ScriptTarget.ESNext,
+                module: ts.ModuleKind.NodeNext,
+            },
+        );
+
+        return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+}
+
 suite('Type Generation', () => {
+    test.concurrent.each(
+        [
+            { wit: `${JCO_WIT_FIXTURE_DIR}/flavorful`, worldName: 'test:flavorful/flavorful' },
+            { wit: `${WIT_FIXTURE_DIR}/issue-926`, worldName: 'test:issue-926/issue-926' },
+            { wit: `${WIT_FIXTURE_DIR}/js-reserved-word.wit`, worldName: 'fixtures:js-reserved-word/imports' },
+            { wit: `${WIT_FIXTURE_DIR}/js-reserved-word.wit`, worldName: 'fixtures:js-reserved-word/exports' },
+            { wit: `${WIT_FIXTURE_DIR}/named-async-types.wit`, worldName: 'test:named-async-types/named-async-types' },
+            { wit: `${WIT_FIXTURE_DIR}/declaration-names`, worldName: 'test:declaration-names/shadowed-globals-world' },
+            {
+                wit: `${WIT_FIXTURE_DIR}/declaration-names`,
+                worldName: 'test:declaration-names/variant-case-names-world',
+            },
+            { wit: `${WIT_FIXTURE_DIR}/declaration-names`, worldName: 'test:declaration-names/function-names-world' },
+            { wit: `${WIT_FIXTURE_DIR}/declaration-names`, worldName: 'test:declaration-names/versions-world' },
+            { wit: `${WIT_FIXTURE_DIR}/declaration-names`, worldName: 'test:declaration-names/world-imports-world' },
+        ].flatMap((fixture) => [
+            { ...fixture, name: 'host', generate: generateHostTypes },
+            { ...fixture, name: 'guest', generate: generateGuestTypes },
+        ]),
+    )('declarations type-check ($worldName, $name)', async ({ wit, worldName, generate }) => {
+        const files = await generate(wit, { worldName });
+        assert.deepStrictEqual(await typeCheckDeclarations(files), []);
+    });
+
+    test.concurrent.each([
+        { name: 'host', generate: generateHostTypes },
+        { name: 'guest', generate: generateGuestTypes },
+    ])('interfaces differing only in version each have a declaration file ($name)', async ({ generate }) => {
+        const files = await generate(`${WIT_FIXTURE_DIR}/declaration-names`, {
+            worldName: 'test:declaration-names/versions-world',
+        });
+        assert.sameMembers(Object.keys(files), [
+            'versions-world.d.ts',
+            'interfaces/test-versioned-api-1-0-0.d.ts',
+            'interfaces/test-versioned-api-1-1-0.d.ts',
+            'interfaces/test-versioned-api-2-0-0.d.ts',
+        ]);
+        const latest = Buffer.from(files['interfaces/test-versioned-api-2-0-0.d.ts']).toString();
+        assert.include(latest, 'id: bigint,');
+    });
+
+    test.concurrent.each([
+        { name: 'host', generate: generateHostTypes },
+        { name: 'guest', generate: generateGuestTypes },
+    ])('globals shadowed by WIT type names are referenced through globalThis ($name)', async ({ generate }) => {
+        const files = await generate(`${WIT_FIXTURE_DIR}/declaration-names`, {
+            worldName: 'test:declaration-names/shadowed-globals-world',
+        });
+        const source = Buffer.from(files['interfaces/test-declaration-names-shadowed-globals.d.ts']).toString();
+        assert.include(source, 'export function bytes(bytes: globalThis.Uint8Array): globalThis.Uint8Array;');
+        assert.include(source, 'strings: globalThis.Array<string>, array: Array');
+        assert.include(source, 'entries: globalThis.Map<string, number>, sizes: Map');
+        assert.include(source, 'nested: Option_<number | undefined>, choice: Option');
+        assert.include(source, "export type Option_<T> = { tag: 'none' } | { tag: 'some', val: T };");
+        assert.include(source, 'outcome: Result): globalThis.Array<Result_<number, string>>');
+    });
+
+    test('world-level function imports are declared as default exports for guests', async () => {
+        const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
+            worldName: 'test:declaration-names/world-imports-world',
+        });
+        const source = Buffer.from(files['world-imports-world.d.ts']).toString();
+        assert.include(
+            source,
+            [
+                "declare module 'lookup-entry' {",
+                "  import type { Operation, Entry } from 'test:declaration-names/world-imports-world';",
+                '  export { _default as default };',
+                '  function _default(key: string): Entry;',
+                '}',
+            ].join('\n'),
+        );
+
+        // A guest module importing each function must type-check against the declarations.
+        const dir = await getTmpDir();
+        try {
+            await writeFiles(files, { baseDir: dir });
+            const testFile = join(dir, 'world-imports.mts');
+            await copyFile(new URL('./fixtures/typescript/world-imports.mts', import.meta.url), testFile);
+            const program = ts.createProgram([testFile, join(dir, 'world-imports-world.d.ts')], {
+                noEmit: true,
+                strict: true,
+                types: [],
+                target: ts.ScriptTarget.ESNext,
+                module: ts.ModuleKind.NodeNext,
+            });
+            assert.deepStrictEqual(
+                ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
+                [],
+            );
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('host declarations leave world-level function imports to the import object', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
+            worldName: 'test:declaration-names/world-imports-world',
+        });
+        assert.notInclude(Buffer.from(files['world-imports-world.d.ts']).toString(), 'declare module');
+    });
+
+    test('resource functions named constructor are declared as computed members', async () => {
+        const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
+            worldName: 'test:declaration-names/function-names-world',
+        });
+        const source = Buffer.from(files['interfaces/test-declaration-names-function-names.d.ts']).toString();
+        assert.include(source, 'constructor(name: string)');
+        assert.include(source, '["constructor"](): number;');
+        assert.include(source, 'static ["constructor"](): number;');
+    });
+
+    test('variant cases named like other declarations are inlined', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
+            worldName: 'test:declaration-names/variant-case-names-world',
+        });
+        const source = Buffer.from(files['interfaces/test-declaration-names-variant-case-names.d.ts']).toString();
+
+        // `shape.round-circle` and `shape-round.circle` would both be `ShapeRoundCircle`
+        assert.notInclude(source, 'ShapeRoundCircle');
+        assert.include(
+            source,
+            "export type Shape =\n  | {\n    tag: 'round-circle',\n    val: number,\n  }\n  | ShapeSquare;",
+        );
+        assert.include(source, "export type ShapeRound =\n  | {\n    tag: 'circle',\n    val: number,\n  };");
+        assert.strictEqual(source.match(/export interface OperationCreate/g)?.length, 1);
+        assert.include(source, 'export interface OperationCancel');
+    });
     test.concurrent.each([
         { name: 'host', generate: generateHostTypes },
         { name: 'guest', generate: generateGuestTypes },
@@ -190,15 +346,20 @@ suite('Type Generation', () => {
     });
 
     // https://github.com/bytecodealliance/jco/issues/926
-    test('preserves named variant case interfaces by default', async () => {
+    test('preserves named variant case interfaces that do not collide by default', async () => {
         const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/issue-926`, {
             worldName: 'test:issue-926/issue-926',
         });
         const declaration = Buffer.from(files['interfaces/test-issue-926-operations.d.ts']).toString();
 
-        assert.include(declaration, 'export type Operation = OperationCreate | OperationEdit | OperationCancel;');
-        assert.strictEqual(declaration.match(/export interface OperationCreate/g)?.length, 2);
-        assert.strictEqual(declaration.match(/export interface OperationEdit/g)?.length, 2);
+        // The `create` and `edit` cases would be declared as `OperationCreate` and
+        // `OperationEdit`, the names of the records they carry, so they are inlined.
+        assert.include(
+            declaration,
+            `export type Operation =\n  | {\n    /**\n     * Creates an operation.\n     */\n    tag: 'create',\n    val: OperationCreate,\n  }\n  | {\n    tag: 'edit',\n    val: OperationEdit,\n  }\n  | OperationCancel;`,
+        );
+        assert.strictEqual(declaration.match(/export interface OperationCreate/g)?.length, 1);
+        assert.strictEqual(declaration.match(/export interface OperationEdit/g)?.length, 1);
         assert.strictEqual(declaration.match(/export interface OperationCancel/g)?.length, 1);
     });
 
