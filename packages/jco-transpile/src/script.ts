@@ -1,6 +1,5 @@
 import { callBindgen, scripts } from './component.js';
 import type { scripts as ScriptsNamespace } from '../vendor/js-component-bindgen-component.js';
-import { ensureWitFilesystemPreopen } from './preopens.js';
 
 export type ScriptComponentOpts = ScriptsNamespace.ScriptComponentOpts;
 export type ScriptEngineBackend = ScriptsNamespace.ScriptEngineBackend;
@@ -21,7 +20,6 @@ export async function createWorld(
     inputs: ScriptEngineWitInput[],
     backend: ScriptEngineBackend,
 ): Promise<ScriptEngineWorld> {
-    ensureWitFilesystemPreopen();
     return callBindgen(() => scripts.createWorld(inputs, backend));
 }
 

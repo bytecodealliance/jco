@@ -13,7 +13,6 @@ import { TranspilationOptions } from './transpile.js';
 import { extractWITAsyncModeFromOpts, type FileBytes, isWindows } from './common.js';
 
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
-import { ensureWitFilesystemPreopen } from './preopens.js';
 
 /** Expand an encoded WIT package into a conventional path-to-source map. */
 export async function unpackWit(packageSpec: string | undefined, bytes: Uint8Array) {
@@ -138,8 +137,6 @@ export async function generateGuestTypes(witPath: string, opts: TypegenOptions):
  * @returns A `Promise` that resolves to written file data
  */
 export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
-    ensureWitFilesystemPreopen();
-
     let name;
     if (opts.name) {
         name = opts.name;

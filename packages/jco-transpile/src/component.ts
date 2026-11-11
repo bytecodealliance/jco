@@ -1,16 +1,13 @@
-import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
-
 import { instantiate, type ImportObject } from '../vendor/js-component-bindgen-component-instantiation.js';
 import type * as Bindgen from '../vendor/js-component-bindgen-component.js';
+import { compileCoreModule as compileUrl, createToolImports } from './tool-imports.js';
 
 export type * from '../vendor/js-component-bindgen-component.js';
 
 type Component = Awaited<ReturnType<typeof instantiate>>;
 
 const modules = new Map<string, WebAssembly.Module | Promise<WebAssembly.Module>>();
-// Generated JS consumes unversioned WASI keys; its declarations retain the
-// versions from the component's WIT imports.
-const imports = new WASIShim().getImportObject() as unknown as ImportObject;
+const imports = createToolImports<ImportObject>();
 let component: Component | undefined;
 
 // Written out, as a bundler only follows a URL that is one literal.
@@ -38,11 +35,7 @@ async function compileCoreModule(path: string): Promise<WebAssembly.Module> {
     if (!url) {
         throw new Error(`unknown core module [${path}]`);
     }
-    if (typeof process !== 'undefined' && process.versions?.node) {
-        const { readFile } = await import('node:fs/promises');
-        return WebAssembly.compile(await readFile(url));
-    }
-    return WebAssembly.compileStreaming(fetch(url));
+    return compileUrl(url);
 }
 
 function loadCoreModule(path: string): WebAssembly.Module | Promise<WebAssembly.Module> {

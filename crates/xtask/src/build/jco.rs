@@ -199,12 +199,9 @@ fn transpile(args: TranspileArgs) -> Result<()> {
         .no_typescript(false)
         .map(import_map)
         .nodejs_compat_disabled(false)
-        // Both bindgen entry points share these core modules by filename.
-        .base64_cutoff(if name == "js-component-bindgen-component" {
-            0
-        } else {
-            5000
-        })
+        // The ES module and instantiable builds share core modules by filename,
+        // and an instantiable build requests every one from its loader.
+        .base64_cutoff(0)
         .tla_compat(true)
         .valid_lifting_optimization(false)
         .tracing(false)
@@ -219,9 +216,11 @@ fn transpile(args: TranspileArgs) -> Result<()> {
 
     let mut transpiled = js_component_bindgen::transpile(&adapted_component, opts.clone())?;
 
-    // The JS API can discard a trapped bindgen instance and instantiate a new
-    // one without reloading an ES module or recompiling its core Wasm modules.
-    if name == "js-component-bindgen-component" {
+    // An instantiable build takes its WASI imports as an argument, so the JS API
+    // can give each tool a private filesystem instead of the shim's global one.
+    // It also lets the API discard a trapped bindgen instance and instantiate a
+    // new one without reloading an ES module or recompiling its core Wasm modules.
+    {
         let mut factory_opts = opts;
         factory_opts.instantiation_mode = Some(InstantiationMode::Async);
         factory_opts.map = None;
