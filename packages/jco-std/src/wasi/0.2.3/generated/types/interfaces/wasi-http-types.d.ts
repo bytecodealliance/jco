@@ -15,15 +15,34 @@ declare module 'wasi:http/types@0.2.3' {
    * 
    * Note that this function is fallible because not all io-errors are
    * http-related errors.
+   *
+   * @since 0.2.0
    */
   export function httpErrorCode(err: IoError): ErrorCode | undefined;
+  /**
+   * @since 0.2.0
+   */
   export type Duration = import('wasi:clocks/monotonic-clock@0.2.3').Duration;
+  /**
+   * @since 0.2.0
+   */
   export type InputStream = import('wasi:io/streams@0.2.3').InputStream;
+  /**
+   * @since 0.2.0
+   */
   export type OutputStream = import('wasi:io/streams@0.2.3').OutputStream;
+  /**
+   * @since 0.2.0
+   */
   export type IoError = import('wasi:io/error@0.2.3').Error;
+  /**
+   * @since 0.2.0
+   */
   export type Pollable = import('wasi:io/poll@0.2.3').Pollable;
   /**
    * This type corresponds to HTTP standard Methods.
+   *
+   * @since 0.2.0
    */
   export type Method = MethodGet | MethodHead | MethodPost | MethodPut | MethodDelete | MethodConnect | MethodOptions | MethodTrace | MethodPatch | MethodOther;
   export interface MethodGet {
@@ -59,6 +78,8 @@ declare module 'wasi:http/types@0.2.3' {
   }
   /**
    * This type corresponds to HTTP standard Related Schemes.
+   *
+   * @since 0.2.0
    */
   export type Scheme = SchemeHttp | SchemeHttps | SchemeOther;
   export interface SchemeHttp {
@@ -73,6 +94,8 @@ declare module 'wasi:http/types@0.2.3' {
   }
   /**
    * Defines the case payload type for `DNS-error` above:
+   *
+   * @since 0.2.0
    */
   export interface DnsErrorPayload {
     rcode?: string,
@@ -80,6 +103,8 @@ declare module 'wasi:http/types@0.2.3' {
   }
   /**
    * Defines the case payload type for `TLS-alert-received` above:
+   *
+   * @since 0.2.0
    */
   export interface TlsAlertReceivedPayload {
     alertId?: number,
@@ -87,6 +112,8 @@ declare module 'wasi:http/types@0.2.3' {
   }
   /**
    * Defines the case payload type for `HTTP-response-{header,trailer}-size` above:
+   *
+   * @since 0.2.0
    */
   export interface FieldSizePayload {
     fieldName?: string,
@@ -95,6 +122,8 @@ declare module 'wasi:http/types@0.2.3' {
   /**
    * These cases are inspired by the IANA HTTP Proxy Error Types:
    * <https://www.iana.org/assignments/http-proxy-status/http-proxy-status.xhtml#table-http-proxy-error-types>
+   *
+   * @since 0.2.0
    */
   export type ErrorCode = ErrorCodeDnsTimeout | ErrorCodeDnsError | ErrorCodeDestinationNotFound | ErrorCodeDestinationUnavailable | ErrorCodeDestinationIpProhibited | ErrorCodeDestinationIpUnroutable | ErrorCodeConnectionRefused | ErrorCodeConnectionTerminated | ErrorCodeConnectionTimeout | ErrorCodeConnectionReadTimeout | ErrorCodeConnectionWriteTimeout | ErrorCodeConnectionLimitReached | ErrorCodeTlsProtocolError | ErrorCodeTlsCertificateError | ErrorCodeTlsAlertReceived | ErrorCodeHttpRequestDenied | ErrorCodeHttpRequestLengthRequired | ErrorCodeHttpRequestBodySize | ErrorCodeHttpRequestMethodInvalid | ErrorCodeHttpRequestUriInvalid | ErrorCodeHttpRequestUriTooLong | ErrorCodeHttpRequestHeaderSectionSize | ErrorCodeHttpRequestHeaderSize | ErrorCodeHttpRequestTrailerSectionSize | ErrorCodeHttpRequestTrailerSize | ErrorCodeHttpResponseIncomplete | ErrorCodeHttpResponseHeaderSectionSize | ErrorCodeHttpResponseHeaderSize | ErrorCodeHttpResponseBodySize | ErrorCodeHttpResponseTrailerSectionSize | ErrorCodeHttpResponseTrailerSize | ErrorCodeHttpResponseTransferCoding | ErrorCodeHttpResponseContentCoding | ErrorCodeHttpResponseTimeout | ErrorCodeHttpUpgradeFailed | ErrorCodeHttpProtocolError | ErrorCodeLoopDetected | ErrorCodeConfigurationError | ErrorCodeInternalError;
   export interface ErrorCodeDnsTimeout {
@@ -239,6 +268,8 @@ declare module 'wasi:http/types@0.2.3' {
   /**
    * This type enumerates the different kinds of errors that may occur when
    * setting or appending to a `fields` resource.
+   *
+   * @since 0.2.0
    */
   export type HeaderError = HeaderErrorInvalidSyntax | HeaderErrorForbidden | HeaderErrorImmutable;
   /**
@@ -272,6 +303,9 @@ declare module 'wasi:http/types@0.2.3' {
    * # Deprecation
    * 
    * This type has been deprecated in favor of the `field-name` type.
+   *
+   * @since 0.2.0
+   * @deprecated since 0.2.2
    */
   export type FieldKey = string;
   /**
@@ -279,33 +313,63 @@ declare module 'wasi:http/types@0.2.3' {
    * 
    * Field names should always be treated as case insensitive by the `fields`
    * resource for the purposes of equality checking.
+   *
+   * @since 0.2.1
    */
   export type FieldName = FieldKey;
   /**
    * Field values should always be ASCII strings. However, in
    * reality, HTTP implementations often have to interpret malformed values,
    * so they are provided as a list of bytes.
+   *
+   * @since 0.2.0
    */
   export type FieldValue = Uint8Array;
   /**
    * Headers is an alias for Fields.
+   *
+   * @since 0.2.0
    */
   export type Headers = Fields;
   /**
    * Trailers is an alias for Fields.
+   *
+   * @since 0.2.0
    */
   export type Trailers = Fields;
   /**
    * This type corresponds to the HTTP standard Status Code.
+   *
+   * @since 0.2.0
    */
   export type StatusCode = number;
   export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
   
+  /**
+  * This following block defines the `fields` resource which corresponds to
+  * HTTP standard Fields. Fields are a common representation used for both
+  * Headers and Trailers.
+  * 
+  * A `fields` may be mutable or immutable. A `fields` created using the
+  * constructor, `from-list`, or `clone` will be mutable, but a `fields`
+  * resource given by other means (including, but not limited to,
+  * `incoming-request.headers`, `outgoing-request.headers`) might be be
+  * immutable. In an immutable fields, the `set`, `append`, and `delete`
+  * operations will fail with `header-error.immutable`.
+  *
+  * @since 0.2.0
+  */
   export class Fields implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#fields';
     /**
     * Construct an empty HTTP Fields.
     * 
     * The resulting `fields` is mutable.
+    *
+    * @since 0.2.0
     */
     constructor()
     /**
@@ -322,6 +386,9 @@ declare module 'wasi:http/types@0.2.3' {
     * 
     * An error result will be returned if any `field-name` or `field-value` is
     * syntactically invalid, or if a field is forbidden.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: HeaderError }} The error of the result, as the `payload` of the thrown error.
     */
     static fromList(entries: Array<[FieldName, FieldValue]>): Fields;
     /**
@@ -329,11 +396,15 @@ declare module 'wasi:http/types@0.2.3' {
     * in this `fields` or is syntactically invalid, an empty list is returned.
     * However, if the name is present but empty, this is represented by a list
     * with one or more empty field-values present.
+    *
+    * @since 0.2.0
     */
     get(name: FieldName): Array<FieldValue>;
     /**
     * Returns `true` when the name is present in this `fields`. If the name is
     * syntactically invalid, `false` is returned.
+    *
+    * @since 0.2.0
     */
     has(name: FieldName): boolean;
     /**
@@ -344,6 +415,9 @@ declare module 'wasi:http/types@0.2.3' {
     * 
     * Fails with `header-error.invalid-syntax` if the `field-name` or any of
     * the `field-value`s are syntactically invalid.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: HeaderError }} The error of the result, as the `payload` of the thrown error.
     */
     set(name: FieldName, value: Array<FieldValue>): void;
     /**
@@ -354,8 +428,11 @@ declare module 'wasi:http/types@0.2.3' {
     * 
     * Fails with `header-error.invalid-syntax` if the `field-name` is
     * syntactically invalid.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: HeaderError }} The error of the result, as the `payload` of the thrown error.
     */
-    'delete'(name: FieldName): void;
+    "delete"(name: FieldName): void;
     /**
     * Append a value for a name. Does not change or delete any existing
     * values for that name.
@@ -364,6 +441,9 @@ declare module 'wasi:http/types@0.2.3' {
     * 
     * Fails with `header-error.invalid-syntax` if the `field-name` or
     * `field-value` are syntactically invalid.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: HeaderError }} The error of the result, as the `payload` of the thrown error.
     */
     append(name: FieldName, value: FieldValue): void;
     /**
@@ -376,18 +456,35 @@ declare module 'wasi:http/types@0.2.3' {
     * 
     * The names and values are always returned in the original casing and in
     * the order in which they will be serialized for transport.
+    *
+    * @since 0.2.0
     */
     entries(): Array<[FieldName, FieldValue]>;
     /**
     * Make a deep copy of the Fields. Equivalent in behavior to calling the
     * `fields` constructor on the return value of `entries`. The resulting
     * `fields` is mutable.
+    *
+    * @since 0.2.0
     */
     clone(): Fields;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents a future which may eventually return an incoming HTTP
+  * Response, or an error.
+  * 
+  * This resource is returned by the `wasi:http/outgoing-handler` interface to
+  * provide the HTTP Response corresponding to the sent Request.
+  *
+  * @since 0.2.0
+  */
   export class FutureIncomingResponse implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#future-incoming-response';
     /**
      * This type does not have a public constructor.
      */
@@ -396,6 +493,8 @@ declare module 'wasi:http/types@0.2.3' {
     * Returns a pollable which becomes ready when either the Response has
     * been received, or an error has occurred. When this pollable is ready,
     * the `get` method will return `some`.
+    *
+    * @since 0.2.0
     */
     subscribe(): Pollable;
     /**
@@ -413,12 +512,27 @@ declare module 'wasi:http/types@0.2.3' {
     * occurred. Errors may also occur while consuming the response body,
     * but those will be reported by the `incoming-body` and its
     * `output-stream` child.
+    *
+    * @since 0.2.0
     */
     get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents a future which may eventually return trailers, or an error.
+  * 
+  * In the case that the incoming HTTP Request or Response did not have any
+  * trailers, this future will resolve to the empty set of trailers once the
+  * complete Request or Response body has been received.
+  *
+  * @since 0.2.0
+  */
   export class FutureTrailers implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#future-trailers';
     /**
      * This type does not have a public constructor.
      */
@@ -427,6 +541,8 @@ declare module 'wasi:http/types@0.2.3' {
     * Returns a pollable which becomes ready when either the trailers have
     * been received, or an error has occurred. When this pollable is ready,
     * the `get` method will return `some`.
+    *
+    * @since 0.2.0
     */
     subscribe(): Pollable;
     /**
@@ -449,12 +565,30 @@ declare module 'wasi:http/types@0.2.3' {
     * resource is immutable, and a child. Use of the `set`, `append`, or
     * `delete` methods will return an error, and the resource must be
     * dropped before the parent `future-trailers` is dropped.
+    *
+    * @since 0.2.0
     */
     get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents an incoming HTTP Request or Response's Body.
+  * 
+  * A body has both its contents - a stream of bytes - and a (possibly
+  * empty) set of trailers, indicating that the full contents of the
+  * body have been received. This resource represents the contents as
+  * an `input-stream` and the delivery of trailers as a `future-trailers`,
+  * and ensures that the user of this interface may only be consuming either
+  * the body contents or waiting on trailers at any given time.
+  *
+  * @since 0.2.0
+  */
   export class IncomingBody implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#incoming-body';
     /**
      * This type does not have a public constructor.
      */
@@ -475,35 +609,57 @@ declare module 'wasi:http/types@0.2.3' {
     * backpressure is to be applied when the user is consuming the body,
     * and for that backpressure to not inhibit delivery of the trailers if
     * the user does not read the entire body.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     stream(): InputStream;
     /**
     * Takes ownership of `incoming-body`, and returns a `future-trailers`.
     * This function will trap if the `input-stream` child is still alive.
+    *
+    * @since 0.2.0
     */
     static finish(this_: IncomingBody): FutureTrailers;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents an incoming HTTP Request.
+  *
+  * @since 0.2.0
+  */
   export class IncomingRequest implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#incoming-request';
     /**
      * This type does not have a public constructor.
      */
     private constructor();
     /**
     * Returns the method of the incoming request.
+    *
+    * @since 0.2.0
     */
     method(): Method;
     /**
     * Returns the path with query parameters from the request, as a string.
+    *
+    * @since 0.2.0
     */
     pathWithQuery(): string | undefined;
     /**
     * Returns the protocol scheme from the request.
+    *
+    * @since 0.2.0
     */
     scheme(): Scheme | undefined;
     /**
     * Returns the authority of the Request's target URI, if present.
+    *
+    * @since 0.2.0
     */
     authority(): string | undefined;
     /**
@@ -515,23 +671,39 @@ declare module 'wasi:http/types@0.2.3' {
     * The `headers` returned are a child resource: it must be dropped before
     * the parent `incoming-request` is dropped. Dropping this
     * `incoming-request` before all children are dropped will trap.
+    *
+    * @since 0.2.0
     */
     headers(): Headers;
     /**
     * Gives the `incoming-body` associated with this request. Will only
     * return success at most once, and subsequent calls will return error.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     consume(): IncomingBody;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents an incoming HTTP Response.
+  *
+  * @since 0.2.0
+  */
   export class IncomingResponse implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#incoming-response';
     /**
      * This type does not have a public constructor.
      */
     private constructor();
     /**
     * Returns the status code from the incoming response.
+    *
+    * @since 0.2.0
     */
     status(): StatusCode;
     /**
@@ -542,17 +714,46 @@ declare module 'wasi:http/types@0.2.3' {
     * 
     * This headers resource is a child: it must be dropped before the parent
     * `incoming-response` is dropped.
+    *
+    * @since 0.2.0
     */
     headers(): Headers;
     /**
     * Returns the incoming body. May be called at most once. Returns error
     * if called additional times.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     consume(): IncomingBody;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents an outgoing HTTP Request or Response's Body.
+  * 
+  * A body has both its contents - a stream of bytes - and a (possibly
+  * empty) set of trailers, inducating the full contents of the body
+  * have been sent. This resource represents the contents as an
+  * `output-stream` child resource, and the completion of the body (with
+  * optional trailers) with a static function that consumes the
+  * `outgoing-body` resource, and ensures that the user of this interface
+  * may not write to the body contents after the body has been finished.
+  * 
+  * If the user code drops this resource, as opposed to calling the static
+  * method `finish`, the implementation should treat the body as incomplete,
+  * and that an error has occurred. The implementation should propagate this
+  * error to the HTTP protocol by whatever means it has available,
+  * including: corrupting the body on the wire, aborting the associated
+  * Request, or sending a late status code for the Response.
+  *
+  * @since 0.2.0
+  */
   export class OutgoingBody implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#outgoing-body';
     /**
      * This type does not have a public constructor.
      */
@@ -567,6 +768,9 @@ declare module 'wasi:http/types@0.2.3' {
     * Returns success on the first call: the `output-stream` resource for
     * this `outgoing-body` may be retrieved at most once. Subsequent calls
     * will return error.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     write(): OutputStream;
     /**
@@ -579,12 +783,24 @@ declare module 'wasi:http/types@0.2.3' {
     * constructed with a Content-Length header, and the contents written
     * to the body (via `write`) does not match the value given in the
     * Content-Length.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: ErrorCode }} The error of the result, as the `payload` of the thrown error.
     */
     static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents an outgoing HTTP Request.
+  *
+  * @since 0.2.0
+  */
   export class OutgoingRequest implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#outgoing-request';
     /**
     * Construct a new `outgoing-request` with a default `method` of `GET`, and
     * `none` values for `path-with-query`, `scheme`, and `authority`.
@@ -596,6 +812,8 @@ declare module 'wasi:http/types@0.2.3' {
     * and `authority`, or `headers` which are not permitted to be sent.
     * It is the obligation of the `outgoing-handler.handle` implementation
     * to reject invalid constructions of `outgoing-request`.
+    *
+    * @since 0.2.0
     */
     constructor(headers: Headers)
     /**
@@ -605,43 +823,63 @@ declare module 'wasi:http/types@0.2.3' {
     * Returns success on the first call: the `outgoing-body` resource for
     * this `outgoing-request` can be retrieved at most once. Subsequent
     * calls will return error.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     body(): OutgoingBody;
     /**
     * Get the Method for the Request.
+    *
+    * @since 0.2.0
     */
     method(): Method;
     /**
     * Set the Method for the Request. Fails if the string present in a
     * `method.other` argument is not a syntactically valid method.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setMethod(method: Method): void;
     /**
     * Get the combination of the HTTP Path and Query for the Request.
     * When `none`, this represents an empty Path and empty Query.
+    *
+    * @since 0.2.0
     */
     pathWithQuery(): string | undefined;
     /**
     * Set the combination of the HTTP Path and Query for the Request.
     * When `none`, this represents an empty Path and empty Query. Fails is the
     * string given is not a syntactically valid path and query uri component.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setPathWithQuery(pathWithQuery: string | undefined): void;
     /**
     * Get the HTTP Related Scheme for the Request. When `none`, the
     * implementation may choose an appropriate default scheme.
+    *
+    * @since 0.2.0
     */
     scheme(): Scheme | undefined;
     /**
     * Set the HTTP Related Scheme for the Request. When `none`, the
     * implementation may choose an appropriate default scheme. Fails if the
     * string given is not a syntactically valid uri scheme.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setScheme(scheme: Scheme | undefined): void;
     /**
     * Get the authority of the Request's target URI. A value of `none` may be used
     * with Related Schemes which do not require an authority. The HTTP and
     * HTTPS schemes always require an authority.
+    *
+    * @since 0.2.0
     */
     authority(): string | undefined;
     /**
@@ -649,6 +887,9 @@ declare module 'wasi:http/types@0.2.3' {
     * with Related Schemes which do not require an authority. The HTTP and
     * HTTPS schemes always require an authority. Fails if the string given is
     * not a syntactically valid URI authority.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setAuthority(authority: string | undefined): void;
     /**
@@ -660,27 +901,45 @@ declare module 'wasi:http/types@0.2.3' {
     * This headers resource is a child: it must be dropped before the parent
     * `outgoing-request` is dropped, or its ownership is transferred to
     * another component by e.g. `outgoing-handler.handle`.
+    *
+    * @since 0.2.0
     */
     headers(): Headers;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents an outgoing HTTP Response.
+  *
+  * @since 0.2.0
+  */
   export class OutgoingResponse implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#outgoing-response';
     /**
     * Construct an `outgoing-response`, with a default `status-code` of `200`.
     * If a different `status-code` is needed, it must be set via the
     * `set-status-code` method.
     * 
     * * `headers` is the HTTP Headers for the Response.
+    *
+    * @since 0.2.0
     */
     constructor(headers: Headers)
     /**
     * Get the HTTP Status Code for the Response.
+    *
+    * @since 0.2.0
     */
     statusCode(): StatusCode;
     /**
     * Set the HTTP Status Code for the Response. Fails if the status-code
     * given is not a valid http status code.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setStatusCode(statusCode: StatusCode): void;
     /**
@@ -692,6 +951,8 @@ declare module 'wasi:http/types@0.2.3' {
     * This headers resource is a child: it must be dropped before the parent
     * `outgoing-request` is dropped, or its ownership is transferred to
     * another component by e.g. `outgoing-handler.handle`.
+    *
+    * @since 0.2.0
     */
     headers(): Headers;
     /**
@@ -700,49 +961,96 @@ declare module 'wasi:http/types@0.2.3' {
     * Returns success on the first call: the `outgoing-body` resource for
     * this `outgoing-response` can be retrieved at most once. Subsequent
     * calls will return error.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     body(): OutgoingBody;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Parameters for making an HTTP Request. Each of these parameters is
+  * currently an optional timeout applicable to the transport layer of the
+  * HTTP protocol.
+  * 
+  * These timeouts are separate from any the user may use to bound a
+  * blocking call to `wasi:io/poll.poll`.
+  *
+  * @since 0.2.0
+  */
   export class RequestOptions implements Disposable {
     /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#request-options';
+    /**
     * Construct a default `request-options` value.
+    *
+    * @since 0.2.0
     */
     constructor()
     /**
     * The timeout for the initial connect to the HTTP Server.
+    *
+    * @since 0.2.0
     */
     connectTimeout(): Duration | undefined;
     /**
     * Set the timeout for the initial connect to the HTTP Server. An error
     * return value indicates that this timeout is not supported.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setConnectTimeout(duration: Duration | undefined): void;
     /**
     * The timeout for receiving the first byte of the Response body.
+    *
+    * @since 0.2.0
     */
     firstByteTimeout(): Duration | undefined;
     /**
     * Set the timeout for receiving the first byte of the Response body. An
     * error return value indicates that this timeout is not supported.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setFirstByteTimeout(duration: Duration | undefined): void;
     /**
     * The timeout for receiving subsequent chunks of bytes in the Response
     * body stream.
+    *
+    * @since 0.2.0
     */
     betweenBytesTimeout(): Duration | undefined;
     /**
     * Set the timeout for receiving subsequent chunks of bytes in the Response
     * body stream. An error return value indicates that this timeout is not
     * supported.
+    *
+    * @since 0.2.0
+    * @throws {Error & { payload: undefined }} The error of the result, as the `payload` of the thrown error.
     */
     setBetweenBytesTimeout(duration: Duration | undefined): void;
     [Symbol.dispose](): void;
   }
   
+  /**
+  * Represents the ability to send an HTTP Response.
+  * 
+  * This resource is used by the `wasi:http/incoming-handler` interface to
+  * allow a Response to be sent corresponding to the Request provided as the
+  * other argument to `incoming-handler.handle`.
+  *
+  * @since 0.2.0
+  */
   export class ResponseOutparam implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:http/types@0.2#response-outparam';
     /**
      * This type does not have a public constructor.
      */
@@ -757,6 +1065,8 @@ declare module 'wasi:http/types@0.2.3' {
     * 
     * The user may provide an `error` to `response` to allow the
     * implementation determine how to respond with an HTTP error response.
+    *
+    * @since 0.2.0
     */
     static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
     [Symbol.dispose](): void;

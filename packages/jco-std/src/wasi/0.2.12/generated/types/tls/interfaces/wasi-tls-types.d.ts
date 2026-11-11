@@ -14,6 +14,10 @@ declare module 'wasi:tls/types@0.2.0-draft' {
 
   export class ClientConnection implements Disposable {
     /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:tls/types@0.2.0-draft#client-connection';
+    /**
      * This type does not have a public constructor.
      */
     private constructor();
@@ -22,12 +26,20 @@ declare module 'wasi:tls/types@0.2.0-draft' {
   }
 
   export class ClientHandshake implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:tls/types@0.2.0-draft#client-handshake';
     constructor(serverName: string, input: InputStream, output: OutputStream)
     static finish(this_: ClientHandshake): FutureClientStreams;
     [Symbol.dispose](): void;
   }
 
   export class FutureClientStreams implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:tls/types@0.2.0-draft#future-client-streams';
     /**
      * This type does not have a public constructor.
      */

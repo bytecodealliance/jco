@@ -11,8 +11,16 @@ declare module 'wasi:http/incoming-handler@0.2.3' {
    * The implementor of this function must write a response to the
    * `response-outparam` before returning, or else the caller will respond
    * with an error on its behalf.
+   *
+   * @since 0.2.0
    */
   export function handle(request: IncomingRequest, responseOut: ResponseOutparam): void;
+  /**
+   * @since 0.2.0
+   */
   export type IncomingRequest = import('wasi:http/types@0.2.3').IncomingRequest;
+  /**
+   * @since 0.2.0
+   */
   export type ResponseOutparam = import('wasi:http/types@0.2.3').ResponseOutparam;
 }

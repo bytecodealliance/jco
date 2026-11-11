@@ -1,6 +1,31 @@
 declare module 'wasi:io/error@0.2.12' {
   
+  /**
+  * A resource which represents some error information.
+  * 
+  * The only method provided by this resource is `to-debug-string`,
+  * which provides some human-readable information about the error.
+  * 
+  * In the `wasi:io` package, this resource is returned through the
+  * `wasi:io/streams.stream-error` type.
+  * 
+  * To provide more specific error information, other interfaces may
+  * offer functions to "downcast" this error into more specific types. For example,
+  * errors returned from streams derived from filesystem types can be described using
+  * the filesystem's own error-code type. This is done using the function
+  * `wasi:filesystem/types.filesystem-error-code`, which takes a `borrow<error>`
+  * parameter and returns an `option<wasi:filesystem/types.error-code>`.
+  * 
+  * The set of functions which can "downcast" an `error` into a more
+  * concrete type is open.
+  *
+  * @since 0.2.0
+  */
   export class Error implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:io/error@0.2#error';
     /**
      * This type does not have a public constructor.
      */
@@ -13,6 +38,8 @@ declare module 'wasi:io/error@0.2.12' {
     * It may change across platforms, hosts, or other implementation
     * details. Parsing this string is a major platform-compatibility
     * hazard.
+    *
+    * @since 0.2.0
     */
     toDebugString(): string;
     [Symbol.dispose](): void;
