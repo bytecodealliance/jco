@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-ae31eb63.js";
+            window.path_to_searchindex_js = "searchindex-4e876952.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-332598f4.js"></script>
@@ -735,7 +735,7 @@ runtime usage. This shim layer supports both Node.js and browsers.</p>
 <p><code>--instantiation [mode]</code>: Instead of a direct ES module, export an <code>instantiate</code> function which can take the imports as an argument instead of implicit imports. The <code>instantiate</code> function can be async (with <code>--instantiation</code> or <code>--instantiation async</code>), or sync (with <code>--instantiation sync</code>).</p>
 </li>
 <li>
-<p><code>--cm-runtime-es-module &lt;base&gt;</code>: Select an experimental API-v1 Component Model runtime package or directory base. Bindings import named exports from <code>&lt;base&gt;/runtime</code> and <code>&lt;base&gt;/intrinsics/resource</code>; directory and file/HTTP(S) URL bases append <code>.js</code>. Relative bases resolve from the generated bindings. Install the runtime alongside the generated component; omitting this option keeps intrinsics inline. The current operation is <code>tableGet(context, table, handle)</code>. Legacy provider files such as <code>./provider.js</code> must migrate to a directory base. See the <a href="../../packages/jco-cm-runtime/docs/runtime.html">runtime contract</a>.</p>
+<p><code>--cm-runtime-es-module &lt;base&gt;</code>: Select an experimental API-v1 Component Model runtime package or directory base. Bindings import named exports from <code>&lt;base&gt;/runtime</code> and <code>&lt;base&gt;/intrinsics/resource</code>; directory and file/HTTP(S) URL bases append <code>.js</code>. Relative bases resolve from the generated bindings. Install the runtime alongside the generated component; omitting this option bundles jco’s own runtime into the bindings, which then import no runtime. The current operation is <code>tableGet(context, table, handle)</code>. Legacy provider files such as <code>./provider.js</code> must migrate to a directory base. See the <a href="../../packages/jco-cm-runtime/docs/runtime.html">runtime contract</a>.</p>
 </li>
 <li>
 <p><code>--valid-lifting-optimization</code>: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.</p>
@@ -6155,7 +6155,7 @@ a resource-lifetime predicate. A selected long-lived producer can keep its handl
 indefinitely. Tracking neither cancels a call nor prevents new calls. Whole-instance
 <code>whenIdle()</code> and <code>stop()</code> retain their existing behavior.</p>
 <h2 id="runtime-compatibility-and-cost"><a class="header" href="#runtime-compatibility-and-cost">Runtime compatibility and cost</a></h2>
-<p>Tracking lives in generated binding glue and works with inline intrinsics and external
+<p>Tracking lives in generated binding glue and works with the bundled runtime and external
 runtime providers. It reuses the existing task ancestry and idle-notification contracts;
 providers need no additional task methods, scheduler fields, modules, or feature flag.
 A provider that already correctly implements those lifecycle contracts can be used
