@@ -199,6 +199,40 @@ suite('Type Generation', () => {
         }
     });
 
+    test('async functions implemented only by the host may return values directly', async () => {
+        const opts = { worldName: 'test:async-returns/async-returns' };
+        const fixture = `${WIT_FIXTURE_DIR}/async-returns.wit`;
+        const host = await generateHostTypes(fixture, { ...opts, instantiation: 'async' });
+        const read = (files: Record<string, Uint8Array>, name: string) => Buffer.from(files[name]).toString();
+
+        const hostOnly = read(host, 'interfaces/test-async-returns-host-only.d.ts');
+        assert.include(hostOnly, 'export function fetch(key: string): Promise<string> | string;');
+        assert.include(hostOnly, 'export function notify(): Promise<void> | void;');
+        assert.include(hostOnly, 'export function now(): bigint;');
+        assert.include(hostOnly, 'read(): Promise<number | undefined> | number | undefined;');
+        assert.include(hostOnly, 'static open(): Promise<Connection> | Connection;');
+        assert.include(read(host, 'async-returns.d.ts'), '"default"(): Promise<number> | number,');
+
+        // An interface that the world also exports shares its declaration with the
+        // functions that the component provides, which always return promises.
+        assert.include(
+            read(host, 'interfaces/test-async-returns-shared.d.ts'),
+            'export function echo(value: string): Promise<string>;',
+        );
+        assert.include(
+            read(host, 'interfaces/test-async-returns-guest-only.d.ts'),
+            'export function run(): Promise<number>;',
+        );
+        assert.deepStrictEqual(await typeCheckDeclarations(host), []);
+
+        // Guests call the functions that they import, which always return promises.
+        const guest = await generateGuestTypes(fixture, opts);
+        const guestHostOnly = read(guest, 'interfaces/test-async-returns-host-only.d.ts');
+        assert.include(guestHostOnly, 'export function fetch(key: string): Promise<string>;');
+        assert.include(guestHostOnly, 'read(): Promise<number | undefined>;');
+        assert.deepStrictEqual(await typeCheckDeclarations(guest), []);
+    });
+
     test('host declarations leave world-level function imports to the import object', async () => {
         const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
             worldName: 'test:declaration-names/world-imports-world',

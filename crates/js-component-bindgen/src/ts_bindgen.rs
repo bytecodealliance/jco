@@ -233,6 +233,11 @@ struct TsInterface<'a> {
     names: Rc<ModuleNames>,
     /// JSDoc tags for the stability of the item that is declared next.
     stability_tags: Vec<String>,
+    /// Whether the functions declared here are only ever implemented by the host.
+    ///
+    /// The host may return the result of such a function directly even if the
+    /// function is async, as the generated bindings await whatever it returns.
+    host_implemented: bool,
     has_constructor: bool,
     needs_ty_option: bool,
     needs_ty_result: bool,
@@ -887,6 +892,7 @@ impl TsBindgen {
             &self.interface_file_stems,
         )
         .with_names(&self.world_names);
+        generator.host_implemented = !self.is_guest;
         generator.ts_func(
             func,
             true,
@@ -1141,6 +1147,10 @@ impl TsBindgen {
                     .map(|(name, id)| (name.as_str(), *id)),
                 self.variants_inline_cases,
             )));
+            // A world that both imports and exports an interface shares one declaration
+            // of it, which then also describes the functions the component provides.
+            generator.host_implemented =
+                !self.is_guest && type_meta.is_import() && !resolve.exports_interface(interface_id);
             generator.begin(&id_name); // Write module declaration
 
             // Generate function definitions
@@ -1218,6 +1228,7 @@ impl<'a> TsInterface<'a> {
             interface_file_stems: Rc::clone(interface_file_stems),
             names: Rc::default(),
             stability_tags: Vec::new(),
+            host_implemented: false,
             is_guest,
             flags_as_bigint,
             variants_inline_cases,
@@ -1551,6 +1562,7 @@ impl<'a> TsInterface<'a> {
         requires_async_porcelain: bool,
         meta: &GeneratedTypeMeta,
     ) {
+        let host_implemented = self.host_implemented;
         let iface = self.iface_for(func, meta);
         iface.stability(&func.stability);
         iface.docs(&func.docs);
@@ -1655,6 +1667,23 @@ impl<'a> TsInterface<'a> {
                 .push_str(&format!("{}<", iface.names.global("Promise")));
         }
 
+        Self::print_func_result(iface, func);
+
+        if promise_wrap_result {
+            // closes `Promise<>`
+            iface.src.push_str(">");
+            if host_implemented {
+                iface.src.push_str(" | ");
+                Self::print_func_result(iface, func);
+            }
+        }
+
+        let end_character = if declaration { ';' } else { ',' };
+        iface.src.push_str(format!("{end_character}\n").as_str());
+    }
+
+    /// Print the type of the value that a function returns when it does not throw.
+    fn print_func_result(iface: &mut TsInterface<'a>, func: &Function) {
         if let Some((ok_ty, _)) = get_thrown_type(iface.resolve, func.result) {
             iface.print_optional_ty(ok_ty);
         } else {
@@ -1663,14 +1692,6 @@ impl<'a> TsInterface<'a> {
                 Some(ty) => iface.print_ty(&ty),
             }
         }
-
-        if promise_wrap_result {
-            // closes `Promise<>`
-            iface.src.push_str(">");
-        }
-
-        let end_character = if declaration { ';' } else { ',' };
-        iface.src.push_str(format!("{end_character}\n").as_str());
     }
 
     fn post_types(&mut self) {
