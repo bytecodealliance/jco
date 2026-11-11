@@ -2,7 +2,8 @@ import { env } from "node:process";
 import { stat } from "node:fs/promises";
 import { styleText } from "node:util";
 
-import { generateGuestTypes, writeFiles } from "@bytecodealliance/jco-transpile";
+// Use the workspace backend built by setup:jco-transpile:build for checked-in declarations.
+import { generateGuestTypes, writeFiles } from "../../jco-transpile/dist/index.js";
 
 /** World that should be used for binding generation */
 const BINDING_WORLD = env.BINDING_WORLD;
