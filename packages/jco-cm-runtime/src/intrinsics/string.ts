@@ -142,11 +142,22 @@ export const validateGuestChar: StringModule['validateGuestChar'] = (value) => {
     return String.fromCodePoint(value);
 };
 
+/** Lower exactly one Unicode scalar value from a host string. */
 export const validateHostChar: StringModule['validateHostChar'] = (value) => {
     if (typeof value !== 'string') {
         throw new TypeError('must be a string');
     }
-    return value.codePointAt(0);
+
+    const codePoint = value.codePointAt(0);
+    if (
+        codePoint === undefined ||
+        (codePoint >= 0xd800 && codePoint <= 0xdfff) ||
+        value.length !== (codePoint > 0xffff ? 2 : 1)
+    ) {
+        throw new TypeError('not a valid char');
+    }
+
+    return codePoint;
 };
 
 /** Decode canonical Latin-1 bytes directly; TextDecoder('latin1') uses Windows-1252. */

@@ -226,7 +226,7 @@ test.concurrent.each([[0xd800], [0xdc00], [0xd800, 0x61], [0xd800, 0xd800]])(
     },
 );
 
-test.concurrent('character validation preserves inline coercion and errors', () => {
+test.concurrent('character validation accepts Unicode scalar values and rejects invalid strings', () => {
     const s = strings();
     expect(s.validateGuestChar(0)).toBe('\0');
     expect(s.validateGuestChar(0x1f680)).toBe('🚀');
@@ -237,9 +237,25 @@ test.concurrent('character validation preserves inline coercion and errors', () 
     for (const value of [-1, 1.5, NaN]) {
         expect(() => s.validateGuestChar(value)).toThrow(RangeError);
     }
-    expect(s.validateHostChar('🚀x')).toBe(0x1f680);
-    expect(s.validateHostChar('\ud800')).toBe(0xd800);
-    expect(s.validateHostChar('')).toBeUndefined();
+    for (const value of ['\0', 'a', 'é', '\u0301', '\ud7ff', '\ue000', '\uffff', '\u{10000}', '🚀', '\u{10ffff}']) {
+        expect(s.validateHostChar(value)).toBe(value.codePointAt(0));
+    }
+    for (const value of [
+        '',
+        'ab',
+        '🚀x',
+        'x🚀',
+        '🚀🚀',
+        'e\u0301',
+        '\ud800',
+        '\udbff',
+        '\udc00',
+        '\udfff',
+        '\udc00\ud800',
+        '\ud800a',
+    ]) {
+        expect(() => s.validateHostChar(value)).toThrow(new TypeError('not a valid char'));
+    }
     expect(() => s.validateHostChar(42)).toThrow('must be a string');
 });
 

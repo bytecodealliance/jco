@@ -321,7 +321,7 @@ export interface StringModule {
         memory: StringMemory,
     ) => Promise<StringAllocation>;
     readonly validateGuestChar: (value: number) => string;
-    readonly validateHostChar: (value: unknown) => number | undefined;
+    readonly validateHostChar: (value: unknown) => number;
 }
 
 /** Mutable cache owner; proxy internals are created only on first use. */
