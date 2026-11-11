@@ -1,8 +1,10 @@
 import { expect } from "vitest";
-import { util, test } from "../helpers/util.js";
+import { util, native, test } from "../helpers/util.js";
 
-test("debug refuses unavailable behavior before observing inputs", () => {
-  expect(() => Reflect.apply(util.debug, undefined, ["net"])).toThrow(
-    expect.objectContaining({ code: "ERR_JCO_UNSUPPORTED_NODE_API" }),
-  );
+test("debug aliases debuglog and returns a disabled logger like Node", () => {
+  expect(util.debug).toBe(util.debuglog);
+  const section = "jco-std-disabled-debug-fixture";
+  const logger = util.debug(section);
+  expect(logger.enabled).toBe(native.debug(section).enabled);
+  expect(logger("unused %s", "message")).toBeUndefined();
 });

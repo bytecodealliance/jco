@@ -4,11 +4,13 @@ import {
   invalidArgType,
   outOfRange,
 } from "../errors/core.js";
+import { format } from "./inspect.js";
 import { parseCallSites } from "../errors/call-site.js";
 
 const warned = new Set<string>();
 type WarningProcess = {
   env?: Record<string, string>;
+  pid?: number;
   noDeprecation?: boolean;
   throwDeprecation?: boolean;
   emitWarning?: (message: string, type: string, code?: string) => void;
@@ -16,28 +18,56 @@ type WarningProcess = {
 const processInfo = (): WarningProcess | undefined =>
   (globalThis as { process?: WarningProcess }).process;
 
+/** Create a lazily initialized logger, notifying its callback on the first log call. */
 export function debuglog(section: string, callback?: (fn: (...args: unknown[]) => void) => void) {
-  const name = String(section).toUpperCase();
-  const enabled = (processInfo()?.env?.NODE_DEBUG ?? "")
-    .split(/[\s,]+/)
-    .some(
-      (pattern) =>
-        pattern.length > 0 &&
-        new RegExp(
-          `^${pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*")}$`,
-          "i",
-        ).test(name),
-    );
-  const logger = Object.assign(
+  let enabled: boolean | undefined;
+  let initialized = false;
+  let name: string;
+
+  const isEnabled = () => {
+    if (enabled === undefined) {
+      name = section.toUpperCase();
+      enabled = (processInfo()?.env?.NODE_DEBUG ?? "")
+        .split(",")
+        .some(
+          (pattern) =>
+            pattern.length > 0 &&
+            new RegExp(
+              `^${pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\\\*/g, ".*")}$`,
+              "i",
+            ).test(name),
+        );
+    }
+    return enabled;
+  };
+  const implementation = Object.defineProperty(
     (...args: unknown[]) => {
-      if (enabled) {
-        console.error(name, ...args);
+      if (isEnabled()) {
+        console.error(`${name} ${processInfo()?.pid ?? 0}: ${format(...args)}`);
       }
     },
-    { enabled },
+    "enabled",
+    { get: isEnabled, configurable: true, enumerable: true },
   );
-  callback?.(logger);
-  return logger;
+  const logger = (...args: unknown[]) => {
+    // Reading .enabled on a disabled logger also avoids its initialization callback.
+    if (enabled === false) {
+      return;
+    }
+    isEnabled();
+    if (!initialized) {
+      initialized = true;
+      if (typeof callback === "function") {
+        callback(implementation);
+      }
+    }
+    implementation(...args);
+  };
+  return Object.defineProperty(logger, "enabled", {
+    get: isEnabled,
+    configurable: true,
+    enumerable: true,
+  }) as typeof logger & { readonly enabled: boolean };
 }
 
 export const debug: typeof debuglog = debuglog;
