@@ -86,7 +86,8 @@ Selecting an external provider works the same way with or without it.
 
 The crate ships the runtime it bundles under `runtime/`:
 
-- `runtime-all.js` holds every runtime module in one file;
+- `runtime-all.js` holds every runtime module in one file,
+  and starts with a line naming the runtime version it was built from;
 - `runtime-export-map.tsv` maps each public export to its name in that file.
 
 Both are generated from `packages/jco-cm-runtime` and committed,
@@ -95,7 +96,12 @@ so the crate builds without a JavaScript toolchain.
 so after changing that package the only manual step is committing the result.
 To regenerate them alone, run
 `pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime`;
-`check:embedded-runtime` verifies that the committed files are current.
+`check:embedded-runtime` reports whether the committed files are current.
+
+The committed files may lag behind the runtime package,
+so that this crate can be released with an older runtime.
+CI therefore only warns when they differ,
+and comments on the crate's release pull request.
 Rolldown runs only for that step.
 
 # License
