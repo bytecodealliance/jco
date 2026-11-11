@@ -1,0 +1,35 @@
+package test:anonymous-resources@1.2.3;
+
+world one {
+  import first: interface {
+    resource thing { constructor(); }
+    take: func(value: thing);
+  }
+  import second: interface {
+    resource thing { constructor(); }
+    take: func(value: thing);
+  }
+  export first: interface {
+    resource thing { constructor(); }
+    take: func(value: thing);
+  }
+  export second: interface {
+    resource thing { constructor(); }
+    take: func(value: thing);
+  }
+}
+
+world two {
+  import first: interface {
+    resource thing { constructor(); }
+    take: func(value: thing);
+  }
+  export first: interface {
+    resource thing { constructor(); }
+    take: func(value: thing);
+  }
+}
+
+world included {
+  include one;
+}

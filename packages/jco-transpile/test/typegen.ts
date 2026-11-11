@@ -272,6 +272,52 @@ suite('Type Generation', () => {
         assert.deepStrictEqual(await typeCheckGenerated(host, ['resource-versions.mts']), []);
     });
 
+    test.each(
+        [
+            { name: 'host', generate: generateHostTypes },
+            { name: 'guest', generate: generateGuestTypes },
+        ].flatMap((side) =>
+            ([undefined, 'sync', 'async'] as const).map((instantiation) => ({ ...side, instantiation })),
+        ),
+    )('labeled exports use runtime names ($name, $instantiation)', async ({ generate, instantiation }) => {
+        const files = await generate(`${WIT_FIXTURE_DIR}/export-labels.wit`, {
+            worldName: 'test:export-labels/export-labels',
+            instantiation: instantiation ? { tag: instantiation } : undefined,
+        });
+        const world = Buffer.from(files['export-labels.d.ts']).toString();
+        if (instantiation) {
+            assert.include(world, 'myApi: typeof TestExportLabelsApiExports,');
+            assert.include(world, 'inlineApi: typeof InlineApiExports,');
+            assert.notInclude(world, '"my-api":');
+            assert.notInclude(world, '"inline-api":');
+        } else {
+            assert.include(world, 'export * as myApi from ');
+            assert.include(world, 'export * as inlineApi from ');
+            assert.strictEqual(world.split('export * as myApi ').length - 1, 1);
+        }
+        // A namespaced interface whose short alias is occupied still has declarations.
+        assert.property(files, 'interfaces/exports/test-export-labels-my-api.d.ts');
+        assert.deepStrictEqual(await typeCheckGenerated(files), []);
+    });
+
+    test('anonymous host resource brands include their world and interface label', async () => {
+        const files: Record<string, Uint8Array> = {};
+        for (const world of ['one', 'two', 'included']) {
+            const generated = await generateHostTypes(`${WIT_FIXTURE_DIR}/anonymous-resources.wit`, {
+                worldName: world,
+            });
+            for (const [name, bytes] of Object.entries(generated)) {
+                files[`${world}/${name}`] = bytes;
+            }
+        }
+        assert.deepStrictEqual(await typeCheckGenerated(files, ['anonymous-resource-brands-host.mts']), []);
+    });
+
+    test('anonymous guest resource brands distinguish imported interfaces', async () => {
+        const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/anonymous-resources.wit`, { worldName: 'one' });
+        assert.deepStrictEqual(await typeCheckGenerated(files, ['anonymous-resource-brands-guest.mts']), []);
+    });
+
     test('the errors of results are documented and typed', async () => {
         const opts = { worldName: 'test:result-errors/result-errors' };
         const fixture = `${WIT_FIXTURE_DIR}/result-errors.wit`;

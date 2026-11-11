@@ -1,0 +1,18 @@
+package test:export-labels;
+
+interface api {
+  run: func() -> u32;
+}
+
+interface my-api {
+  other: func() -> string;
+}
+
+world export-labels {
+  export my-api: api;
+  export inline-api: interface {
+    run: func() -> u32;
+  }
+  // The labeled export owns myApi, so the namespaced interface has no short alias.
+  export my-api;
+}
