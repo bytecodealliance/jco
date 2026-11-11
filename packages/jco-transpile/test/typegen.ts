@@ -50,6 +50,10 @@ suite('Type Generation', () => {
             { wit: `${WIT_FIXTURE_DIR}/declaration-names`, worldName: 'test:declaration-names/shadowed-globals-world' },
             {
                 wit: `${WIT_FIXTURE_DIR}/declaration-names`,
+                worldName: 'test:declaration-names/shadowed-world-globals-world',
+            },
+            {
+                wit: `${WIT_FIXTURE_DIR}/declaration-names`,
                 worldName: 'test:declaration-names/variant-case-names-world',
             },
             { wit: `${WIT_FIXTURE_DIR}/declaration-names`, worldName: 'test:declaration-names/function-names-world' },
@@ -392,6 +396,23 @@ suite('Type Generation', () => {
             assert.notMatch(source, /@throws[^\n]*\n \*\/\nexport function plain/);
             assert.include(source, '\nexport function plain(): number;');
         }
+    });
+
+    test('globals shadowed by world-level types are referenced through globalThis', async () => {
+        const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
+            worldName: 'test:declaration-names/shadowed-world-globals-world',
+            instantiation: 'async',
+        });
+        const source = Buffer.from(files['shadowed-world-globals-world.d.ts']).toString();
+        // The world's own types keep their names...
+        assert.include(source, 'export interface Promise {');
+        assert.include(source, 'settle(promise: Promise, record: Record): Promise,');
+        // ...while the declarations that every world has refer to the globals.
+        assert.include(source, 'whenIdle(): globalThis.Promise<void>;');
+        assert.include(source, 'value is globalThis.Error & { readonly payload: unknown }');
+        assert.include(source, 'imports: globalThis.Record<string, any>');
+        assert.include(source, '): ShadowedWorldGlobalsWorld | globalThis.Promise<ShadowedWorldGlobalsWorld>;');
+        assert.deepStrictEqual(await typeCheckDeclarations(files), []);
     });
 
     test('host declarations leave world-level function imports to the import object', async () => {

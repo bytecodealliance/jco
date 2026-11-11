@@ -602,6 +602,11 @@ pub fn ts_bindgen(
         );
     }
 
+    // The globals that the declarations of the world refer to, which a type of
+    // the world may shadow.
+    let promise = bindgen.world_names.global("Promise");
+    let error = bindgen.world_names.global("Error");
+    let record = bindgen.world_names.global("Record");
     let camel = world.name.to_upper_camel_case();
     let call_tracking_members = if call_tracking {
         "readonly calls: {
@@ -612,14 +617,17 @@ pub fn ts_bindgen(
             /** Start an exported method with its receiver. */
             startWithThis<Receiver, Args extends unknown[], Result>(receiver: Receiver, fn: (this: Receiver, ...args: Args) => Result, ...args: Args): { readonly result: Result; readonly finished: Promise<{ readonly status: 'completed' } | { readonly status: 'stopped' } | { readonly status: 'trapped'; readonly error: Error }> };
         };"
+        .replace("Promise<", &format!("{promise}<"))
+        .replace("readonly error: Error ", &format!("readonly error: {error} "))
     } else {
-        ""
+        String::new()
     };
     let component_error = if has_result_export && !opts.no_component_error_wrapping {
         "/** Test whether a value is a declared WIT result error from this instance. */
         isComponentError(value: unknown): value is Error & { readonly payload: unknown };"
+            .replace("value is Error ", &format!("value is {error} "))
     } else {
-        ""
+        String::new()
     };
 
     // Generate a type definition for the import object to type-check
@@ -645,7 +653,7 @@ pub fn ts_bindgen(
         );
         uwriteln!(
             bindgen.src,
-            "readonly _util: {{ stop(): void; whenIdle(): Promise<void>; {call_tracking_members} {component_error} }};"
+            "readonly _util: {{ stop(): void; whenIdle(): {promise}<void>; {call_tracking_members} {component_error} }};"
         );
         uwriteln!(bindgen.src, "}}");
     } else {
@@ -657,7 +665,7 @@ pub fn ts_bindgen(
             );
             uwriteln!(
                 bindgen.src,
-                "export const _util: {{ stop(): void; whenIdle(): Promise<void>; {call_tracking_members} {component_error} }};"
+                "export const _util: {{ stop(): void; whenIdle(): {promise}<void>; {call_tracking_members} {component_error} }};"
             );
         }
     }
@@ -677,7 +685,7 @@ pub fn ts_bindgen(
         uwriteln!(
             bindgen.src,
             "
-            export const $init: Promise<void>;"
+            export const $init: {promise}<void>;"
         );
     }
 
@@ -704,7 +712,7 @@ pub fn ts_bindgen(
                 ): {};
                 ",
                 match mode {
-                    InstantiationMode::Async => format!("Promise<{camel}>"),
+                    InstantiationMode::Async => format!("{promise}<{camel}>"),
                     InstantiationMode::Sync => camel,
                 }
             );
@@ -771,15 +779,15 @@ pub fn ts_bindgen(
                 export function instantiate(
                     getCoreModule: (path: string) => WebAssembly.Module,
                     imports: ImportObject,
-                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
+                    instantiateCore?: (module: WebAssembly.Module, imports: {record}<string, any>) => WebAssembly.Instance,
                     options?: InstantiateOptions
                 ): {camel};
                 export function instantiate(
-                    getCoreModule: (path: string) => WebAssembly.Module | Promise<WebAssembly.Module>,
+                    getCoreModule: (path: string) => WebAssembly.Module | {promise}<WebAssembly.Module>,
                     imports: ImportObject,
-                    instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance | Promise<WebAssembly.Instance>,
+                    instantiateCore?: (module: WebAssembly.Module, imports: {record}<string, any>) => WebAssembly.Instance | {promise}<WebAssembly.Instance>,
                     options?: InstantiateOptions
-                ): {camel} | Promise<{camel}>;
+                ): {camel} | {promise}<{camel}>;
                 ",
                 );
             }
@@ -813,7 +821,7 @@ pub fn ts_bindgen(
                     export function instantiate(
                         getCoreModule: (path: string) => WebAssembly.Module,
                         imports: ImportObject,
-                        instantiateCore?: (module: WebAssembly.Module, imports: Record<string, any>) => WebAssembly.Instance,
+                        instantiateCore?: (module: WebAssembly.Module, imports: {record}<string, any>) => WebAssembly.Instance,
                         options?: InstantiateOptions
                     ): {camel};
                     ",
