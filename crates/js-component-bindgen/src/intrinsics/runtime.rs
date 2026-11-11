@@ -233,9 +233,11 @@ mod tests {
         for intrinsic in SAMPLES {
             assert_eq!(
                 binding(&ExternalRuntime, intrinsic),
-                binding(&InlineRuntime, intrinsic)
+                IntrinsicBinding::Imported {
+                    local_name: intrinsic.name()
+                }
             );
-            assert!(!render_with(&ExternalRuntime, intrinsic).is_empty());
+            assert!(render_with(&ExternalRuntime, intrinsic).is_empty());
         }
     }
 
@@ -253,10 +255,11 @@ mod tests {
             ExternalRuntime.call(TABLE_GET, ""),
             "rscTableGet(_jcoResourceTableGetContext)"
         );
-        let borrow = SAMPLES[0];
+        let when_idle = SAMPLES[0];
+        assert_eq!(InlineRuntime.call(when_idle, ""), "_whenIdle()");
         assert_eq!(
-            ExternalRuntime.call(borrow, "a"),
-            InlineRuntime.call(borrow, "a")
+            ExternalRuntime.call(when_idle, ""),
+            "_whenIdle(_jcoComponentIdleContext)"
         );
     }
 
@@ -273,7 +276,7 @@ mod tests {
             String::from(output)
         };
         assert!(prelude(&InlineRuntime, BTreeSet::from([TABLE_GET])).is_empty());
-        assert!(prelude(&ExternalRuntime, BTreeSet::from(SAMPLES)).is_empty());
+        assert!(prelude(&ExternalRuntime, BTreeSet::new()).is_empty());
         let prelude = prelude(&ExternalRuntime, BTreeSet::from([TABLE_GET, SAMPLES[0]]));
         assert_eq!(prelude.matches("_jcoRuntimeApiVersion !== 1").count(), 1);
         assert_eq!(

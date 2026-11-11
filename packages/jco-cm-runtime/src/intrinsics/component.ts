@@ -23,6 +23,9 @@ import { debugLog } from './core/debug.js';
 import { promiseWithResolvers } from './core/promises.js';
 import { getHandleIndexSpace } from './resource.js';
 
+export { initializeCallTracking } from './component/call-tracking.js';
+export { checkIdle, reportTrap, stopInstance, whenIdle } from './component/lifecycle.js';
+
 export const initializeInstanceFlags: ComponentModule['initializeInstanceFlags'] = () => new Map();
 export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTrap = null) => ({
     error: null,

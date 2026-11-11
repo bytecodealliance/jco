@@ -863,7 +863,76 @@ export interface ComponentAsyncStateContext extends TrapContext {
     /** Settle guest-task idle waiters after the store traps or stops. */
     readonly checkIdle?: () => void;
 }
+/** Capabilities for `reportTrap`, which tells the embedder about a trap once. */
+export interface ComponentReportTrapContext extends TrapContext {
+    readonly storeTrap: Pick<ComponentStoreTrap, 'onTrap' | 'stopped' | 'trapsReported'>;
+    readonly normalization: ComponentNormalizeTrapContext;
+}
+/** Capabilities for `checkIdle` and `whenIdle`, which settle once no guest task is live. */
+export interface ComponentIdleContext {
+    readonly storeTrap: Pick<ComponentStoreTrap, 'error'>;
+    readonly storeAsyncState: Pick<ComponentStoreAsyncState, 'idleWaiters'>;
+    /** Tasks by component index; host tasks live under -1. */
+    readonly tasks: Iterable<readonly [number, { readonly length: number }]>;
+    /** Present when call tracking is enabled for the instance. */
+    readonly checkCalls?: () => void;
+}
+/** A task as call tracking observes it. */
+export interface ComponentTrackedTask {
+    readonly getRootTask: () => unknown;
+    readonly isErrored: () => unknown;
+}
+export interface ComponentCallTrackingContext extends TrapContext {
+    readonly storeTrap: Pick<ComponentStoreTrap, 'error' | 'stopped'>;
+    readonly tasks: Iterable<readonly [number, Iterable<{ readonly task: ComponentTrackedTask }>]>;
+}
+/** The terminal outcome of one tracked export invocation. */
+export type ComponentCallOutcome =
+    | { readonly status: 'completed' }
+    | { readonly status: 'stopped' }
+    | { readonly status: 'trapped'; readonly error: unknown };
+/** Private per-invocation record; generated code only passes it back. */
+export interface ComponentTrackedCall {
+    readonly id: number;
+    task: ComponentTrackedTask | null;
+    resultSettled: boolean;
+    readonly resolve: (outcome: ComponentCallOutcome) => void;
+}
+export interface ComponentCallHandle {
+    readonly result: unknown;
+    readonly finished: Promise<ComponentCallOutcome>;
+}
+/** Host invocation tracking for one instance. */
+export interface ComponentCallTracking {
+    readonly publicAPI: {
+        readonly start: (fn: Function, ...args: unknown[]) => ComponentCallHandle;
+        readonly startWithThis: (receiver: unknown, fn: Function, ...args: unknown[]) => ComponentCallHandle;
+    };
+    readonly check: () => void;
+    readonly observe: <T extends PromiseLike<unknown>>(call: ComponentTrackedCall, result: T) => T;
+    readonly register: (fn: Function, id: number, construct: boolean, asynchronous: boolean, future: boolean) => void;
+    readonly capture: (id: number) => ComponentTrackedCall | null;
+    readonly attach: (call: ComponentTrackedCall | null, task: ComponentTrackedTask) => void;
+}
+/** Capabilities for `stopInstance`, which shuts the whole store down. */
+export interface ComponentStopContext extends TrapContext {
+    readonly storeTrap: ComponentStoreTrap;
+    readonly storeAsyncState: Pick<ComponentStoreAsyncState, 'deadlockCheck'>;
+    readonly asyncState: Pick<ComponentAsyncStates, 'values'>;
+    readonly tasks: {
+        readonly values: () => Iterable<readonly { readonly task: { readonly stop: (error: unknown) => void } }[]>;
+    };
+    readonly symbolDispose: symbol;
+    readonly RepTable: { readonly FREE: unknown };
+    /** The stream and future tables, whose entries hold both ends of each channel. */
+    readonly channels: readonly { readonly data: () => readonly unknown[] }[];
+}
 export interface ComponentModule {
+    readonly reportTrap: (context: ComponentReportTrapContext, error: unknown) => void;
+    readonly checkIdle: (context: ComponentIdleContext) => void;
+    readonly whenIdle: (context: ComponentIdleContext) => Promise<void>;
+    readonly stopInstance: (context: ComponentStopContext) => void;
+    readonly initializeCallTracking: (context: ComponentCallTrackingContext) => ComponentCallTracking;
     readonly initializeInstanceFlags: () => ComponentInstanceFlags;
     readonly initializeStoreTrap: (onTrap?: ((error: Error) => void) | null) => ComponentStoreTrap;
     readonly initializeStoreAsyncState: () => ComponentStoreAsyncState;

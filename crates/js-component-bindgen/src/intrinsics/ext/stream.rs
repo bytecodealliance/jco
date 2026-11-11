@@ -509,9 +509,12 @@ mod tests {
                 .build(),
         )
         .to_string();
-        assert!(source.contains("reportTrap: err => _reportTrap(err)"));
-        assert!(source.contains("function _reportTrap(err)"));
-        assert!(source.contains("function _checkIdle()"));
+        assert!(
+            source.contains("reportTrap: err => _reportTrap(_jcoComponentReportTrapContext, err)")
+        );
+        assert!(source.contains("checkIdle: () => _checkIdle(_jcoComponentIdleContext)"));
+        assert!(!source.contains("function _reportTrap(err)"));
+        assert!(!source.contains("function _checkIdle()"));
     }
 
     use super::*;

@@ -591,8 +591,12 @@ impl JsBindgen<'_> {
             ("() => {}".to_string(), "async () => {}".to_string())
         } else {
             (
-                self.intrinsic(Intrinsic::Component(ComponentIntrinsic::StopInstance)),
-                self.intrinsic(Intrinsic::Component(ComponentIntrinsic::WhenIdle)),
+                self.intrinsic_callback_reference(Intrinsic::Component(
+                    ComponentIntrinsic::StopInstance,
+                )),
+                self.intrinsic_callback_reference(Intrinsic::Component(
+                    ComponentIntrinsic::WhenIdle,
+                )),
             )
         };
         let call_tracking = self

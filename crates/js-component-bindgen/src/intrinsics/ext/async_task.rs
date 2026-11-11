@@ -334,7 +334,7 @@ impl TaskContextIntrinsic {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META"
             }
             Self::ClearCurrentThread => {
-                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS, checkIdle: () => _checkIdle()"
+                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS, checkIdle: () => _checkIdle(_jcoComponentIdleContext)"
             }
             Self::InitializeAsyncSubtaskClass => {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
@@ -356,7 +356,7 @@ impl TaskContextIntrinsic {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, AsyncSubtask, RuntimeError: WebAssembly.RuntimeError"
             }
             Self::DriverLoop => {
-                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, events: ASYNC_EVENT_CODE, strictNumeric: _jcoStrictNumericContext, reportTrap: err => _reportTrap(err)"
+                "RuntimeError: WebAssemblyRuntimeError, lookup: _jcoComponentStateLookupContext, WaitableSet, events: ASYNC_EVENT_CODE, strictNumeric: _jcoStrictNumericContext, reportTrap: err => _reportTrap(_jcoComponentReportTrapContext, err)"
             }
             Self::LowerImport => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, AsyncTask, mayLeave: _jcoComponentMayLeaveContext, events: ASYNC_EVENT_CODE"
@@ -636,8 +636,8 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
         kind,
     })
 }
-/// Requires the inline functions that the contexts of `intrinsic` call back into.
-/// They stay inline in every runtime, so no context can name them as a dependency.
+/// Requires the functions that the contexts of `intrinsic` call back into.
+/// A context names other contexts as dependencies, not the operations it calls.
 pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     if let Some(import) = super::ExternalRuntime::import(intrinsic)
         && let Some(context) = import.context
@@ -683,15 +683,17 @@ mod tests {
     #[test]
     fn task_retirement_selects_the_instance_idle_tracker() {
         let source = generated([Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentThread)]);
-        assert!(source.contains("checkIdle: () => _checkIdle()"));
-        assert!(source.contains("function _checkIdle()"));
+        assert!(source.contains("checkIdle: () => _checkIdle(_jcoComponentIdleContext)"));
+        assert!(!source.contains("function _checkIdle()"));
     }
 
     #[test]
     fn driver_reports_background_traps_through_the_instance_notifier() {
         let source = generated([Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop)]);
-        assert!(source.contains("reportTrap: err => _reportTrap(err)"));
-        assert!(source.contains("function _reportTrap(err)"));
+        assert!(
+            source.contains("reportTrap: err => _reportTrap(_jcoComponentReportTrapContext, err)")
+        );
+        assert!(!source.contains("function _reportTrap(err)"));
     }
 
     #[test]

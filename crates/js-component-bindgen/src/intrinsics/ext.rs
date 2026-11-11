@@ -474,7 +474,7 @@ impl ExternalRuntime {
             Intrinsic::AsyncTask(i) => async_task::import(i),
             Intrinsic::ErrCtx(i) => Some(error_context::import(i)),
             Intrinsic::Waitable(i) => Some(waitable::import(i)),
-            Intrinsic::Component(i) => component::import(i),
+            Intrinsic::Component(i) => Some(component::import(i)),
             Intrinsic::Resource(i) => Some(resource::resource_import(i)),
             Intrinsic::HandleTables | Intrinsic::ScopeId => {
                 Some(resource::resource_owner_import(intrinsic))
@@ -667,23 +667,27 @@ impl Provides<WebIdlIntrinsic> for ExternalRuntime {
 
 impl Provides<ComponentIntrinsic> for ExternalRuntime {
     fn binding(&self, intrinsic: ComponentIntrinsic) -> IntrinsicBinding {
-        if component::import(intrinsic).is_some() {
-            IntrinsicBinding::Imported {
-                local_name: intrinsic.name(),
-            }
-        } else {
-            InlineRuntime.binding(intrinsic)
+        let _ = component::import(intrinsic);
+        IntrinsicBinding::Imported {
+            local_name: intrinsic.name(),
         }
     }
     fn render(
         &self,
         intrinsic: ComponentIntrinsic,
-        output: &mut Source,
+        _output: &mut Source,
         args: &RenderIntrinsicsArgs<'_>,
     ) {
         async_task::discover_dependencies(intrinsic.into(), args);
-        if component::import(intrinsic).is_none() {
-            InlineRuntime.render(intrinsic, output, args);
+        // The idle context calls into the tracker, which no context can name
+        // as a dependency because it exists only when tracking is enabled.
+        if args.call_tracking
+            && matches!(
+                intrinsic,
+                ComponentIntrinsic::CheckIdle | ComponentIntrinsic::WhenIdle
+            )
+        {
+            args.require_intrinsic(ComponentIntrinsic::CallTracking);
         }
     }
 }
