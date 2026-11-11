@@ -1,18 +1,10 @@
 /// <reference path="./wasi-io-error.d.ts" />
 /// <reference path="./wasi-io-poll.d.ts" />
 declare module 'wasi:io/streams@0.2.12' {
-  /**
-   * @since 0.2.0
-   */
   export type Error = import('wasi:io/error@0.2.12').Error;
-  /**
-   * @since 0.2.0
-   */
   export type Pollable = import('wasi:io/poll@0.2.12').Pollable;
   /**
    * An error for input-stream and output-stream operations.
-   *
-   * @since 0.2.0
    */
   export type StreamError = StreamErrorLastOperationFailed | StreamErrorClosed;
   /**
@@ -45,8 +37,6 @@ declare module 'wasi:io/streams@0.2.12' {
   * available, which could even be zero. To wait for data to be available,
   * use the `subscribe` function to obtain a `pollable` which can be polled
   * for using `wasi:io/poll`.
-  *
-  * @since 0.2.0
   */
   export class InputStream implements Disposable {
     /**
@@ -85,7 +75,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * as a return value by the callee. The callee may return a list of bytes
     * less than `len` in size while more bytes are available for reading.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     read(len: bigint): Uint8Array;
@@ -93,7 +82,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * Read bytes from a stream, after blocking until at least one byte can
     * be read. Except for blocking, behavior is identical to `read`.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     blockingRead(len: bigint): Uint8Array;
@@ -103,7 +91,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * Behaves identical to `read`, except instead of returning a list
     * of bytes, returns the number of bytes consumed from the stream.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     skip(len: bigint): bigint;
@@ -111,7 +98,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * Skip bytes from a stream, after blocking until at least one byte
     * can be skipped. Except for blocking behavior, identical to `skip`.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     blockingSkip(len: bigint): bigint;
@@ -122,8 +108,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * The created `pollable` is a child resource of the `input-stream`.
     * Implementations may trap if the `input-stream` is dropped before
     * all derived `pollable`s created with this function are dropped.
-    *
-    * @since 0.2.0
     */
     subscribe(): Pollable;
     [Symbol.dispose](): void;
@@ -142,8 +126,6 @@ declare module 'wasi:io/streams@0.2.12' {
   * Dropping an `output-stream` while there's still an active write in
   * progress may result in the data being lost. Before dropping the stream,
   * be sure to fully flush your writes.
-  *
-  * @since 0.2.0
   */
   export class OutputStream implements Disposable {
     /**
@@ -165,7 +147,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * become ready when this function will report at least 1 byte, or an
     * error.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     checkWrite(): bigint;
@@ -184,7 +165,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * returns Err(closed) without writing if the stream has closed since
     * the last call to check-write provided a permit.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     write(contents: Uint8Array): void;
@@ -200,7 +180,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * subsequent calls to check-write or other interfaces should return
     * stream-error::closed.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     blockingWriteAndFlush(contents: Uint8Array): void;
@@ -216,7 +195,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * completed. The `subscribe` pollable will become ready when the
     * flush has completed and the stream can accept more writes.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     flush(): void;
@@ -224,7 +202,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * Request to flush buffered output, and block until flush completes
     * and stream is ready for writing again.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     blockingFlush(): void;
@@ -239,8 +216,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * The created `pollable` is a child resource of the `output-stream`.
     * Implementations may trap if the `output-stream` is dropped before
     * all derived `pollable`s created with this function are dropped.
-    *
-    * @since 0.2.0
     */
     subscribe(): Pollable;
     /**
@@ -251,7 +226,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * passing a list of bytes, you simply pass the number of zero-bytes
     * that should be written.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     writeZeroes(len: bigint): void;
@@ -263,7 +237,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * Functionality is equivelant to `blocking-write-and-flush` with
     * contents given as a list of len containing only zeroes.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     blockingWriteZeroesAndFlush(len: bigint): void;
@@ -282,7 +255,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * This function returns the number of bytes transferred; it may be less
     * than `len`.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     splice(src: InputStream, len: bigint): bigint;
@@ -293,7 +265,6 @@ declare module 'wasi:io/streams@0.2.12' {
     * `output-stream` is ready for writing, and the `input-stream`
     * is ready for reading, before performing the `splice`.
     *
-    * @since 0.2.0
     * @throws {globalThis.Error & { payload: StreamError }} The error of the result, as the `payload` of the thrown error.
     */
     blockingSplice(src: InputStream, len: bigint): bigint;

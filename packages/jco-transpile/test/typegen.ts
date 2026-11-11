@@ -72,7 +72,7 @@ suite('Type Generation', () => {
     test.concurrent.each([
         { name: 'host', generate: generateHostTypes },
         { name: 'guest', generate: generateGuestTypes },
-    ])('WIT item stability is documented with JSDoc tags ($name)', async ({ generate }) => {
+    ])('WIT docs omit introduction versions ($name)', async ({ generate }) => {
         const files = await generate(`${WIT_FIXTURE_DIR}/stability.wit`, {
             worldName: 'test:stability/stability',
             allFeatures: true,
@@ -84,25 +84,18 @@ suite('Type Generation', () => {
             .map((line) => line.trim())
             .join('\n');
 
-        assert.include(
-            source,
-            '/**\n* Reads the record.\n*\n* @since 0.1.0\n*/\nexport function read(): StableRecord;',
-        );
-        assert.include(source, '/**\n* @since 0.1.0\n* @deprecated since 0.2.0\n*/\nexport function old(): OldEnum;');
+        assert.include(source, '/**\n* Reads the record.\n*/\nexport function read(): StableRecord;');
+        assert.include(source, '/**\n* @deprecated since 0.2.0\n*/\nexport function old(): OldEnum;');
         assert.include(
             source,
             '/**\n* @experimental Gated by the WIT feature `experimental-items`.\n*/\nexport function experimental(): void;',
         );
-        assert.include(source, '/**\n* A stable record.\n*\n* @since 0.1.0\n*/\nexport interface StableRecord {');
-        assert.include(source, '* @since 0.1.0\n* @deprecated since 0.2.0\n*/\nexport type OldEnum = "first";');
+        assert.include(source, '/**\n* A stable record.\n*/\nexport interface StableRecord {');
+        assert.include(source, '* @deprecated since 0.2.0\n*/\nexport type OldEnum = "first";');
         assert.notMatch(source, /\*\/\nexport function plain\(\): void;/);
-        assert.include(
-            source,
-            '/**\n* A stable resource.\n*\n* @since 0.1.0\n* @deprecated since 0.2.0\n*/\nexport class Handle',
-        );
+        assert.include(source, '/**\n* A stable resource.\n*\n* @deprecated since 0.2.0\n*/\nexport class Handle');
 
-        // A type used from another interface carries the tags of the `use`, and
-        // nothing else of the interface takes them instead.
+        // Introduction annotations on a `use` do not create empty comment blocks.
         const trim = (name: string) =>
             Buffer.from(files[name])
                 .toString()
@@ -110,13 +103,16 @@ suite('Type Generation', () => {
                 .map((line) => line.trim())
                 .join('\n');
         const users = trim('interfaces/test-stability-users.d.ts');
-        assert.include(users, '/**\n* @since 0.2.0\n*/\nexport type OldEnum = import(');
-        assert.strictEqual(users.split('@since').length - 1, 1);
+        assert.include(users, 'export type OldEnum = import(');
+        assert.notInclude(users, '/**\n*/');
 
         // A type of the world itself is documented once, with its tags.
         const world = trim('stability.d.ts');
-        assert.include(world, '/**\n* @since 0.1.0\n* @deprecated since 0.2.0\n*/\nexport interface Legacy {');
+        assert.include(world, '/**\n* @deprecated since 0.2.0\n*/\nexport interface Legacy {');
         assert.strictEqual(world.split('@deprecated').length - 1, 1);
+        for (const contents of Object.values(files)) {
+            assert.notInclude(Buffer.from(contents).toString(), '@since');
+        }
         assert.deepStrictEqual(await typeCheckGenerated(files), []);
     });
 

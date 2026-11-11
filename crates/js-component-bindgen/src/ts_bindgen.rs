@@ -2636,22 +2636,23 @@ fn resource_brand(resolve: &Resolve, id: TypeId) -> String {
     )
 }
 
-/// The JSDoc block tags that describe the stability of a WIT item: `@since` for
-/// a stable item, `@experimental` for one gated by a feature, and `@deprecated`
-/// for either once it is deprecated.
+/// JSDoc tags for WIT feature gates and deprecations.
+/// Introduction versions are left to the WIT contract, since they do not identify
+/// the JavaScript package release that introduced the generated declaration.
 fn stability_tags(stability: &Stability) -> Vec<String> {
-    let (introduction, deprecated) = match stability {
+    let (mut tags, deprecated) = match stability {
         Stability::Unknown => return Vec::new(),
-        Stability::Stable { since, deprecated } => (format!("@since {since}"), deprecated),
+        Stability::Stable { deprecated, .. } => (Vec::new(), deprecated),
         Stability::Unstable {
             feature,
             deprecated,
         } => (
-            format!("@experimental Gated by the WIT feature `{feature}`."),
+            vec![format!(
+                "@experimental Gated by the WIT feature `{feature}`."
+            )],
             deprecated,
         ),
     };
-    let mut tags = vec![introduction];
     if let Some(version) = deprecated {
         tags.push(format!("@deprecated since {version}"));
     }
