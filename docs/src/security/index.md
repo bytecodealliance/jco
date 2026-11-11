@@ -114,20 +114,29 @@ the platform's APIs. When the embedder configures a restriction, the shim guaran
 - **Instances.** Two components given separate `WASIShim` instances do not see each other's
   preopens, environment, or arguments.
 
-**The defaults are not a sandbox.** On Node.js, a shim used without configuration gives the guest
-the host's filesystem, environment, and network, as an ordinary Node.js library would have. This
-is deliberate, and it means that transpiling a component and importing the result runs it with
-the authority of the process. Running an untrusted component requires an explicit configuration:
-`new WASIShim({ sandbox: { ... } })` in code, or `jco run --sandbox` on the command line. See the
-[Preview 2 shim](../wasi/preview2-shim.md) chapter.
+**Do not treat the defaults as a sandbox.** What a guest receives when nothing is configured
+depends on the package and its version:
+
+- `@bytecodealliance/jco` currently grants full host access by default on Node.js. `jco run`
+  without `--sandbox` gives the guest the host's filesystem, environment, and network, as an
+  ordinary Node.js program would have. This is historical behaviour, and a future release of
+  `jco` will deny access by default.
+- `@bytecodealliance/jco-transpile` does not grant full host access by default.
+
+Because the default differs between packages and will change, state the restrictions for an
+untrusted component explicitly: `new WASIShim({ sandbox: { ... } })` in code, or
+`jco run --sandbox` on the command line. See the [Preview 2 shim](../wasi/preview2-shim.md)
+chapter.
 
 Two limits follow from implementing WASI in JavaScript without operating-system support:
 
 - **Path confinement is resolved in userland.** Node.js exposes no `openat`-style API, so the
   shims resolve and check a path and then open it. The guarantee above holds against everything
   the guest does through its own imports. It does not hold against another process, or other host
-  code, that rearranges the directory tree while the guest is running. Do not preopen a directory
-  that a less trusted party can write to from outside.
+  code, that rearranges the directory tree while the guest is running. Closing that gap would
+  mean performing every file operation in native code through `@bytecodealliance/jco-node-fs`,
+  which Jco does not do today. Do not preopen a directory that a less trusted party can write to
+  from outside.
 - **The Preview 3 shim has no per-instance sandbox.** Its configuration is process-global, so
   every component in the realm shares one set of preopens, environment variables, and arguments.
   To give two Preview 3 components different capabilities, run them in separate workers or
@@ -148,8 +157,8 @@ than was intended, that is a bug in the embedding.
   its own bindings.
 
 Transpiling does not make a component safe to run. The output imports whatever the component
-imports, and by default maps WASI imports to shims that grant full access on Node.js. Review the
-imports (`jco wit component.wasm`) before running the output.
+imports, and what satisfies those imports decides what the component can do. Review the imports
+(`jco wit component.wasm`) before running the output.
 
 `jco componentize` is different: it bundles and evaluates the JavaScript it is given, with
 whichever engine backend is selected, and may resolve and load project dependencies. Its input is
@@ -161,7 +170,7 @@ componentize source you would not run.
 | | Node.js | Browser |
 | --- | --- | --- |
 | Ambient authority of the realm | The operating system user: files, sockets, environment, child processes | The page's origin: DOM, storage, cookies, credentialed requests to the origin |
-| Shim defaults | Full filesystem, environment, and network access | No filesystem preopens, no raw sockets, stdin closed. Outbound HTTP is allowed through `fetch`. |
+| Defaults | Full filesystem, environment, and network access with `jco` today; see [Capabilities](#3-capabilities-the-wasi-shims) | No filesystem preopens, no raw sockets, stdin closed. Outbound HTTP is allowed through `fetch`. |
 | Restricting a guest | `WASIShim` `sandbox` options, `jco run --sandbox` | `WASIShim` `sandbox` options, and the page's Content Security Policy |
 | Stopping a runaway guest | `worker.terminate()`, or killing the process | `worker.terminate()` on a Web Worker |
 | Isolation stronger than a realm | `worker_threads`, child processes, the Node.js permission model, containers | Web Workers, sandboxed or cross-origin iframes |
@@ -237,7 +246,7 @@ of Chrome, Firefox, and Safari.
 
 | Package | Runs | Role in the model |
 | --- | --- | --- |
-| `@bytecodealliance/jco` | Build time, and as host for `run` and `serve` | CLI over the packages below. `run` grants full access unless `--sandbox` is passed. `serve` is for development only. |
+| `@bytecodealliance/jco` | Build time, and as host for `run` and `serve` | CLI over the packages below. In the current version, `run` grants full access unless `--sandbox` is passed. `serve` is for development only. |
 | `@bytecodealliance/jco-transpile`, `js-component-bindgen` | Build time; their output runs in the host | Boundary 4 when run, boundary 2 through the code they generate |
 | `@bytecodealliance/jco-cm-runtime` | Host | Boundary 2, when selected with `--cm-runtime-es-module`. Experimental. |
 | `@bytecodealliance/preview2-shim` | Host | Boundary 3 for WASI 0.2 |
@@ -282,13 +291,15 @@ Some features are still changing and have not had the review the rest of Jco has
 are fixed in the open as ordinary bugs unless they also affect a configuration that uses no
 experimental feature. Do not rely on them to contain untrusted components.
 
-- Component Model async and the WebAssembly JavaScript Promise Integration it builds on
-  (`--async-mode`, and components using WASI 0.3)
 - `@bytecodealliance/jco-cm-runtime` and `--cm-runtime-es-module`
-- `jco componentize`, including Node.js built-in compatibility and the Perry backend
+- Experimental parts of `jco componentize`: new engines and backends such as Perry, and Node.js
+  built-in compatibility
 - `webidl:` imports
 - `jco transpile --js`
 - `jco serve`
+
+Component Model async, the WebAssembly JavaScript Promise Integration it builds on, WASI 0.3
+components, and `jco componentize` itself are not experimental. They are covered by this model.
 
 ## What Jco depends on
 
