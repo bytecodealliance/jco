@@ -16,6 +16,7 @@ use crate::files::Files;
 use crate::function_bindgen::{as_nullable, js_array_ty, maybe_null};
 use crate::names::{
     LocalNames, RESERVED_KEYWORDS, is_valid_js_identifier, js_string_literal, maybe_quote_id,
+    static_member_name,
 };
 use crate::source::Source;
 use crate::transpile_bindgen::{AsyncMode, InstantiationMode, TranspileOpts, parse_world_key};
@@ -1936,9 +1937,10 @@ impl<'a> TsInterface<'a> {
                     iface.src.push_str("constructor");
                 }
                 FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
-                    iface
-                        .src
-                        .push_str(&format!("static {}", class_member_name(&escaped_name)));
+                    iface.src.push_str(&format!(
+                        "static {}",
+                        class_member_name(&static_member_name(func.item_name()))
+                    ));
                 }
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
                     iface.src.push_str(&class_member_name(&escaped_name));
