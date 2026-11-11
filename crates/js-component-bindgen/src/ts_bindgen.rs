@@ -21,8 +21,8 @@ use crate::names::{
 use crate::source::Source;
 use crate::transpile_bindgen::{AsyncMode, InstantiationMode, TranspileOpts, parse_world_key};
 use crate::{
-    FunctionIdentifier, dealias, feature_gate_allowed, get_thrown_type, requires_async_porcelain,
-    uwrite, uwriteln,
+    FunctionIdentifier, TypeGenerationConfig, dealias, feature_gate_allowed, get_thrown_type,
+    requires_async_porcelain, uwrite, uwriteln,
 };
 
 /// TypeScript declaration for the `Option<T>` helper type alias used to
@@ -170,8 +170,11 @@ struct TsBindgen {
     raw_result_errors: bool,
     /// Whether the `val` of a `result` arm without a payload is optional.
     optional_result_payloads: bool,
+    type_generation: TypeGenerationConfig,
     /// Declaration files of the import side of interfaces.
     import_side_files: BTreeSet<String>,
+    /// Unversioned compatibility paths already assigned to an interface.
+    legacy_interface_files: BTreeSet<String>,
     /// The export-side declarations of interfaces, keyed by the declaration
     /// file that the import side of the same interface has or would have.
     export_side_declarations: BTreeMap<String, ExportSideDeclaration>,
@@ -290,6 +293,7 @@ struct TsInterface<'a> {
     raw_result_errors: bool,
     /// Whether the `val` of a `result` arm without a payload is optional.
     optional_result_payloads: bool,
+    type_generation: TypeGenerationConfig,
     /// The documentation comment of the class, if this declares the functions of a resource.
     class_docs: Source,
     /// The name that identifies the resource to the type checker,
@@ -313,6 +317,7 @@ struct TsInterface<'a> {
     references: BTreeSet<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn ts_bindgen(
     name: &str,
     resolve: &Resolve,
@@ -320,6 +325,7 @@ pub fn ts_bindgen(
     opts: &TranspileOpts,
     call_tracking: bool,
     optional_result_payloads: bool,
+    type_generation: TypeGenerationConfig,
     files: &mut Files,
 ) -> Result<()> {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
@@ -360,7 +366,9 @@ pub fn ts_bindgen(
         ),
         raw_result_errors: opts.no_component_error_wrapping,
         optional_result_payloads,
+        type_generation,
         import_side_files: BTreeSet::new(),
+        legacy_interface_files: BTreeSet::new(),
         export_side_declarations: BTreeMap::new(),
         world_type_names: Vec::new(),
         guest_import_modules: Source::default(),
@@ -484,6 +492,7 @@ pub fn ts_bindgen(
                         opts.use_namespace_objects,
                         opts.enum_values_screaming_snake_case,
                     )
+                    .with_type_generation(type_generation)
                     .with_interface_file_stems(&bindgen.interface_file_stems)
                     .with_names(&bindgen.world_names);
                     generator.stability(&ty.stability);
@@ -1053,9 +1062,11 @@ impl TsBindgen {
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
         )
+        .with_type_generation(self.type_generation)
         .with_interface_file_stems(&self.interface_file_stems)
         .with_names(&self.world_names);
-        generator.host_implemented = !self.is_guest;
+        generator.host_implemented =
+            !self.is_guest && self.type_generation.async_imports_may_return_sync;
         generator.ts_func(
             func,
             true,
@@ -1096,6 +1107,7 @@ impl TsBindgen {
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
         )
+        .with_type_generation(self.type_generation)
         .with_interface_file_stems(&self.interface_file_stems)
         .with_names(&self.world_names);
         generator.ts_func(
@@ -1199,6 +1211,7 @@ impl TsBindgen {
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
         )
+        .with_type_generation(self.type_generation)
         .with_interface_file_stems(&self.interface_file_stems)
         .with_names(&self.world_names);
         generator.raw_result_errors = self.raw_result_errors;
@@ -1292,11 +1305,12 @@ impl TsBindgen {
     /// For host types, the import specifier is `./interfaces/{file}.js`.
     /// For guest types, the import specifier is the interface ID (e.g. `ns:pkg/iface`).
     ///
-    /// The import side and the export side of an interface are declared
-    /// separately, as what a caller of the interface sees differs from what an
+    /// By default, the import and export sides are declared separately,
+    /// as what a caller of the interface sees differs from what an
     /// implementation of it provides. The export-side declaration file is in the
     /// `exports` directory, and for guest types its module is named by
-    /// [`guest_export_module`].
+    /// [`guest_export_module`]. The shared compatibility layout keeps the first
+    /// declaration at the import-side path for both directions.
     fn generate_interface(
         &mut self,
         name: &str,
@@ -1312,24 +1326,25 @@ impl TsBindgen {
         let interface_stem =
             interface_file_stem(&self.interface_file_stems, interface_id, &id_name);
         let import_side_file_name = format!("{INTERFACES_DIR}/{interface_stem}.d.ts");
-        let (file_stem, module_name) = if type_meta.is_export() {
-            self.export_side_declarations
-                .entry(import_side_file_name)
-                .or_insert_with(|| ExportSideDeclaration {
-                    id_name: id_name.clone(),
-                    file_stem: interface_stem.clone(),
-                });
-            (
-                format!("{INTERFACES_DIR}/{EXPORTS_DIR}/{interface_stem}"),
-                guest_export_module(&id_name),
-            )
-        } else {
-            self.import_side_files.insert(import_side_file_name);
-            (
-                format!("{INTERFACES_DIR}/{interface_stem}"),
-                id_name.clone(),
-            )
-        };
+        let (file_stem, module_name) =
+            if type_meta.is_export() && self.type_generation.separate_interfaces() {
+                self.export_side_declarations
+                    .entry(import_side_file_name)
+                    .or_insert_with(|| ExportSideDeclaration {
+                        id_name: id_name.clone(),
+                        file_stem: interface_stem.clone(),
+                    });
+                (
+                    format!("{INTERFACES_DIR}/{EXPORTS_DIR}/{interface_stem}"),
+                    guest_export_module(&id_name),
+                )
+            } else {
+                self.import_side_files.insert(import_side_file_name);
+                (
+                    format!("{INTERFACES_DIR}/{interface_stem}"),
+                    id_name.clone(),
+                )
+            };
         let file_name = format!("{file_stem}.d.ts");
         let (_name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
 
@@ -1343,6 +1358,7 @@ impl TsBindgen {
                 self.use_namespace_objects,
                 self.enum_values_screaming_snake_case,
             )
+            .with_type_generation(self.type_generation)
             .with_interface_file_stems(&self.interface_file_stems)
             .with_names(&Rc::new(ModuleNames::of_types(
                 resolve,
@@ -1352,12 +1368,19 @@ impl TsBindgen {
                     .map(|(name, id)| (name.as_str(), *id)),
                 self.variants_inline_cases,
             )));
-            generator.host_implemented = !self.is_guest && type_meta.is_import();
-            generator.is_export_side = type_meta.is_export();
+            generator.host_implemented = !self.is_guest
+                && type_meta.is_import()
+                && self.type_generation.async_imports_may_return_sync;
+            generator.is_export_side =
+                type_meta.is_export() && self.type_generation.separate_interfaces();
             generator.exported_interfaces = Rc::clone(&self.exported_interfaces);
             generator.raw_result_errors = self.raw_result_errors;
             generator.optional_result_payloads = self.optional_result_payloads;
-            if !self.is_guest && type_meta.is_export() && !self.raw_result_errors {
+            if !self.is_guest
+                && type_meta.is_export()
+                && !self.raw_result_errors
+                && self.type_generation.typed_error_classes
+            {
                 generator.error_class_interface = Some(interface_id);
             }
             if self.is_guest {
@@ -1416,6 +1439,28 @@ impl TsBindgen {
             files.push(&file_name, src.as_bytes());
         }
 
+        // The shared layout retains the unversioned path for the first interface
+        // encountered, as earlier generators did. World declarations still use the
+        // versioned paths so distinct versions no longer share incorrect types.
+        if !self.type_generation.separate_interfaces() {
+            let legacy_stem = interface_goal_name(&id_name);
+            let legacy_file = format!("{INTERFACES_DIR}/{legacy_stem}.d.ts");
+            if legacy_stem != interface_stem
+                && !self
+                    .interface_file_stems
+                    .values()
+                    .any(|stem| stem == &legacy_stem)
+                && self.legacy_interface_files.insert(legacy_file.clone())
+            {
+                let alias = if self.is_guest {
+                    format!("/// <reference path=\"./{interface_stem}.d.ts\" />\n")
+                } else {
+                    format!("export * from './{interface_stem}.js';\n")
+                };
+                files.push(&legacy_file, alias.as_bytes());
+            }
+        }
+
         if self.is_guest {
             self.references.insert(format!("./{file_name}"));
             module_name
@@ -1444,6 +1489,7 @@ impl<'a> TsInterface<'a> {
             error_classes: BTreeMap::new(),
             raw_result_errors: false,
             optional_result_payloads: false,
+            type_generation: TypeGenerationConfig::default(),
             class_docs: Source::default(),
             resource_brand: String::new(),
             host_implemented: false,
@@ -1515,7 +1561,7 @@ impl<'a> TsInterface<'a> {
                 "export class {class_name}{impl_phrase} {{",
                 class_name = resource.to_upper_camel_case(),
             );
-            if generates_disposable_resource {
+            if generates_disposable_resource && self.type_generation.nominal_resources {
                 // The bindings accept only instances of the class they generate, so the
                 // class is declared with a member that no other object has: TypeScript
                 // then no longer takes an object of a matching shape, or another resource
@@ -1868,6 +1914,11 @@ impl<'a> TsInterface<'a> {
         self.src.push_str("]");
     }
 
+    fn with_type_generation(mut self, config: TypeGenerationConfig) -> Self {
+        self.type_generation = config;
+        self
+    }
+
     fn iface_for<'i>(
         &'i mut self,
         func: &Function,
@@ -1896,6 +1947,7 @@ impl<'a> TsInterface<'a> {
                             self.use_namespace_objects,
                             self.enum_values_screaming_snake_case,
                         )
+                        .with_type_generation(self.type_generation)
                         .with_interface_file_stems(&self.interface_file_stems)
                         .with_names(&self.names),
                     )
@@ -2482,6 +2534,7 @@ impl<'a> TsInterface<'a> {
                     self.use_namespace_objects,
                     self.enum_values_screaming_snake_case,
                 )
+                .with_type_generation(self.type_generation)
                 .with_interface_file_stems(&self.interface_file_stems)
                 .with_names(&self.names),
             )

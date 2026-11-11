@@ -188,6 +188,19 @@ world js-component-bindgen {
     /// in the generated TypeScript.
     optional-result-payloads: option<bool>,
 
+    /// Require nominal identities for resources supplied by the bindings. Defaults to true.
+    nominal-resources: option<bool>,
+
+    /// Allow host async imports to return a value without a Promise. Defaults to true.
+    async-imports-may-return-sync: option<bool>,
+
+    /// Export named error classes for named result error payloads. Defaults to true.
+    typed-error-classes: option<bool>,
+
+    /// Generate separate import-side and export-side interface declarations. Defaults to true.
+    /// Implied by nominal-resources, async-imports-may-return-sync, and typed-error-classes.
+    separate-interface-types: option<bool>,
+
     /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     asmjs: option<bool>,
 
@@ -270,6 +283,21 @@ world js-component-bindgen {
     /// Declare the `val` of a WIT `result` arm that has no payload as optional
     /// in the generated TypeScript.
     optional-result-payloads: option<bool>,
+
+    /// Require nominal identities for resources supplied by the bindings. Defaults to true.
+    nominal-resources: option<bool>,
+
+    /// Allow host async imports to return a value without a Promise. Defaults to true.
+    async-imports-may-return-sync: option<bool>,
+
+    /// Export named error classes for named result error payloads. Defaults to true.
+    typed-error-classes: option<bool>,
+
+    /// Generate separate import-side and export-side interface declarations. Defaults to true.
+    /// Implied by nominal-resources, async-imports-may-return-sync, and typed-error-classes.
+    separate-interface-types: option<bool>,
+
+
   }
 
   enum export-type {

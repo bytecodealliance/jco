@@ -111,6 +111,16 @@ impl bindings::Guest for JsComponentBindgenComponent {
                 .opts(opts)
                 .call_tracking(options.call_tracking.unwrap_or(false))
                 .optional_result_payloads(options.optional_result_payloads.unwrap_or(false))
+                .type_generation(
+                    js_component_bindgen::TypeGenerationConfig::builder()
+                        .nominal_resources(options.nominal_resources.unwrap_or(true))
+                        .async_imports_may_return_sync(
+                            options.async_imports_may_return_sync.unwrap_or(true),
+                        )
+                        .typed_error_classes(options.typed_error_classes.unwrap_or(true))
+                        .separate_interface_types(options.separate_interface_types.unwrap_or(true))
+                        .build(),
+                )
                 .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
                 .build(),
         )
@@ -198,6 +208,12 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .select_world(&[ids], world_string.as_deref())
             .map_err(|e| e.to_string())?;
 
+        let type_generation = js_component_bindgen::TypeGenerationConfig::builder()
+            .nominal_resources(opts.nominal_resources.unwrap_or(true))
+            .async_imports_may_return_sync(opts.async_imports_may_return_sync.unwrap_or(true))
+            .typed_error_classes(opts.typed_error_classes.unwrap_or(true))
+            .separate_interface_types(opts.separate_interface_types.unwrap_or(true))
+            .build();
         let call_tracking = opts.call_tracking.unwrap_or(false);
         let optional_result_payloads = opts.optional_result_payloads.unwrap_or(false);
         let opts = js_component_bindgen::TranspileOpts::builder()
@@ -232,6 +248,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
                 .opts(opts)
                 .call_tracking(call_tracking)
                 .optional_result_payloads(optional_result_payloads)
+                .type_generation(type_generation)
                 .build(),
         )
         .with_context(|| format!("generating types for [{}]", name))

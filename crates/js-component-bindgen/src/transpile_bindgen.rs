@@ -253,6 +253,7 @@ struct JsBindgen<'a> {
     /// Optional external Component Model runtime provider.
     cm_runtime_es_module: Option<&'a str>,
     call_tracking: bool,
+    typed_error_classes: bool,
     tracked_exports: u32,
 
     /// List of all intrinsics emitted to `src` so far.
@@ -337,6 +338,7 @@ pub fn transpile_bindgen(
     opts: TranspileOpts,
     cm_runtime_es_module: Option<&str>,
     call_tracking: bool,
+    typed_error_classes: bool,
     files: &mut Files,
 ) -> TranspileBindgenResult {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
@@ -355,6 +357,7 @@ pub fn transpile_bindgen(
         opts: &opts,
         cm_runtime_es_module,
         call_tracking,
+        typed_error_classes,
         tracked_exports: 0,
         all_intrinsics: BTreeSet::new(),
         all_core_exported_funcs: Vec::new(),
@@ -6454,7 +6457,7 @@ impl<'a> Instantiator<'a, '_> {
         func: &Function,
         classes: &mut BTreeMap<String, String>,
     ) -> Option<String> {
-        if self.bindgen.opts.no_component_error_wrapping {
+        if self.bindgen.opts.no_component_error_wrapping || !self.bindgen.typed_error_classes {
             return None;
         }
         let class = crate::result_error_class(self.resolve, iface_id, func)?;
