@@ -3,6 +3,7 @@ use std::path::PathBuf;
 use structopt::StructOpt;
 
 mod build;
+mod embedded_runtime;
 mod generate;
 mod sync_wast_fixtures;
 mod test;
@@ -21,6 +22,13 @@ enum Cmd {
     BuildWastFixture {
         /// Path to the given .wast file
         path: PathBuf,
+    },
+    /// Update the Component Model runtime embedded in js-component-bindgen
+    /// from the jco-cm-runtime package
+    UpdateEmbeddedRuntime {
+        /// Check whether the embedded runtime differs without updating it
+        #[structopt(long)]
+        check: bool,
     },
     /// Synchronize vendored WAST fixtures with their pinned upstream revisions
     SyncWastFixtures {
@@ -84,6 +92,7 @@ fn main() -> anyhow::Result<()> {
             build::wast_fixtures::run(&path)?;
             Ok(())
         }
+        Cmd::UpdateEmbeddedRuntime { check } => embedded_runtime::run(check),
         Cmd::SyncWastFixtures { check } => sync_wast_fixtures::run(check),
         Cmd::Test(Platform::Node) => test::run(false),
         Cmd::Test(Platform::Deno) => test::run(true),

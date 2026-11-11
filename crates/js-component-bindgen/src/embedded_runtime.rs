@@ -9,8 +9,8 @@
 //! `runtime/`, which are committed so the crate builds without a JavaScript toolchain:
 //!
 //! - `runtime-all.js` is every runtime module bundled into one, exporting each
-//!   public name under a unique alias, and starts with a line naming the version
-//!   of the runtime package it was built from;
+//!   public name under a unique alias, and starts with two lines naming the version
+//!   of the runtime package it was built from and the commit of those sources;
 //! - `runtime-export-map.tsv` maps `<subpath>:<export>` to that alias.
 
 use std::collections::HashMap;
@@ -250,13 +250,22 @@ mod tests {
     use super::{NAMESPACE, PACKAGE, RUNTIME_SOURCE, link};
 
     #[test]
-    fn shipped_runtime_names_its_version() {
-        let header = RUNTIME_SOURCE.lines().next().unwrap();
-        let version = header
-            .strip_prefix(&format!("// {PACKAGE}@"))
+    fn shipped_runtime_names_its_version_and_commit() {
+        let mut lines = RUNTIME_SOURCE.lines();
+        let version = lines
+            .next()
+            .and_then(|line| line.strip_prefix(&format!("// {PACKAGE}@")))
             .expect("the shipped runtime starts with its package version");
         assert_eq!(version.split('.').count(), 3);
         assert!(version.starts_with(|first: char| first.is_ascii_digit()));
+
+        // A release must not embed a runtime built from uncommitted sources.
+        let commit = lines
+            .next()
+            .and_then(|line| line.strip_prefix("// generated from commit "))
+            .expect("the shipped runtime names the commit it was generated from");
+        assert_eq!(commit.len(), 40);
+        assert!(commit.chars().all(|digit| digit.is_ascii_hexdigit()));
     }
 
     #[test]

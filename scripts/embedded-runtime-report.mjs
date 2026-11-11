@@ -3,6 +3,7 @@ import { appendFile, readFile } from 'node:fs/promises';
 // Dependency-free so the write-enabled reporter can run from the trusted base
 // revision without installing dependencies or executing release-branch code.
 const VERSION = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
+const COMMIT = /^[0-9a-f]{40}(-dirty)?$/;
 const MARKER = '<!-- js-component-bindgen-embedded-runtime -->';
 
 /**
@@ -16,10 +17,20 @@ function version(value) {
 }
 
 /**
+ * Describe a commit reported by the check, which ran release-branch code.
+ *
+ * @param {unknown} value - commit read from the check's result
+ * @returns {string} the commit, or a placeholder when it is not a valid one
+ */
+function commit(value) {
+    return typeof value === 'string' && COMMIT.test(value) ? value : 'unknown';
+}
+
+/**
  * Build the release PR comment for a check result.
  *
  * @param {object} args
- * @param {{ stale?: unknown, embeddedVersion?: unknown, currentVersion?: unknown } | undefined} args.result -
+ * @param {{ stale?: unknown, embeddedVersion?: unknown, embeddedCommit?: unknown, currentVersion?: unknown } | undefined} args.result -
  *   outcome of the check, or undefined when it did not complete
  * @param {string} args.sha - commit the check ran against
  * @param {string} args.runURL - link to the workflow run
@@ -34,7 +45,7 @@ function buildReport({ result, sha, runURL }) {
         status = [
             'The embedded runtime differs from `packages/jco-cm-runtime`, so this release would not ship the current runtime.',
             '',
-            'If that is not intended, regenerate it with `pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime` and commit the result.',
+            'If that is not intended, update it with `cargo xtask update-embedded-runtime` or the `update-embedded-runtime` workflow before releasing.',
         ].join('\n');
     } else {
         status = 'The check did not complete. Review the logs before releasing.';
@@ -45,10 +56,10 @@ function buildReport({ result, sha, runURL }) {
         '',
         `Commit: ${sha}`,
         '',
-        '| Runtime | Version |',
-        '| --- | --- |',
-        `| Embedded in the crate | ${version(result?.embeddedVersion)} |`,
-        `| \`packages/jco-cm-runtime\` | ${version(result?.currentVersion)} |`,
+        '| Runtime | Version | Generated from commit |',
+        '| --- | --- | --- |',
+        `| Embedded in the crate | ${version(result?.embeddedVersion)} | ${commit(result?.embeddedCommit)} |`,
+        `| \`packages/jco-cm-runtime\` | ${version(result?.currentVersion)} | |`,
         '',
         status,
         '',

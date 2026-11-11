@@ -1,6 +1,8 @@
+import { execFile } from 'node:child_process';
 import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { dirname, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 
 import { rolldown } from 'rolldown';
 
@@ -10,8 +12,56 @@ const RUNTIME_DIST = new URL('../../jco-cm-runtime/dist/', import.meta.url);
 /** Where js-component-bindgen keeps the runtime it bundles into generated bindings. */
 const DESTINATION = new URL('../../../crates/js-component-bindgen/runtime/', import.meta.url);
 
+/** The Component Model runtime package, whose sources the generated files come from. */
+const RUNTIME_PACKAGE = new URL('../../jco-cm-runtime/', import.meta.url);
+
+/** Paths in the runtime package that determine the generated code. */
+const RUNTIME_SOURCES = ['src', 'package.json', 'tsconfig.build.json', 'tsconfig.json'];
+
 /** Start of the first line of `runtime-all.js`, which names the runtime version it was built from. */
 const VERSION_HEADER = '// @bytecodealliance/jco-cm-runtime@';
+
+/** Start of the second line of `runtime-all.js`, which names the commit its sources come from. */
+const COMMIT_HEADER = '// generated from commit ';
+
+/**
+ * Split `runtime-all.js` into the provenance its header records and the bundled code.
+ *
+ * @param {string} source - contents of `runtime-all.js`
+ * @returns {{ version: string | null, commit: string | null, code: string }}
+ */
+function parseRuntime(source) {
+    const lines = source.replaceAll('\r\n', '\n').split('\n');
+    let version = null;
+    let commit = null;
+    if (lines[0]?.startsWith(VERSION_HEADER)) {
+        version = lines.shift().slice(VERSION_HEADER.length);
+    }
+    if (lines[0]?.startsWith(COMMIT_HEADER)) {
+        commit = lines.shift().slice(COMMIT_HEADER.length);
+    }
+    return { version, commit, code: lines.join('\n') };
+}
+
+/**
+ * Name the commit that the runtime being generated comes from: the last one to
+ * change the runtime's sources, which stays valid when the generating branch is
+ * rebased. It is marked `-dirty` when those sources have changes not yet committed.
+ *
+ * @returns {Promise<string>} the commit hash, or `unknown` outside a git checkout
+ */
+async function runtimeCommit() {
+    const run = promisify(execFile);
+    const git = (...args) =>
+        run('git', args, { cwd: fileURLToPath(RUNTIME_PACKAGE) }).then(({ stdout }) => stdout.trim());
+    try {
+        const commit = await git('log', '-1', '--format=%H', '--', ...RUNTIME_SOURCES);
+        const changes = await git('status', '--porcelain', '--', ...RUNTIME_SOURCES);
+        return `${commit || 'unknown'}${changes ? '-dirty' : ''}`;
+    } catch {
+        return 'unknown';
+    }
+}
 
 /** Virtual module id of the entry point handed to the bundler. */
 const ENTRY = 'runtime-entry';
@@ -81,7 +131,8 @@ async function bundle(entry, modules) {
  * - `runtime-all.js` exports every public runtime name under a unique alias;
  * - `runtime-export-map.tsv` maps `<subpath>:<export>` to that alias.
  *
- * `runtime-all.js` starts with a line naming the runtime version it was built from.
+ * `runtime-all.js` starts with two lines naming the runtime version it was built
+ * from and the commit those sources were last changed in.
  *
  * Options:
  * - `--check` compares against the committed files instead of writing them,
@@ -114,41 +165,43 @@ async function main() {
             reexports.push(`export { ${name} as ${alias} } from ${JSON.stringify(id)};`);
         }
     }
-    const bundled = await bundle(reexports.join('\n'), modules);
-    const code = `${VERSION_HEADER}${manifest.version}\n${bundled.code}`;
+    const { code } = await bundle(reexports.join('\n'), modules);
+    const header = `${VERSION_HEADER}${manifest.version}\n${COMMIT_HEADER}${await runtimeCommit()}\n`;
 
     const stale = [];
-    for (const [file, contents] of [
-        ['runtime-all.js', code],
+    for (const [file, contents, generated] of [
+        ['runtime-all.js', header + code, code],
         ['runtime-export-map.tsv', exportMap.join('\n') + '\n'],
     ]) {
         const target = new URL(file, DESTINATION);
-        const current = await readFile(target, 'utf8').catch(() => undefined);
-        if (current?.replaceAll('\r\n', '\n') === contents) {
-            // Leave current files untouched, so builds that embed them are not redone.
-            continue;
-        }
+        const current = (await readFile(target, 'utf8').catch(() => undefined))?.replaceAll('\r\n', '\n');
         if (check) {
-            stale.push(fileURLToPath(target));
-        } else {
+            // The header records provenance rather than content, so only the
+            // generated code decides whether a file is out of date.
+            const unchanged =
+                generated === undefined ? current === contents : parseRuntime(current ?? '').code === generated;
+            if (!unchanged) {
+                stale.push(fileURLToPath(target));
+            }
+        } else if (current !== contents) {
             await writeFile(target, contents);
         }
     }
     if (resultPath) {
-        const embedded = await readFile(new URL('runtime-all.js', DESTINATION), 'utf8').catch(() => '');
-        const [header] = embedded.split('\n', 1);
+        const embedded = parseRuntime(await readFile(new URL('runtime-all.js', DESTINATION), 'utf8').catch(() => ''));
         await mkdir(dirname(resultPath), { recursive: true });
         await writeFile(
             resultPath,
             JSON.stringify({
                 stale: stale.length > 0,
-                embeddedVersion: header.startsWith(VERSION_HEADER) ? header.slice(VERSION_HEADER.length) : null,
+                embeddedVersion: embedded.version,
+                embeddedCommit: embedded.commit,
                 currentVersion: manifest.version,
             }),
         );
     }
     if (stale.length > 0) {
-        const message = `out of date: ${stale.join(', ')}; regenerate with \`pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime\``;
+        const message = `the embedded runtime differs from packages/jco-cm-runtime: ${stale.join(', ')}; update it with \`cargo xtask update-embedded-runtime\``;
         if (!advisory) {
             throw new Error(message);
         }
