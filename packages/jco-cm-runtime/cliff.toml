@@ -25,15 +25,15 @@ trim = true
 
 [git]
 commit_parsers = [
-    { message = '^feat\((bindgen|runtime)\)', group = '<!-- 0 -->🚀 Features' },
-    { message = '^fix\((bindgen|runtime)\)', group = '<!-- 1 -->🐛 Bug Fixes' },
-    { message = '^refactor\((bindgen|runtime)\)', group = '<!-- 2 -->🚜 Refactor' },
-    { message = '^docs\((bindgen|runtime)\)', group = '<!-- 3 -->📚 Documentation' },
-    { message = '^perf\((bindgen|runtime)\)', group = '<!-- 4 -->⚡ Performance' },
-    { message = '^style\((bindgen|runtime)\)', group = '<!-- 5 -->🎨 Styling' },
-    { message = '^test\((bindgen|runtime)\)', group = '<!-- 6 -->🧪 Testing' },
-    { message = '^chore\((bindgen|runtime)\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
-    { message = '^sec\((bindgen|runtime)\)', group = '<!-- 8 -->🔒️ Security' },
+    { message = '^feat\(runtime\)', group = '<!-- 0 -->🚀 Features' },
+    { message = '^fix\(runtime\)', group = '<!-- 1 -->🐛 Bug Fixes' },
+    { message = '^refactor\(runtime\)', group = '<!-- 2 -->🚜 Refactor' },
+    { message = '^docs\(runtime\)', group = '<!-- 3 -->📚 Documentation' },
+    { message = '^perf\(runtime\)', group = '<!-- 4 -->⚡ Performance' },
+    { message = '^style\(runtime\)', group = '<!-- 5 -->🎨 Styling' },
+    { message = '^test\(runtime\)', group = '<!-- 6 -->🧪 Testing' },
+    { message = '^chore\(runtime\)', group = '<!-- 7 -->⚙️ Miscellaneous Tasks' },
+    { message = '^sec\(runtime\)', group = '<!-- 8 -->🔒️ Security' },
     { message = '^release', skip = true },
 ]
 filter_commits = true
