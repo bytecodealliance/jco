@@ -9,7 +9,8 @@
 //! `runtime/`, which are committed so the crate builds without a JavaScript toolchain:
 //!
 //! - `runtime-all.js` is every runtime module bundled into one, exporting each
-//!   public name under a unique alias;
+//!   public name under a unique alias, and starts with a line naming the version
+//!   of the runtime package it was built from;
 //! - `runtime-export-map.tsv` maps `<subpath>:<export>` to that alias.
 
 use std::collections::HashMap;
@@ -246,7 +247,17 @@ pub(crate) fn link(generated: &str) -> Result<Option<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{NAMESPACE, link};
+    use super::{NAMESPACE, PACKAGE, RUNTIME_SOURCE, link};
+
+    #[test]
+    fn shipped_runtime_names_its_version() {
+        let header = RUNTIME_SOURCE.lines().next().unwrap();
+        let version = header
+            .strip_prefix(&format!("// {PACKAGE}@"))
+            .expect("the shipped runtime starts with its package version");
+        assert_eq!(version.split('.').count(), 3);
+        assert!(version.starts_with(|first: char| first.is_ascii_digit()));
+    }
 
     #[test]
     fn keeps_other_imports_and_avoids_name_capture() {

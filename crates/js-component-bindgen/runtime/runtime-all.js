@@ -1,3 +1,4 @@
+// @bytecodealliance/jco-cm-runtime@0.1.0
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;

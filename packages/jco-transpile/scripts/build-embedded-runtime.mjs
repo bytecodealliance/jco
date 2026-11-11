@@ -1,5 +1,5 @@
-import { readFile, readdir, writeFile } from 'node:fs/promises';
-import { posix } from 'node:path';
+import { mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { dirname, posix } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { rolldown } from 'rolldown';
@@ -9,6 +9,9 @@ const RUNTIME_DIST = new URL('../../jco-cm-runtime/dist/', import.meta.url);
 
 /** Where js-component-bindgen keeps the runtime it bundles into generated bindings. */
 const DESTINATION = new URL('../../../crates/js-component-bindgen/runtime/', import.meta.url);
+
+/** Start of the first line of `runtime-all.js`, which names the runtime version it was built from. */
+const VERSION_HEADER = '// @bytecodealliance/jco-cm-runtime@';
 
 /** Virtual module id of the entry point handed to the bundler. */
 const ENTRY = 'runtime-entry';
@@ -78,10 +81,20 @@ async function bundle(entry, modules) {
  * - `runtime-all.js` exports every public runtime name under a unique alias;
  * - `runtime-export-map.tsv` maps `<subpath>:<export>` to that alias.
  *
- * With `--check`, compare against the committed files instead of writing them.
+ * `runtime-all.js` starts with a line naming the runtime version it was built from.
+ *
+ * Options:
+ * - `--check` compares against the committed files instead of writing them,
+ *   and fails when they are out of date;
+ * - `--advisory` makes an out-of-date result a warning instead of a failure,
+ *   since a crate release may deliberately ship an older runtime;
+ * - `--result <path>` writes the outcome of a check as JSON to `path`.
  */
 async function main() {
     const check = process.argv.includes('--check');
+    const advisory = process.argv.includes('--advisory');
+    const resultIndex = process.argv.indexOf('--result');
+    const resultPath = resultIndex === -1 ? undefined : process.argv[resultIndex + 1];
     const manifest = JSON.parse(await readFile(new URL('../package.json', RUNTIME_DIST), 'utf8'));
     const modules = await readRuntimeModules();
 
@@ -101,7 +114,8 @@ async function main() {
             reexports.push(`export { ${name} as ${alias} } from ${JSON.stringify(id)};`);
         }
     }
-    const { code } = await bundle(reexports.join('\n'), modules);
+    const bundled = await bundle(reexports.join('\n'), modules);
+    const code = `${VERSION_HEADER}${manifest.version}\n${bundled.code}`;
 
     const stale = [];
     for (const [file, contents] of [
@@ -120,10 +134,26 @@ async function main() {
             await writeFile(target, contents);
         }
     }
-    if (stale.length > 0) {
-        throw new Error(
-            `out of date: ${stale.join(', ')}; regenerate with \`pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime\``,
+    if (resultPath) {
+        const embedded = await readFile(new URL('runtime-all.js', DESTINATION), 'utf8').catch(() => '');
+        const [header] = embedded.split('\n', 1);
+        await mkdir(dirname(resultPath), { recursive: true });
+        await writeFile(
+            resultPath,
+            JSON.stringify({
+                stale: stale.length > 0,
+                embeddedVersion: header.startsWith(VERSION_HEADER) ? header.slice(VERSION_HEADER.length) : null,
+                currentVersion: manifest.version,
+            }),
         );
+    }
+    if (stale.length > 0) {
+        const message = `out of date: ${stale.join(', ')}; regenerate with \`pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime\``;
+        if (!advisory) {
+            throw new Error(message);
+        }
+        // GitHub Actions surfaces this as an annotation; elsewhere it is a plain warning.
+        console.warn(process.env.GITHUB_ACTIONS ? `::warning title=Embedded runtime::${message}` : message);
     }
 }
 
