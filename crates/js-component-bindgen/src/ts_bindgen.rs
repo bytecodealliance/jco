@@ -41,14 +41,23 @@ fn ts_option_type_alias(name: &str) -> String {
 /// represent WIT `result<T, E>` values. Emitted at the top level for the same
 /// reason as [`ts_option_type_alias`].
 ///
-/// An arm without a payload (e.g. the `ok` arm of `result<_, E>`) is typed with `void`,
-/// and its `val` is optional so that `{ tag: 'ok' }` is a complete value.
-fn ts_result_type_alias(name: &str) -> String {
-    format!(
-        "export type {name}<T, E> = \
-         ([T] extends [void] ? {{ tag: 'ok', val?: T }} : {{ tag: 'ok', val: T }}) | \
-         ([E] extends [void] ? {{ tag: 'err', val?: E }} : {{ tag: 'err', val: E }});\n"
-    )
+/// An arm without a payload (e.g. the `ok` arm of `result<_, E>`) is typed with `void`.
+/// With `optional_payloads`, the `val` of such an arm is optional, so that
+/// `{ tag: 'ok' }` is a complete value.
+// TODO(breaking): declare the payloads as optional unconditionally at the next
+// major release. The conditional types that this takes stay unresolved for the
+// type parameters of generic code, which then can no longer narrow a
+// `Result<T, E>` by its tag, so existing generic helpers would stop compiling.
+fn ts_result_type_alias(name: &str, optional_payloads: bool) -> String {
+    if optional_payloads {
+        format!(
+            "export type {name}<T, E> = \
+             ([T] extends [void] ? {{ tag: 'ok', val?: T }} : {{ tag: 'ok', val: T }}) | \
+             ([E] extends [void] ? {{ tag: 'err', val?: E }} : {{ tag: 'err', val: E }});\n"
+        )
+    } else {
+        format!("export type {name}<T, E> = {{ tag: 'ok', val: T }} | {{ tag: 'err', val: E }};\n")
+    }
 }
 
 /// The names that the declarations of one generated module bind.
@@ -158,6 +167,8 @@ struct TsBindgen {
     /// Whether the bindings throw the error of a result as it is, rather than
     /// as the payload of an error.
     raw_result_errors: bool,
+    /// Whether the `val` of a `result` arm without a payload is optional.
+    optional_result_payloads: bool,
     /// Declaration files of the import side of interfaces.
     import_side_files: BTreeSet<String>,
     /// The export-side declarations of interfaces, keyed by the declaration
@@ -276,6 +287,10 @@ struct TsInterface<'a> {
     /// Whether the bindings throw the error of a result as it is, rather than
     /// as the payload of an error.
     raw_result_errors: bool,
+    /// Whether the `val` of a `result` arm without a payload is optional.
+    optional_result_payloads: bool,
+    /// The documentation comment of the class, if this declares the functions of a resource.
+    class_docs: Source,
     /// Whether the functions declared here are only ever implemented by the host.
     ///
     /// The host may return the result of such a function directly even if the
@@ -300,6 +315,7 @@ pub fn ts_bindgen(
     id: WorldId,
     opts: &TranspileOpts,
     call_tracking: bool,
+    optional_result_payloads: bool,
     files: &mut Files,
 ) -> Result<()> {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
@@ -339,6 +355,7 @@ pub fn ts_bindgen(
                 .collect(),
         ),
         raw_result_errors: opts.no_component_error_wrapping,
+        optional_result_payloads,
         import_side_files: BTreeSet::new(),
         export_side_declarations: BTreeMap::new(),
         world_type_names: Vec::new(),
@@ -465,7 +482,7 @@ pub fn ts_bindgen(
                     )
                     .with_interface_file_stems(&bindgen.interface_file_stems)
                     .with_names(&bindgen.world_names);
-                    generator.docs(&ty.docs);
+                    generator.stability(&ty.stability);
 
                     match &ty.kind {
                         TypeDefKind::Record(record) => {
@@ -513,7 +530,13 @@ pub fn ts_bindgen(
         }
         // kebab import funcs (always default imports)
         for (name, func) in funcs {
-            bindgen.import_funcs(resolve, &name, func, files);
+            bindgen.import_funcs(
+                resolve,
+                &name,
+                func,
+                files,
+                opts.instantiation_mode.is_some(),
+            );
             if opts.guest && opts.instantiation_mode.is_none() {
                 bindgen.guest_import_func_module(resolve, &id_name, &name, func);
             }
@@ -677,7 +700,10 @@ pub fn ts_bindgen(
         bindgen.src.push_str(&alias);
     }
     if bindgen.needs_ty_result {
-        let alias = ts_result_type_alias(&bindgen.world_names.result_alias());
+        let alias = ts_result_type_alias(
+            &bindgen.world_names.result_alias(),
+            bindgen.optional_result_payloads,
+        );
         bindgen.src.push_str(&alias);
     }
 
@@ -996,6 +1022,7 @@ impl TsBindgen {
         import_name: &str,
         func: &Function,
         _files: &mut Files,
+        instantiation: bool,
     ) {
         uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
         let mut generator = TsInterface::new(
@@ -1017,6 +1044,12 @@ impl TsBindgen {
             false,
             &GeneratedTypeMeta { is_export: false },
         );
+        // Only the declarations for instantiation include the import object,
+        // which then needs the helper type aliases that its functions refer to.
+        if instantiation {
+            self.needs_ty_option |= generator.needs_ty_option;
+            self.needs_ty_result |= generator.needs_ty_result;
+        }
         let (src, references) = generator.finish();
         self.import_object.push_str(&src);
         self.references.extend(references);
@@ -1297,13 +1330,14 @@ impl TsBindgen {
             generator.is_export_side = type_meta.is_export();
             generator.exported_interfaces = Rc::clone(&self.exported_interfaces);
             generator.raw_result_errors = self.raw_result_errors;
+            generator.optional_result_payloads = self.optional_result_payloads;
             if !self.is_guest && type_meta.is_export() && !self.raw_result_errors {
                 generator.error_class_interface = Some(interface_id);
             }
             if self.is_guest {
                 generator.begin_guest_module(&module_name);
             } else {
-                generator.begin(&id_name);
+                generator.begin_host_module(&id_name);
             }
 
             // Generate function definitions
@@ -1383,6 +1417,8 @@ impl<'a> TsInterface<'a> {
             error_class_interface: None,
             error_classes: BTreeMap::new(),
             raw_result_errors: false,
+            optional_result_payloads: false,
+            class_docs: Source::default(),
             host_implemented: false,
             is_export_side: false,
             exported_interfaces: Rc::default(),
@@ -1416,12 +1452,9 @@ impl<'a> TsInterface<'a> {
         self
     }
 
-    fn begin(&mut self, id_name: &str) {
-        if self.is_guest {
-            self.begin_guest_module(id_name);
-        } else {
-            uwriteln!(self.src, "/** @module Interface {id_name} **/");
-        }
+    /// Open the module that holds the declarations for a host.
+    fn begin_host_module(&mut self, id_name: &str) {
+        uwriteln!(self.src, "/** @module Interface {id_name} **/");
     }
 
     /// Open the ambient module that holds the declarations for a guest.
@@ -1448,9 +1481,11 @@ impl<'a> TsInterface<'a> {
                 (String::new(), vec![])
             };
 
+            self.src.push_str("\n");
+            self.src.push_str(&source.class_docs);
             uwriteln!(
                 self.src,
-                "\nexport class {class_name}{impl_phrase} {{",
+                "export class {class_name}{impl_phrase} {{",
                 class_name = resource.to_upper_camel_case(),
             );
             if generates_disposable_resource {
@@ -1573,8 +1608,12 @@ impl<'a> TsInterface<'a> {
 
         let err_ty = match err {
             Some(err) => {
+                // The type is only named in a comment, which must not make the
+                // module declare the helper type aliases that it refers to.
+                let needs_ty = (self.needs_ty_option, self.needs_ty_result);
                 let src = std::mem::take(&mut self.src);
                 self.print_ty(err);
+                (self.needs_ty_option, self.needs_ty_result) = needs_ty;
                 std::mem::replace(&mut self.src, src).to_string()
             }
             None => "undefined".to_string(),
@@ -1997,8 +2036,10 @@ impl<'a> TsInterface<'a> {
                 .push_str(&ts_option_type_alias(&self.names.option_alias()));
         }
         if needs_ty_result {
-            self.src
-                .push_str(&ts_result_type_alias(&self.names.result_alias()));
+            self.src.push_str(&ts_result_type_alias(
+                &self.names.result_alias(),
+                self.optional_result_payloads,
+            ));
         }
     }
 
@@ -2313,6 +2354,8 @@ impl<'a> TsInterface<'a> {
                 } else {
                     format!("{path_prefix}{owned_interface_name}.js")
                 };
+                // The alias has no documentation of its own, but may have tags.
+                self.docs(&Docs::default());
                 uwriteln!(
                     self.src,
                     "export type {type_name} = import('{import_name}').{orig_name};",
@@ -2381,7 +2424,12 @@ impl<'a> TsInterface<'a> {
 
     fn type_resource(&mut self, _id: TypeId, ty: &TypeDef, meta: GeneratedTypeMeta) {
         let resource = ty.name.clone().unwrap();
-        self.resources.entry(resource).or_insert_with(|| {
+        // The class is declared once all of its functions are known, so its
+        // documentation comment is kept until then.
+        let src = std::mem::take(&mut self.src);
+        self.docs(&ty.docs);
+        let class_docs = std::mem::replace(&mut self.src, src);
+        let (_, class) = self.resources.entry(resource).or_insert_with(|| {
             (
                 meta,
                 TsInterface::new(
@@ -2397,6 +2445,7 @@ impl<'a> TsInterface<'a> {
                 .with_names(&self.names),
             )
         });
+        class.class_docs = class_docs;
     }
 }
 

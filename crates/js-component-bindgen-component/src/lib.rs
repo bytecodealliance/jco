@@ -110,6 +110,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             TranspileConfig::builder()
                 .opts(opts)
                 .call_tracking(options.call_tracking.unwrap_or(false))
+                .optional_result_payloads(options.optional_result_payloads.unwrap_or(false))
                 .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
                 .build(),
         )
@@ -198,6 +199,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .map_err(|e| e.to_string())?;
 
         let call_tracking = opts.call_tracking.unwrap_or(false);
+        let optional_result_payloads = opts.optional_result_payloads.unwrap_or(false);
         let opts = js_component_bindgen::TranspileOpts::builder()
             .name("component".into())
             .no_typescript(false)
@@ -229,6 +231,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             TranspileConfig::builder()
                 .opts(opts)
                 .call_tracking(call_tracking)
+                .optional_result_payloads(optional_result_payloads)
                 .build(),
         )
         .with_context(|| format!("generating types for [{}]", name))

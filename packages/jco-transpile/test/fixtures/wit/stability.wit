@@ -25,8 +25,29 @@ interface items {
   experimental: func();
 
   plain: func();
+
+  /// A stable resource.
+  @since(version = 0.1.0)
+  @deprecated(version = 0.2.0)
+  resource handle {
+    constructor();
+  }
+}
+
+interface users {
+  @since(version = 0.2.0)
+  use items.{old-enum};
+
+  current: func() -> old-enum;
 }
 
 world stability {
+  @since(version = 0.1.0)
+  @deprecated(version = 0.2.0)
+  record legacy {
+    value: u32,
+  }
+
   import items;
+  import users;
 }

@@ -89,6 +89,14 @@ pub struct TranspileConfig {
     /// Emit optional host invocation tracking, independent of the runtime provider.
     #[builder(default)]
     pub call_tracking: bool,
+    // TODO(breaking): remove this option at the next major release, and always
+    // declare these payloads as optional. Doing so now would stop generic code
+    // over the generated `Result<T, E>` type from compiling.
+    /// Declare the `val` of a WIT `result` arm that has no payload as optional
+    /// in the generated TypeScript, so that `{ tag: 'ok' }` is a complete
+    /// `result<_, E>` value.
+    #[builder(default)]
+    pub optional_result_payloads: bool,
     /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     /// Intrinsics are generated inline when this is `None` (the default).
@@ -128,6 +136,7 @@ pub fn generate_types_with_config(
         world_id,
         opts,
         config.call_tracking,
+        config.optional_result_payloads,
         &mut files,
     )
     .context("failed to generate Typescript bindings")?;
@@ -158,6 +167,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     let TranspileConfig {
         mut opts,
         call_tracking,
+        optional_result_payloads,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
     } = config;
@@ -269,8 +279,16 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         {
             exports.extend(inferred_async_exports);
         }
-        ts_bindgen(&name, &resolve, world_id, &opts, call_tracking, &mut files)
-            .context("failed to generate Typescript bindings")?;
+        ts_bindgen(
+            &name,
+            &resolve,
+            world_id,
+            &opts,
+            call_tracking,
+            optional_result_payloads,
+            &mut files,
+        )
+        .context("failed to generate Typescript bindings")?;
     }
 
     let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
