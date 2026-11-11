@@ -82,7 +82,6 @@ interface TypegenOptions {
     /** Represent WIT enum values as SCREAMING_SNAKE_CASE strings */
     enumValuesScreamingSnakeCase?: boolean;
 
-    // TODO(breaking): remove this option at the next major release and always declare these payloads as optional
     /**
      * Declare the `val` of a WIT `result` arm that has no payload as optional,
      * so that `{ tag: 'ok' }` is a complete `result<_, E>` value.
@@ -91,6 +90,18 @@ interface TypegenOptions {
      * over `Result<T, E>` cannot narrow by its tag.
      */
     optionalResultPayloads?: boolean;
+
+    /** Require nominal resource identities. Implies separateInterfaceTypes. Defaults to true. */
+    nominalResources?: boolean;
+
+    /** Allow synchronous host async returns. Implies separateInterfaceTypes. Defaults to true. */
+    asyncImportsMayReturnSync?: boolean;
+
+    /** Export named result error classes. Implies separateInterfaceTypes. Defaults to true. */
+    typedErrorClasses?: boolean;
+
+    /** Generate separate import/export declarations. Other direction-specific options imply this. Defaults to true. */
+    separateInterfaceTypes?: boolean;
 }
 
 /**
@@ -201,6 +212,10 @@ export async function runTypesComponent(witPath: string, opts: TypegenOptions) {
         useNamespaceObjects: opts.useNamespaceObjects === true,
         enumValuesScreamingSnakeCase: opts.enumValuesScreamingSnakeCase === true,
         optionalResultPayloads: opts.optionalResultPayloads === true,
+        nominalResources: opts.nominalResources !== false,
+        asyncImportsMayReturnSync: opts.asyncImportsMayReturnSync !== false,
+        typedErrorClasses: opts.typedErrorClasses !== false,
+        separateInterfaceTypes: opts.separateInterfaceTypes !== false,
     };
     const types = (await callBindgen(() => generateTypes(name, generateOpts))).map(([name, file]) => [
         `${outDir}${name}`,
