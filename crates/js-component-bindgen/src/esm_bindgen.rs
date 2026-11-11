@@ -199,7 +199,20 @@ impl EsmBindgen {
             .collect()
     }
 
+    // TODO(breaking): give this method the `util_members` argument at the next major
+    // release and remove `render_exports_with_util_members`.
     pub fn render_exports(
+        &mut self,
+        output: &mut Source,
+        instantiation: bool,
+        local_names: &mut LocalNames,
+        opts: &TranspileOpts,
+    ) {
+        self.render_exports_with_util_members(output, instantiation, local_names, opts, None);
+    }
+
+    /// Render exports, adding `util_members` to the exported utilities when given.
+    pub(crate) fn render_exports_with_util_members(
         &mut self,
         output: &mut Source,
         instantiation: bool,
@@ -309,7 +322,20 @@ impl EsmBindgen {
     /// let gen = (function* _initGenerator () {
     /// ```
     ///
+    // TODO(breaking): give this method the `external_runtime` argument at the next major
+    // release and remove `render_imports_with_runtime`.
     pub fn render_imports(
+        &mut self,
+        output: &mut Source,
+        imports_object: Option<&str>,
+        local_names: &mut LocalNames,
+    ) {
+        self.render_imports_with_runtime(output, imports_object, local_names, false);
+    }
+
+    /// Render imports, taking their intrinsics from an external runtime when
+    /// `external_runtime` is set and from inline definitions otherwise.
+    pub(crate) fn render_imports_with_runtime(
         &mut self,
         output: &mut Source,
         imports_object: Option<&str>,

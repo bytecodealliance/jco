@@ -777,7 +777,7 @@ impl JsBindgen<'_> {
         } else {
             None
         };
-        self.esm_bindgen.render_imports(
+        self.esm_bindgen.render_imports_with_runtime(
             &mut output,
             imports_object,
             &mut self.local_names,
@@ -787,7 +787,7 @@ impl JsBindgen<'_> {
         // Create instantiation code
         if self.opts.instantiation_mode.is_some() {
             uwrite!(&mut self.src.js, "{}", &core_exported_funcs as &str);
-            self.esm_bindgen.render_exports(
+            self.esm_bindgen.render_exports_with_util_members(
                 &mut self.src.js,
                 self.opts.instantiation_mode.is_some(),
                 &mut self.local_names,
@@ -930,7 +930,7 @@ impl JsBindgen<'_> {
                 maybe_sync = helper.maybe_sync_return,
             );
 
-            self.esm_bindgen.render_exports(
+            self.esm_bindgen.render_exports_with_util_members(
                 &mut output,
                 self.opts.instantiation_mode.is_some(),
                 &mut self.local_names,
