@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 0da38a45228a86d09589592c7af76931ec6ea633
+// generated from commit c1e4baf5c08eb609a9d01e9367df3eb5aa559e94
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1777,9 +1777,12 @@ const validateGuestChar = (value) => {
 	if (value > 1114111 || value >= 55296 && value <= 57343) throw new TypeError("not a valid char");
 	return String.fromCodePoint(value);
 };
+/** Lower exactly one Unicode scalar value from a host string. */
 const validateHostChar = (value) => {
 	if (typeof value !== "string") throw new TypeError("must be a string");
-	return value.codePointAt(0);
+	const codePoint = value.codePointAt(0);
+	if (codePoint === void 0 || codePoint >= 55296 && codePoint <= 57343 || value.length !== (codePoint > 65535 ? 2 : 1)) throw new TypeError("not a valid char");
+	return codePoint;
 };
 /** Decode canonical Latin-1 bytes directly; TextDecoder('latin1') uses Windows-1252. */
 const compactUtf16Decode = (decoder, memory, ptr, taggedLength) => {
