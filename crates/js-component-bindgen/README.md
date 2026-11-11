@@ -91,7 +91,9 @@ The crate ships the runtime it bundles under `runtime/`:
 
 Both are generated from `packages/jco-cm-runtime` and committed,
 so the crate builds without a JavaScript toolchain.
-After changing that package, regenerate them with
+`cargo xtask build`, which every jco build runs, regenerates them before compiling,
+so after changing that package the only manual step is committing the result.
+To regenerate them alone, run
 `pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime`;
 `check:embedded-runtime` verifies that the committed files are current.
 Rolldown runs only for that step.
