@@ -1,3 +1,5 @@
+import { typegenOptions } from "./typegen-options.js";
+
 import {
     $init,
     generate as _generate,
@@ -5,10 +7,12 @@ import {
 } from "@bytecodealliance/jco-transpile/component";
 
 export async function generate(...args: Parameters<typeof _generate>) {
+    args[1] = { ...args[1], ...typegenOptions(args[1]) };
     return callBindgen(() => _generate(...args));
 }
 
 export async function generateTypes(...args: Parameters<typeof _generateTypes>) {
+    args[1] = { ...args[1], ...typegenOptions(args[1]) };
     return callBindgen(() => _generateTypes(...args));
 }
 

@@ -214,6 +214,14 @@ program
             .implies({ flagsAsBigint: true }),
     )
     .option("--enum-values-screaming-snake-case", "represent WIT enum values as SCREAMING_SNAKE_CASE strings")
+    .option("--nominal-resources", "require nominal resource identities (implies --separate-interface-types)")
+    .option(
+        "--async-imports-may-return-sync",
+        "allow synchronous host async returns (implies --separate-interface-types)",
+    )
+    .option("--typed-error-classes", "export named result error classes (implies --separate-interface-types)")
+    .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
+    .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
     .allowExcessArguments(true)
     .action(asyncAction(transpileCmd));
 
@@ -260,6 +268,14 @@ program
             .implies({ flagsAsBigint: true }),
     )
     .option("--enum-values-screaming-snake-case", "represent WIT enum values as SCREAMING_SNAKE_CASE strings")
+    .option("--nominal-resources", "require nominal resource identities (implies --separate-interface-types)")
+    .option(
+        "--async-imports-may-return-sync",
+        "allow synchronous host async returns (implies --separate-interface-types)",
+    )
+    .option("--typed-error-classes", "export named result error classes (implies --separate-interface-types)")
+    .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
+    .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
     .action(asyncAction(types));
 
 program
@@ -291,6 +307,14 @@ program
             .implies({ flagsAsBigint: true }),
     )
     .option("--enum-values-screaming-snake-case", "represent WIT enum values as SCREAMING_SNAKE_CASE strings")
+    .option("--nominal-resources", "require nominal resource identities (implies --separate-interface-types)")
+    .option(
+        "--async-imports-may-return-sync",
+        "allow synchronous host async returns (implies --separate-interface-types)",
+    )
+    .option("--typed-error-classes", "export named result error classes (implies --separate-interface-types)")
+    .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
+    .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
     .action(asyncAction(guestTypes));
 
 program
