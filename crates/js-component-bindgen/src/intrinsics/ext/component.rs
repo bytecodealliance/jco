@@ -1,8 +1,9 @@
 //! Central metadata for named component operations and their actual state owners.
 use super::super::{RenderIntrinsicsArgs, component::ComponentIntrinsic};
 use super::{
-    CoreContextIntrinsic, RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind,
-    RuntimeInitializer, WaitableContextIntrinsic,
+    CoreContextIntrinsic, FutureContextIntrinsic, RuntimeContextIntrinsic, RuntimeImport,
+    RuntimeImportKind, RuntimeInitializer, StreamContextIntrinsic, TaskContextIntrinsic,
+    WaitableContextIntrinsic,
 };
 use crate::{source::Source, uwriteln};
 use std::fmt::Write;
@@ -38,9 +39,17 @@ pub(crate) enum ComponentContextIntrinsic {
     PostReturnTrap,
     /// The component async-state constructor returned by `initializeComponentAsyncStateClass`.
     InitializeComponentAsyncStateClass,
+    /// Capabilities for `reportTrap`, which notifies the embedder of a trap.
+    ReportTrap,
+    /// Shared capabilities for `checkIdle` and `whenIdle`.
+    CheckIdle,
+    /// The host invocation tracker returned by `initializeCallTracking`.
+    InitializeCallTracking,
+    /// Capabilities for `stopInstance`, which shuts the store down.
+    StopInstance,
 }
 impl ComponentContextIntrinsic {
-    const ALL: [Self; 13] = [
+    const ALL: [Self; 17] = [
         Self::InitializeInstanceFlags,
         Self::InitializeStoreTrap,
         Self::InitializeStoreAsyncState,
@@ -54,6 +63,10 @@ impl ComponentContextIntrinsic {
         Self::RecordTrap,
         Self::PostReturnTrap,
         Self::InitializeComponentAsyncStateClass,
+        Self::ReportTrap,
+        Self::CheckIdle,
+        Self::InitializeCallTracking,
+        Self::StopInstance,
     ];
     pub(crate) fn get_global_names() -> impl Iterator<Item = &'static str> {
         Self::ALL
@@ -81,6 +94,10 @@ impl ComponentContextIntrinsic {
             Self::RecordTrap => "_jcoComponentRecordTrapContext",
             Self::PostReturnTrap => "_jcoComponentPostReturnTrapContext",
             Self::InitializeComponentAsyncStateClass => "ComponentAsyncState",
+            Self::ReportTrap => "_jcoComponentReportTrapContext",
+            Self::CheckIdle => "_jcoComponentIdleContext",
+            Self::InitializeCallTracking => "CALL_TRACKING",
+            Self::StopInstance => "_jcoComponentStopContext",
         }
     }
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
@@ -104,6 +121,9 @@ impl ComponentContextIntrinsic {
                 "initializeComponentAsyncStateClass",
                 "_jcoInitializeComponentAsyncStateClass",
             ),
+            Self::InitializeCallTracking => {
+                ("initializeCallTracking", "_jcoInitializeCallTracking")
+            }
             _ => return None,
         };
         Some(RuntimeInitializer {
@@ -113,8 +133,31 @@ impl ComponentContextIntrinsic {
         })
     }
     pub(crate) fn dependencies(self) -> &'static [RuntimeContextIntrinsic] {
-        use RuntimeContextIntrinsic::{Component, Core};
+        use RuntimeContextIntrinsic::{Component, Core, Future, Stream, Task};
         match self {
+            Self::ReportTrap => &[
+                Component(Self::InitializeStoreTrap),
+                Component(Self::NormalizeCoreTrap),
+            ],
+            Self::CheckIdle => &[
+                Component(Self::InitializeStoreTrap),
+                Component(Self::InitializeStoreAsyncState),
+                Task(TaskContextIntrinsic::InitializeTasksByComponent),
+            ],
+            Self::InitializeCallTracking => &[
+                Component(Self::InitializeStoreTrap),
+                Task(TaskContextIntrinsic::InitializeTasksByComponent),
+            ],
+            Self::StopInstance => &[
+                Component(Self::InitializeStoreTrap),
+                Component(Self::InitializeStoreAsyncState),
+                Component(Self::InitializeComponentAsyncStates),
+                Task(TaskContextIntrinsic::InitializeTasksByComponent),
+                Core(CoreContextIntrinsic::InitializeSymbolDispose),
+                Core(CoreContextIntrinsic::InitializeRepTableClass),
+                Stream(StreamContextIntrinsic::InitializeStreams),
+                Future(FutureContextIntrinsic::InitializeFutures),
+            ],
             Self::NormalizeCoreTrap => &[Component(Self::InitializeCoreTrapMessages)],
             Self::CheckForDeadlock => &[
                 Component(Self::InitializeStoreTrap),
@@ -158,8 +201,9 @@ impl ComponentContextIntrinsic {
                     "options?.onTrap ?? null".into()
                 }
                 Self::InitializeCoreTrapMessages => core_trap_messages_js(),
+                Self::InitializeCallTracking => "{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, tasks: ASYNC_TASKS_BY_COMPONENT_IDX }".into(),
                 Self::InitializeComponentAsyncStateClass => format!(
-                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable, reportTrap: err => _reportTrap(err), checkIdle: () => _checkIdle() }}",
+                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable, reportTrap: err => _reportTrap(_jcoComponentReportTrapContext, err), checkIdle: () => _checkIdle(_jcoComponentIdleContext) }}",
                     Trap::CannotEnterComponent.to_string()
                 ),
                 _ => String::new(),
@@ -198,6 +242,26 @@ impl ComponentContextIntrinsic {
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext }};"
             ),
+            Self::ReportTrap => uwriteln!(
+                output,
+                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext }};"
+            ),
+            Self::CheckIdle => {
+                // The tracker is initialized before any task can retire.
+                let check_calls = if args.call_tracking {
+                    ", checkCalls: () => CALL_TRACKING.check()"
+                } else {
+                    ""
+                };
+                uwriteln!(
+                    output,
+                    "const {local} = {{ storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, tasks: ASYNC_TASKS_BY_COMPONENT_IDX{check_calls} }};"
+                )
+            }
+            Self::StopInstance => uwriteln!(
+                output,
+                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, asyncState: ASYNC_STATE, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, symbolDispose, RepTable, channels: [STREAMS, FUTURES] }};"
+            ),
             _ => unreachable!("other component contexts have selected initializers"),
         }
     }
@@ -221,11 +285,34 @@ fn core_trap_messages_js() -> String {
     .join(",");
     format!("{{{messages}}}")
 }
-pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
+pub(crate) fn import(intrinsic: ComponentIntrinsic) -> RuntimeImport {
     use ComponentIntrinsic::*;
     let (export, context, kind) = match intrinsic {
-        // Trap reporting uses instantiation options; shutdown and idle checks use generated tables.
-        StopInstance | ReportTrap | WhenIdle | CheckIdle | CallTracking => return None,
+        StopInstance => (
+            "stopInstance",
+            ComponentContextIntrinsic::StopInstance,
+            RuntimeImportKind::Call,
+        ),
+        ReportTrap => (
+            "reportTrap",
+            ComponentContextIntrinsic::ReportTrap,
+            RuntimeImportKind::Call,
+        ),
+        WhenIdle => (
+            "whenIdle",
+            ComponentContextIntrinsic::CheckIdle,
+            RuntimeImportKind::Call,
+        ),
+        CheckIdle => (
+            "checkIdle",
+            ComponentContextIntrinsic::CheckIdle,
+            RuntimeImportKind::Call,
+        ),
+        CallTracking => (
+            "initializeCallTracking",
+            ComponentContextIntrinsic::InitializeCallTracking,
+            RuntimeImportKind::InitializedValue,
+        ),
         GlobalInstanceFlagsMap => (
             "initializeInstanceFlags",
             ComponentContextIntrinsic::InitializeInstanceFlags,
@@ -319,12 +406,12 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> Option<RuntimeImport> {
             RuntimeImportKind::Call,
         ),
     };
-    Some(RuntimeImport {
+    RuntimeImport {
         suffix: "intrinsics/component",
         export,
         context: Some(RuntimeContextIntrinsic::Component(context)),
         kind,
-    })
+    }
 }
 
 #[cfg(all(test, feature = "external-runtime"))]
@@ -359,23 +446,52 @@ mod tests {
     }
 
     #[test]
-    fn stop_instance_keeps_inline_shutdown_and_discovers_external_state() {
+    fn stop_instance_is_imported_with_the_store_owners_it_shuts_down() {
         use crate::intrinsics::runtime::{IntrinsicBinding, select};
 
         let intrinsic = ComponentIntrinsic::StopInstance;
         assert!(matches!(
             select(true).binding(intrinsic),
-            IntrinsicBinding::Inline { .. }
+            IntrinsicBinding::Imported { .. }
         ));
-        assert!(import(intrinsic).is_none());
-        let (_, intrinsics) = generated([intrinsic]);
-        for dependency in [
-            ComponentIntrinsic::GlobalStoreTrap,
-            ComponentIntrinsic::GlobalStoreAsyncState,
-            ComponentIntrinsic::GlobalAsyncStateMap,
-        ] {
-            assert!(intrinsics.contains(&dependency.into()));
-            assert!(import(dependency).is_some());
+        let (source, _) = generated([intrinsic]);
+        assert!(!source.contains("function _stopInstance("));
+        assert!(source.contains(
+            "const _jcoComponentStopContext = { RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, asyncState: ASYNC_STATE, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, symbolDispose, RepTable, channels: [STREAMS, FUTURES] };"
+        ));
+        assert_eq!(
+            select(true).callback_reference(intrinsic.into()),
+            "_stopInstance.bind(void 0, _jcoComponentStopContext)"
+        );
+        assert_eq!(
+            select(true).callback_reference(ComponentIntrinsic::WhenIdle.into()),
+            "_whenIdle.bind(void 0, _jcoComponentIdleContext)"
+        );
+    }
+
+    #[test]
+    fn idle_checks_reach_the_call_tracker_only_when_tracking_is_enabled() {
+        for call_tracking in [false, true] {
+            let mut intrinsics = BTreeSet::from([ComponentIntrinsic::CheckIdle.into()]);
+            let opts = TranspileOpts::builder().name("component".into()).build();
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .external_runtime(true)
+                    .call_tracking(call_tracking)
+                    .build(),
+            );
+            assert!(!source.contains("function _checkIdle("));
+            assert!(!source.contains("const CALL_TRACKING = (() =>"));
+            assert_eq!(
+                source.contains("checkCalls: () => CALL_TRACKING.check()"),
+                call_tracking
+            );
+            assert_eq!(
+                source.contains("const CALL_TRACKING = _jcoInitializeCallTracking({ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, tasks: ASYNC_TASKS_BY_COMPONENT_IDX });"),
+                call_tracking
+            );
         }
     }
 
@@ -402,9 +518,11 @@ mod tests {
             1
         );
         assert!(source.contains("deadlock: _jcoComponentDeadlockContext, Waitable"));
-        assert!(source.contains("reportTrap: err => _reportTrap(err)"));
-        assert!(source.contains("function _reportTrap(err)"));
-        assert!(source.contains("_normalizeCoreTrap(_jcoComponentNormalizeTrapContext, err)"));
+        assert!(
+            source.contains("reportTrap: err => _reportTrap(_jcoComponentReportTrapContext, err)")
+        );
+        assert!(!source.contains("function _reportTrap(err)"));
+        assert!(source.contains("normalization: _jcoComponentNormalizeTrapContext"));
         assert!(source.contains("instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP"));
         assert!(source.contains("asyncState: ASYNC_STATE, ComponentAsyncState"));
         assert!(source.contains("wasm trap: cannot enter component instance"));

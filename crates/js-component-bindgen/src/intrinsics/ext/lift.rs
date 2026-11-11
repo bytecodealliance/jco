@@ -274,7 +274,7 @@ mod tests {
     fn endpoint_capabilities_share_named_owners() {
         let (source, intrinsics) =
             generated(&[LiftIntrinsic::LiftFlatFuture, LiftIntrinsic::LiftFlatStream]);
-        // Component state calls back into functions that stay inline.
+        // Component state calls back into these operations.
         for inline in [
             crate::intrinsics::component::ComponentIntrinsic::ReportTrap,
             crate::intrinsics::component::ComponentIntrinsic::CheckIdle,
