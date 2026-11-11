@@ -6,8 +6,8 @@ import { assert, test } from 'vitest';
 
 import { getTmpDir, setupAsyncTest } from '../helpers.js';
 import {
-    defaultRuntimeUrl,
     externalRuntime,
+    runtimeBase,
     runtimeOptions,
     transpile,
     transpileBytes,
@@ -18,12 +18,14 @@ import { parse } from '../../src/wasm-tools.js';
 
 const fixture = new URL('../fixtures/components/runtime/external-runtime-resource.component.wat', import.meta.url);
 
+const importsSelectedRuntime = (source: string) => runtimeBase !== undefined && source.includes(runtimeBase);
+
 test.concurrent('runtime mode preserves explicit provider options without mutating them', () => {
     const options = Object.freeze({ cmRuntimeEsModule: './custom-runtime/', minify: false });
     assert.deepEqual(runtimeOptions(options), options);
     assert.notStrictEqual(runtimeOptions(options), options);
     assert.isUndefined(runtimeOptions({ cmRuntimeEsModule: undefined }).cmRuntimeEsModule);
-    assert.strictEqual(runtimeOptions().cmRuntimeEsModule, externalRuntime ? defaultRuntimeUrl.href : undefined);
+    assert.strictEqual(runtimeOptions().cmRuntimeEsModule, runtimeBase);
 });
 
 test.concurrent.each([
@@ -47,9 +49,9 @@ test.concurrent.each([
                 ? await transpileBytes(component, selectedOptions)
                 : await transpile(componentPath, selectedOptions);
         const source = new TextDecoder().decode(files['component.js']);
-        assert.strictEqual(source.includes(defaultRuntimeUrl.href), externalRuntime && !optOut);
+        assert.strictEqual(importsSelectedRuntime(source), externalRuntime && !optOut);
         const production = await productionTranspileBytes(component, options);
-        assert.notInclude(new TextDecoder().decode(production.files['component.js']), defaultRuntimeUrl.href);
+        assert.isFalse(importsSelectedRuntime(new TextDecoder().decode(production.files['component.js'])));
         await writeFiles(files, { baseDir: outDir });
         await writeFile(join(outDir, 'package.json'), '{"type":"module"}');
         const bindings = await import(pathToFileURL(join(outDir, 'component.js')).href);
@@ -73,7 +75,7 @@ test.concurrent('setupAsyncTest runs generated bindings in the selected runtime 
     });
     try {
         const source = await readFile(result.esModuleOutputPath, 'utf8');
-        assert.strictEqual(source.includes(defaultRuntimeUrl.href), externalRuntime);
+        assert.strictEqual(importsSelectedRuntime(source), externalRuntime);
         assert.strictEqual(result.instance.run(42), 42);
         assert.throws(() => result.instance.invalid(0), WebAssembly.RuntimeError, 'unknown handle index 0');
     } finally {
