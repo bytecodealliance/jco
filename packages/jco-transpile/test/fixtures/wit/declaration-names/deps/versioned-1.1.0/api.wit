@@ -1,0 +1,10 @@
+package test:versioned@1.1.0;
+
+interface api {
+  record config {
+    name: string,
+  }
+
+  get: func() -> config;
+  count: func() -> u32;
+}

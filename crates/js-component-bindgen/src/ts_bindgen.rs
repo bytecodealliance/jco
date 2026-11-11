@@ -1,12 +1,13 @@
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
+use std::rc::Rc;
 
 use anyhow::{Context as _, Result};
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use log::debug;
 use wit_bindgen_core::wit_parser::{
-    Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
+    Case, Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
     Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem, WorldKey,
 };
 
@@ -24,19 +25,111 @@ use crate::{
 
 /// TypeScript declaration for the `Option<T>` helper type alias used to
 /// represent WIT `option<T>` values that cannot be flattened to `T | undefined`.
+/// It is declared as `name`, which is `Option` unless a WIT type of the module
+/// has that name (see [`ModuleNames::option_alias`]).
 ///
 /// This is always emitted at the top level of a module (or `.d.ts` file), never
 /// inside an `export interface { ... }` block, since a type-alias declaration is
 /// not a valid interface member
 /// (see https://github.com/bytecodealliance/jco/issues/1708).
-const TS_OPTION_TYPE_ALIAS: &str =
-    "export type Option<T> = { tag: 'none' } | { tag: 'some', val: T };\n";
+fn ts_option_type_alias(name: &str) -> String {
+    format!("export type {name}<T> = {{ tag: 'none' }} | {{ tag: 'some', val: T }};\n")
+}
 
 /// TypeScript declaration for the `Result<T, E>` helper type alias used to
 /// represent WIT `result<T, E>` values. Emitted at the top level for the same
-/// reason as [`TS_OPTION_TYPE_ALIAS`].
-const TS_RESULT_TYPE_ALIAS: &str =
-    "export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };\n";
+/// reason as [`ts_option_type_alias`].
+fn ts_result_type_alias(name: &str) -> String {
+    format!("export type {name}<T, E> = {{ tag: 'ok', val: T }} | {{ tag: 'err', val: E }};\n")
+}
+
+/// The names that the declarations of one generated module bind.
+///
+/// A WIT type may be named after a global that the generated declarations
+/// refer to, such as `array`, `promise` or `symbol`, or after one of the helper
+/// type aliases. Its declaration shadows that name in the whole module.
+#[derive(Default)]
+struct ModuleNames {
+    /// The declared names, each in the form in which it is declared.
+    declared: BTreeSet<String>,
+    /// The names of variant case interfaces (see [`variant_case_name`]) that
+    /// are not declared, because a WIT type or another variant case of the
+    /// module has the same name. Such a case is inlined in its variant's union.
+    inlined_variant_cases: BTreeSet<String>,
+}
+
+impl ModuleNames {
+    /// The names bound by the declarations of `types`, the named types of an
+    /// interface or of a world.
+    fn of_types<'t>(
+        resolve: &Resolve,
+        types: impl Iterator<Item = (&'t str, TypeId)>,
+        variants_inline_cases: bool,
+    ) -> Self {
+        let mut declared = BTreeSet::new();
+        let mut variant_cases: BTreeMap<String, usize> = BTreeMap::new();
+        for (name, id) in types {
+            declared.insert(name.to_upper_camel_case());
+            if let TypeDefKind::Variant(variant) = &resolve.types[id].kind
+                && !variants_inline_cases
+            {
+                for case in &variant.cases {
+                    *variant_cases
+                        .entry(variant_case_name(name, &case.name))
+                        .or_default() += 1;
+                }
+            }
+        }
+
+        let mut inlined_variant_cases = BTreeSet::new();
+        for (case_name, count) in variant_cases {
+            if count > 1 || declared.contains(&case_name) {
+                inlined_variant_cases.insert(case_name);
+            } else {
+                declared.insert(case_name);
+            }
+        }
+        ModuleNames {
+            declared,
+            inlined_variant_cases,
+        }
+    }
+
+    /// A reference to the global `name`, which goes through `globalThis` if a
+    /// declaration of the module shadows the global.
+    fn global(&self, name: &str) -> String {
+        if self.declared.contains(name) {
+            format!("globalThis.{name}")
+        } else {
+            name.to_string()
+        }
+    }
+
+    /// The name of a helper type alias that is declared as `goal` unless the
+    /// module already declares that name.
+    fn helper_alias(&self, goal: &str) -> String {
+        let mut name = goal.to_string();
+        while self.declared.contains(&name) {
+            name.push('_');
+        }
+        name
+    }
+
+    /// The name of the `Option<T>` helper type alias.
+    fn option_alias(&self) -> String {
+        self.helper_alias("Option")
+    }
+
+    /// The name of the `Result<T, E>` helper type alias.
+    fn result_alias(&self) -> String {
+        self.helper_alias("Result")
+    }
+}
+
+/// The name of the interface declared for the case `case` of the variant `variant`.
+fn variant_case_name(variant: &str, case: &str) -> String {
+    format!("{variant}_{case}").to_upper_camel_case()
+}
 
 struct TsBindgen {
     /// The source code for the "main" file that's going to be created for the
@@ -47,6 +140,18 @@ struct TsBindgen {
 
     interface_names: LocalNames,
     local_names: LocalNames,
+
+    /// Stems of the declaration files of the world's interfaces.
+    interface_file_stems: Rc<InterfaceFileStems>,
+    /// The names bound by the declarations of the world's own types.
+    world_names: Rc<ModuleNames>,
+
+    /// The names under which the world's own types are declared, in order.
+    world_type_names: Vec<String>,
+    /// Ambient module declarations of the functions that a guest world
+    /// imports. A guest imports each as the default export of the module
+    /// named after the import.
+    guest_import_modules: Source,
 
     /// TypeScript definitions which will become the import object
     import_object: Source,
@@ -114,6 +219,10 @@ struct TsInterface<'a> {
     use_namespace_objects: bool,
     enum_values_screaming_snake_case: bool,
     resolve: &'a Resolve,
+    /// Stems of the declaration files of the world's interfaces.
+    interface_file_stems: Rc<InterfaceFileStems>,
+    /// The names bound by the declarations of the module being generated.
+    names: Rc<ModuleNames>,
     has_constructor: bool,
     needs_ty_option: bool,
     needs_ty_result: bool,
@@ -142,6 +251,23 @@ pub fn ts_bindgen(
         src: Source::default(),
         interface_names: LocalNames::default(),
         local_names: LocalNames::default(),
+        interface_file_stems: Rc::new(interface_file_stems(resolve, id)),
+        world_names: Rc::new(ModuleNames::of_types(
+            resolve,
+            resolve.worlds[id]
+                .imports
+                .values()
+                .filter_map(|item| match item {
+                    WorldItem::Type { id, .. } => {
+                        let name = resolve.types[*id].name.as_deref()?;
+                        Some((name, *id))
+                    }
+                    _ => None,
+                }),
+            opts.variants_inline_cases,
+        )),
+        world_type_names: Vec::new(),
+        guest_import_modules: Source::default(),
         import_object: Source::default(),
         export_object: Source::default(),
         needs_ty_option: false,
@@ -261,7 +387,9 @@ pub fn ts_bindgen(
                         opts.variants_inline_cases,
                         opts.use_namespace_objects,
                         opts.enum_values_screaming_snake_case,
-                    );
+                        &bindgen.interface_file_stems,
+                    )
+                    .with_names(&bindgen.world_names);
                     generator.docs(&ty.docs);
 
                     match &ty.kind {
@@ -296,15 +424,24 @@ pub fn ts_bindgen(
                             generator.type_map(*id, name, key, value, &ty.docs)
                         }
                     }
+                    // The helper type aliases that the type refers to are declared
+                    // once for the world, after all of its declarations.
+                    bindgen.needs_ty_option |= generator.needs_ty_option;
+                    bindgen.needs_ty_result |= generator.needs_ty_result;
+
                     let (src, references) = generator.finish();
                     bindgen.src.push_str(&src);
                     bindgen.references.extend(references);
+                    bindgen.world_type_names.push(name.to_upper_camel_case());
                 }
             }
         }
         // kebab import funcs (always default imports)
         for (name, func) in funcs {
             bindgen.import_funcs(resolve, &name, func, files);
+            if opts.guest && opts.instantiation_mode.is_none() {
+                bindgen.guest_import_func_module(resolve, &id_name, &name, func);
+            }
         }
         // namespace imports are grouped by namespace / kebab name
         // kebab name imports are direct
@@ -453,10 +590,12 @@ pub fn ts_bindgen(
     // Emitted here, after the `export interface {World}` block above, so the
     // aliases land at the top level rather than inside that interface.
     if bindgen.needs_ty_option {
-        bindgen.src.push_str(TS_OPTION_TYPE_ALIAS);
+        let alias = ts_option_type_alias(&bindgen.world_names.option_alias());
+        bindgen.src.push_str(&alias);
     }
     if bindgen.needs_ty_result {
-        bindgen.src.push_str(TS_RESULT_TYPE_ALIAS);
+        let alias = ts_result_type_alias(&bindgen.world_names.result_alias());
+        bindgen.src.push_str(&alias);
     }
 
     if opts.tla_compat && opts.instantiation_mode.is_none() {
@@ -612,6 +751,8 @@ pub fn ts_bindgen(
 
     if bindgen.is_guest {
         uwriteln!(bindgen.src, "}}");
+        let import_modules = std::mem::take(&mut bindgen.guest_import_modules);
+        bindgen.src.push_str(&import_modules);
     }
 
     let filename = format!("{name}.d.ts");
@@ -733,7 +874,9 @@ impl TsBindgen {
             self.variants_inline_cases,
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
-        );
+            &self.interface_file_stems,
+        )
+        .with_names(&self.world_names);
         generator.ts_func(
             func,
             true,
@@ -745,6 +888,65 @@ impl TsBindgen {
         self.import_object.push_str(&src);
         self.references.extend(references);
         uwriteln!(self.import_object, "}},");
+    }
+
+    /// Declare the ambient module of a function that a guest world imports.
+    ///
+    /// The function is the default export of the module named after the
+    /// import. Its signature may name the world's own types and the helper type
+    /// aliases, which the module imports from the world's module.
+    fn guest_import_func_module(
+        &mut self,
+        resolve: &Resolve,
+        world_module: &str,
+        import_name: &str,
+        func: &Function,
+    ) {
+        let mut generator = TsInterface::new(
+            resolve,
+            false,
+            self.is_guest,
+            self.flags_as_bigint,
+            self.variants_inline_cases,
+            self.use_namespace_objects,
+            self.enum_values_screaming_snake_case,
+            &self.interface_file_stems,
+        )
+        .with_names(&self.world_names);
+        generator.ts_func(
+            func,
+            true,
+            true,
+            false,
+            &GeneratedTypeMeta { is_export: false },
+        );
+
+        let mut imported_names = self.world_type_names.clone();
+        if generator.needs_ty_option {
+            self.needs_ty_option = true;
+            imported_names.push(self.world_names.option_alias());
+        }
+        if generator.needs_ty_result {
+            self.needs_ty_result = true;
+            imported_names.push(self.world_names.result_alias());
+        }
+
+        let (src, references) = generator.finish();
+        self.references.extend(references);
+
+        uwriteln!(
+            self.guest_import_modules,
+            "declare module '{import_name}' {{"
+        );
+        if !imported_names.is_empty() {
+            uwriteln!(
+                self.guest_import_modules,
+                "import type {{ {} }} from '{world_module}';",
+                imported_names.join(", ")
+            );
+        }
+        self.guest_import_modules.push_str(&src);
+        uwriteln!(self.guest_import_modules, "}}");
     }
 
     fn export_interface(
@@ -798,7 +1000,9 @@ impl TsBindgen {
             self.variants_inline_cases,
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
-        );
+            &self.interface_file_stems,
+        )
+        .with_names(&self.world_names);
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
@@ -901,8 +1105,10 @@ impl TsBindgen {
             .id_of(interface_id)
             .unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
-        let goal_name_kebab = goal_name.to_kebab_case();
-        let file_stem = format!("interfaces/{goal_name_kebab}");
+        let file_stem = format!(
+            "interfaces/{}",
+            interface_file_stem(&self.interface_file_stems, interface_id, &id_name)
+        );
         let file_name = format!("{file_stem}.d.ts");
         let (_name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
 
@@ -915,7 +1121,16 @@ impl TsBindgen {
                 self.variants_inline_cases,
                 self.use_namespace_objects,
                 self.enum_values_screaming_snake_case,
-            );
+                &self.interface_file_stems,
+            )
+            .with_names(&Rc::new(ModuleNames::of_types(
+                resolve,
+                resolve.interfaces[interface_id]
+                    .types
+                    .iter()
+                    .map(|(name, id)| (name.as_str(), *id)),
+                self.variants_inline_cases,
+            )));
             generator.begin(&id_name); // Write module declaration
 
             // Generate function definitions
@@ -986,9 +1201,12 @@ impl<'a> TsInterface<'a> {
         variants_inline_cases: bool,
         use_namespace_objects: bool,
         enum_values_screaming_snake_case: bool,
+        interface_file_stems: &Rc<InterfaceFileStems>,
     ) -> Self {
         TsInterface {
             is_root,
+            interface_file_stems: Rc::clone(interface_file_stems),
+            names: Rc::default(),
             is_guest,
             flags_as_bigint,
             variants_inline_cases,
@@ -1004,6 +1222,13 @@ impl<'a> TsInterface<'a> {
             needs_module_end: false,
             references: Default::default(),
         }
+    }
+
+    /// Set the names bound by the declarations of the module that this
+    /// generator's output is part of.
+    fn with_names(mut self, names: &Rc<ModuleNames>) -> Self {
+        self.names = Rc::clone(names);
+        self
     }
 
     fn begin(&mut self, id_name: &str) {
@@ -1022,9 +1247,15 @@ impl<'a> TsInterface<'a> {
             let (impl_phrase, extra_members) = if generates_disposable_resource {
                 // Guest imports and host exports are resource consumers. Their generated
                 // wrappers own component-model handles and support deterministic cleanup.
-                (" implements Disposable", vec!["[Symbol.dispose](): void;"])
+                (
+                    format!(" implements {}", self.names.global("Disposable")),
+                    vec![format!(
+                        "[{}.dispose](): void;",
+                        self.names.global("Symbol")
+                    )],
+                )
             } else {
-                ("", vec![])
+                (String::new(), vec![])
             };
 
             uwriteln!(
@@ -1133,7 +1364,8 @@ impl<'a> TsInterface<'a> {
                     TypeDefKind::Option(t) => {
                         if maybe_null(self.resolve, t) {
                             self.needs_ty_option = true;
-                            self.src.push_str("Option<");
+                            self.src
+                                .push_str(&format!("{}<", self.names.option_alias()));
                             self.print_ty(t);
                             self.src.push_str(">");
                         } else {
@@ -1143,7 +1375,8 @@ impl<'a> TsInterface<'a> {
                     }
                     TypeDefKind::Result(r) => {
                         self.needs_ty_result = true;
-                        self.src.push_str("Result<");
+                        self.src
+                            .push_str(&format!("{}<", self.names.result_alias()));
                         self.print_optional_ty(r.ok.as_ref());
                         self.src.push_str(", ");
                         self.print_optional_ty(r.err.as_ref());
@@ -1152,16 +1385,8 @@ impl<'a> TsInterface<'a> {
                     TypeDefKind::Variant(_) => panic!("[print_ty()] anonymous variant"),
                     TypeDefKind::List(v) => self.print_list_ty(v),
                     TypeDefKind::FixedLengthList(v, len) => self.print_fixed_size_list(v, len),
-                    TypeDefKind::Future(maybe_ty) => {
-                        self.src.push_str("PromiseLike<");
-                        self.print_optional_ty(maybe_ty.as_ref());
-                        self.src.push_str("> & { [Symbol.dispose]?(): void }");
-                    }
-                    TypeDefKind::Stream(maybe_ty) => {
-                        self.src.push_str("AsyncIterable<");
-                        self.print_optional_ty(maybe_ty.as_ref());
-                        self.src.push_str(">");
-                    }
+                    TypeDefKind::Future(maybe_ty) => self.print_future_ty(maybe_ty.as_ref()),
+                    TypeDefKind::Stream(maybe_ty) => self.print_stream_ty(maybe_ty.as_ref()),
                     TypeDefKind::Unknown => unreachable!("unexpectedly unknown type def"),
                     TypeDefKind::Resource => todo!("[print_ty()] resource"),
                     TypeDefKind::Handle(h) => {
@@ -1188,13 +1413,32 @@ impl<'a> TsInterface<'a> {
         }
     }
 
+    /// Print the type of a `future` with the given payload type
+    fn print_future_ty(&mut self, payload: Option<&Type>) {
+        self.src
+            .push_str(&format!("{}<", self.names.global("PromiseLike")));
+        self.print_optional_ty(payload);
+        self.src.push_str(&format!(
+            "> & {{ [{}.dispose]?(): void }}",
+            self.names.global("Symbol")
+        ));
+    }
+
+    /// Print the type of a `stream` with the given element type
+    fn print_stream_ty(&mut self, element: Option<&Type>) {
+        self.src
+            .push_str(&format!("{}<", self.names.global("AsyncIterable")));
+        self.print_optional_ty(element);
+        self.src.push_str(">");
+    }
+
     /// Print the list type
     fn print_list_ty(&mut self, ty: &Type) {
         match js_array_ty(self.resolve, ty) {
-            Some("Uint8Array") => self.src.push_str("Uint8Array"),
-            Some(ty) => self.src.push_str(ty),
+            Some(ty) => self.src.push_str(&self.names.global(ty)),
             None => {
-                self.src.push_str("Array<");
+                self.src
+                    .push_str(&format!("{}<", self.names.global("Array")));
                 self.print_ty(ty);
                 self.src.push_str(">");
             }
@@ -1202,7 +1446,7 @@ impl<'a> TsInterface<'a> {
     }
 
     fn print_map_ty(&mut self, key: &Type, value: &Type) {
-        self.src.push_str("Map<");
+        self.src.push_str(&format!("{}<", self.names.global("Map")));
         self.print_ty(key);
         self.src.push_str(", ");
         self.print_ty(value);
@@ -1257,7 +1501,9 @@ impl<'a> TsInterface<'a> {
                             self.variants_inline_cases,
                             self.use_namespace_objects,
                             self.enum_values_screaming_snake_case,
-                        ),
+                            &self.interface_file_stems,
+                        )
+                        .with_names(&self.names),
                     )
                 })
                 .1
@@ -1299,7 +1545,13 @@ impl<'a> TsInterface<'a> {
                         iface
                             .src
                             .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
-                        iface.src.push_str(&format!("function {local_name}"));
+                        // Guest declarations are nested in an ambient `declare module`
+                        // block, while host declarations sit at the top level of a
+                        // `.d.ts` file, where a function must be declared ambient.
+                        let declare = if iface.is_guest { "" } else { "declare " };
+                        iface
+                            .src
+                            .push_str(&format!("{declare}function {local_name}"));
                     }
                 }
                 FunctionKind::Constructor(_) => {
@@ -1307,10 +1559,12 @@ impl<'a> TsInterface<'a> {
                     iface.src.push_str("constructor");
                 }
                 FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
-                    iface.src.push_str(&format!("static {escaped_name}"));
+                    iface
+                        .src
+                        .push_str(&format!("static {}", class_member_name(&escaped_name)));
                 }
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
-                    iface.src.push_str(&escaped_name);
+                    iface.src.push_str(&class_member_name(&escaped_name));
                 }
             }
         } else {
@@ -1363,7 +1617,9 @@ impl<'a> TsInterface<'a> {
         let promise_wrap_result = requires_async_porcelain || is_async_fn;
 
         if promise_wrap_result {
-            iface.src.push_str("Promise<");
+            iface
+                .src
+                .push_str(&format!("{}<", iface.names.global("Promise")));
         }
 
         if let Some((ok_ty, _)) = get_thrown_type(iface.resolve, func.result) {
@@ -1390,10 +1646,12 @@ impl<'a> TsInterface<'a> {
         let needs_ty_result =
             self.needs_ty_result || self.resources.iter().any(|(_, r)| r.1.needs_ty_result);
         if needs_ty_option {
-            self.src.push_str(TS_OPTION_TYPE_ALIAS);
+            self.src
+                .push_str(&ts_option_type_alias(&self.names.option_alias()));
         }
         if needs_ty_result {
-            self.src.push_str(TS_RESULT_TYPE_ALIAS);
+            self.src
+                .push_str(&ts_result_type_alias(&self.names.result_alias()));
         }
     }
 
@@ -1450,30 +1708,46 @@ impl<'a> TsInterface<'a> {
     fn type_variant(&mut self, _id: TypeId, name: &str, variant: &Variant, docs: &Docs) {
         self.docs(docs);
         if !self.variants_inline_cases {
+            // A case whose interface would take the name of another declaration
+            // of the module is inlined in the union instead of being declared.
+            let names = Rc::clone(&self.names);
+            let is_inlined = |case: &Case| {
+                names
+                    .inlined_variant_cases
+                    .contains(&variant_case_name(name, &case.name))
+            };
+
             self.src
-                .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
-            for (i, case) in variant.cases.iter().enumerate() {
-                if i > 0 {
-                    self.src.push_str(" | ");
+                .push_str(&format!("export type {} =", name.to_upper_camel_case()));
+            if variant.cases.iter().any(is_inlined) {
+                self.src.indent(1);
+                for case in variant.cases.iter() {
+                    self.src.push_str("\n| ");
+                    if is_inlined(case) {
+                        self.src.push_str("{\n");
+                        self.docs(&case.docs);
+                        self.print_variant_case_members(case);
+                        self.src.push_str("}");
+                    } else {
+                        self.src.push_str(&variant_case_name(name, &case.name));
+                    }
                 }
-                self.src
-                    .push_str(&format!("{}_{}", name, case.name).to_upper_camel_case());
+                self.src.deindent(1);
+            } else {
+                for (i, case) in variant.cases.iter().enumerate() {
+                    self.src.push_str(if i > 0 { " | " } else { " " });
+                    self.src.push_str(&variant_case_name(name, &case.name));
+                }
             }
             self.src.push_str(";\n");
-            for case in variant.cases.iter() {
+
+            for case in variant.cases.iter().filter(|case| !is_inlined(case)) {
                 self.docs(&case.docs);
                 self.src.push_str(&format!(
                     "export interface {} {{\n",
-                    format!("{}_{}", name, case.name).to_upper_camel_case()
+                    variant_case_name(name, &case.name)
                 ));
-                self.src.push_str("tag: '");
-                self.src.push_str(&case.name);
-                self.src.push_str("',\n");
-                if let Some(ty) = case.ty {
-                    self.src.push_str("val: ");
-                    self.print_ty(&ty);
-                    self.src.push_str(",\n");
-                }
+                self.print_variant_case_members(case);
                 self.src.push_str("}\n");
             }
             self.type_variant_namespace(name, variant);
@@ -1490,19 +1764,24 @@ impl<'a> TsInterface<'a> {
             self.src.push_str("\n");
             self.src.push_str("| {\n");
             self.docs(&case.docs);
-            self.src.push_str("tag: '");
-            self.src.push_str(&case.name);
-            self.src.push_str("',\n");
-            if let Some(ty) = case.ty {
-                self.src.push_str("val: ");
-                self.print_ty(&ty);
-                self.src.push_str(",\n");
-            }
+            self.print_variant_case_members(case);
             self.src.push_str("}");
         }
         self.src.deindent(1);
         self.src.push_str(";\n");
         self.type_variant_namespace(name, variant);
+    }
+
+    /// Print the `tag` and `val` members of the object type of a variant case
+    fn print_variant_case_members(&mut self, case: &Case) {
+        self.src.push_str("tag: '");
+        self.src.push_str(&case.name);
+        self.src.push_str("',\n");
+        if let Some(ty) = case.ty {
+            self.src.push_str("val: ");
+            self.print_ty(&ty);
+            self.src.push_str(",\n");
+        }
     }
 
     fn type_option(&mut self, _id: TypeId, name: &str, payload: &Type, docs: &Docs) {
@@ -1511,7 +1790,8 @@ impl<'a> TsInterface<'a> {
         self.src.push_str(&format!("export type {name} = "));
         if maybe_null(self.resolve, payload) {
             self.needs_ty_option = true;
-            self.src.push_str("Option<");
+            self.src
+                .push_str(&format!("{}<", self.names.option_alias()));
             self.print_ty(payload);
             self.src.push_str(">");
         } else {
@@ -1567,7 +1847,8 @@ impl<'a> TsInterface<'a> {
                 self.print_ty(ty);
             }
             self.src.push_str(&format!(
-                ") => Extract<{name}, {{ tag: '{}' }}>,\n",
+                ") => {}<{name}, {{ tag: '{}' }}>,\n",
+                self.names.global("Extract"),
                 case.name
             ));
         }
@@ -1578,7 +1859,10 @@ impl<'a> TsInterface<'a> {
         self.docs(docs);
         let name = name.to_upper_camel_case();
         self.needs_ty_result = true;
-        self.src.push_str(&format!("export type {name} = Result<"));
+        self.src.push_str(&format!(
+            "export type {name} = {}<",
+            self.names.result_alias()
+        ));
         self.print_optional_ty(result.ok.as_ref());
         self.src.push_str(", ");
         self.print_optional_ty(result.err.as_ref());
@@ -1633,10 +1917,10 @@ impl<'a> TsInterface<'a> {
                             if parent_id == i {
                                 None
                             } else {
-                                Some(self.resolve.id_of(i).unwrap())
+                                Some((i, self.resolve.id_of(i).unwrap()))
                             }
                         } else {
-                            Some(self.resolve.id_of(i).unwrap())
+                            Some((i, self.resolve.id_of(i).unwrap()))
                         }
                     }
                     _ => None,
@@ -1647,7 +1931,7 @@ impl<'a> TsInterface<'a> {
         let path_prefix = if self.is_root { "./interfaces/" } else { "./" };
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
-            Some(owned_interface_id) => {
+            Some((owned_interface, owned_interface_id)) => {
                 // The import path names the immediate owner, so retain that
                 // interface's alias name rather than the ultimate target's.
                 let Type::Id(orig_id) = ty else {
@@ -1658,7 +1942,11 @@ impl<'a> TsInterface<'a> {
                     .as_ref()
                     .unwrap()
                     .to_upper_camel_case();
-                let owned_interface_name = interface_goal_name(&owned_interface_id);
+                let owned_interface_name = interface_file_stem(
+                    &self.interface_file_stems,
+                    owned_interface,
+                    &owned_interface_id,
+                );
                 let import_name = if self.is_guest {
                     self.references
                         .insert(format!("{path_prefix}{owned_interface_name}.d.ts"));
@@ -1694,22 +1982,18 @@ impl<'a> TsInterface<'a> {
 
     fn type_future(&mut self, name: &str, element_ty: &Option<Type>, docs: &Docs) {
         self.docs(docs);
-        self.src.push_str(&format!(
-            "export type {} = PromiseLike<",
-            name.to_upper_camel_case()
-        ));
-        self.print_optional_ty(element_ty.as_ref());
-        self.src.push_str("> & { [Symbol.dispose]?(): void };\n");
+        self.src
+            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+        self.print_future_ty(element_ty.as_ref());
+        self.src.push_str(";\n");
     }
 
     fn type_stream(&mut self, name: &str, element_ty: &Option<Type>, docs: &Docs) {
         self.docs(docs);
-        self.src.push_str(&format!(
-            "export type {} = AsyncIterable<",
-            name.to_upper_camel_case()
-        ));
-        self.print_optional_ty(element_ty.as_ref());
-        self.src.push_str(">;\n");
+        self.src
+            .push_str(&format!("export type {} = ", name.to_upper_camel_case()));
+        self.print_stream_ty(element_ty.as_ref());
+        self.src.push_str(";\n");
     }
 
     fn type_list(&mut self, _id: TypeId, name: &str, element_ty: &Type, docs: &Docs) {
@@ -1749,10 +2033,81 @@ impl<'a> TsInterface<'a> {
                     self.variants_inline_cases,
                     self.use_namespace_objects,
                     self.enum_values_screaming_snake_case,
-                ),
+                    &self.interface_file_stems,
+                )
+                .with_names(&self.names),
             )
         });
     }
+}
+
+/// Render the name of a method or static function of a class declaration.
+///
+/// A member spelled `constructor` declares the class constructor, which can
+/// neither be `static` nor have a return type, so a WIT function with that
+/// name is declared through a computed member name instead.
+fn class_member_name(escaped_name: &str) -> String {
+    if escaped_name == "constructor" {
+        "[\"constructor\"]".to_string()
+    } else {
+        escaped_name.to_string()
+    }
+}
+
+/// Stems of the `interfaces/{stem}.d.ts` declaration files, by interface.
+type InterfaceFileStems = BTreeMap<InterfaceId, String>;
+
+/// Choose the declaration file stem of each named interface that a world
+/// imports or exports.
+///
+/// A stem is the interface's name without its version, so that file names
+/// stay the same across version bumps. Interfaces of one world that differ
+/// only in version would share that stem, so each of them has its version
+/// appended instead.
+fn interface_file_stems(resolve: &Resolve, world: WorldId) -> InterfaceFileStems {
+    let world = &resolve.worlds[world];
+    let mut interfaces_by_stem: BTreeMap<String, BTreeSet<InterfaceId>> = BTreeMap::new();
+    for item in world.imports.values().chain(world.exports.values()) {
+        let WorldItem::Interface { id, .. } = item else {
+            continue;
+        };
+        let Some(id_name) = resolve.id_of(*id) else {
+            continue;
+        };
+        interfaces_by_stem
+            .entry(interface_goal_name(&id_name))
+            .or_default()
+            .insert(*id);
+    }
+
+    let mut stems = InterfaceFileStems::new();
+    for (stem, interfaces) in interfaces_by_stem {
+        for &interface in &interfaces {
+            let version = resolve.interfaces[interface]
+                .package
+                .and_then(|package| resolve.packages[package].name.version.as_ref());
+            let stem = match version {
+                Some(version) if interfaces.len() > 1 => {
+                    format!("{stem}-{}", version.to_string().to_kebab_case())
+                }
+                _ => stem.clone(),
+            };
+            stems.insert(interface, stem);
+        }
+    }
+    stems
+}
+
+/// The declaration file stem of `interface`, whose name is `id_name`.
+fn interface_file_stem(
+    stems: &InterfaceFileStems,
+    interface: InterfaceId,
+    id_name: &str,
+) -> String {
+    stems
+        .get(&interface)
+        .cloned()
+        .unwrap_or_else(|| interface_goal_name(id_name))
 }
 
 fn interface_goal_name(iface_name: &str) -> String {

@@ -1,0 +1,9 @@
+package test:versioned@2.0.0;
+
+interface api {
+  record config {
+    id: u64,
+  }
+
+  get: func() -> config;
+}

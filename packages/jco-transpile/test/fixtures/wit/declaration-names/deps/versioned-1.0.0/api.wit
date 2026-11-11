@@ -1,0 +1,9 @@
+package test:versioned@1.0.0;
+
+interface api {
+  record config {
+    name: string,
+  }
+
+  get: func() -> config;
+}

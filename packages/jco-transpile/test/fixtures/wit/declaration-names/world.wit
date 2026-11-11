@@ -1,0 +1,133 @@
+package test:declaration-names;
+
+/// WIT types named after the globals and helper type aliases that generated
+/// declarations refer to.
+interface shadowed-globals {
+  record array {
+    length: u32,
+  }
+
+  record promise {
+    settled: bool,
+  }
+
+  record promise-like {
+    settled: bool,
+  }
+
+  record async-iterable {
+    done: bool,
+  }
+
+  record disposable {
+    disposed: bool,
+  }
+
+  record %map {
+    size: u32,
+  }
+
+  variant %option {
+    first,
+    second(u8),
+  }
+
+  variant %result {
+    first,
+    second(u8),
+  }
+
+  resource symbol {
+    constructor();
+  }
+
+  resource uint8-array {
+    constructor();
+  }
+
+  bytes: func(bytes: list<u8>) -> list<u8>;
+  strings: func(strings: list<string>, array: array) -> list<string>;
+  nested-option: func(nested: option<option<u8>>, choice: %option) -> option<option<u8>>;
+  nested-result: func(nested: option<result<u8, string>>, outcome: %result) -> list<result<u8, string>>;
+  entries: func(entries: map<string, u32>, sizes: %map) -> map<string, u32>;
+  symbols: func(symbol: symbol, disposable: disposable) -> uint8-array;
+  later: async func(bytes: stream<u8>, value: future<u32>) -> u32;
+  records: func(promise: promise, promise-like: promise-like, async-iterable: async-iterable);
+}
+
+/// Variant cases whose interface would be named like another declaration.
+interface variant-case-names {
+  record operation-create {
+    credit: u64,
+  }
+
+  variant operation {
+    /// Creates an operation.
+    create(operation-create),
+    cancel,
+  }
+
+  variant shape-round {
+    circle(f64),
+  }
+
+  variant shape {
+    round-circle(f64),
+    square(f64),
+  }
+
+  process: func(operation: operation, shape: shape, round: shape-round) -> operation;
+}
+
+/// Resource functions named after the class constructor, and a freestanding
+/// function named after a reserved word.
+interface function-names {
+  resource widget {
+    constructor(name: string);
+    %constructor: func() -> u32;
+    create: static func() -> widget;
+  }
+
+  resource factory {
+    %constructor: static func() -> u32;
+  }
+
+  %new: func(name: string) -> widget;
+}
+
+world shadowed-globals-world {
+  import shadowed-globals;
+  export shadowed-globals;
+}
+
+world variant-case-names-world {
+  import variant-case-names;
+  export variant-case-names;
+}
+
+world function-names-world {
+  import function-names;
+  export function-names;
+}
+
+world versions-world {
+  import test:versioned/api@1.0.0;
+  import test:versioned/api@1.1.0;
+  import test:versioned/api@2.0.0;
+}
+
+world world-imports-world {
+  use variant-case-names.{operation};
+
+  record entry {
+    key: string,
+    value: option<option<u32>>,
+  }
+
+  import log: func(message: string);
+  import lookup-entry: func(key: string) -> result<entry, string>;
+  import apply: func(operation: operation, entries: list<result<entry, string>>) -> option<option<entry>>;
+  import later: async func(key: string) -> entry;
+
+  export run: func();
+}
