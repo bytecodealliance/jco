@@ -1,0 +1,45 @@
+package test:resource-versions;
+
+package test:versioned@0.2.3 {
+  interface things {
+    resource thing {
+      constructor();
+      size: func() -> u32;
+    }
+    take: func(thing: thing);
+  }
+
+  interface others {
+    resource thing {
+      constructor();
+      size: func() -> u32;
+    }
+  }
+}
+
+package test:versioned@0.2.6 {
+  interface things {
+    resource thing {
+      constructor();
+      size: func() -> u32;
+    }
+    take: func(thing: thing);
+  }
+}
+
+package test:versioned@0.3.0 {
+  interface things {
+    resource thing {
+      constructor();
+      size: func() -> u32;
+    }
+    take: func(thing: thing);
+  }
+}
+
+world versions {
+  export test:versioned/things@0.2.3;
+  export test:versioned/others@0.2.3;
+  export test:versioned/things@0.2.6;
+  export test:versioned/things@0.3.0;
+}

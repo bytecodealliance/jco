@@ -303,11 +303,36 @@ suite('Type Generation', () => {
         assert.deepStrictEqual(await typeCheckDeclarations(exportOnly), []);
     });
 
+    /**
+     * Type check a fixture module against declarations generated for a host.
+     *
+     * @param files - Generated declaration files, by path.
+     * @param fixture - Name of the module under `fixtures/typescript`.
+     */
+    async function typeCheckHostModule(files: Record<string, Uint8Array>, fixture: string): Promise<string[]> {
+        const dir = await getTmpDir();
+        try {
+            await writeFiles(files, { baseDir: dir });
+            const testFile = join(dir, fixture);
+            await copyFile(new URL(`./fixtures/typescript/${fixture}`, import.meta.url), testFile);
+            const program = ts.createProgram([testFile], {
+                noEmit: true,
+                strict: true,
+                types: [],
+                target: ts.ScriptTarget.ESNext,
+                module: ts.ModuleKind.NodeNext,
+            });
+            return ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    }
+
     test('resources that the bindings provide are nominal types', async () => {
         const opts = { worldName: 'test:interface-sides/both-sides' };
         const fixture = `${WIT_FIXTURE_DIR}/interface-sides.wit`;
         const read = (files: Record<string, Uint8Array>, name: string) => Buffer.from(files[name]).toString();
-        const brand = 'private $brand: unknown;';
+        const brand = "readonly $brand: 'test:interface-sides/types#shape';";
 
         const host = await generateHostTypes(fixture, opts);
         assert.include(read(host, 'interfaces/exports/test-interface-sides-types.d.ts'), brand);
@@ -319,25 +344,22 @@ suite('Type Generation', () => {
 
         // A host module must type-check against the declarations, apart from
         // the look-alike resources that it marks as errors.
-        const dir = await getTmpDir();
-        try {
-            await writeFiles(host, { baseDir: dir });
-            const testFile = join(dir, 'resource-brands.mts');
-            await copyFile(new URL('./fixtures/typescript/resource-brands.mts', import.meta.url), testFile);
-            const program = ts.createProgram([testFile], {
-                noEmit: true,
-                strict: true,
-                types: [],
-                target: ts.ScriptTarget.ESNext,
-                module: ts.ModuleKind.NodeNext,
-            });
-            assert.deepStrictEqual(
-                ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-                [],
-            );
-        } finally {
-            await rm(dir, { recursive: true, force: true });
-        }
+        assert.deepStrictEqual(await typeCheckHostModule(host, 'resource-brands.mts'), []);
+    });
+
+    test('resources of semver compatible versions of an interface are the same type', async () => {
+        const host = await generateHostTypes(`${WIT_FIXTURE_DIR}/resource-versions.wit`, {
+            worldName: 'test:resource-versions/versions',
+        });
+        const read = (name: string) => Buffer.from(host[name]).toString();
+        const brand = "readonly $brand: 'test:versioned/things@0.2#thing';";
+        assert.include(read('interfaces/exports/test-versioned-things-0-2-3.d.ts'), brand);
+        assert.include(read('interfaces/exports/test-versioned-things-0-2-6.d.ts'), brand);
+        assert.include(
+            read('interfaces/exports/test-versioned-things-0-3-0.d.ts'),
+            "readonly $brand: 'test:versioned/things@0.3#thing';",
+        );
+        assert.deepStrictEqual(await typeCheckHostModule(host, 'resource-versions.mts'), []);
     });
 
     test('the errors of results are documented and typed', async () => {
