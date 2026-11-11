@@ -1,0 +1,38 @@
+package test:interface-sides;
+
+interface types {
+  record point {
+    x: u32,
+    y: u32,
+  }
+
+  resource shape {
+    constructor(origin: point);
+    area: func() -> u32;
+  }
+}
+
+interface store {
+  use types.{point, shape};
+
+  put: func(shape: shape) -> point;
+}
+
+interface sink {
+  use types.{point, shape};
+
+  take: func(point: point, shape: borrow<shape>);
+}
+
+/// Imports and exports the same interfaces.
+world both-sides {
+  import types;
+  import store;
+  export types;
+  export store;
+}
+
+/// Exports an interface that uses the types of one the world only imports.
+world export-only {
+  export sink;
+}

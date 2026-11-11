@@ -26,7 +26,7 @@ suite('namespace objects', async () => {
             useNamespaceObjects: true,
         });
         const source = Buffer.from(result.files['namespace-objects.js']).toString();
-        const declarations = Buffer.from(result.files['interfaces/test-namespace-objects-api.d.ts']).toString();
+        const declarations = Buffer.from(result.files['interfaces/exports/test-namespace-objects-api.d.ts']).toString();
 
         assert.include(source, 'const Y = Object.freeze({');
         assert.include(source, "Text: (val) => ({ tag: 'text', val }),");

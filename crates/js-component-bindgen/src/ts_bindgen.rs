@@ -153,6 +153,13 @@ struct TsBindgen {
     interface_file_stems: Rc<InterfaceFileStems>,
     /// The names bound by the declarations of the world's own types.
     world_names: Rc<ModuleNames>,
+    /// The interfaces that the world exports.
+    exported_interfaces: Rc<BTreeSet<InterfaceId>>,
+    /// Declaration files of the import side of interfaces.
+    import_side_files: BTreeSet<String>,
+    /// The export-side declarations of interfaces, keyed by the declaration
+    /// file that the import side of the same interface has or would have.
+    export_side_declarations: BTreeMap<String, ExportSideDeclaration>,
 
     /// The names under which the world's own types are declared, in order.
     world_type_names: Vec<String>,
@@ -192,6 +199,30 @@ struct TsBindgen {
     /// definitions. This is used to generate `/// <reference path="..." />`
     /// directives at the top of the file.
     references: BTreeSet<String>,
+}
+
+/// The export-side declaration of an interface.
+struct ExportSideDeclaration {
+    /// The ID of the interface, or the name it is exported under if it has none.
+    id_name: String,
+    /// The stem of the declaration file, relative to the directory of
+    /// export-side declarations.
+    file_stem: String,
+}
+
+/// Directory of the declarations of interfaces, relative to the world's declaration.
+const INTERFACES_DIR: &str = "interfaces";
+
+/// Directory of the export-side declarations of interfaces, relative to [`INTERFACES_DIR`].
+const EXPORTS_DIR: &str = "exports";
+
+/// The name of the ambient module that declares the export side of an
+/// interface for a guest.
+///
+/// A guest imports an interface by its ID, so the declarations of what the
+/// guest must provide for the same interface need a module name of their own.
+fn guest_export_module(id_name: &str) -> String {
+    format!("jco:exports/{id_name}")
 }
 
 /// Information related to a generated type (import, function, etc)
@@ -238,6 +269,10 @@ struct TsInterface<'a> {
     /// The host may return the result of such a function directly even if the
     /// function is async, as the generated bindings await whatever it returns.
     host_implemented: bool,
+    /// Whether this declares the export side of an interface.
+    is_export_side: bool,
+    /// The interfaces that the world exports.
+    exported_interfaces: Rc<BTreeSet<InterfaceId>>,
     has_constructor: bool,
     needs_ty_option: bool,
     needs_ty_result: bool,
@@ -281,6 +316,18 @@ pub fn ts_bindgen(
                 }),
             opts.variants_inline_cases,
         )),
+        exported_interfaces: Rc::new(
+            resolve.worlds[id]
+                .exports
+                .values()
+                .filter_map(|item| match item {
+                    WorldItem::Interface { id, .. } => Some(*id),
+                    _ => None,
+                })
+                .collect(),
+        ),
+        import_side_files: BTreeSet::new(),
+        export_side_declarations: BTreeMap::new(),
         world_type_names: Vec::new(),
         guest_import_modules: Source::default(),
         import_object: Source::default(),
@@ -402,8 +449,8 @@ pub fn ts_bindgen(
                         opts.variants_inline_cases,
                         opts.use_namespace_objects,
                         opts.enum_values_screaming_snake_case,
-                        &bindgen.interface_file_stems,
                     )
+                    .with_interface_file_stems(&bindgen.interface_file_stems)
                     .with_names(&bindgen.world_names);
                     generator.docs(&ty.docs);
 
@@ -770,6 +817,8 @@ pub fn ts_bindgen(
         bindgen.src.push_str(&import_modules);
     }
 
+    bindgen.keep_import_side_paths_of_exports(files);
+
     let filename = format!("{name}.d.ts");
     files.push(
         &filename,
@@ -781,6 +830,35 @@ pub fn ts_bindgen(
 }
 
 impl TsBindgen {
+    /// Declare the export side of each interface that the world only exports
+    /// at the path, and for guests in the module, of its import side too.
+    ///
+    /// The declaration of such an interface used to be there, where code written
+    /// against earlier output still looks for it.
+    fn keep_import_side_paths_of_exports(&mut self, files: &mut Files) {
+        for (import_side_file_name, declaration) in &self.export_side_declarations {
+            if self.import_side_files.contains(import_side_file_name) {
+                continue;
+            }
+            let ExportSideDeclaration { id_name, file_stem } = declaration;
+            let mut src = Source::default();
+            if self.is_guest {
+                self.references.insert(format!("./{import_side_file_name}"));
+                uwriteln!(
+                    src,
+                    "/// <reference path=\"./{EXPORTS_DIR}/{file_stem}.d.ts\" />"
+                );
+                uwriteln!(src, "declare module '{id_name}' {{");
+                uwriteln!(src, "export * from '{}';", guest_export_module(id_name));
+                uwriteln!(src, "}}");
+            } else {
+                uwriteln!(src, "/** @module Interface {id_name} **/");
+                uwriteln!(src, "export * from './{EXPORTS_DIR}/{file_stem}.js';");
+            }
+            files.push(import_side_file_name, src.as_bytes());
+        }
+    }
+
     fn world_import_interface(
         &mut self,
         resolve: &Resolve,
@@ -791,7 +869,13 @@ impl TsBindgen {
     ) {
         if instantiation {
             // in case an imported type is used as an exported type
-            let local_name = self.import_interface(name, resolve, id, files);
+            let local_name = self.import_interface(
+                name,
+                resolve,
+                id,
+                files,
+                GeneratedTypeMeta { is_export: false },
+            );
             uwriteln!(
                 self.import_object,
                 "{}: typeof {local_name},",
@@ -835,7 +919,13 @@ impl TsBindgen {
                 if iface_name == "*" {
                     uwrite!(self.import_object, "{}: ", maybe_quote_id(import_name));
                     let name = resolve.interfaces[**id].name.as_ref().unwrap();
-                    let local_name = self.import_interface(name, resolve, **id, files);
+                    let local_name = self.import_interface(
+                        name,
+                        resolve,
+                        **id,
+                        files,
+                        GeneratedTypeMeta { is_export: false },
+                    );
                     uwriteln!(self.import_object, "typeof {local_name},",);
                     return;
                 }
@@ -843,7 +933,13 @@ impl TsBindgen {
             uwriteln!(self.import_object, "{}: {{", maybe_quote_id(import_name));
             for (iface_name, &id) in ifaces {
                 let name = resolve.interfaces[id].name.as_ref().unwrap();
-                let local_name = self.import_interface(name, resolve, id, files);
+                let local_name = self.import_interface(
+                    name,
+                    resolve,
+                    id,
+                    files,
+                    GeneratedTypeMeta { is_export: false },
+                );
                 uwriteln!(
                     self.import_object,
                     "{}: typeof {local_name},",
@@ -889,8 +985,8 @@ impl TsBindgen {
             self.variants_inline_cases,
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
-            &self.interface_file_stems,
         )
+        .with_interface_file_stems(&self.interface_file_stems)
         .with_names(&self.world_names);
         generator.host_implemented = !self.is_guest;
         generator.ts_func(
@@ -926,8 +1022,8 @@ impl TsBindgen {
             self.variants_inline_cases,
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
-            &self.interface_file_stems,
         )
+        .with_interface_file_stems(&self.interface_file_stems)
         .with_names(&self.world_names);
         generator.ts_func(
             func,
@@ -974,7 +1070,13 @@ impl TsBindgen {
         instantiation: bool,
     ) {
         if instantiation {
-            let local_name = self.import_interface(export_name, resolve, id, files);
+            let local_name = self.import_interface(
+                export_name,
+                resolve,
+                id,
+                files,
+                GeneratedTypeMeta { is_export: true },
+            );
             uwriteln!(
                 self.export_object,
                 "{}: typeof {local_name},",
@@ -1016,8 +1118,8 @@ impl TsBindgen {
             self.variants_inline_cases,
             self.use_namespace_objects,
             self.enum_values_screaming_snake_case,
-            &self.interface_file_stems,
         )
+        .with_interface_file_stems(&self.interface_file_stems)
         .with_names(&self.world_names);
         let id_name = &resolve.worlds[world].name;
 
@@ -1081,16 +1183,15 @@ impl TsBindgen {
         resolve: &Resolve,
         id: InterfaceId,
         files: &mut Files,
+        type_meta: GeneratedTypeMeta,
     ) -> String {
         let id_name = resolve.id_of(id).unwrap_or_else(|| name.to_string());
-        let goal_name = interface_goal_name(&id_name);
-        let file_name = self.generate_interface(
-            name,
-            resolve,
-            id,
-            files,
-            GeneratedTypeMeta { is_export: false },
-        );
+        let goal_name = if type_meta.is_export() {
+            format!("{}-exports", interface_goal_name(&id_name))
+        } else {
+            interface_goal_name(&id_name)
+        };
+        let file_name = self.generate_interface(name, resolve, id, files, type_meta);
 
         let (local_name, local_exists) = self.local_names.get_or_create(&file_name, &goal_name);
         let local_name = local_name.to_upper_camel_case();
@@ -1109,6 +1210,12 @@ impl TsBindgen {
     ///
     /// For host types, the import specifier is `./interfaces/{file}.js`.
     /// For guest types, the import specifier is the interface ID (e.g. `ns:pkg/iface`).
+    ///
+    /// The import side and the export side of an interface are declared
+    /// separately, as what a caller of the interface sees differs from what an
+    /// implementation of it provides. The export-side declaration file is in the
+    /// `exports` directory, and for guest types its module is named by
+    /// [`guest_export_module`].
     fn generate_interface(
         &mut self,
         name: &str,
@@ -1121,10 +1228,27 @@ impl TsBindgen {
             .id_of(interface_id)
             .unwrap_or_else(|| name.to_string());
         let goal_name = interface_goal_name(&id_name);
-        let file_stem = format!(
-            "interfaces/{}",
-            interface_file_stem(&self.interface_file_stems, interface_id, &id_name)
-        );
+        let interface_stem =
+            interface_file_stem(&self.interface_file_stems, interface_id, &id_name);
+        let import_side_file_name = format!("{INTERFACES_DIR}/{interface_stem}.d.ts");
+        let (file_stem, module_name) = if type_meta.is_export() {
+            self.export_side_declarations
+                .entry(import_side_file_name)
+                .or_insert_with(|| ExportSideDeclaration {
+                    id_name: id_name.clone(),
+                    file_stem: interface_stem.clone(),
+                });
+            (
+                format!("{INTERFACES_DIR}/{EXPORTS_DIR}/{interface_stem}"),
+                guest_export_module(&id_name),
+            )
+        } else {
+            self.import_side_files.insert(import_side_file_name);
+            (
+                format!("{INTERFACES_DIR}/{interface_stem}"),
+                id_name.clone(),
+            )
+        };
         let file_name = format!("{file_stem}.d.ts");
         let (_name, iface_exists) = self.interface_names.get_or_create(&file_name, &goal_name);
 
@@ -1137,8 +1261,8 @@ impl TsBindgen {
                 self.variants_inline_cases,
                 self.use_namespace_objects,
                 self.enum_values_screaming_snake_case,
-                &self.interface_file_stems,
             )
+            .with_interface_file_stems(&self.interface_file_stems)
             .with_names(&Rc::new(ModuleNames::of_types(
                 resolve,
                 resolve.interfaces[interface_id]
@@ -1147,14 +1271,17 @@ impl TsBindgen {
                     .map(|(name, id)| (name.as_str(), *id)),
                 self.variants_inline_cases,
             )));
-            // A world that both imports and exports an interface shares one declaration
-            // of it, which then also describes the functions the component provides.
-            generator.host_implemented =
-                !self.is_guest && type_meta.is_import() && !resolve.exports_interface(interface_id);
-            generator.begin(&id_name); // Write module declaration
+            generator.host_implemented = !self.is_guest && type_meta.is_import();
+            generator.is_export_side = type_meta.is_export();
+            generator.exported_interfaces = Rc::clone(&self.exported_interfaces);
+            if self.is_guest {
+                generator.begin_guest_module(&module_name);
+            } else {
+                generator.begin(&id_name);
+            }
 
             // Generate function definitions
-            let async_funcs = if resolve.exports_interface(interface_id) {
+            let async_funcs = if type_meta.is_export() {
                 &self.async_exports
             } else {
                 &self.async_imports
@@ -1205,7 +1332,7 @@ impl TsBindgen {
 
         if self.is_guest {
             self.references.insert(format!("./{file_name}"));
-            id_name
+            module_name
         } else {
             format!("./{file_stem}.js")
         }
@@ -1221,14 +1348,15 @@ impl<'a> TsInterface<'a> {
         variants_inline_cases: bool,
         use_namespace_objects: bool,
         enum_values_screaming_snake_case: bool,
-        interface_file_stems: &Rc<InterfaceFileStems>,
     ) -> Self {
         TsInterface {
             is_root,
-            interface_file_stems: Rc::clone(interface_file_stems),
+            interface_file_stems: Rc::default(),
             names: Rc::default(),
             stability_tags: Vec::new(),
             host_implemented: false,
+            is_export_side: false,
+            exported_interfaces: Rc::default(),
             is_guest,
             flags_as_bigint,
             variants_inline_cases,
@@ -1246,6 +1374,12 @@ impl<'a> TsInterface<'a> {
         }
     }
 
+    /// Set the stems of the declaration files of the world's interfaces.
+    fn with_interface_file_stems(mut self, stems: &Rc<InterfaceFileStems>) -> Self {
+        self.interface_file_stems = Rc::clone(stems);
+        self
+    }
+
     /// Set the names bound by the declarations of the module that this
     /// generator's output is part of.
     fn with_names(mut self, names: &Rc<ModuleNames>) -> Self {
@@ -1255,11 +1389,16 @@ impl<'a> TsInterface<'a> {
 
     fn begin(&mut self, id_name: &str) {
         if self.is_guest {
-            uwriteln!(self.src, "declare module '{id_name}' {{");
-            self.needs_module_end = true;
+            self.begin_guest_module(id_name);
         } else {
             uwriteln!(self.src, "/** @module Interface {id_name} **/");
         }
+    }
+
+    /// Open the ambient module that holds the declarations for a guest.
+    fn begin_guest_module(&mut self, module_name: &str) {
+        uwriteln!(self.src, "declare module '{module_name}' {{");
+        self.needs_module_end = true;
     }
 
     fn finish(mut self) -> (Source, BTreeSet<String>) {
@@ -1365,7 +1504,7 @@ impl<'a> TsInterface<'a> {
                     *id,
                     ty,
                     GeneratedTypeMeta {
-                        is_export: self.resolve.exports_interface(iface_id),
+                        is_export: self.is_export_side,
                     },
                 ),
                 TypeDefKind::Handle(_) => todo!("types for handle"),
@@ -1543,8 +1682,8 @@ impl<'a> TsInterface<'a> {
                             self.variants_inline_cases,
                             self.use_namespace_objects,
                             self.enum_values_screaming_snake_case,
-                            &self.interface_file_stems,
                         )
+                        .with_interface_file_stems(&self.interface_file_stems)
                         .with_names(&self.names),
                     )
                 })
@@ -1982,7 +2121,6 @@ impl<'a> TsInterface<'a> {
             }
             _ => None,
         };
-        let path_prefix = if self.is_root { "./interfaces/" } else { "./" };
         let type_name = name.to_upper_camel_case();
         match owner_not_parent {
             Some((owned_interface, owned_interface_id)) => {
@@ -2001,10 +2139,23 @@ impl<'a> TsInterface<'a> {
                     owned_interface,
                     &owned_interface_id,
                 );
+                // An exported interface uses the types of the import side of
+                // another interface, unless the world exports that one as well.
+                let owner_is_export_side =
+                    self.is_export_side && self.exported_interfaces.contains(&owned_interface);
+                let path_prefix = match (self.is_root, self.is_export_side, owner_is_export_side) {
+                    (true, _, _) => format!("./{INTERFACES_DIR}/"),
+                    (false, true, false) => "../".to_string(),
+                    (false, _, _) => "./".to_string(),
+                };
                 let import_name = if self.is_guest {
                     self.references
                         .insert(format!("{path_prefix}{owned_interface_name}.d.ts"));
-                    owned_interface_id
+                    if owner_is_export_side {
+                        guest_export_module(&owned_interface_id)
+                    } else {
+                        owned_interface_id
+                    }
                 } else {
                     format!("{path_prefix}{owned_interface_name}.js")
                 };
@@ -2087,8 +2238,8 @@ impl<'a> TsInterface<'a> {
                     self.variants_inline_cases,
                     self.use_namespace_objects,
                     self.enum_values_screaming_snake_case,
-                    &self.interface_file_stems,
                 )
+                .with_interface_file_stems(&self.interface_file_stems)
                 .with_names(&self.names),
             )
         });
@@ -2202,22 +2353,4 @@ fn generate_references(references: &BTreeSet<String>) -> String {
         uwriteln!(out, "/// <reference path=\"{}\" />", reference);
     }
     out
-}
-
-trait ResolveExt {
-    /// Check whether a certain interface is exported
-    fn exports_interface(&self, iface_id: InterfaceId) -> bool;
-}
-
-impl ResolveExt for Resolve {
-    fn exports_interface(&self, iface_id: InterfaceId) -> bool {
-        for (_world_id, world) in self.worlds.iter() {
-            for (world_key, _world_item) in world.exports.iter() {
-                if matches!(world_key, WorldKey::Interface(iid) if *iid == iface_id) {
-                    return true;
-                }
-            }
-        }
-        false
-    }
 }
