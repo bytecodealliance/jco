@@ -373,6 +373,58 @@ pub fn get_thrown_type(
     }
 }
 
+/// The class of the errors that the bindings throw when a function that an
+/// interface exports returns the error of its `result`.
+///
+/// The bindings export one class per named error type from the interface, so
+/// that a host can tell the errors of the interface apart with `instanceof`.
+/// There is none for an error type without a name, and none where the name of
+/// the class would be that of another declaration of the interface.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ResultErrorClass {
+    /// The name that the interface exports the class under.
+    pub name: String,
+    /// The name of the error type, as declared in WIT.
+    pub payload_type_name: String,
+}
+
+/// Find the [`ResultErrorClass`] of a function of an interface.
+pub(crate) fn result_error_class(
+    resolve: &Resolve,
+    interface: wit_parser::InterfaceId,
+    func: &Function,
+) -> Option<ResultErrorClass> {
+    use heck::ToUpperCamelCase as _;
+
+    let (_, Some(Type::Id(err))) = get_thrown_type(resolve, func.result)? else {
+        return None;
+    };
+    let payload_type_name = resolve.types[*err].name.clone()?;
+    let name = format!("{}Error", payload_type_name.to_upper_camel_case());
+
+    // The declarations of the interface name its types, and name the cases of
+    // its variants after the variant and the case.
+    let is_declared = resolve.interfaces[interface]
+        .types
+        .iter()
+        .any(|(type_name, type_id)| {
+            if type_name.to_upper_camel_case() == name {
+                return true;
+            }
+            let TypeDefKind::Variant(variant) = &resolve.types[*type_id].kind else {
+                return false;
+            };
+            variant
+                .cases
+                .iter()
+                .any(|case| format!("{type_name}_{}", case.name).to_upper_camel_case() == name)
+        });
+    (!is_declared).then_some(ResultErrorClass {
+        name,
+        payload_type_name,
+    })
+}
+
 /// Check whether a given function is an async fn
 ///
 /// Functions that are designated as guest async represent use of

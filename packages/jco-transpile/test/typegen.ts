@@ -138,6 +138,9 @@ suite('Type Generation', () => {
                 "declare module 'lookup-entry' {",
                 "  import type { Operation, Entry } from 'test:declaration-names/world-imports-world';",
                 '  export { _default as default };',
+                '  /**',
+                '  * @throws {Error & { payload: string }} The error of the result, as the `payload` of the thrown error.',
+                '  */',
                 '  function _default(key: string): Entry;',
                 '}',
             ].join('\n'),
@@ -335,6 +338,59 @@ suite('Type Generation', () => {
             );
         } finally {
             await rm(dir, { recursive: true, force: true });
+        }
+    });
+
+    test('the errors of results are documented and typed', async () => {
+        const opts = { worldName: 'test:result-errors/result-errors' };
+        const fixture = `${WIT_FIXTURE_DIR}/result-errors.wit`;
+        const read = (files: Record<string, Uint8Array>, name: string) => Buffer.from(files[name]).toString();
+        const importSide = 'interfaces/test-result-errors-failures.d.ts';
+        const exportSide = 'interfaces/exports/test-result-errors-failures.d.ts';
+        const caught = 'The error of the result, as the `payload` of the thrown error.';
+        const thrown = 'To return the error of the result, throw it, or an `Error` that has it as its `payload`.';
+
+        // A host catches the errors of the functions that the component exports.
+        const host = await generateHostTypes(fixture, opts);
+        const hostExports = read(host, exportSide);
+        assert.include(
+            hostExports,
+            ['/**', ' * Looks a key up.', ' *', ` * @throws {ErrorCodeError} ${caught}`, ' */'].join('\n'),
+        );
+        assert.include(hostExports, `@throws {Error & { payload: string }} ${caught}`);
+        assert.include(hostExports, `@throws {Error & { payload: undefined }} ${caught}`);
+        assert.include(
+            hostExports,
+            [
+                'export class ErrorCodeError extends Error {',
+                '  constructor(payload: ErrorCode);',
+                '  readonly payload: ErrorCode;',
+                '}',
+            ].join('\n'),
+        );
+        // The type `problem-error` already has the name of the class that `problem` would get.
+        assert.include(hostExports, `@throws {Error & { payload: Problem }} ${caught}`);
+        assert.notInclude(hostExports, 'export class ProblemError');
+        assert.include(read(host, 'result-errors.d.ts'), `@throws {Error & { payload: string }} ${caught}`);
+
+        // A host throws to return the errors of the functions that the component imports.
+        const hostImports = read(host, importSide);
+        assert.include(hostImports, `@throws {ErrorCode} ${thrown}`);
+        assert.include(hostImports, `@throws {undefined} ${thrown}`);
+        assert.notInclude(hostImports, 'export class ErrorCodeError');
+        assert.deepStrictEqual(await typeCheckDeclarations(host), []);
+
+        // A guest has no error classes, as its runtime provides none.
+        const guest = await generateGuestTypes(fixture, opts);
+        assert.include(read(guest, importSide), `@throws {Error & { payload: ErrorCode }} ${caught}`);
+        assert.include(read(guest, exportSide), `@throws {ErrorCode} ${thrown}`);
+        assert.notInclude(read(guest, importSide), 'export class ErrorCodeError');
+        assert.deepStrictEqual(await typeCheckDeclarations(guest), []);
+
+        // No function without a result has the tag.
+        for (const source of [hostExports, hostImports]) {
+            assert.notMatch(source, /@throws[^\n]*\n \*\/\nexport function plain/);
+            assert.include(source, '\nexport function plain(): number;');
         }
     });
 
