@@ -1,14 +1,14 @@
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { assert, test } from 'vitest';
-import ts from 'typescript-compiler-api';
 
-import { COMPONENT_FIXTURES_DIR } from './common.js';
-import { getTmpDir } from './helpers.js';
-import { transpileBytes, writeFiles } from './transpilation.js';
-import { parse } from '../src/wasm-tools.js';
+import { LOCAL_TEST_COMPONENTS_DIR } from './common.js';
+import { caught, loadTranspiledComponent, typeCheck } from './helpers.js';
+
+const INTERFACE = 'jco:test-components/result-failures';
+const DECLARATIONS = 'interfaces/exports/jco-test-components-result-failures.d.ts';
 
 interface ComponentError extends Error {
     readonly payload: unknown;
@@ -22,22 +22,20 @@ interface Failures {
 }
 
 interface Component {
-    failures: Failures;
+    [INTERFACE]: Failures;
     _util: { stop(): void; isComponentError(value: unknown): value is ComponentError };
 }
 
-/** Transpile the fixture component into `dir` and load it. */
-async function load(
-    dir: string,
-    opts: { instantiation?: 'async' | 'sync'; noComponentErrorWrapping: boolean },
-): Promise<Component> {
-    const wat = await readFile(join(COMPONENT_FIXTURES_DIR, 'error-classes/component.wat'), 'utf8');
-    const { files } = await transpileBytes(await parse(wat), { name: 'component', ...opts });
-    await writeFiles(files, { baseDir: dir });
-    await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
-    const module = await import(pathToFileURL(join(dir, 'component.js')).href);
-    const getCoreModule = (path: string) => new WebAssembly.Module(files[path]);
-    return opts.instantiation ? await module.instantiate(getCoreModule, {}) : module;
+/**
+ * Transpile the test component and load it.
+ *
+ * @param opts - how the component is instantiated, and whether the errors of results are wrapped
+ */
+async function load(opts: { instantiation?: 'async' | 'sync'; noComponentErrorWrapping: boolean }) {
+    const bytes = await readFile(join(LOCAL_TEST_COMPONENTS_DIR, 'result-error-classes.wasm'));
+    const loaded = await loadTranspiledComponent(bytes, opts, new WASIShim().getImportObject());
+    const instance: Component = loaded.instance;
+    return { ...loaded, instance };
 }
 
 /** Compile a consumer that narrows caught errors with the exported error class. */
@@ -46,9 +44,14 @@ async function checkTypes(dir: string, instantiation: 'async' | 'sync' | undefin
     await writeFile(
         consumer,
         `import * as component from './component.js';
-        declare const getCoreModule: (path: string) => WebAssembly.Module;
-        ${instantiation ? `const instance = await component.instantiate(getCoreModule, {});` : 'const instance = component;'}
-        const { failures } = instance;
+        ${
+            instantiation
+                ? `declare const getCoreModule: (path: string) => WebAssembly.Module;
+        declare const imports: Parameters<typeof component.instantiate>[1];
+        const instance = await component.instantiate(getCoreModule, imports);`
+                : 'const instance = component;'
+        }
+        const failures = instance.resultFailures;
         try {
             failures.check(true);
         } catch (error: unknown) {
@@ -62,35 +65,14 @@ async function checkTypes(dir: string, instantiation: 'async' | 'sync' | undefin
         // @ts-expect-error A function with an unnamed error type has no error class.
         failures.StringError;`,
     );
-    const program = ts.createProgram([consumer], {
-        noEmit: true,
-        strict: true,
-        types: [],
-        target: ts.ScriptTarget.ESNext,
-        module: ts.ModuleKind.NodeNext,
-    });
-    assert.deepEqual(
-        ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-        [],
-    );
-}
-
-/** Catch a thrown value without relying on any error properties. */
-function caught(call: () => unknown): unknown {
-    try {
-        call();
-    } catch (error) {
-        return error;
-    }
-    assert.fail('expected a declared error');
+    assert.deepEqual(typeCheck([consumer]), []);
 }
 
 for (const instantiation of [undefined, 'sync', 'async'] as const) {
     test.concurrent(`named result errors are thrown as exported classes (instantiation=${instantiation})`, async () => {
-        const dir = await getTmpDir();
+        const { instance, dir, cleanup } = await load({ instantiation, noComponentErrorWrapping: false });
         try {
-            const instance = await load(dir, { instantiation, noComponentErrorWrapping: false });
-            const { failures } = instance;
+            const failures = instance[INTERFACE];
             const { ErrorCodeError } = failures;
             assert.isFunction(ErrorCodeError);
             assert.strictEqual(failures.check(false), 42);
@@ -100,7 +82,7 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
                 [() => failures.check(true), 'denied'],
                 [() => failures.recheck(true), 'not-found'],
             ] as const) {
-                const error = caught(call);
+                const error = await caught(call);
                 assert.instanceOf(error, ErrorCodeError);
                 assert.instanceOf(error, Error);
                 assert.isTrue(instance._util.isComponentError(error));
@@ -108,7 +90,7 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
             }
 
             // An error type without a name has no class of its own.
-            const unnamed = caught(() => failures.parse(true));
+            const unnamed = await caught(() => failures.parse(true));
             assert.notInstanceOf(unnamed, ErrorCodeError);
             assert.isTrue(instance._util.isComponentError(unnamed));
             assert.strictEqual((unnamed as ComponentError).payload, 'bad input');
@@ -117,24 +99,20 @@ for (const instantiation of [undefined, 'sync', 'async'] as const) {
             instance._util.stop();
             await checkTypes(dir, instantiation);
         } finally {
-            await rm(dir, { recursive: true, force: true });
+            await cleanup();
         }
     });
 }
 
 test.concurrent('raw result errors have no error classes', async () => {
-    const dir = await getTmpDir();
+    const { instance, dir, cleanup } = await load({ noComponentErrorWrapping: true });
     try {
-        const instance = await load(dir, { noComponentErrorWrapping: true });
-        assert.notProperty(instance.failures, 'ErrorCodeError');
-        assert.strictEqual(
-            caught(() => instance.failures.check(true)),
-            'denied',
-        );
-        const declarations = await readFile(join(dir, 'interfaces/exports/test-error-classes-failures.d.ts'), 'utf8');
+        assert.notProperty(instance[INTERFACE], 'ErrorCodeError');
+        assert.strictEqual(await caught(() => instance[INTERFACE].check(true)), 'denied');
+        const declarations = await readFile(join(dir, DECLARATIONS), 'utf8');
         assert.notInclude(declarations, 'ErrorCodeError');
         assert.include(declarations, '@throws {ErrorCode} The error of the result.');
     } finally {
-        await rm(dir, { recursive: true, force: true });
+        await cleanup();
     }
 });

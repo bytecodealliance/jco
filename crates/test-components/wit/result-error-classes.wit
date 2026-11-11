@@ -1,0 +1,20 @@
+package jco:test-components;
+
+// Functions whose results have named and unnamed error types.
+interface result-failures {
+  enum error-code {
+    not-found,
+    denied,
+  }
+
+  // Returns 42, or the error `denied`.
+  check: func(fail: bool) -> result<u32, error-code>;
+  // Returns nothing, or the error `not-found`.
+  recheck: func(fail: bool) -> result<_, error-code>;
+  // Returns 7, or the error "bad input".
+  parse: func(fail: bool) -> result<u32, string>;
+}
+
+world result-error-classes {
+  export result-failures;
+}
