@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-import { CUSTOM_BASE_VARIABLE, RUNTIME_MODES } from '../../../test/helpers/runtime-mode.mjs';
+import { CUSTOM_BASE_VARIABLE, RUNTIME_MODES } from '../test/runtime-mode.mjs';
 
 /** Run vitest with the given arguments against one runtime mode. */
 async function main() {
