@@ -123,7 +123,7 @@ suite('component model maps', () => {
         assert.throws(() => api.echoStrings({ answer: 42 }), TypeError);
 
         const declarations = await readFile(
-            join(esModuleOutputDir, 'interfaces/jco-test-components-cm-maps-api.d.ts'),
+            join(esModuleOutputDir, 'interfaces/exports/jco-test-components-cm-maps-api.d.ts'),
             'utf8',
         );
         assert.include(declarations, 'Map<string, number>');
