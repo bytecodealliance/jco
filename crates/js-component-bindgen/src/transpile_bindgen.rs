@@ -6433,13 +6433,7 @@ impl<'a> Instantiator<'a, '_> {
             return Some(local_name.clone());
         }
 
-        self.bindgen
-            .all_intrinsics
-            .insert(Intrinsic::ComponentError);
-        let component_error =
-            crate::intrinsics::runtime::select(self.bindgen.cm_runtime_es_module.is_some())
-                .reference(Intrinsic::ComponentError)
-                .to_string();
+        let component_error = self.bindgen.intrinsic(Intrinsic::ComponentError);
         let local_name = self
             .bindgen
             .local_names

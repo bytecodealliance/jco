@@ -184,6 +184,10 @@ world js-component-bindgen {
     /// Represent WIT enum values as SCREAMING_SNAKE_CASE strings.
     enum-values-screaming-snake-case: option<bool>,
 
+    /// Declare the `val` of a WIT `result` arm that has no payload as optional
+    /// in the generated TypeScript.
+    optional-result-payloads: option<bool>,
+
     /// Whether the core module(s) were actually transpiled from Wasm to JS (asm.js) and thus needs shimming for i64
     asmjs: option<bool>,
 
@@ -262,6 +266,10 @@ world js-component-bindgen {
 
     /// Represent WIT enum values as SCREAMING_SNAKE_CASE strings.
     enum-values-screaming-snake-case: option<bool>,
+
+    /// Declare the `val` of a WIT `result` arm that has no payload as optional
+    /// in the generated TypeScript.
+    optional-result-payloads: option<bool>,
   }
 
   enum export-type {

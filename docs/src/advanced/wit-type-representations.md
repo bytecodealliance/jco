@@ -292,8 +292,11 @@ that would _not_ fit in a `u32` (unsigned 32 bit integer) via WebAssembly.
 type Result<T,E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 ```
 
-An arm without a payload (e.g. the `ok` arm of `result<_, string>`) is typed as `void`,
-and its `val` may be left out: `{ tag: 'ok' }` is a complete value.
+An arm without a payload (e.g. the `ok` arm of `result<_, string>`) is typed as `void`.
+With the `optionalResultPayloads` option of `@bytecodealliance/jco-transpile`,
+the `val` of such an arm may be left out: `{ tag: 'ok' }` is then a complete value.
+The `Result` type is a conditional type under that option,
+which generic code over `Result<T, E>` cannot narrow by its tag.
 
 ### `result`s in context: Function return values
 

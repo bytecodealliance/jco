@@ -181,6 +181,16 @@ export interface TranspilationOptions {
 
     /** Represent WIT enum values as SCREAMING_SNAKE_CASE strings */
     enumValuesScreamingSnakeCase?: boolean;
+
+    // TODO(breaking): remove this option at the next major release and always declare these payloads as optional
+    /**
+     * Declare the `val` of a WIT `result` arm that has no payload as optional,
+     * so that `{ tag: 'ok' }` is a complete `result<_, E>` value.
+     *
+     * The `Result<T, E>` helper type is then a conditional type, which generic code
+     * over `Result<T, E>` cannot narrow by its tag.
+     */
+    optionalResultPayloads?: boolean;
 }
 
 interface TranspilationResult {
@@ -354,6 +364,7 @@ export async function transpileBytes(
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,
         enumValuesScreamingSnakeCase: opts.enumValuesScreamingSnakeCase === true,
+        optionalResultPayloads: opts.optionalResultPayloads === true,
         idlImports: opts.experimentalIdlImports === true,
         asmjs: opts.js === true,
         // Lets hosts that forbid runtime Wasm compilation (ex. Cloudflare Workers) precompile
