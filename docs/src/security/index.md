@@ -170,7 +170,7 @@ componentize source you would not run.
 | | Node.js | Browser |
 | --- | --- | --- |
 | Ambient authority of the realm | The operating system user: files, sockets, environment, child processes | The page's origin: DOM, storage, cookies, credentialed requests to the origin |
-| Defaults | Full filesystem, environment, and network access with `jco` today; see [Capabilities](#3-capabilities-the-wasi-shims) | No filesystem preopens, no raw sockets, stdin closed. Outbound HTTP is allowed through `fetch`. |
+| Defaults | Full filesystem, environment, and network access with `jco` today; see [Capabilities](#3-capabilities-the-wasi-shims) | No filesystem preopens, no raw sockets, stdin closed. Outbound HTTP is allowed through `fetch`, and currently [carries the user's session](#browsers) to the page's origin. |
 | Restricting a guest | `WASIShim` `sandbox` options, `jco run --sandbox` | `WASIShim` `sandbox` options, and the page's Content Security Policy |
 | Stopping a runaway guest | `worker.terminate()`, or killing the process | `worker.terminate()` on a Web Worker |
 | Isolation stronger than a realm | `worker_threads`, child processes, the Node.js permission model, containers | Web Workers, sandboxed or cross-origin iframes |
@@ -196,11 +196,15 @@ The browser's own sandbox stays in place around everything Jco does: a guest tha
 entirely has the authority of the page, never of the user's machine. That makes the page's
 origin the asset to protect.
 
-- **Outbound HTTP uses `fetch` with the page's identity.** A guest that imports `wasi:http` sends
-  requests as the page, subject to the browser's rules for CORS, cookies, and
-  `connect-src`. A same-origin request can carry the user's session. Deny network access with
-  `sandbox.enableNetwork: false`, or restrict destinations with CSP, unless the guest is meant to
-  act for the user.
+- **Known limitation: outbound HTTP can carry the user's session.** A guest's `wasi:http`
+  requests should not be sent with the user's credentials, but in the current implementation
+  they can be. The browser shims call `fetch` without setting its `credentials` option, so the
+  browser's default applies and a request to the page's own origin includes the user's cookies
+  and HTTP authentication. A guest that is allowed outbound HTTP can therefore call the
+  application's own API as the signed-in user. This is a limitation of the current
+  implementation, not an intended capability, and it may change in a future release. Until then,
+  deny network access with `sandbox.enableNetwork: false`, restrict destinations with CSP
+  `connect-src`, or serve the guest from an origin that holds no session.
 - **Content Security Policy applies to the output.** Compiling WebAssembly requires
   `'wasm-unsafe-eval'` under a restrictive `script-src`. The bindings `jco transpile` generates
   do not use `eval` or `new Function`.
