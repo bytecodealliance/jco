@@ -304,6 +304,10 @@ program
     .option("--jco-dir <dir>", "Instead of using a temporary dir, set the output directory for the run command")
     .option("--jco-trace", "Enable call tracing")
     .option(
+        "--jco-cm-runtime-es-module <base>",
+        "Experimental Component Model runtime package or directory base imported by the transpiled code",
+    )
+    .option(
         "--jco-import <module>",
         "Custom module to import before the run executes to support custom environment setup",
     )
@@ -343,6 +347,10 @@ program
     .option("--isolate-worker-pool-size <number>", "Number of one-shot request workers to prewarm", myParseInt, 50)
     .option("--jco-dir <dir>", "Instead of using a temporary dir, set the output directory for the transpiled code")
     .option("--jco-trace", "Enable call tracing")
+    .option(
+        "--jco-cm-runtime-es-module <base>",
+        "Experimental Component Model runtime package or directory base imported by the transpiled code",
+    )
     .option(
         "--jco-import <module>",
         "Custom module to import before the server executes to support custom environment setup",
