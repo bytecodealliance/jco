@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-dab95095.js";
+            window.path_to_searchindex_js = "../searchindex-ae31eb63.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-332598f4.js"></script>
@@ -185,6 +185,46 @@
 <p>Types represented in <a href="https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md">WebAssembly Interface Types (“WIT”)</a> must be converted down to types that are familiar for Javascript,
 and <a href="https://www.typescriptlang.org/">Typescript</a> (if dealing with <code>jco types</code> or <code>jco guest-types</code> subcommands).</p>
 <p>This document details the type representations and usage for types that are defined in WIT and built into components.</p>
+<h2 id="declaration-compatibility-and-opt-ins"><a class="header" href="#declaration-compatibility-and-opt-ins">Declaration compatibility and opt-ins</a></h2>
+<p>Jco keeps the following declaration contracts stable across its nonbreaking releases. The
+same defaults apply to its CLI, Node API, and browser/component API. The lower-level
+<code>@bytecodealliance/jco-transpile</code> package has its own release cycle and enables the first
+four options by default; it keeps <code>optionalResultPayloads</code> disabled by default.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Jco API option</th><th>CLI flag</th><th>Behavior when enabled</th></tr>
+</thead>
+<tbody>
+<tr><td><code>nominalResources</code></td><td><code>--nominal-resources</code></td><td>Resource consumers require the generated resource identity; structural mocks no longer type-check.</td></tr>
+<tr><td><code>asyncImportsMayReturnSync</code></td><td><code>--async-imports-may-return-sync</code></td><td>Host async imports return <code>Promise&lt;T&gt; | T</code>; callers should use <code>await</code> or <code>Promise.resolve</code> before Promise methods.</td></tr>
+<tr><td><code>typedErrorClasses</code></td><td><code>--typed-error-classes</code></td><td>Wrapped named result errors gain exported error classes, adding keys to interface objects.</td></tr>
+<tr><td><code>separateInterfaceTypes</code></td><td><code>--separate-interface-types</code></td><td>Import and export declarations use separate files; export declarations live under <code>interfaces/exports/</code>.</td></tr>
+<tr><td><code>optionalResultPayloads</code></td><td><code>--optional-result-payloads</code></td><td>Result arms without a payload allow an omitted <code>val</code>; the conditional <code>Result&lt;T, E&gt;</code> helper changes generic narrowing.</td></tr>
+</tbody>
+</table>
+</div>
+<p>All five options default to <code>false</code> in Jco. The first three imply <code>separateInterfaceTypes</code>,
+since the contracts of an imported interface can differ from those of its exported counterpart.
+For example, <code>jco types input.wit --nominal-resources</code> opts into nominal resources and the
+split layout. Use the same options when generating declarations and transpiling the component.
+Named error classes require error wrapping; <code>--no-component-error-wrapping</code> still takes precedence.</p>
+<p>With the default shared layout, an interface that is both imported and exported keeps the
+import-side declaration, matching earlier Jco output. With separate declarations, annotate
+exported resources using the export-side type, or infer their type from the exported constructor.
+Copy the entire generated declaration tree recursively when packaging split output.</p>
+<p>When several versions of an interface occur in a world, their declarations have versioned
+filenames so their different types are represented accurately. Jco’s shared layout also retains
+the unversioned path as an alias for the first version encountered (imports before exports),
+matching the earlier declaration selection. New consumers should import the explicit versioned
+path. Changing which version occurs first can change what the compatibility alias refers to.
+A single version keeps its existing unversioned path.</p>
+<p>Correctness fixes still apply with the default settings. Variant cases whose generated names
+collide with named records retain their payload under <code>.val</code>; code relying on the previously
+merged, flattened declaration must use <code>.val.field</code>. Resource static functions named
+<code>prototype</code> are exposed as <code>prototype_</code>, since JavaScript classes reserve <code>prototype</code>; host
+implementations must provide that spelling too. Worlds containing different versions of an
+interface now use each version’s actual types, which can reveal previously hidden mismatches.</p>
 <h2 id="basic-types"><a class="header" href="#basic-types">Basic types</a></h2>
 <p>Here is a basic table of conversions between WIT types and JS types:</p>
 <p>More complicated types that are built into WIT but require more work to translate are explained below.</p>
@@ -394,6 +434,11 @@ that would <em>not</em> fit in a <code>u32</code> (unsigned 32 bit integer) via 
 <h3 id="typescript-schema"><a class="header" href="#typescript-schema">Typescript Schema</a></h3>
 <pre><code>type Result&lt;T,E&gt; = { tag: 'ok', val: T } | { tag: 'err', val: E };
 </code></pre>
+<p>An arm without a payload (e.g. the <code>ok</code> arm of <code>result&lt;_, string&gt;</code>) is typed as <code>void</code>.
+With the <code>optionalResultPayloads</code> option of <code>@bytecodealliance/jco-transpile</code>,
+the <code>val</code> of such an arm may be left out: <code>{ tag: 'ok' }</code> is then a complete value.
+The <code>Result</code> type is a conditional type under that option,
+which generic code over <code>Result&lt;T, E&gt;</code> cannot narrow by its tag.</p>
 <h3 id="results-in-context-function-return-values"><a class="header" href="#results-in-context-function-return-values"><code>result</code>s in context: Function return values</a></h3>
 <p>When a result is returned directly from a function, any thrown error of the function is treated as the result error type,
 while any direct return value is treated as the result success type.</p>
@@ -420,6 +465,34 @@ against the private error constructor, which belongs to that instance. It return
 from other instances, ordinary host exceptions, and objects that only have a <code>payload</code> property.
 The predicate is absent when bindings do not use error wrapping. In TypeScript, it narrows the value to
 <code>Error &amp; { readonly payload: unknown }</code>.</p>
+<p>When wrapping and <code>typedErrorClasses</code> are enabled, an exported interface also exports one error class per named error type
+of its functions. The class is named after the type, with an <code>Error</code> suffix, and extends the wrapper,
+so <code>_util.isComponentError()</code> holds for its instances too:</p>
+<pre><code class="language-wit">interface fallible {
+    enum error-code { not-found, denied }
+    f: func(input: u32) -&gt; result&lt;u32, error-code&gt;;
+}
+</code></pre>
+<pre><code class="language-js">import { fallible } from './component.js';
+
+try {
+    fallible.f(42);
+} catch (error) {
+    if (error instanceof fallible.ErrorCodeError) {
+        console.error('Declared WIT error:', error.payload); // 'not-found' | 'denied' in TypeScript
+    } else {
+        throw error;
+    }
+}
+</code></pre>
+<p>There is no class of its own for:</p>
+<ul>
+<li>an error type without a name (e.g. <code>result&lt;u32, string&gt;</code>),</li>
+<li>an error type whose class would be named like another type of the interface,</li>
+<li>a function that the world exports directly, rather than through an interface.</li>
+</ul>
+<p>Such functions throw the wrapper itself.
+The generated declarations name what each function throws in a <code>@throws</code> tag.</p>
 <p><strong>Traps are not <code>ComponentError</code> instances.</strong> They have a distinct type, <code>WebAssembly.RuntimeError</code>,
 and the predicate returns <code>false</code> for them. Using <code>await</code> in the example catches both synchronous
 exceptions and rejected asynchronous exports. See <a href="./detecting-traps.html">Detecting traps</a> for handling
