@@ -1,0 +1,34 @@
+package test:result-errors;
+
+interface failures {
+  enum error-code {
+    not-found,
+    denied,
+  }
+
+  record problem {
+    message: string,
+  }
+
+  /// Named like the error class that `problem` would otherwise get.
+  type problem-error = u32;
+
+  resource job {
+    constructor();
+    run: func() -> result<u32, error-code>;
+  }
+
+  /// Looks a key up.
+  lookup: func(key: string) -> result<string, error-code>;
+  check: func(fail: bool) -> result<_, error-code>;
+  parse: func(text: string) -> result<u32, string>;
+  validate: func(fail: bool) -> result<_, problem>;
+  ping: func(fail: bool) -> result;
+  plain: func() -> u32;
+}
+
+world result-errors {
+  import failures;
+  export failures;
+  export top-level: func(fail: bool) -> result<u32, string>;
+}

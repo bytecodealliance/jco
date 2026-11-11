@@ -328,6 +328,40 @@ from other instances, ordinary host exceptions, and objects that only have a `pa
 The predicate is absent when bindings do not use error wrapping. In TypeScript, it narrows the value to
 `Error & { readonly payload: unknown }`.
 
+When wrapping is enabled, an exported interface also exports one error class per named error type
+of its functions. The class is named after the type, with an `Error` suffix, and extends the wrapper,
+so `_util.isComponentError()` holds for its instances too:
+
+```wit
+interface fallible {
+    enum error-code { not-found, denied }
+    f: func(input: u32) -> result<u32, error-code>;
+}
+```
+
+```js
+import { fallible } from './component.js';
+
+try {
+    fallible.f(42);
+} catch (error) {
+    if (error instanceof fallible.ErrorCodeError) {
+        console.error('Declared WIT error:', error.payload); // 'not-found' | 'denied' in TypeScript
+    } else {
+        throw error;
+    }
+}
+```
+
+There is no class of its own for:
+
+- an error type without a name (e.g. `result<u32, string>`),
+- an error type whose class would be named like another type of the interface,
+- a function that the world exports directly, rather than through an interface.
+
+Such functions throw the wrapper itself.
+The generated declarations name what each function throws in a `@throws` tag.
+
 **Traps are not `ComponentError` instances.** They have a distinct type, `WebAssembly.RuntimeError`,
 and the predicate returns `false` for them. Using `await` in the example catches both synchronous
 exceptions and rejected asynchronous exports. See [Detecting traps](./detecting-traps.md) for handling

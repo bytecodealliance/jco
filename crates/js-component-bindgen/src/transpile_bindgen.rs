@@ -297,6 +297,9 @@ struct JsFunctionBindgenArgs<'a> {
     /// The interned index of the function's result tuple type, for exports
     result_type_idx: Option<u32>,
     tracked_export: Option<u32>,
+    /// The class to throw the error of the function's result as, if the
+    /// function has one of its own (see `crate::result_error_class`)
+    result_error_class: Option<String>,
 }
 
 impl<'a> ManagesIntrinsics for JsBindgen<'a> {
@@ -4726,6 +4729,7 @@ impl<'a> Instantiator<'a, '_> {
                     for_import: true,
                     result_type_idx: None,
                     tracked_export: None,
+                    result_error_class: None,
                 });
                 uwriteln!(
                     self.src.js,
@@ -5530,6 +5534,7 @@ impl<'a> Instantiator<'a, '_> {
             for_import,
             result_type_idx,
             tracked_export,
+            result_error_class,
         } = args;
 
         let (memory, mut realloc) =
@@ -5755,6 +5760,7 @@ impl<'a> Instantiator<'a, '_> {
             tracing_prefix: &tracing_prefix,
             tracing_enabled: self.bindgen.opts.tracing,
             no_component_error_wrapping: self.bindgen.opts.no_component_error_wrapping,
+            result_error_class,
             encoding: match opts.string_encoding {
                 wasmtime_environ::component::StringEncoding::Utf8 => StringEncoding::UTF8,
                 wasmtime_environ::component::StringEncoding::Utf16 => StringEncoding::UTF16,
@@ -6203,6 +6209,7 @@ impl<'a> Instantiator<'a, '_> {
                         func_ty,
                         &export_name,
                         &export_resource_map,
+                        None,
                     );
 
                     let js_binding_name = match func.kind {
@@ -6317,6 +6324,9 @@ impl<'a> Instantiator<'a, '_> {
                         }
                     }
 
+                    // The error classes of the interface, by the names they are exported under
+                    let mut result_error_classes = BTreeMap::<String, String>::new();
+
                     // Process exported instances
                     for (func_name, (export_idx, _extern_data)) in exports.raw_iter() {
                         let func_name = func_name.as_ref().to_string();
@@ -6359,6 +6369,13 @@ impl<'a> Instantiator<'a, '_> {
                             .get(*options)
                             .expect("failed to find options");
 
+                        let result_error_class = self.export_result_error_class(
+                            iface_id,
+                            &export_name,
+                            func,
+                            &mut result_error_classes,
+                        );
+
                         self.export_bindgen(
                             &local_name,
                             def,
@@ -6367,6 +6384,7 @@ impl<'a> Instantiator<'a, '_> {
                             func_ty,
                             &export_name,
                             &export_resource_map,
+                            result_error_class,
                         );
 
                         // Determine the export func name (this can also be a class name)
@@ -6411,6 +6429,52 @@ impl<'a> Instantiator<'a, '_> {
         self.bindgen.esm_bindgen.populate_export_aliases();
     }
 
+    /// Define the class that an exported function of an interface throws the
+    /// error of its result as, unless another function of the interface already
+    /// did, and export it from the interface.
+    ///
+    /// Returns the local name of the class, or `None` if the function throws
+    /// the generic error class or the raw error.
+    fn export_result_error_class(
+        &mut self,
+        iface_id: wit_parser::InterfaceId,
+        export_name: &str,
+        func: &Function,
+        classes: &mut BTreeMap<String, String>,
+    ) -> Option<String> {
+        if self.bindgen.opts.no_component_error_wrapping {
+            return None;
+        }
+        let class = crate::result_error_class(self.resolve, iface_id, func)?;
+        if let Some(local_name) = classes.get(&class.name) {
+            return Some(local_name.clone());
+        }
+
+        self.bindgen
+            .all_intrinsics
+            .insert(Intrinsic::ComponentError);
+        let component_error =
+            crate::intrinsics::runtime::select(self.bindgen.cm_runtime_es_module.is_some())
+                .reference(Intrinsic::ComponentError)
+                .to_string();
+        let local_name = self
+            .bindgen
+            .local_names
+            .create_once(&class.name)
+            .to_string();
+        uwriteln!(
+            self.src.js,
+            "class {local_name} extends {component_error} {{}}"
+        );
+        self.bindgen.esm_bindgen.add_export_constant(
+            export_name,
+            local_name.clone(),
+            class.name.clone(),
+        );
+        classes.insert(class.name, local_name.clone());
+        Some(local_name)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn export_bindgen(
         &mut self,
@@ -6421,6 +6485,7 @@ impl<'a> Instantiator<'a, '_> {
         func_ty_idx: &TypeFuncIndex,
         export_name: &String,
         export_resource_map: &ResourceMap,
+        result_error_class: Option<String>,
     ) {
         // Determine whether the function should be generated as async
         let inferred_async = self.core_def_requires_async_export(def, false);
@@ -6614,6 +6679,7 @@ impl<'a> Instantiator<'a, '_> {
             for_import: false,
             result_type_idx: Some(self.types[*func_ty_idx].results.as_u32()),
             tracked_export,
+            result_error_class,
         });
         if let Some(target) = wrapped_function_target {
             let async_fn_ctor = self.bindgen.intrinsic(Intrinsic::AsyncFunctionCtor);

@@ -221,6 +221,10 @@ pub struct FunctionBindgen<'a> {
     /// Whether top-level result errors should be thrown as their raw lifted payload.
     pub no_component_error_wrapping: bool,
 
+    /// The class to throw the error of a top-level result as, where the
+    /// function has a class of its own for it rather than the generic one.
+    pub result_error_class: Option<String>,
+
     /// Method if string encoding
     pub encoding: StringEncoding,
 
@@ -429,6 +433,12 @@ impl FunctionBindgen<'_> {
         let ret = self.tmp;
         self.tmp += 1;
         ret
+    }
+
+    /// The class that wraps the error of a top-level result when it is thrown.
+    fn thrown_error_class(&mut self) -> String {
+        let component_err = self.intrinsic(Intrinsic::ComponentError);
+        self.result_error_class.clone().unwrap_or(component_err)
     }
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
@@ -933,7 +943,7 @@ impl FunctionBindgen<'_> {
             let throw_result_err = if self.no_component_error_wrapping {
                 "throw taskRes.val;".to_string()
             } else {
-                let component_err = self.intrinsic(Intrinsic::ComponentError);
+                let component_err = self.thrown_error_class();
                 format!("throw new {component_err}(taskRes.val);")
             };
             uwriteln!(
@@ -2857,7 +2867,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         let throw_err = if self.no_component_error_wrapping {
                             "throw retCopy.val;".to_string()
                         } else {
-                            let component_err = self.intrinsic(Intrinsic::ComponentError);
+                            let component_err = self.thrown_error_class();
                             format!("throw new {component_err}(retCopy.val);")
                         };
 
@@ -4170,7 +4180,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let throw_result_err = if self.no_component_error_wrapping {
                     "throw taskRes.val;".to_string()
                 } else {
-                    let component_err = self.intrinsic(Intrinsic::ComponentError);
+                    let component_err = self.thrown_error_class();
                     format!("throw new {component_err}(taskRes.val);")
                 };
 

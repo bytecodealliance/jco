@@ -155,6 +155,9 @@ struct TsBindgen {
     world_names: Rc<ModuleNames>,
     /// The interfaces that the world exports.
     exported_interfaces: Rc<BTreeSet<InterfaceId>>,
+    /// Whether the bindings throw the error of a result as it is, rather than
+    /// as the payload of an error.
+    raw_result_errors: bool,
     /// Declaration files of the import side of interfaces.
     import_side_files: BTreeSet<String>,
     /// The export-side declarations of interfaces, keyed by the declaration
@@ -262,8 +265,17 @@ struct TsInterface<'a> {
     interface_file_stems: Rc<InterfaceFileStems>,
     /// The names bound by the declarations of the module being generated.
     names: Rc<ModuleNames>,
-    /// JSDoc tags for the stability of the item that is declared next.
-    stability_tags: Vec<String>,
+    /// JSDoc tags for the item that is declared next, such as its stability.
+    doc_tags: Vec<String>,
+    /// The interface whose functions throw the errors of their results as
+    /// classes that the interface exports (see [`crate::result_error_class`]),
+    /// if this declares the side of one that a host calls.
+    error_class_interface: Option<InterfaceId>,
+    /// The error classes that the declared functions throw, by name.
+    error_classes: BTreeMap<String, crate::ResultErrorClass>,
+    /// Whether the bindings throw the error of a result as it is, rather than
+    /// as the payload of an error.
+    raw_result_errors: bool,
     /// Whether the functions declared here are only ever implemented by the host.
     ///
     /// The host may return the result of such a function directly even if the
@@ -326,6 +338,7 @@ pub fn ts_bindgen(
                 })
                 .collect(),
         ),
+        raw_result_errors: opts.no_component_error_wrapping,
         import_side_files: BTreeSet::new(),
         export_side_declarations: BTreeMap::new(),
         world_type_names: Vec::new(),
@@ -1121,6 +1134,7 @@ impl TsBindgen {
         )
         .with_interface_file_stems(&self.interface_file_stems)
         .with_names(&self.world_names);
+        generator.raw_result_errors = self.raw_result_errors;
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
@@ -1274,6 +1288,10 @@ impl TsBindgen {
             generator.host_implemented = !self.is_guest && type_meta.is_import();
             generator.is_export_side = type_meta.is_export();
             generator.exported_interfaces = Rc::clone(&self.exported_interfaces);
+            generator.raw_result_errors = self.raw_result_errors;
+            if !self.is_guest && type_meta.is_export() && !self.raw_result_errors {
+                generator.error_class_interface = Some(interface_id);
+            }
             if self.is_guest {
                 generator.begin_guest_module(&module_name);
             } else {
@@ -1353,7 +1371,10 @@ impl<'a> TsInterface<'a> {
             is_root,
             interface_file_stems: Rc::default(),
             names: Rc::default(),
-            stability_tags: Vec::new(),
+            doc_tags: Vec::new(),
+            error_class_interface: None,
+            error_classes: BTreeMap::new(),
+            raw_result_errors: false,
             host_implemented: false,
             is_export_side: false,
             exported_interfaces: Rc::default(),
@@ -1444,6 +1465,25 @@ impl<'a> TsInterface<'a> {
             }
             uwriteln!(self.src, "}}")
         }
+        for class in self.error_classes.into_values() {
+            let payload_ty = class.payload_type_name.to_upper_camel_case();
+            uwriteln!(self.src, "\n/**");
+            uwriteln!(
+                self.src,
+                " * The error that the functions of this interface throw for an error of the type `{}`.",
+                class.payload_type_name
+            );
+            uwriteln!(self.src, " */");
+            uwriteln!(
+                self.src,
+                "export class {} extends {} {{",
+                class.name,
+                self.names.global("Error")
+            );
+            uwriteln!(self.src, "constructor(payload: {payload_ty});");
+            uwriteln!(self.src, "readonly payload: {payload_ty};");
+            uwriteln!(self.src, "}}");
+        }
         if self.src.is_empty() {
             // If there are no types, we still need to emit an empty module
             // to satisfy the TypeScript compiler.
@@ -1458,15 +1498,15 @@ impl<'a> TsInterface<'a> {
     /// Write a documentation comment with the text `docs`, followed by the
     /// tags of the stability that [`Self::stability`] set for the item, if any.
     fn docs_raw(&mut self, docs: &str) {
-        let stability_tags = std::mem::take(&mut self.stability_tags);
+        let doc_tags = std::mem::take(&mut self.doc_tags);
         self.src.push_str("/**\n");
         for line in docs.lines() {
             self.src.push_str(&format!(" * {line}\n"));
         }
-        if !docs.is_empty() && !stability_tags.is_empty() {
+        if !docs.is_empty() && !doc_tags.is_empty() {
             self.src.push_str(" *\n");
         }
-        for tag in stability_tags {
+        for tag in doc_tags {
             self.src.push_str(&format!(" * {tag}\n"));
         }
         self.src.push_str(" */\n");
@@ -1475,15 +1515,58 @@ impl<'a> TsInterface<'a> {
     fn docs(&mut self, docs: &Docs) {
         match &docs.contents {
             Some(docs) => self.docs_raw(docs),
-            None if !self.stability_tags.is_empty() => self.docs_raw(""),
+            None if !self.doc_tags.is_empty() => self.docs_raw(""),
             None => {}
         }
+    }
+
+    /// The JSDoc tag for what a function throws on account of the error of
+    /// its `result`, if it returns one.
+    ///
+    /// The side that calls the function catches the error. The side that
+    /// implements the function throws to return it.
+    fn throws_tag(&mut self, func: &Function, meta: &GeneratedTypeMeta) -> Option<String> {
+        let (_, err) = get_thrown_type(self.resolve, func.result)?;
+
+        let err_ty = match err {
+            Some(err) => {
+                let src = std::mem::take(&mut self.src);
+                self.print_ty(err);
+                std::mem::replace(&mut self.src, src).to_string()
+            }
+            None => "undefined".to_string(),
+        };
+
+        let is_caller = self.is_guest == meta.is_import();
+        if !is_caller {
+            return Some(format!(
+                "@throws {{{err_ty}}} To return the error of the result, throw it, \
+                 or an `Error` that has it as its `payload`."
+            ));
+        }
+        if !self.is_guest && self.raw_result_errors {
+            return Some(format!("@throws {{{err_ty}}} The error of the result."));
+        }
+        let class = self
+            .error_class_interface
+            .and_then(|interface| crate::result_error_class(self.resolve, interface, func));
+        let thrown_ty = match class {
+            Some(class) => {
+                let name = class.name.clone();
+                self.error_classes.insert(name.clone(), class);
+                name
+            }
+            None => format!("{} & {{ payload: {err_ty} }}", self.names.global("Error")),
+        };
+        Some(format!(
+            "@throws {{{thrown_ty}}} The error of the result, as the `payload` of the thrown error."
+        ))
     }
 
     /// Set the stability of the item that is declared next. The next
     /// documentation comment carries it as JSDoc tags.
     fn stability(&mut self, stability: &Stability) {
-        self.stability_tags = stability_tags(stability);
+        self.doc_tags = stability_tags(stability);
     }
 
     fn types(&mut self, iface_id: InterfaceId) {
@@ -1519,7 +1602,7 @@ impl<'a> TsInterface<'a> {
                 TypeDefKind::Map(key, value) => self.type_map(*id, name, key, value, &ty.docs),
             }
             // A declaration without a documentation comment leaves the tags unused.
-            self.stability_tags.clear();
+            self.doc_tags.clear();
         }
     }
 
@@ -1710,10 +1793,8 @@ impl<'a> TsInterface<'a> {
         meta: &GeneratedTypeMeta,
     ) {
         let host_implemented = self.host_implemented;
+        let throws_tag = self.throws_tag(func, meta);
         let iface = self.iface_for(func, meta);
-        iface.stability(&func.stability);
-        iface.docs(&func.docs);
-        iface.stability_tags.clear();
 
         let out_name = if default {
             "default".to_string()
@@ -1727,16 +1808,34 @@ impl<'a> TsInterface<'a> {
             js_string_literal(&out_name)
         };
 
+        // A function whose name is not an identifier is declared under a local
+        // name and exported under its own. The export comes first, so that the
+        // documentation comment is that of the function declaration.
+        let is_freestanding = matches!(
+            func.kind,
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding
+        );
+        let renamed_local_name =
+            if declaration && is_freestanding && !is_valid_js_identifier(&out_name) {
+                let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
+                let local_name = local_name.to_string();
+                iface
+                    .src
+                    .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
+                Some(local_name)
+            } else {
+                None
+            };
+
+        iface.stability(&func.stability);
+        iface.doc_tags.extend(throws_tag);
+        iface.docs(&func.docs);
+        iface.doc_tags.clear();
+
         if declaration {
             match func.kind {
                 FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                    if is_valid_js_identifier(&out_name) {
-                        iface.src.push_str(&format!("export function {out_name}"));
-                    } else {
-                        let (local_name, _) = iface.local_names.get_or_create(&out_name, &out_name);
-                        iface
-                            .src
-                            .push_str(&format!("export {{ {local_name} as {out_name} }};\n"));
+                    if let Some(local_name) = &renamed_local_name {
                         // Guest declarations are nested in an ambient `declare module`
                         // block, while host declarations sit at the top level of a
                         // `.d.ts` file, where a function must be declared ambient.
@@ -1744,6 +1843,8 @@ impl<'a> TsInterface<'a> {
                         iface
                             .src
                             .push_str(&format!("{declare}function {local_name}"));
+                    } else {
+                        iface.src.push_str(&format!("export function {out_name}"));
                     }
                 }
                 FunctionKind::Constructor(_) => {
