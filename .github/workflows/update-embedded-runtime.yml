@@ -1,0 +1,65 @@
+name: update-embedded-runtime
+run-name: update-embedded-runtime
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: none
+
+jobs:
+  update-embedded-runtime:
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write
+      contents: write
+    steps:
+      # The generated file names the commit that last changed the runtime's
+      # sources, which needs the history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Install node modules
+        run: pnpm install --frozen-lockfile
+
+      # This is what `cargo xtask update-embedded-runtime` runs.
+      - name: Update the runtime embedded in js-component-bindgen
+        run: pnpm --filter '@bytecodealliance/jco-transpile' run build:embedded-runtime
+
+      - name: Gather runtime metadata
+        id: runtime-meta
+        shell: bash
+        run: |
+          RUNTIME=crates/js-component-bindgen/runtime/runtime-all.js
+          {
+              echo "version=$(sed -n '1s|^// @bytecodealliance/jco-cm-runtime@||p' "$RUNTIME")";
+              echo "commit=$(sed -n '2s|^// generated from commit ||p' "$RUNTIME")";
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create embedded runtime update PR
+        uses: peter-evans/create-pull-request@5f6978faf089d4d20b00c7766989d076bb2fc7f1 # v8.1.1
+        with:
+          branch: update-embedded-runtime
+          token: ${{ secrets.RELEASE_PAT || secrets.GITHUB_TOKEN }}
+          add-paths: |
+            crates/js-component-bindgen/runtime
+          commit-message: |
+            chore(bindgen): update the embedded jco-cm-runtime
+          title: |
+            chore(bindgen): update the embedded jco-cm-runtime
+          signoff: true
+          body: |
+            This updates the Component Model runtime that `js-component-bindgen` bundles into generated bindings.
+
+            - Runtime version: `${{ steps.runtime-meta.outputs.version }}`
+            - Generated from commit: ${{ steps.runtime-meta.outputs.commit }}

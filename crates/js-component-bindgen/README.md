@@ -87,22 +87,28 @@ Selecting an external provider works the same way with or without it.
 The crate ships the runtime it bundles under `runtime/`:
 
 - `runtime-all.js` holds every runtime module in one file,
-  and starts with a line naming the runtime version it was built from;
+  and starts with two lines naming the runtime version it was built from
+  and the commit that last changed those sources;
 - `runtime-export-map.tsv` maps each public export to its name in that file.
 
 Both are generated from `packages/jco-cm-runtime` and committed,
 so the crate builds without a JavaScript toolchain.
-`cargo xtask build`, which every jco build runs, regenerates them before compiling,
-so after changing that package the only manual step is committing the result.
-To regenerate them alone, run
-`pnpm --filter @bytecodealliance/jco-transpile build:embedded-runtime`;
-`check:embedded-runtime` reports whether the committed files are current.
 
-The committed files may lag behind the runtime package,
-so that this crate can be released with an older runtime.
-CI therefore only warns when they differ,
+Which runtime the crate embeds is an explicit decision, separate from changes
+to either this crate or the runtime package:
+
+- builds never regenerate the files, so work on `packages/jco-cm-runtime`
+  does not reach bundled bindings until the files are updated;
+- `cargo xtask update-embedded-runtime` updates them from the current runtime
+  package, and the result is committed like any other change;
+- the `update-embedded-runtime` workflow does the same on demand
+  and opens a pull request with the result;
+- `cargo xtask update-embedded-runtime --check` reports whether they differ.
+
+Because the files may deliberately lag behind the runtime package,
+CI only warns when they differ,
 and comments on the crate's release pull request.
-Rolldown runs only for that step.
+Rolldown runs only when the files are updated.
 
 # License
 
