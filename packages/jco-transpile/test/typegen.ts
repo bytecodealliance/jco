@@ -97,6 +97,36 @@ suite('Type Generation', () => {
         assert.include(source, 'outcome: Result): globalThis.Array<Result_<number, string>>');
     });
 
+    test.concurrent.each([
+        { name: 'host', generate: generateHostTypes },
+        { name: 'guest', generate: generateGuestTypes },
+    ])('WIT item stability is documented with JSDoc tags ($name)', async ({ generate }) => {
+        const files = await generate(`${WIT_FIXTURE_DIR}/stability.wit`, {
+            worldName: 'test:stability/stability',
+            allFeatures: true,
+        });
+        // Compare without indentation, which differs between host and guest declarations
+        const source = Buffer.from(files['interfaces/test-stability-items.d.ts'])
+            .toString()
+            .split('\n')
+            .map((line) => line.trim())
+            .join('\n');
+
+        assert.include(
+            source,
+            '/**\n* Reads the record.\n*\n* @since 0.1.0\n*/\nexport function read(): StableRecord;',
+        );
+        assert.include(source, '/**\n* @since 0.1.0\n* @deprecated since 0.2.0\n*/\nexport function old(): OldEnum;');
+        assert.include(
+            source,
+            '/**\n* @experimental Gated by the WIT feature `experimental-items`.\n*/\nexport function experimental(): void;',
+        );
+        assert.include(source, '/**\n* A stable record.\n*\n* @since 0.1.0\n*/\nexport interface StableRecord {');
+        assert.include(source, '* @since 0.1.0\n* @deprecated since 0.2.0\n*/\nexport type OldEnum = "first";');
+        assert.notMatch(source, /\*\/\nexport function plain\(\): void;/);
+        assert.deepStrictEqual(await typeCheckDeclarations(files), []);
+    });
+
     test('world-level function imports are declared as default exports for guests', async () => {
         const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
             worldName: 'test:declaration-names/world-imports-world',
