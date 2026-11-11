@@ -109,10 +109,15 @@ async function main() {
         ['runtime-export-map.tsv', exportMap.join('\n') + '\n'],
     ]) {
         const target = new URL(file, DESTINATION);
-        if (!check) {
-            await writeFile(target, contents);
-        } else if ((await readFile(target, 'utf8')).replaceAll('\r\n', '\n') !== contents) {
+        const current = await readFile(target, 'utf8').catch(() => undefined);
+        if (current?.replaceAll('\r\n', '\n') === contents) {
+            // Leave current files untouched, so builds that embed them are not redone.
+            continue;
+        }
+        if (check) {
             stale.push(fileURLToPath(target));
+        } else {
+            await writeFile(target, contents);
         }
     }
     if (stale.length > 0) {
