@@ -3,6 +3,7 @@ const PROJECTS = new Set([
   "bare-jco",
   "jco-node-fs",
   "jco-transpile",
+  "jco-cm-runtime",
   "jco-std",
   "js-component-bindgen",
   "preview2-shim",

@@ -54,3 +54,18 @@ test("validates manually dispatched metadata", () => {
     /Invalid release project/,
   );
 });
+
+test("accepts Component Model runtime releases", () => {
+  const expected = { project: "jco-cm-runtime", version: "0.0.1" };
+  assert.deepEqual(
+    collectReleaseMetadata(pullRequest("release: jco-cm-runtime v0.0.1")),
+    expected,
+  );
+  assert.deepEqual(
+    collectReleaseMetadata({
+      eventName: "workflow_dispatch",
+      payload: { inputs: expected },
+    }),
+    expected,
+  );
+});
