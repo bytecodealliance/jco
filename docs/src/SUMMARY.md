@@ -77,6 +77,8 @@
     - [Preview 3 output flush and shutdown](./advanced/preview3-output-flush-and-shutdown.md)
     - [Preview 3 host value disposal](./advanced/preview3-host-value-disposal.md)
     - [Script-only components](./advanced/script-only-components.md)
+- [Security model](./security/index.md)
+    - [What is considered a security vulnerability?](./security/what-is-a-vulnerability.md)
 - [Troubleshooting](./troubleshooting/index.md)
     - [Common issues](./troubleshooting/common-issues.md)
 - [Contributor Guide](./contributor-guide.md)
