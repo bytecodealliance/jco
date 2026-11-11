@@ -12,9 +12,6 @@ export async function test({ server }) {
   for await (const chunk of resp.body.values()) {
     chunks.push(chunk);
   }
-  assert.strictEqual(chunks.length, 2);
-  assert.deepEqual(chunks, [
-    new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]),
-    new Uint8Array([0x48, 0x65, 0x6c, 0x6c, 0x6f]),
-  ]);
+  // HTTP transport may split or coalesce the application's writes.
+  assert.strictEqual(Buffer.concat(chunks).toString("utf8"), "HelloHello");
 }

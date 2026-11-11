@@ -1,15 +1,15 @@
 import { fileURLToPath, URL } from "node:url";
 import { join, normalize, sep } from "node:path";
-import { readdir, stat, mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
+import { readdir, stat, mkdtemp, mkdir, writeFile, readFile, rm } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { debuglog } from "node:util";
 
-import { suite, test, assert } from "vitest";
+import { suite, test, afterAll } from "vitest";
 import { default as which } from "which";
 // NOTE: we must use the older version of componentize-js for components with
 // `wasi:http` < v0.2.10
-import { componentize } from "@bytecodealliance/componentize-js-0-19-3";
+import { componentizeLegacy as componentize } from "./helpers/componentize.js";
 
 import { rolldown } from "rolldown";
 
@@ -61,10 +61,10 @@ const TEST_RESOLVER_CONFIG = {
   },
 };
 
-/** Get the binary path to wasmtime if it doesn't exist */
-async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
+/** Resolve an explicit Wasmtime override before searching PATH. */
+async function getWasmtimeBin(env: NodeJS.ProcessEnv = process.env): Promise<string> {
   try {
-    return env?.TEST_WASMTIME_BIN ?? (await which("wasmtime"));
+    return env.TEST_WASMTIME_BIN ?? (await which("wasmtime"));
   } catch (err) {
     console.error(
       "missing wasmtime binary, set TEST_WASMTIME_BIN or ensure wasmtime is in your PATH",
@@ -94,6 +94,7 @@ const log = debuglog("test-e2e");
 
 suite("hono apps", async () => {
   const tmpdir = await getTmpDir();
+  afterAll(() => rm(tmpdir, { recursive: true, force: true }));
   const builtComponentDir = join(tmpdir, "built-components");
   await mkdir(builtComponentDir, { recursive: true });
   log("writing component output to dir", builtComponentDir);
@@ -142,7 +143,7 @@ suite("hono apps", async () => {
     // Get wasmtime dir path, ensure it exists
     const wasmtimeBin = await getWasmtimeBin();
 
-    test(`[${appFolderName}]`, { retry: 3 }, async () => {
+    test(`[${appFolderName}]`, async () => {
       log(`testing app [${appFolderName}]`);
 
       // Bundle the application w/ deps via rolldown
@@ -170,7 +171,6 @@ suite("hono apps", async () => {
       const componentOutputPath = join(componentOutputDir, "component.wasm");
       await writeFile(componentOutputPath, component);
 
-      // Serve with wasmtime?
       const wasmtime = spawn(wasmtimeBin, [
         "serve",
         "-S",
@@ -180,57 +180,59 @@ suite("hono apps", async () => {
         ...wasmtimeExtraArgs,
         componentOutputPath,
       ]);
-      process.on("exit", () => {
-        if (wasmtime && !wasmtime.killed) {
-          wasmtime.kill();
+      const stop = () => wasmtime.kill();
+      process.once("exit", stop);
+      let output = "";
+      let startupTimer: ReturnType<typeof setTimeout> | undefined;
+      let requestTimer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const { host, port } = await new Promise<{ host: string; port: number }>(
+          (resolve, reject) => {
+            const observe = (chunk: Buffer) => {
+              output += chunk.toString();
+              log(`[wasmtime] ${chunk}`);
+              const match = /(127\.0\.0\.1):(\d+)(?:\/|\s)/.exec(output);
+              if (match) {
+                resolve({ host: match[1], port: Number(match[2]) });
+              }
+            };
+            wasmtime.stdout.on("data", observe);
+            wasmtime.stderr.on("data", observe);
+            wasmtime.once("error", reject);
+            wasmtime.once("exit", (code, signal) =>
+              reject(new Error(`Wasmtime exited before listening (${code ?? signal}): ${output}`)),
+            );
+            startupTimer = setTimeout(
+              () => reject(new Error(`Wasmtime startup timed out: ${output}`)),
+              30_000,
+            );
+          },
+        );
+        clearTimeout(startupTimer);
+        await Promise.race([
+          testMod.test({ server: { host, port, url: `http://${host}:${port}` } }),
+          new Promise<never>((_resolve, reject) => {
+            requestTimer = setTimeout(
+              () => reject(new Error(`HTTP fixture timed out: ${output}`)),
+              30_000,
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(startupTimer);
+        clearTimeout(requestTimer);
+        process.off("exit", stop);
+        if (
+          wasmtime.pid !== undefined &&
+          wasmtime.exitCode === null &&
+          wasmtime.signalCode === null
+        ) {
+          const closed = new Promise<void>((resolve) => wasmtime.once("close", () => resolve()));
+          stop();
+          await closed;
         }
-      });
-
-      // Wait for wasmtime to start serving the component
-      const { promise: startupWait, resolve: resolveStartupWait } = Promise.withResolvers();
-      wasmtime.stderr.on("data", (data) => {
-        log(`[wasmtime] STDERR: ${data}`);
-        if (data.includes("a matching implementation was not found in the linker")) {
-          console.error(
-            [
-              "Do you have a version of wasmtime with the right interfaces?",
-              "Consider installing the following version of wasmtime locally:",
-              "    cargo install \\",
-              "        --git https://github.com/bytecodealliance/wasmtime \\",
-              "        --rev 29f2a1ca66c849a2d2e533a2df87c221daa8e2de \\",
-              "        wasmtime-cli",
-            ].join("\n"),
-          );
-          assert.fail(`unexpected error while running wasmtime: ${data}]`);
-        }
-
-        if (data.includes("127.0.0.1")) {
-          resolveStartupWait(data);
-        }
-      });
-      wasmtime.stdout.on("data", (data) => {
-        log(`[wasmtime] STDOUT: ${data}`);
-        if (data.includes("127.0.0.1")) {
-          resolveStartupWait(data);
-        }
-      });
-
-      // Wait for startup
-      const ipLine = await startupWait;
-
-      // Parse out wasmtime's randomly chosen port
-      const matches = /(127\.0\.0\.1):(\d+)/.exec(ipLine);
-      if (!matches) {
-        throw new Error("failed to match IP address regex");
+        await rm(componentOutputDir, { recursive: true, force: true });
       }
-      const host = matches[1];
-      const port = parseInt(matches[2]);
-      const url = `http://${host}:${port}`;
-
-      // Run the test that is co-located with the fixture app in question
-      await testMod.test({ server: { host, port, url } });
-
-      wasmtime.kill();
     });
   }
 });
