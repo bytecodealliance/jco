@@ -121,7 +121,9 @@ depends on the package and its version:
   without `--sandbox` gives the guest the host's filesystem, environment, and network, as an
   ordinary Node.js program would have. This is historical behaviour, and a future release of
   `jco` will deny access by default.
-- `@bytecodealliance/jco-transpile` does not grant full host access by default.
+- The shims themselves, and so the output of `@bytecodealliance/jco-transpile`, give a guest no
+  filesystem access by default on Node.js: there are no preopens until the embedder adds them.
+  The host's environment variables and network are still available by default.
 
 Because the default differs between packages and will change, state the restrictions for an
 untrusted component explicitly: `new WASIShim({ sandbox: { ... } })` in code, or
@@ -170,7 +172,7 @@ componentize source you would not run.
 | | Node.js | Browser |
 | --- | --- | --- |
 | Ambient authority of the realm | The operating system user: files, sockets, environment, child processes | The page's origin: DOM, storage, cookies, credentialed requests to the origin |
-| Defaults | Full filesystem, environment, and network access with `jco` today; see [Capabilities](#3-capabilities-the-wasi-shims) | No filesystem preopens, no raw sockets, stdin closed. Outbound HTTP is allowed through `fetch`, and currently [carries the user's session](#browsers) to the page's origin. |
+| Defaults | No filesystem preopens; host environment and network available. `jco run` adds full filesystem access today; see [Capabilities](#3-capabilities-the-wasi-shims) | No filesystem preopens, no raw sockets, stdin closed. Outbound HTTP is allowed through `fetch`, and currently [carries the user's session](#browsers) to the page's origin. |
 | Restricting a guest | `WASIShim` `sandbox` options, `jco run --sandbox` | `WASIShim` `sandbox` options, and the page's Content Security Policy |
 | Stopping a runaway guest | `worker.terminate()`, or killing the process | `worker.terminate()` on a Web Worker |
 | Isolation stronger than a realm | `worker_threads`, child processes, the Node.js permission model, containers | Web Workers, sandboxed or cross-origin iframes |
