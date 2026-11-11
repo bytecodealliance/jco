@@ -19,10 +19,21 @@ declare module 'wasi:io/poll@0.2.12' {
    * do any I/O so it doesn't fail. If any of the I/O sources identified by
    * the pollables has an error, it is indicated by marking the source as
    * being ready for I/O.
+   *
+   * @since 0.2.0
    */
   export function poll(in_: Array<Pollable>): Uint32Array;
   
+  /**
+  * `pollable` represents a single I/O event which may be ready, or not.
+  *
+  * @since 0.2.0
+  */
   export class Pollable implements Disposable {
+    /**
+     * Identifies the resource to the type checker. This member does not exist at runtime.
+     */
+    readonly $brand: 'wasi:io/poll@0.2#pollable';
     /**
      * This type does not have a public constructor.
      */
@@ -31,6 +42,8 @@ declare module 'wasi:io/poll@0.2.12' {
     * Return the readiness of a pollable. This function never blocks.
     * 
     * Returns `true` when the pollable is ready, and `false` otherwise.
+    *
+    * @since 0.2.0
     */
     ready(): boolean;
     /**
@@ -39,6 +52,8 @@ declare module 'wasi:io/poll@0.2.12' {
     * 
     * This function is equivalent to calling `poll.poll` on a list
     * containing only this pollable.
+    *
+    * @since 0.2.0
     */
     block(): void;
     [Symbol.dispose](): void;

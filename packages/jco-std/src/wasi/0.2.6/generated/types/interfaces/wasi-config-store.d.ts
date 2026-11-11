@@ -4,12 +4,16 @@ declare module 'wasi:config/store@0.2.0-rc.1' {
    * 
    * The value is returned as an `option<string>`. If the key is not found,
    * `Ok(none)` is returned. If an error occurs, an `Err(error)` is returned.
+   *
+   * @throws {globalThis.Error & { payload: Error }} The error of the result, as the `payload` of the thrown error.
    */
   export function get(key: string): string | undefined;
   /**
    * Gets a list of configuration key-value pairs of type `string`.
    * 
    * If an error occurs, an `Err(error)` is returned.
+   *
+   * @throws {globalThis.Error & { payload: Error }} The error of the result, as the `payload` of the thrown error.
    */
   export function getAll(): Array<[string, string]>;
   /**
