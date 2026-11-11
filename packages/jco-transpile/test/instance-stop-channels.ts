@@ -2,7 +2,7 @@
 import { spawn } from 'node:child_process';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { env, execArgv } from 'node:process';
+import { execArgv } from 'node:process';
 import { pathToFileURL } from 'node:url';
 
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
@@ -12,6 +12,7 @@ import { parse } from '../src/wasm-tools.js';
 import { $init, generate } from '../src/component.js';
 import { getTmpDir } from './helpers.js';
 import { hasJspi } from './common.js';
+import { runtimeBase } from './transpilation.js';
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -35,10 +36,7 @@ async function generated(componentUrl: URL | string, callTracking = false) {
         callTracking,
         instantiation: { tag: 'async' },
         noTypescript: true,
-        cmRuntimeEsModule:
-            env.JCO_TEST_RUNTIME === 'external'
-                ? new URL('../../jco-cm-runtime/dist/', import.meta.url).href
-                : undefined,
+        cmRuntimeEsModule: runtimeBase,
         map: [],
     });
     return files;

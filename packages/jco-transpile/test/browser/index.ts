@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import puppeteer, { type Browser } from 'puppeteer';
 import { afterAll, assert, beforeAll, suite, test } from 'vitest';
 
-import { defaultRuntimeUrl, externalRuntime, transpileBytes, writeFiles } from '../transpilation.js';
+import { externalRuntime, runtimeBase, transpileBytes, writeFiles } from '../transpilation.js';
 import { WEBIDL_FIXTURES_DIR, COMPONENT_FIXTURES_DIR } from '../common.js';
 import { componentize, getTmpDir, runBrowserCase, setupAsyncTest, startTestWebServer } from '../helpers.js';
 
@@ -47,8 +47,12 @@ suite('Browser', () => {
 
     beforeAll(async () => {
         tmpDir = await getTmpDir();
-        if (externalRuntime) {
-            await cp(new URL('.', defaultRuntimeUrl), join(tmpDir, 'cm-runtime'), { recursive: true });
+        if (runtimeBase !== undefined) {
+            // The browser loads the runtime from the test server, so it must be a local directory.
+            if (!runtimeBase.startsWith('file:')) {
+                throw new Error(`browser tests need a runtime in a local directory, not ${runtimeBase}`);
+            }
+            await cp(new URL(runtimeBase), join(tmpDir, 'cm-runtime'), { recursive: true });
         }
         const server = await startTestWebServer({
             routes: [
