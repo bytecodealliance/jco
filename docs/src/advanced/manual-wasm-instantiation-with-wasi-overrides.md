@@ -188,9 +188,9 @@ versioned satisfies VersionedWASIImportObject<'0.2.3'>;
 
 ## Sandboxing with `WASIShim`
 
-By default, the `preview2-shim` provides full access to the host filesystem, environment variables,
-and network - matching the default behavior of Node.js libraries. You can use the `sandbox` option
-to restrict what guests can access.
+By default on Node.js, the `preview2-shim` gives a guest no filesystem preopens, but does provide
+the host's environment variables and network. Use the `sandbox` option to grant directories and
+to restrict the rest.
 
 Each `WASIShim` instance has its own isolated preopens, environment variables, and arguments.
 Multiple instances with different configurations will not affect each other:

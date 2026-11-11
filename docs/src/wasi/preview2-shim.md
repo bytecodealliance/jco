@@ -68,9 +68,9 @@ Helpers that only exist for one build are exported under that build's prefix.
 
 ### Node.js
 
-The Node.js build gives a component host filesystem, environment, and network access by default,
-matching the behaviour of ordinary Node.js libraries. It is tested against the Wasmtime WASI
-conformance suite.
+The Node.js build gives a component no filesystem access by default: there are no preopens until
+the application configures them. The host's environment variables and network are available by
+default. It is tested against the Wasmtime WASI conformance suite.
 
 ### Browsers
 

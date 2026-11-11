@@ -165,7 +165,7 @@ them all. `--sandbox-fs-preopen HOST[::GUEST]` exposes a directory (using the ho
 path when it is omitted). The environment and preopen options may be repeated; values are applied
 in command-line order.
 
-Using the preview2-shim WASI implementation, full access to the underlying system primitives is provided, including filesystem and environment variable permissions.
+Without `--sandbox`, `jco run` itself preopens the host root and passes the host environment through. The preview2-shim WASI implementation no longer grants filesystem access on its own.
 
 For HTTP Proxy components, `jco serve` provides a JS server implementation:
 
