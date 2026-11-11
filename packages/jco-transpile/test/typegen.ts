@@ -301,6 +301,43 @@ suite('Type Generation', () => {
         assert.deepStrictEqual(await typeCheckDeclarations(exportOnly), []);
     });
 
+    test('resources that the bindings provide are nominal types', async () => {
+        const opts = { worldName: 'test:interface-sides/both-sides' };
+        const fixture = `${WIT_FIXTURE_DIR}/interface-sides.wit`;
+        const read = (files: Record<string, Uint8Array>, name: string) => Buffer.from(files[name]).toString();
+        const brand = 'private $brand: unknown;';
+
+        const host = await generateHostTypes(fixture, opts);
+        assert.include(read(host, 'interfaces/exports/test-interface-sides-types.d.ts'), brand);
+        assert.notInclude(read(host, 'interfaces/test-interface-sides-types.d.ts'), brand);
+
+        const guest = await generateGuestTypes(fixture, opts);
+        assert.include(read(guest, 'interfaces/test-interface-sides-types.d.ts'), brand);
+        assert.notInclude(read(guest, 'interfaces/exports/test-interface-sides-types.d.ts'), brand);
+
+        // A host module must type-check against the declarations, apart from
+        // the look-alike resources that it marks as errors.
+        const dir = await getTmpDir();
+        try {
+            await writeFiles(host, { baseDir: dir });
+            const testFile = join(dir, 'resource-brands.mts');
+            await copyFile(new URL('./fixtures/typescript/resource-brands.mts', import.meta.url), testFile);
+            const program = ts.createProgram([testFile], {
+                noEmit: true,
+                strict: true,
+                types: [],
+                target: ts.ScriptTarget.ESNext,
+                module: ts.ModuleKind.NodeNext,
+            });
+            assert.deepStrictEqual(
+                ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
+                [],
+            );
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
     test('host declarations leave world-level function imports to the import object', async () => {
         const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
             worldName: 'test:declaration-names/world-imports-world',

@@ -1424,6 +1424,14 @@ impl<'a> TsInterface<'a> {
                 "\nexport class {class_name}{impl_phrase} {{",
                 class_name = resource.to_upper_camel_case(),
             );
+            if generates_disposable_resource {
+                // The bindings accept only instances of the class they generate, so the
+                // class is declared with a private member: TypeScript then no longer
+                // takes an object of a matching shape, or another resource with the
+                // same functions, for an instance of it. An ECMAScript private name
+                // would do the same, but is an error in projects that target ES5.
+                uwriteln!(self.src, "private $brand: unknown;");
+            }
             if !source.has_constructor {
                 uwriteln!(self.src, "/**");
                 uwriteln!(self.src, " * This type does not have a public constructor.");
