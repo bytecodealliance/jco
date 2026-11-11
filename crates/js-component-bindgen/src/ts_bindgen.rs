@@ -1142,6 +1142,13 @@ impl TsBindgen {
         files: &mut Files,
         instantiation: bool,
     ) {
+        // Labeled exports use camel case at runtime, independently of the
+        // optional short aliases of namespaced interfaces.
+        let binding_name = if export_name.contains(':') {
+            export_name.to_string()
+        } else {
+            export_name.to_lower_camel_case()
+        };
         if instantiation {
             let local_name = self.import_interface(
                 export_name,
@@ -1153,16 +1160,16 @@ impl TsBindgen {
             uwriteln!(
                 self.export_object,
                 "{}: typeof {local_name},",
-                maybe_quote_id(export_name)
+                maybe_quote_id(&binding_name)
             );
-        } else if export_name != maybe_quote_id(export_name) {
+        } else if binding_name != maybe_quote_id(&binding_name) {
             // TODO: TypeScript doesn't currently support
             // non-identifier exports
             // tracking in https://github.com/microsoft/TypeScript/issues/40594
         } else {
-            let id_name = resolve.id_of(id).unwrap_or_else(|| export_name.to_string());
+            let id_name = resolve.id_of(id).unwrap_or_else(|| binding_name.clone());
             let file_name = self.generate_interface(
-                export_name,
+                &binding_name,
                 resolve,
                 id,
                 files,
@@ -1170,7 +1177,7 @@ impl TsBindgen {
             );
             uwriteln!(
                 self.export_object,
-                "export * as {export_name} from '{file_name}'; // export {id_name}"
+                "export * as {binding_name} from '{file_name}'; // export {id_name}"
             );
         }
     }
@@ -2523,12 +2530,47 @@ fn interface_export_aliases(resolve: &Resolve, world: &World) -> BTreeMap<String
 fn resource_brand(resolve: &Resolve, id: TypeId) -> String {
     let ty = &resolve.types[crate::dealias(resolve, id)];
     let resource = ty.name.as_deref().unwrap_or_default();
-    let TypeOwner::Interface(interface) = ty.owner else {
-        return resource.to_string();
+    let (package, owner) = match ty.owner {
+        TypeOwner::Interface(interface_id) => {
+            let interface = &resolve.interfaces[interface_id];
+            if let Some(name) = &interface.name {
+                (interface.package, name.clone())
+            } else {
+                // Inline interfaces have no package-qualified interface name.
+                // Their world and import/export label identify the resource,
+                // including when two inline interfaces use the same type name.
+                resolve
+                    .worlds
+                    .iter()
+                    .find_map(|(_, world)| {
+                        for (direction, items) in
+                            [("import", &world.imports), ("export", &world.exports)]
+                        {
+                            for (key, item) in items {
+                                if let (WorldKey::Name(label), WorldItem::Interface { id, .. }) =
+                                    (key, item)
+                                    && *id == interface_id
+                                {
+                                    return Some((
+                                        world.package,
+                                        format!("world:{}/{direction}:{label}", world.name),
+                                    ));
+                                }
+                            }
+                        }
+                        None
+                    })
+                    .expect("an inline resource interface belongs to a world")
+            }
+        }
+        TypeOwner::World(world_id) => {
+            let world = &resolve.worlds[world_id];
+            (world.package, format!("world:{}", world.name))
+        }
+        TypeOwner::None => return resource.to_string(),
     };
-    let interface = &resolve.interfaces[interface];
-    let (Some(interface_name), Some(package)) = (&interface.name, interface.package) else {
-        return resource.to_string();
+    let Some(package) = package else {
+        return format!("{owner}#{resource}");
     };
     let package = &resolve.packages[package].name;
     let track = match &package.version {
@@ -2536,7 +2578,7 @@ fn resource_brand(resolve: &Resolve, id: TypeId) -> String {
         None => String::new(),
     };
     format!(
-        "{}:{}/{interface_name}{track}#{resource}",
+        "{}:{}/{owner}{track}#{resource}",
         package.namespace, package.name
     )
 }
