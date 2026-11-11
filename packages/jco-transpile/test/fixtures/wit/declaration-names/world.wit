@@ -131,3 +131,20 @@ world world-imports-world {
 
   export run: func();
 }
+
+/// Declares types named like the globals that the world's own declarations use.
+world shadowed-world-globals-world {
+  record promise {
+    id: u32,
+  }
+
+  record error {
+    code: u32,
+  }
+
+  record %record {
+    key: string,
+  }
+
+  export settle: func(promise: promise, %record: %record) -> result<promise, error>;
+}
