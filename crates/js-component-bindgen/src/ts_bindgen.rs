@@ -7,9 +7,9 @@ use anyhow::{Context as _, Result};
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use log::debug;
 use wit_bindgen_core::wit_parser::{
-    Case, Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
-    Stability, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant, WorldId, WorldItem,
-    WorldKey,
+    Case, Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, PackageName, Record,
+    Resolve, Result_, Stability, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant,
+    WorldId, WorldItem, WorldKey,
 };
 
 use crate::files::Files;
@@ -292,6 +292,9 @@ struct TsInterface<'a> {
     optional_result_payloads: bool,
     /// The documentation comment of the class, if this declares the functions of a resource.
     class_docs: Source,
+    /// The name that identifies the resource to the type checker,
+    /// if this declares the functions of a resource.
+    resource_brand: String,
     /// Whether the functions declared here are only ever implemented by the host.
     ///
     /// The host may return the result of such a function directly even if the
@@ -1420,6 +1423,7 @@ impl<'a> TsInterface<'a> {
             raw_result_errors: false,
             optional_result_payloads: false,
             class_docs: Source::default(),
+            resource_brand: String::new(),
             host_implemented: false,
             is_export_side: false,
             exported_interfaces: Rc::default(),
@@ -1491,11 +1495,24 @@ impl<'a> TsInterface<'a> {
             );
             if generates_disposable_resource {
                 // The bindings accept only instances of the class they generate, so the
-                // class is declared with a private member: TypeScript then no longer
-                // takes an object of a matching shape, or another resource with the
-                // same functions, for an instance of it. An ECMAScript private name
-                // would do the same, but is an error in projects that target ES5.
-                uwriteln!(self.src, "private $brand: unknown;");
+                // class is declared with a member that no other object has: TypeScript
+                // then no longer takes an object of a matching shape, or another resource
+                // with the same functions, for an instance of it. The type of the member
+                // names the resource up to the semver compatible track of its package,
+                // so that a resource is still accepted in place of the same resource of
+                // a compatible version. A private member would not allow that, as
+                // TypeScript tells private members of separate declarations apart.
+                uwriteln!(self.src, "/**");
+                uwriteln!(
+                    self.src,
+                    " * Identifies the resource to the type checker. This member does not exist at runtime."
+                );
+                uwriteln!(self.src, " */");
+                uwriteln!(
+                    self.src,
+                    "readonly $brand: {};",
+                    js_string_literal(&source.resource_brand).replace('"', "'")
+                );
             }
             if !source.has_constructor {
                 uwriteln!(self.src, "/**");
@@ -2424,7 +2441,7 @@ impl<'a> TsInterface<'a> {
         self.src.push_str(";\n");
     }
 
-    fn type_resource(&mut self, _id: TypeId, ty: &TypeDef, meta: GeneratedTypeMeta) {
+    fn type_resource(&mut self, id: TypeId, ty: &TypeDef, meta: GeneratedTypeMeta) {
         let resource = ty.name.clone().unwrap();
         // The class is declared once all of its functions are known, so its
         // documentation comment is kept until then.
@@ -2448,7 +2465,34 @@ impl<'a> TsInterface<'a> {
             )
         });
         class.class_docs = class_docs;
+        class.resource_brand = resource_brand(self.resolve, id);
     }
+}
+
+/// The name that identifies a resource to the type checker.
+///
+/// The name holds the semver compatible track of the resource's package
+/// rather than its version, so that it is the same in every version of the
+/// package that is compatible with this one.
+fn resource_brand(resolve: &Resolve, id: TypeId) -> String {
+    let ty = &resolve.types[crate::dealias(resolve, id)];
+    let resource = ty.name.as_deref().unwrap_or_default();
+    let TypeOwner::Interface(interface) = ty.owner else {
+        return resource.to_string();
+    };
+    let interface = &resolve.interfaces[interface];
+    let (Some(interface_name), Some(package)) = (&interface.name, interface.package) else {
+        return resource.to_string();
+    };
+    let package = &resolve.packages[package].name;
+    let track = match &package.version {
+        Some(version) => format!("@{}", PackageName::version_compat_track_string(version)),
+        None => String::new(),
+    };
+    format!(
+        "{}:{}/{interface_name}{track}#{resource}",
+        package.namespace, package.name
+    )
 }
 
 /// The JSDoc block tags that describe the stability of a WIT item: `@since` for
