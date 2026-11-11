@@ -212,6 +212,48 @@ suite.each(['stream-lower', 'high-stream-lower'])('stream<T> lowers (%s)', (name
             );
         });
 
+        // A read that finds values already buffered from an asynchronous source completes with them,
+        // rather than waiting for the source to produce again. The guest reads 4096 values at a time, so
+        // the source's 5000-value chunk leaves 904 buffered for the second read, which must not merge
+        // them with the 100 values the source produces later.
+        test.concurrent('u8 async source delivers buffered values without waiting for more', async () => {
+            const instance = await getInstance();
+            const first = Uint8Array.from({ length: 5000 }, (_, i) => i % 256);
+            const second = Uint8Array.from({ length: 100 }, (_, i) => (i * 3) % 256);
+            const source = {
+                [Symbol.asyncIterator]() {
+                    let produced = 0;
+                    return {
+                        async next() {
+                            produced += 1;
+                            if (produced === 1) {
+                                return { value: first, done: false };
+                            }
+                            if (produced === 2) {
+                                await new Promise((resolve) => setTimeout(resolve, 100));
+                                return { value: second, done: false };
+                            }
+                            return { value: undefined, done: true };
+                        },
+                    };
+                },
+            };
+
+            const chunks =
+                await instance['jco:test-components/stream-lower-async'].readStreamValuesU8BulkChunks(source);
+            assert.deepEqual(
+                chunks.map((chunk) => chunk.length),
+                [4096, 904, 100],
+            );
+            assert.deepEqual(
+                toTypedArray(
+                    Uint8Array,
+                    chunks.flatMap((c) => [...c]),
+                ),
+                toTypedArray(Uint8Array, [...first, ...second]),
+            );
+        });
+
         test.concurrent('u16/s16', async () => {
             const instance = await getInstance();
             assert.instanceOf(instance['jco:test-components/stream-lower-async'].readStreamValuesU16, AsyncFunction);

@@ -2613,7 +2613,10 @@ impl AsyncStreamIntrinsic {
                               }}
                               drainPendingValues();
 
-                              while (count > 0 && !pendingValues.done) {{
+                              // Values already buffered from an asynchronous source complete the read at
+                              // once: waiting on the source for more would hold them until it produces
+                              // again, and a read cancelled meanwhile would strand them
+                              while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {{
                                   const appended = await pendingValues.readSource();
                                   if (readEnd.hasPendingEvent()) {{ return bail(); }}
                                   if (!hasPendingReadBuffer()) {{ return bail(); }}
