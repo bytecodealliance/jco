@@ -3,6 +3,8 @@ import { extname, basename, resolve } from "node:path";
 
 import { generateGuestTypes, generateHostTypes } from "@bytecodealliance/jco-transpile";
 
+import { typegenOptions, type TypegenOptions } from "../typegen-options.js";
+
 import {
     writeFiles,
     resolveDefaultWITPath,
@@ -21,7 +23,7 @@ const DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH = "./types/generated/wit/guest";
 /** Default relative path for host type declaration generation */
 const DEFAULT_HOST_TYPES_OUTPUT_DIR_PATH = "./types/generated/wit/host";
 
-export interface TypesOptions {
+export interface TypesOptions extends TypegenOptions {
     name?: string;
     worldName?: string;
     instantiation?: "async" | "sync";
@@ -171,6 +173,7 @@ export async function typesComponent(witPath: string, opts: TypesOptions): Promi
     const generateFn = guest ? generateGuestTypes : generateHostTypes;
     try {
         const generated = await generateFn(absWitPath, {
+            ...typegenOptions(opts),
             name,
             instantiation,
             tlaCompat: opts.tlaCompat ?? false,

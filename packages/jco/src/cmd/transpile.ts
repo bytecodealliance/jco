@@ -2,6 +2,8 @@
 
 import { transpile, transpileBytes } from "@bytecodealliance/jco-transpile";
 
+import { typegenOptions, type TypegenOptions } from "../typegen-options.js";
+
 import { writeFiles } from "../common.js";
 
 declare const __vite_ssr_import_meta__: ImportMeta;
@@ -141,7 +143,7 @@ export function withDefaultNodeCapabilities(opts: TranspileOpts): TranspileOpts 
     return opts;
 }
 
-export interface TranspileOpts {
+export interface TranspileOpts extends TypegenOptions {
     name?: string;
     instantiation?: "async" | "sync";
     importBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
@@ -210,6 +212,8 @@ export async function transpileComponent(component: Uint8Array, opts: TranspileO
 }
 
 function prepOpts(opts: any, program?: any) {
+    Object.assign(opts, typegenOptions(opts));
+
     // Commander derives `flagsAsBigint` from `--flags-as-bigint`, while the
     // public API uses the conventional TypeScript spelling `flagsAsBigInt`.
     opts.flagsAsBigInt ??= opts.flagsAsBigint;

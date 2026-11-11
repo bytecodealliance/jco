@@ -10,6 +10,46 @@ This document details the type representations and usage for types that are defi
 [wit]: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md
 [ts]: https://www.typescriptlang.org/
 
+## Declaration compatibility and opt-ins
+
+Jco keeps the following declaration contracts stable across its nonbreaking releases. The
+same defaults apply to its CLI, Node API, and browser/component API. The lower-level
+`@bytecodealliance/jco-transpile` package has its own release cycle and enables the first
+four options by default; it keeps `optionalResultPayloads` disabled by default.
+
+| Jco API option | CLI flag | Behavior when enabled |
+| --- | --- | --- |
+| `nominalResources` | `--nominal-resources` | Resource consumers require the generated resource identity; structural mocks no longer type-check. |
+| `asyncImportsMayReturnSync` | `--async-imports-may-return-sync` | Host async imports return `Promise<T> \| T`; callers should use `await` or `Promise.resolve` before Promise methods. |
+| `typedErrorClasses` | `--typed-error-classes` | Wrapped named result errors gain exported error classes, adding keys to interface objects. |
+| `separateInterfaceTypes` | `--separate-interface-types` | Import and export declarations use separate files; export declarations live under `interfaces/exports/`. |
+| `optionalResultPayloads` | `--optional-result-payloads` | Result arms without a payload allow an omitted `val`; the conditional `Result<T, E>` helper changes generic narrowing. |
+
+All five options default to `false` in Jco. The first three imply `separateInterfaceTypes`,
+since the contracts of an imported interface can differ from those of its exported counterpart.
+For example, `jco types input.wit --nominal-resources` opts into nominal resources and the
+split layout. Use the same options when generating declarations and transpiling the component.
+Named error classes require error wrapping; `--no-component-error-wrapping` still takes precedence.
+
+With the default shared layout, an interface that is both imported and exported keeps the
+import-side declaration, matching earlier Jco output. With separate declarations, annotate
+exported resources using the export-side type, or infer their type from the exported constructor.
+Copy the entire generated declaration tree recursively when packaging split output.
+
+When several versions of an interface occur in a world, their declarations have versioned
+filenames so their different types are represented accurately. Jco's shared layout also retains
+the unversioned path as an alias for the first version encountered (imports before exports),
+matching the earlier declaration selection. New consumers should import the explicit versioned
+path. Changing which version occurs first can change what the compatibility alias refers to.
+A single version keeps its existing unversioned path.
+
+Correctness fixes still apply with the default settings. Variant cases whose generated names
+collide with named records retain their payload under `.val`; code relying on the previously
+merged, flattened declaration must use `.val.field`. Resource static functions named
+`prototype` are exposed as `prototype_`, since JavaScript classes reserve `prototype`; host
+implementations must provide that spelling too. Worlds containing different versions of an
+interface now use each version's actual types, which can reveal previously hidden mismatches.
+
 ## Basic types
 
 Here is a basic table of conversions between WIT types and JS types:
@@ -331,7 +371,7 @@ from other instances, ordinary host exceptions, and objects that only have a `pa
 The predicate is absent when bindings do not use error wrapping. In TypeScript, it narrows the value to
 `Error & { readonly payload: unknown }`.
 
-When wrapping is enabled, an exported interface also exports one error class per named error type
+When wrapping and `typedErrorClasses` are enabled, an exported interface also exports one error class per named error type
 of its functions. The class is named after the type, with an `Error` suffix, and extends the wrapper,
 so `_util.isComponentError()` holds for its instances too:
 
