@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { resolve, basename, dirname, extname, join } from "node:path";
 
 import { componentWitMetadataForWorld, createComponent, createWorld } from "@bytecodealliance/jco-transpile";
+import { _addPreopen, preopens } from "@bytecodealliance/preview2-shim/filesystem";
 
 import { bundleComponentChunk, bundleComponentSource, classifyComponentSource, loadBundleConfig } from "../bundle.js";
 import { engineCompatPlugin } from "../engine-compat.js";
@@ -680,6 +681,13 @@ async function componentizeQJS(args: BackendComponentizeArgs) {
 async function componentizeCJS(args: BackendComponentizeArgs) {
     const { opts, sourceName, source, witPath } = args;
     const { disableFeatures, enableFeatures } = calculateFeatureSet(opts);
+
+    // ComponentizeJS's splicer reads host WIT paths through the global shim.
+    // Grant Jco's default filesystem before loading it, preserving custom preopens.
+    if (preopens.getDirectories().length === 0) {
+        _addPreopen("/", isWindows ? "//" : "/");
+    }
+
     // Load an older version of componentize-js if we detect an older version of WASI HTTP in use
     // as the version that is usable is baked into the StarlingMonkey version provided by a given version
     // of componentize-js
