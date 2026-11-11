@@ -200,9 +200,10 @@ const component = await instantiate(loader, new WASIShim().getImportObject());
 
 ## Sandboxing
 
-On Node.js, the preview2-shim provides host filesystem, environment, and network access by default,
-matching the usual behavior of Node.js libraries. Browser defaults expose no filesystem preopens or
-raw sockets. Both platforms can configure which capabilities a guest receives.
+On Node.js, the preview2-shim gives a guest no filesystem access by default: there are no preopens
+until the application adds them. The host's environment variables and network are still available
+by default. Browser defaults expose no filesystem preopens or raw sockets. Both platforms can
+configure which capabilities a guest receives.
 
 ### Using WASIShim for sandboxing
 
@@ -282,9 +283,14 @@ application-provided filesystem implementations define their own behavior.
 
 #### Default access
 
-By default (when no options are passed), the shim is providing full access to match typical
-Node.js library behavior. In browsers, filesystem preopens remain empty until the application
-explicitly injects filesystem namespaces or selects the ephemeral file-data adapter.
+By default (when no options are passed), the Node.js shim starts with no preopens, so a guest
+cannot reach the host filesystem. Earlier versions preopened the host root `/`; applications that
+relied on that must now grant a directory explicitly, with `sandbox.preopens` or
+`filesystem._setPreopens({ "/": "/" })`. Environment variables and network access are still
+inherited from the host unless `sandbox.env` and `sandbox.enableNetwork` restrict them.
+
+In browsers, filesystem preopens remain empty until the application explicitly injects filesystem
+namespaces or selects the ephemeral file-data adapter.
 
 #### Preopen mappings
 

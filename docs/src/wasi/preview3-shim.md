@@ -124,7 +124,8 @@ Two chapters describe the details that matter once data is in flight:
 
 ### Node.js
 
-The Node.js build gives a component host filesystem, environment, and network access by default.
+The Node.js build gives a component no filesystem access until preopens are configured. The host's
+environment variables and network are available by default.
 Standard streams and filesystem operations run in a worker so that blocking host I/O never stalls
 the event loop that drives the component's asynchronous exports.
 
