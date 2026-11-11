@@ -292,6 +292,9 @@ that would _not_ fit in a `u32` (unsigned 32 bit integer) via WebAssembly.
 type Result<T,E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
 ```
 
+An arm without a payload (e.g. the `ok` arm of `result<_, string>`) is typed as `void`,
+and its `val` may be left out: `{ tag: 'ok' }` is a complete value.
+
 ### `result`s in context: Function return values
 
 When a result is returned directly from a function, any thrown error of the function is treated as the result error type,

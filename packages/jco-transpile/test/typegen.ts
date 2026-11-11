@@ -165,6 +165,40 @@ suite('Type Generation', () => {
         }
     });
 
+    test('result arms without a payload do not require a value', async () => {
+        const files = await generateGuestTypes(`${WIT_FIXTURE_DIR}/result-payloads.wit`, {
+            worldName: 'test:result-payloads/result-payloads',
+        });
+        const source = Buffer.from(files['interfaces/test-result-payloads-payloads.d.ts']).toString();
+        assert.include(source, 'neither: Result<void, void>,');
+        assert.include(source, 'onlyErr: Result<void, string>,');
+        assert.include(source, 'onlyOk: Result<number, void>,');
+        assert.include(source, "([T] extends [void] ? { tag: 'ok', val?: T } : { tag: 'ok', val: T })");
+        assert.include(source, "([E] extends [void] ? { tag: 'err', val?: E } : { tag: 'err', val: E })");
+
+        // A guest module building such results must type-check against the declarations.
+        const dir = await getTmpDir();
+        try {
+            await writeFiles(files, { baseDir: dir });
+            const testFile = join(dir, 'result-payloads.mts');
+            await copyFile(new URL('./fixtures/typescript/result-payloads.mts', import.meta.url), testFile);
+            const declarations = Object.keys(files).map((name) => join(dir, name));
+            const program = ts.createProgram([testFile, ...declarations], {
+                noEmit: true,
+                strict: true,
+                types: [],
+                target: ts.ScriptTarget.ESNext,
+                module: ts.ModuleKind.NodeNext,
+            });
+            assert.deepStrictEqual(
+                ts.getPreEmitDiagnostics(program).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
+                [],
+            );
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    });
+
     test('host declarations leave world-level function imports to the import object', async () => {
         const files = await generateHostTypes(`${WIT_FIXTURE_DIR}/declaration-names`, {
             worldName: 'test:declaration-names/world-imports-world',

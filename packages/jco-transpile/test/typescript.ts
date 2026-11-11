@@ -209,7 +209,7 @@ suite(`TypeScript`, async () => {
         // (from the `option<...>` export) helper aliases must be present...
         assert.include(
             dtsSource,
-            `export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };`,
+            `export type Result<T, E> = ([T] extends [void] ? { tag: 'ok', val?: T } : { tag: 'ok', val: T }) | `,
             'Result helper type alias should be emitted',
         );
         assert.include(
@@ -269,7 +269,9 @@ suite(`TypeScript`, async () => {
         );
         // Both helper aliases are present (and therefore at the top level).
         assert.ok(
-            dtsSource.includes(`export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };`),
+            dtsSource.includes(
+                `export type Result<T, E> = ([T] extends [void] ? { tag: 'ok', val?: T } : { tag: 'ok', val: T }) | `,
+            ),
             'Result helper type alias should be emitted',
         );
         assert.ok(
