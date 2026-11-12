@@ -26,11 +26,15 @@ beforeAll(async () => {
         await cp(join(transpileDir, name), join(installedTranspile, name), { recursive: true });
     }
     await cp(join(jcoDir, "obj"), join(installedTranspile, "vendor"), { recursive: true });
-    await symlink(
-        await realpath(join(transpileDir, "node_modules")),
-        join(installedTranspile, "node_modules"),
-        linkType,
-    );
+    // Link each package to its real location. A junction around node_modules
+    // leaves pnpm's relative package links pointing outside the temporary tree
+    // when the native TypeScript compiler resolves them on Windows.
+    const transpileManifest = JSON.parse(await readFile(join(transpileDir, "package.json"), "utf8"));
+    for (const name of Object.keys({ ...transpileManifest.dependencies, ...transpileManifest.devDependencies })) {
+        const destination = join(installedTranspile, "node_modules", name);
+        await mkdir(dirname(destination), { recursive: true });
+        await symlink(await realpath(join(transpileDir, "node_modules", name)), destination, linkType);
+    }
     await exec(join(jcoDir, "node_modules/typescript/bin/tsc"), "-p", installedTranspile);
 
     await mkdir(installedJco);
