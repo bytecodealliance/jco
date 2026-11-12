@@ -790,7 +790,7 @@ dependencies = [
  "oxc_span",
  "oxc_str",
  "semver",
- "wasm-encoder 0.259.0",
+ "wasm-encoder 0.262.0",
  "wasm-metadata",
  "wasmparser 0.259.0",
  "wasmtime-environ",
@@ -2017,6 +2017,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-encoder"
+version = "0.262.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4495a6f85dd94c411c749303efcbc5defade0b0cbdbc0541495241ab917a9b5a"
+dependencies = [
+ "leb128fmt",
+ "wasmparser 0.262.0",
+]
+
+[[package]]
 name = "wasm-metadata"
 version = "0.259.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2040,7 +2050,7 @@ name = "wasm-tools-js"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "wasm-encoder 0.259.0",
+ "wasm-encoder 0.262.0",
  "wasm-metadata",
  "wasmparser 0.259.0",
  "wasmprinter 0.259.0",
@@ -2084,6 +2094,15 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.262.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "974d643b125b272607e2fff8012ea14a8328acd7621e4bafa7afb32500052b1b"
+dependencies = [
+ "bitflags 2.13.0",
 ]
 
 [[package]]
