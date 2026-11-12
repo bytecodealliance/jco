@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.14.0] - 2026-11-12
+
+### 🚀 Features
+
+- _(p3-shim)_ add compatible browser output lifecycle helpers by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ select Node declarations for Node consumers by @vados-cosmonic
+
+- _(p3-shim)_ finish pending reads when closing stream readers by @vados-cosmonic
+
+- _(p3-shim)_ make output shutdown explicit by @darshpatel1052
+
+- _(p3-shim)_ drain command output before shutdown by @darshpatel1052
+
 ## [0.13.0] - 2026-10-31
 
 ### 🐛 Bug Fixes
