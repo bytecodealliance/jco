@@ -785,3 +785,347 @@ describe("Descriptor#setTimes and #setTimesAt", () => {
     );
   });
 });
+
+/**
+ * Add a preopen for a new temporary directory
+ *
+ * @param {string} prefix Prefix for the temporary directory's name
+ * @returns {Promise<{ tmpDir: string, preopen: object }>} The directory and its preopen descriptor
+ */
+async function addTmpPreopen(prefix) {
+  const { filesystem } = await import("@bytecodealliance/preview3-shim");
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
+  const virtualPath = `/${path.basename(tmpDir)}`;
+  filesystem._addPreopen(virtualPath, tmpDir);
+  const [preopen] = filesystem.preopens
+    .getDirectories()
+    .find(([_desc, preopenPath]) => preopenPath === virtualPath);
+  return { tmpDir, preopen };
+}
+
+/**
+ * Report how a promise settles, or "pending" if it has not settled within `ms`
+ *
+ * @param {Promise<unknown>} promise The promise to observe
+ * @param {number} ms How long to wait for it
+ * @returns {Promise<"resolved" | "rejected" | "pending">}
+ */
+async function settlement(promise, ms) {
+  let timer;
+  const pending = new Promise((resolve) => {
+    timer = setTimeout(() => resolve("pending"), ms);
+  });
+  try {
+    return await Promise.race([
+      promise.then(
+        () => "resolved",
+        () => "rejected",
+      ),
+      pending,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Build file contents whose bytes differ between chunks and between files
+ *
+ * @param {number} length Number of bytes
+ * @param {number} seed Value that distinguishes one file's contents from another's
+ * @returns {Buffer}
+ */
+function patternedBytes(length, seed) {
+  const bytes = Buffer.alloc(length);
+  for (let i = 0; i < length; i++) {
+    bytes[i] = (seed * 31 + Math.floor(i / 4096) * 7 + i) % 256;
+  }
+  return bytes;
+}
+
+describe("Descriptor stream operations", () => {
+  const CHUNK_BYTES = 64 * 1024;
+  let tmpDir;
+  let preopen;
+
+  beforeAll(async () => {
+    ({ tmpDir, preopen } = await addTmpPreopen("preview3-stream-ops-"));
+  });
+
+  afterAll(async () => {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  // A guest can drop a descriptor without awaiting a write it started, Rust's
+  // `std::fs::write` does this once the stream has accepted the last bytes
+  test("writeViaStream finishes after the descriptor is dropped", async () => {
+    const data = patternedBytes(4 * 1024 * 1024 + 7, 1);
+    const file = await preopen.openAt(
+      {},
+      "dropped-write.bin",
+      { create: true, truncate: true },
+      { write: true },
+    );
+
+    async function* chunks() {
+      for (let offset = 0; offset < data.length; offset += CHUNK_BYTES) {
+        yield data.subarray(offset, offset + CHUNK_BYTES);
+      }
+    }
+    const write = file.writeViaStream(chunks(), 0n);
+    file[Symbol.dispose]();
+
+    await expect(write).resolves.toBeUndefined();
+    const written = await fs.readFile(path.join(tmpDir, "dropped-write.bin"));
+    expect(written.length).toBe(data.length);
+    expect(written.equals(data)).toBe(true);
+  });
+
+  test("appendViaStream finishes after the descriptor is dropped", async () => {
+    const prefix = Buffer.from("prefix:");
+    const data = patternedBytes(4 * 1024 * 1024 + 7, 2);
+    await fs.writeFile(path.join(tmpDir, "dropped-append.bin"), prefix);
+    const file = await preopen.openAt({}, "dropped-append.bin", {}, { write: true });
+
+    const { tx, rx } = stream();
+    const append = file.appendViaStream(rx);
+    file[Symbol.dispose]();
+    for (let offset = 0; offset < data.length; offset += CHUNK_BYTES) {
+      await tx.write(data.subarray(offset, offset + CHUNK_BYTES));
+    }
+    await tx.close();
+
+    await expect(append).resolves.toBeUndefined();
+    const written = await fs.readFile(path.join(tmpDir, "dropped-append.bin"));
+    expect(written.length).toBe(prefix.length + data.length);
+    expect(written.equals(Buffer.concat([prefix, data]))).toBe(true);
+  });
+
+  test("readViaStream finishes after the descriptor is dropped", async () => {
+    const data = patternedBytes(16 * CHUNK_BYTES + 7, 3);
+    await fs.writeFile(path.join(tmpDir, "dropped-read.bin"), data);
+    const file = await preopen.openAt({}, "dropped-read.bin", {}, { read: true });
+
+    const [reader, future] = file.readViaStream(0n);
+    file[Symbol.dispose]();
+
+    const read = await reader.readAll();
+    await expect(future.read()).resolves.toBeDefined();
+    expect(read.length).toBe(data.length);
+    expect(read.equals(data)).toBe(true);
+  });
+
+  // The filesystem worker hands each chunk to the reader's thread when the
+  // reader pulls it, so a chunk cannot share its buffer with another read
+  test("concurrent readViaStream operations each read their own file", async () => {
+    const files = [4, 5, 6, 7].map((seed) => ({
+      name: `concurrent-read-${seed}.bin`,
+      data: patternedBytes(4 * CHUNK_BYTES, seed),
+    }));
+    for (const { name, data } of files) {
+      await fs.writeFile(path.join(tmpDir, name), data);
+    }
+
+    const descriptors = await Promise.all(
+      files.map(({ name }) => preopen.openAt({}, name, {}, { read: true })),
+    );
+    const reads = descriptors.map((descriptor) => descriptor.readViaStream(0n));
+    const contents = await Promise.all(reads.map(([reader]) => reader.readAll()));
+    await Promise.all(reads.map(([, future]) => future.read()));
+
+    for (const [index, { data }] of files.entries()) {
+      expect(contents[index].length).toBe(data.length);
+      expect(contents[index].equals(data), `contents of ${files[index].name}`).toBe(true);
+    }
+    for (const descriptor of descriptors) {
+      descriptor[Symbol.dispose]();
+    }
+  });
+
+  // Generated bindings read a host stream through its async iterator and call
+  // `return()` on it when the guest drops the stream. Host code calls `close()`.
+  // Both work with the async iterator protocol
+  const READER_RELEASES = [
+    ["the async iterator is returned", (reader) => reader[Symbol.asyncIterator]()],
+    [
+      "the reader is closed",
+      (reader) => ({
+        async next() {
+          const value = await reader.read();
+          return { value, done: value === null };
+        },
+        async return() {
+          reader.close();
+        },
+      }),
+    ],
+  ];
+
+  test.each(READER_RELEASES)(
+    "dropping a readViaStream stream ends the read when %s",
+    async (_name, iterate) => {
+      await fs.writeFile(
+        path.join(tmpDir, "dropped-stream.bin"),
+        patternedBytes(16 * CHUNK_BYTES, 8),
+      );
+      const file = await preopen.openAt({}, "dropped-stream.bin", {}, { read: true });
+
+      const [reader, future] = file.readViaStream(0n);
+      const iterator = iterate(reader);
+      await iterator.next();
+      await iterator.return();
+
+      // As in Wasmtime, a read that ends because its stream was dropped succeeds
+      expect(await settlement(future.read(), 5_000)).toBe("resolved");
+      file[Symbol.dispose]();
+    },
+  );
+
+  test.each(READER_RELEASES)(
+    "dropping a readDirectory stream ends the listing when %s",
+    async (_name, iterate) => {
+      // Enough entries that the worker is still listing when the stream is dropped
+      const listingPath = path.join(tmpDir, "dropped-listing");
+      await fs.rm(listingPath, { recursive: true, force: true });
+      await fs.mkdir(listingPath);
+      for (let i = 0; i < 32; i++) {
+        await fs.writeFile(path.join(listingPath, `entry-${i}.txt`), "");
+      }
+      const directory = await preopen.openAt(
+        {},
+        "dropped-listing",
+        { directory: true },
+        { read: true },
+      );
+
+      const [reader, future] = directory.readDirectory();
+      const iterator = iterate(reader);
+      await expect(iterator.next()).resolves.toMatchObject({
+        value: { type: { tag: "regular-file" } },
+      });
+      await iterator.return();
+
+      // As in Wasmtime, a listing that ends because its stream was dropped succeeds
+      expect(await settlement(future.read(), 5_000)).toBe("resolved");
+      directory[Symbol.dispose]();
+    },
+  );
+});
+
+describe("Descriptor path operations on a symlink that leads outside the directory", () => {
+  let tmpDir;
+  let preopen;
+  let sub;
+
+  beforeAll(async () => {
+    ({ tmpDir, preopen } = await addTmpPreopen("preview3-symlink-escape-"));
+    await fs.mkdir(path.join(tmpDir, "dir/sub"), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, "dir/outside.txt"), "outside");
+    sub = await preopen.openAt(
+      { symlinkFollow: true },
+      "dir/sub",
+      { directory: true },
+      {
+        read: true,
+        mutateDirectory: true,
+      },
+    );
+  });
+
+  afterAll(async () => {
+    sub[Symbol.dispose]();
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  // Each test gets a fresh `sub/loop -> ..`, which leads from `sub` to its parent
+  beforeEach(async () => {
+    await fs.rm(path.join(tmpDir, "dir/sub/loop"), { force: true });
+    await fs.symlink("..", path.join(tmpDir, "dir/sub/loop"));
+  });
+
+  test("statAt without symlink-follow returns the symlink's own metadata", async () => {
+    const stat = await sub.statAt({ symlinkFollow: false }, "loop");
+    expect(stat.type).toEqual({ tag: "symbolic-link" });
+  });
+
+  test("metadataHashAt without symlink-follow hashes the symlink itself", async () => {
+    const linkStat = await fs.lstat(path.join(tmpDir, "dir/sub/loop"), { bigint: true });
+    const hash = await sub.metadataHashAt({ symlinkFollow: false }, "loop");
+    expect(hash.lower).toBe(linkStat.ino);
+  });
+
+  test("readlinkAt returns the symlink's relative target", async () => {
+    await expect(sub.readlinkAt("loop")).resolves.toBe("..");
+  });
+
+  test("readlinkAt rejects an absolute target", async () => {
+    const absoluteLink = path.join(tmpDir, "dir/sub/absolute.cleanup");
+    await fs.symlink(path.join(tmpDir, "dir/outside.txt"), absoluteLink);
+    try {
+      await expect(sub.readlinkAt("absolute.cleanup")).rejects.toMatchObject({
+        payload: { tag: "not-permitted" },
+      });
+    } finally {
+      await fs.rm(absoluteLink, { force: true });
+    }
+  });
+
+  test("setTimesAt without symlink-follow updates only the symlink", async () => {
+    const linkPath = path.join(tmpDir, "dir/sub/loop");
+    await fs.lutimes(linkPath, 1_000, 2_000);
+    const targetBefore = await fs.stat(path.join(tmpDir, "dir"));
+
+    await sub.setTimesAt(
+      { symlinkFollow: false },
+      "loop",
+      { tag: "no-change" },
+      { tag: "timestamp", val: { seconds: 3_000n, nanoseconds: 0 } },
+    );
+
+    const linkAfter = await fs.lstat(linkPath);
+    expect(Math.round(linkAfter.atimeMs / 1_000)).toBe(1_000);
+    expect(Math.round(linkAfter.mtimeMs / 1_000)).toBe(3_000);
+    const targetAfter = await fs.stat(path.join(tmpDir, "dir"));
+    expect(targetAfter.mtimeMs).toBe(targetBefore.mtimeMs);
+  });
+
+  test("renameAt and unlinkFileAt act on the symlink itself", async () => {
+    await sub.renameAt("loop", sub, "renamed-loop");
+    await expect(fs.readlink(path.join(tmpDir, "dir/sub/renamed-loop"))).resolves.toBe("..");
+
+    await sub.unlinkFileAt("renamed-loop");
+    await expect(fs.lstat(path.join(tmpDir, "dir/sub/renamed-loop"))).rejects.toMatchObject({
+      code: "ENOENT",
+    });
+    await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
+      "outside",
+    );
+  });
+
+  test("operations that follow the symlink still reject it", async () => {
+    await expect(sub.statAt({ symlinkFollow: true }, "loop")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(sub.metadataHashAt({ symlinkFollow: true }, "loop")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(
+      sub.openAt({ symlinkFollow: true }, "loop", { directory: true }, { read: true }),
+    ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
+  });
+
+  test("operations without symlink-follow still reject it before the final component", async () => {
+    await expect(sub.statAt({ symlinkFollow: false }, "loop/outside.txt")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(sub.readlinkAt("loop/sub/loop")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(sub.unlinkFileAt("loop/outside.txt")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
+    });
+    await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
+      "outside",
+    );
+  });
+});

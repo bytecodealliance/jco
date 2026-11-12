@@ -11,8 +11,6 @@ const writeAsync = promisify(fs.write);
 const { opendir } = fs.promises;
 
 const CHUNK_BYTES = 64 * 1024;
-// Reuse a single buffer for all read/write ops
-const BUFFER = Buffer.alloc(CHUNK_BYTES);
 const MAX_SAFE_FILE_POSITION = BigInt(Number.MAX_SAFE_INTEGER);
 
 /** Auto‐dispatch all ops */
@@ -36,26 +34,37 @@ async function handleRead({ fd, offset, stream }) {
     throw err;
   }
 
-  try {
-    const start = pos;
-
-    while (true) {
-      const { bytesRead } = await readAsync(fd, BUFFER, 0, CHUNK_BYTES, filePosition(pos));
-      if (bytesRead === 0) {
-        break;
-      }
-
-      await writer.write(BUFFER.subarray(0, bytesRead));
-      pos += BigInt(bytesRead);
+  const start = pos;
+  while (true) {
+    // Each chunk needs its own buffer. A written chunk is only copied to the
+    // reader's thread once the reader pulls it, a buffer shared with other
+    // read operations could be overwritten by their reads before then
+    const buffer = Buffer.alloc(CHUNK_BYTES);
+    let bytesRead;
+    try {
+      ({ bytesRead } = await readAsync(fd, buffer, 0, CHUNK_BYTES, filePosition(pos)));
+    } catch (err) {
+      await writer.abort(err);
+      throw err;
+    }
+    if (bytesRead === 0) {
+      break;
     }
 
-    await writer.close();
-
-    return { bytesRead: pos - start };
-  } catch (err) {
-    await writer.abort(err);
-    throw err;
+    try {
+      await writer.write(buffer.subarray(0, bytesRead));
+    } catch {
+      // The stream only errors when the reader cancels it, ex: when the guest
+      // drops the stream before end of file. As in Wasmtime, that ends the
+      // read without an error
+      return { bytesRead: pos - start };
+    }
+    pos += BigInt(bytesRead);
   }
+
+  // A reader that cancels after the last chunk also ends the read without an error
+  await writer.close().catch(() => {});
+  return { bytesRead: pos - start };
 }
 
 async function handleWrite({ fd, offset, stream }) {
@@ -110,17 +119,28 @@ async function handleReadDir({ fullPath, stream, preopens }) {
   }
 
   try {
+    // Leaving this loop early closes the directory.
     const walker = await opendir(fullPath);
     for await (const dirent of walker) {
-      await writer.write({
+      const entry = {
         name: dirent.name,
         type: wasiTypeFromDirent(dirent),
-      });
+      };
+      try {
+        await writer.write(entry);
+      } catch {
+        // The stream only errors when the reader cancels it. Ex: when
+        // the guest drops the stream before the last entry. As in Wasmtime,
+        // that ends the listing without an error
+        return { ok: true };
+      }
     }
-    await writer.close();
-    return { ok: true };
   } catch (err) {
     await writer.abort(err);
     throw err;
   }
+
+  // A reader that cancels after the last entry also ends the listing without an error
+  await writer.close().catch(() => {});
+  return { ok: true };
 }
