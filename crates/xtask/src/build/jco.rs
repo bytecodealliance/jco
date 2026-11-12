@@ -178,6 +178,10 @@ fn transpile(args: TranspileArgs) -> Result<()> {
             "@bytecodealliance/preview2-shim/cli#*".into(),
         ),
         (
+            "wasi:clocks/*".into(),
+            "@bytecodealliance/preview2-shim/clocks#*".into(),
+        ),
+        (
             "wasi:filesystem/*".into(),
             "@bytecodealliance/preview2-shim/filesystem#*".into(),
         ),
