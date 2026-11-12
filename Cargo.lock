@@ -2190,7 +2190,7 @@ dependencies = [
  "heck 0.5.0",
  "itertools 0.13.0",
  "weedle",
- "wit-encoder 0.245.1",
+ "wit-encoder",
  "wit-parser 0.245.1",
 ]
 
@@ -2300,23 +2300,15 @@ dependencies = [
 
 [[package]]
 name = "wit-encoder"
-version = "0.214.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "56024e6c0235a742909f0aff7bb0a4c6524d33a3aca59129a7db0f3320f975a1"
-dependencies = [
- "pretty_assertions",
- "semver",
- "serde",
-]
-
-[[package]]
-name = "wit-encoder"
 version = "0.245.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dcbad7e734bf647da67dfd32970662ee615408f4b8ae4bbe602b9fa27e04107d"
 dependencies = [
+ "id-arena",
  "pretty_assertions",
  "semver",
+ "serde",
+ "wit-parser 0.245.1",
 ]
 
 [[package]]
@@ -2331,6 +2323,9 @@ dependencies = [
  "indexmap",
  "log",
  "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
  "unicode-xid",
  "wasmparser 0.245.1",
 ]
@@ -2390,7 +2385,7 @@ dependencies = [
  "webidl2wit",
  "weedle",
  "wit-component",
- "wit-encoder 0.214.0",
+ "wit-encoder",
  "xshell",
 ]
 

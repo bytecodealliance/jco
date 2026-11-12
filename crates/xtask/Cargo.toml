@@ -15,6 +15,6 @@ structopt = { workspace = true }
 webidl2wit = { workspace = true }
 weedle = "0.13.0"
 wit-component = { workspace = true }
-wit-encoder = "0.214.0"
+wit-encoder = "0.245.1"
 xshell = { workspace = true }
 wast = { workspace = true }
