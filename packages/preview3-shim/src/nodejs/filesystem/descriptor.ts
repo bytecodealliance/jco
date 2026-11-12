@@ -1101,13 +1101,34 @@ class Descriptor {
     // surviving symlink that #getFullPath later exposes.
     const segments = this.#normalizeSubpath(subpath);
     const checkedSegments = followFinal ? segments : segments.slice(0, -1);
-    let current = baseResolved;
 
-    for (const seg of checkedSegments) {
-      current = nodePath.join(current, seg);
+    // Walk the path one component at a time, as the kernel does. `current` is
+    // always a path below the base that contains no symlinks. A symlink is not
+    // stepped into, its target's components are queued and walked in turn, so
+    // a symlink that points at another symlink is checked at every level.
+    let current = baseResolved;
+    const pending = [...checkedSegments];
+    let symlinksFollowed = 0;
+
+    while (pending.length > 0) {
+      const seg = pending.shift();
+      if (seg === "" || seg === ".") {
+        continue;
+      }
+
+      // Only a symlink's target can contribute `..`, since the subpath is normalized
+      if (seg === "..") {
+        current = nodePath.dirname(current);
+        if (!isWithinPath(baseResolved, current)) {
+          throw new FSError("not-permitted");
+        }
+        continue;
+      }
+
+      const next = nodePath.join(current, seg);
       let stat;
       try {
-        stat = await fs.lstat(current);
+        stat = await fs.lstat(next);
       } catch (err) {
         if (err.code === "ENOENT") {
           return;
@@ -1115,13 +1136,34 @@ class Descriptor {
         throw FSError.from(err);
       }
 
-      if (stat.isSymbolicLink()) {
-        const target = await fs.readlink(current);
-        current = nodePath.resolve(nodePath.dirname(current), target);
-        if (!isWithinPath(baseResolved, current)) {
+      if (!stat.isSymbolicLink()) {
+        current = next;
+        continue;
+      }
+
+      symlinksFollowed += 1;
+      if (symlinksFollowed > MAX_SYMLINKS_FOLLOWED) {
+        throw new FSError("loop");
+      }
+
+      let target;
+      try {
+        target = await fs.readlink(next);
+      } catch (err) {
+        throw FSError.from(err);
+      }
+
+      // A relative target continues from the symlink's directory. An absolute
+      // target is only allowed below the base, and is walked again from there
+      if (nodePath.isAbsolute(target)) {
+        const targetResolved = nodePath.resolve(target);
+        if (!isWithinPath(baseResolved, targetResolved)) {
           throw new FSError("not-permitted");
         }
+        current = baseResolved;
+        target = nodePath.relative(baseResolved, targetResolved);
       }
+      pending.unshift(...target.split(PATH_SEPARATORS));
     }
   }
 
@@ -1164,6 +1206,15 @@ function stripTrailingSlash(path) {
   }
   return path.replace(/\/+$/, "");
 }
+
+/**
+ * Symlinks followed while checking one path before it is reported as a loop,
+ * the same limit Linux applies during path resolution
+ */
+const MAX_SYMLINKS_FOLLOWED = 40;
+
+/** Separators between the components of a symlink's target */
+const PATH_SEPARATORS = process.platform === "win32" ? /[\\/]+/ : /\/+/;
 
 function isWithinPath(base, candidate) {
   const relative = nodePath.relative(base, candidate);

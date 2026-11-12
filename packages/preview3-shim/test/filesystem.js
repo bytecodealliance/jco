@@ -1128,4 +1128,61 @@ describe("Descriptor path operations on a symlink that leads outside the directo
       "outside",
     );
   });
+
+  // `chain -> loop -> ..` only leads outside once the second symlink is followed
+  test("a symlink that leads outside through another symlink is rejected", async () => {
+    const chainPath = path.join(tmpDir, "dir/sub/chain");
+    await fs.symlink("loop", chainPath);
+    try {
+      await expect(
+        sub.openAt({ symlinkFollow: true }, "chain/outside.txt", {}, { read: true }),
+      ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
+      await expect(sub.statAt({ symlinkFollow: true }, "chain")).rejects.toMatchObject({
+        payload: { tag: "not-permitted" },
+      });
+      await expect(sub.statAt({ symlinkFollow: false }, "chain/outside.txt")).rejects.toMatchObject(
+        { payload: { tag: "not-permitted" } },
+      );
+      await expect(sub.unlinkFileAt("chain/outside.txt")).rejects.toMatchObject({
+        payload: { tag: "not-permitted" },
+      });
+      await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
+        "outside",
+      );
+    } finally {
+      await fs.rm(chainPath, { force: true });
+    }
+  });
+
+  test("symlinks that stay inside the directory are followed", async () => {
+    await fs.mkdir(path.join(tmpDir, "dir/sub/inner/nested"), { recursive: true });
+    await fs.writeFile(path.join(tmpDir, "dir/sub/inner/inside.txt"), "inside");
+    // `up -> nested/..` leaves `nested` but not the directory, and `via -> up` chains to it
+    const upPath = path.join(tmpDir, "dir/sub/inner/up");
+    const viaPath = path.join(tmpDir, "dir/sub/via");
+    await fs.symlink("nested/..", upPath);
+    await fs.symlink("inner/up", viaPath);
+    try {
+      const stat = await sub.statAt({ symlinkFollow: true }, "via/inside.txt");
+      expect(stat.type).toEqual({ tag: "regular-file" });
+    } finally {
+      await fs.rm(upPath, { force: true });
+      await fs.rm(viaPath, { force: true });
+    }
+  });
+
+  test("a symlink cycle is reported as a loop", async () => {
+    const firstPath = path.join(tmpDir, "dir/sub/cycle-a");
+    const secondPath = path.join(tmpDir, "dir/sub/cycle-b");
+    await fs.symlink("cycle-b", firstPath);
+    await fs.symlink("cycle-a", secondPath);
+    try {
+      await expect(sub.statAt({ symlinkFollow: true }, "cycle-a")).rejects.toMatchObject({
+        payload: { tag: "loop" },
+      });
+    } finally {
+      await fs.rm(firstPath, { force: true });
+      await fs.rm(secondPath, { force: true });
+    }
+  });
 });
