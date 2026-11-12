@@ -10,6 +10,7 @@
 name: main-windows
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -26,7 +27,7 @@ permissions: {}
 
 jobs:
   build:
-    if: ${{ startsWith(github.event.pull_request.title, 'release:') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.title, 'release:') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -123,7 +124,7 @@ jobs:
           path: packages/preview2-shim/dist
 
   test-jco:
-    if: ${{ startsWith(github.event.pull_request.title, 'release:') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.title, 'release:') }}
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -254,7 +255,7 @@ jobs:
           pnpm --filter '@bytecodealliance/jco' run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
 
   test-wasi-node:
-    if: ${{ startsWith(github.event.pull_request.title, 'release:') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.title, 'release:') }}
     needs:
       - build
     runs-on: ${{ matrix.os }}
