@@ -1,6 +1,6 @@
 import { cp, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, test, vi } from "vitest";
 
@@ -146,7 +146,12 @@ describe.skipIf(!hasJspi)("node:net in a component", () => {
                 jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
             });
             try {
-                const output = await exec(join(fixture, "run.js"), esModuleOutputPath);
+                const output = await exec(
+                    "--import",
+                    pathToFileURL(join(fixture, "delayed-stdout.js")).href,
+                    join(fixture, "run.js"),
+                    esModuleOutputPath,
+                );
                 expect(JSON.parse(output.stdout)).toEqual({
                     surface: { exports: NET_EXPORTS, aliases: true, ipv6: 6, blocked: true },
                     client: "host:client",
