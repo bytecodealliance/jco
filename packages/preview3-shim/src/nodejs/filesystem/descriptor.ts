@@ -20,9 +20,89 @@ function worker() {
   ));
 }
 
+/**
+ * Write a byte stream to a file in the filesystem worker
+ *
+ * @param {import("node:fs/promises").FileHandle} handle The open file
+ * @param {object} data A readable byte stream
+ * @param {bigint | number} offset The offset within the file
+ * @returns {Promise<void>}
+ * @throws {FSError} `payload.tag` contains mapped WASI error code
+ */
+async function writeFileViaStream(handle, data, offset) {
+  const stream = readableByteStreamFromReader(data, { name: "file write data" });
+
+  try {
+    await worker().run({ op: "write", fd: handle.fd, offset, stream }, [stream]);
+  } catch (err) {
+    throw FSError.from(err);
+  }
+}
+
+/**
+ * Owns a Node.js `FileHandle` on behalf of a descriptor and the stream
+ * operations started from it
+ *
+ * Stream operations run in the filesystem worker with the raw fd, and the
+ * guest can drop the descriptor while one is still running, ex: by
+ * dropping a `write-via-stream` result without awaiting it. Closing the handle
+ * would fail the operation's remaining reads/writes or let them use
+ * whichever file reuses the fd number. Closing therefore waits until the last
+ * stream operation settles
+ */
+class SharedFileHandle {
+  /** The Node.js file handle, or null once closed */
+  #handle;
+  /** Number of stream operations that are using the fd */
+  #operations = 0;
+  /** Whether the owning descriptor has been disposed */
+  #closeRequested = false;
+
+  /**
+   * @param {import("node:fs/promises").FileHandle} handle The handle to own
+   */
+  constructor(handle) {
+    this.#handle = handle;
+  }
+
+  /**
+   * Run a stream operation, keeping the handle open until the operation settles
+   *
+   * @template T
+   * @param {(handle: import("node:fs/promises").FileHandle) => Promise<T>} operation
+   *   The operation to run with the open handle
+   * @returns {Promise<T>} The operation's result
+   */
+  async use(operation) {
+    this.#operations += 1;
+    try {
+      return await operation(this.#handle);
+    } finally {
+      this.#operations -= 1;
+      this.#closeIfUnused();
+    }
+  }
+
+  /** Close the handle now, or once the last stream operation using it settles */
+  close() {
+    this.#closeRequested = true;
+    this.#closeIfUnused();
+  }
+
+  #closeIfUnused() {
+    if (this.#closeRequested && this.#operations === 0 && this.#handle) {
+      const handle = this.#handle;
+      this.#handle = null;
+      void handle.close();
+    }
+  }
+}
+
 class Descriptor {
   /** Node.js file handle for file operations (FileHandle from fs.promises.open) */
   #handle;
+  /** Owner of `#handle` that keeps it open for in-flight stream operations */
+  #sharedHandle;
   /** Descriptor flags */
   #mode;
   /** Absolute filesystem path to the file or directory */
@@ -55,10 +135,13 @@ class Descriptor {
 
     const desc = new Descriptor();
     desc.#handle = handle;
+    desc.#sharedHandle = new SharedFileHandle(handle);
     desc.#fullPath = fullPath;
     desc.#isDirectory = isDirectory;
     desc.#mode = merged;
-    desc.#finalizer = registerDispose(desc, null, handle, (handle) => handle.close());
+    desc.#finalizer = registerDispose(desc, null, desc.#sharedHandle, (sharedHandle) =>
+      sharedHandle.close(),
+    );
 
     return desc;
   }
@@ -97,6 +180,7 @@ class Descriptor {
       this.#finalizer = null;
     }
     this.#handle = null;
+    this.#sharedHandle = null;
   }
 
   /**
@@ -114,21 +198,28 @@ class Descriptor {
   readViaStream(offset) {
     this.#ensureHandle();
     const transform = new TransformStream();
-    const promise = worker()
-      .run(
-        {
-          op: "read",
-          fd: this.#handle.fd,
-          offset,
-          stream: transform.writable,
-        },
-        [transform.writable],
+    const promise = this.#sharedHandle
+      .use((handle) =>
+        worker().run(
+          {
+            op: "read",
+            fd: handle.fd,
+            offset,
+            stream: transform.writable,
+          },
+          [transform.writable],
+        ),
       )
       .catch((err) => {
         throw FSError.from(err);
       });
 
-    return [new StreamReader(transform.readable), new FutureReader(promise)];
+    // Cancel the transferred stream when the reader is released, so that a
+    // guest dropping the stream before end of file also ends the worker's read
+    return [
+      new StreamReader(transform.readable, { preventCancel: false }),
+      new FutureReader(promise),
+    ];
   }
 
   /**
@@ -146,13 +237,7 @@ class Descriptor {
    */
   async writeViaStream(data, offset) {
     this.#ensureWritable(data);
-    const stream = readableByteStreamFromReader(data, { name: "file write data" });
-
-    try {
-      await worker().run({ op: "write", fd: this.#handle.fd, offset, stream }, [stream]);
-    } catch (err) {
-      throw FSError.from(err);
-    }
+    return this.#sharedHandle.use((handle) => writeFileViaStream(handle, data, offset));
   }
 
   /**
@@ -169,8 +254,12 @@ class Descriptor {
    */
   async appendViaStream(data) {
     this.#ensureWritable(data);
-    const offset = await this.#handle.stat().then((s) => s.size);
-    return this.writeViaStream(data, offset);
+    // Hold the handle from the size lookup through the write, in case the
+    // descriptor is dropped in between
+    return this.#sharedHandle.use(async (handle) => {
+      const offset = await handle.stat().then((s) => s.size);
+      return writeFileViaStream(handle, data, offset);
+    });
   }
 
   /**
@@ -348,7 +437,12 @@ class Descriptor {
         throw FSError.from(err);
       });
 
-    return [new StreamReader(transform.readable), new FutureReader(promise)];
+    // Cancel the transferred stream when the reader is released, so that a
+    // guest dropping the stream before the last entry also ends the worker's listing
+    return [
+      new StreamReader(transform.readable, { preventCancel: false }),
+      new FutureReader(promise),
+    ];
   }
 
   /**
@@ -379,7 +473,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async createDirectoryAt(path) {
-    await this.#ensureSandboxedPath(path);
+    await this.#ensureSandboxedPath(path, false);
     const full = this.#getFullPath(path, false);
     try {
       await fs.mkdir(full);
@@ -443,7 +537,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async statAt(flags, path) {
-    await this.#ensureSandboxedPath(path);
+    await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
     const full = this.#getFullPath(path, flags.symlinkFollow);
     try {
       const statFn = flags.symlinkFollow ? fs.stat : fs.lstat;
@@ -482,8 +576,8 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async setTimesAt(flags, path, atimeDesc, mtimeDesc) {
-    await this.#ensureSandboxedPath(path);
-    const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc, path);
+    await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
+    const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc, path, flags);
 
     if (!flags.symlinkFollow && !fs.lutimes) {
       throw new FSError("unsupported");
@@ -520,8 +614,10 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async linkAt(oldFlags, oldPath, newDesc, newPath) {
-    await this.#ensureSandboxedPath(oldPath);
-    await newDesc.#ensureSandboxedPath(newPath);
+    // `fs.link` follows a symlink in `oldPath` on some platforms, such as
+    // macOS, regardless of `oldFlags`, so that symlink's target is checked
+    await this.#ensureSandboxedPath(oldPath, true);
+    await newDesc.#ensureSandboxedPath(newPath, false);
     const src = this.#getFullPath(oldPath, oldFlags.symlinkFollow);
     const dst = newDesc.#getFullPath(newPath, false);
 
@@ -563,7 +659,9 @@ class Descriptor {
       throw new FSError("access");
     }
 
-    await this.#ensureSandboxedPath(path);
+    // Windows has no `O_NOFOLLOW`, so opening can follow a symlink in the final
+    // component even without `symlinkFollow`, and that symlink's target is checked
+    await this.#ensureSandboxedPath(path, true);
     const fullPath = this.#getFullPath(path, pf.symlinkFollow);
     const target = stripTrailingSlash(fullPath);
 
@@ -668,13 +766,20 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async readlinkAt(path) {
-    await this.#ensureSandboxedPath(path);
+    await this.#ensureSandboxedPath(path, false);
     const full = this.#getFullPath(path, false);
+    let target;
     try {
-      return await fs.readlink(full);
+      target = await fs.readlink(full);
     } catch (e) {
       throw FSError.from(e);
     }
+    // A relative target is returned even if it leads outside this directory,
+    // but an absolute target is a host path, which is not exposed
+    if (nodePath.isAbsolute(target)) {
+      throw new FSError("not-permitted");
+    }
+    return target;
   }
 
   /**
@@ -693,7 +798,7 @@ class Descriptor {
     if (path === ".") {
       throw new FSError("invalid");
     }
-    await this.#ensureSandboxedPath(path);
+    await this.#ensureSandboxedPath(path, false);
     const full = this.#getFullPath(path, false);
     try {
       await fs.rmdir(full);
@@ -720,8 +825,8 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async renameAt(oldPath, newDesc, newPath) {
-    await this.#ensureSandboxedPath(oldPath);
-    await newDesc.#ensureSandboxedPath(newPath);
+    await this.#ensureSandboxedPath(oldPath, false);
+    await newDesc.#ensureSandboxedPath(newPath, false);
     const src = this.#getFullPath(oldPath, false);
     const dst = newDesc.#getFullPath(newPath, false);
     try {
@@ -751,7 +856,7 @@ class Descriptor {
     if (target.startsWith("/")) {
       throw new FSError("not-permitted");
     }
-    await this.#ensureSandboxedPath(path);
+    await this.#ensureSandboxedPath(path, false);
     const full = this.#getFullPath(path, false);
 
     try {
@@ -787,7 +892,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async unlinkFileAt(path) {
-    await this.#ensureSandboxedPath(path);
+    await this.#ensureSandboxedPath(path, false);
     const full = this.#getFullPath(path, false);
     if (full.endsWith("/")) {
       const isDir = (await fs.stat(full)).isDirectory();
@@ -863,7 +968,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async metadataHashAt(flags, path) {
-    await this.#ensureSandboxedPath(path);
+    await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
     const full = this.#getFullPath(path, false);
     try {
       const statFn = flags.symlinkFollow ? fs.stat : fs.lstat;
@@ -914,10 +1019,10 @@ class Descriptor {
     }
   }
 
-  async #computeTimestamps(atimeDesc, mtimeDesc, path = null) {
+  async #computeTimestamps(atimeDesc, mtimeDesc, path = null, flags = { symlinkFollow: true }) {
     let stats;
     if (atimeDesc.tag === "no-change" || mtimeDesc.tag === "no-change") {
-      const flags = { symlinkFollow: true };
+      // Without symlink-follow, an unchanged timestamp is the symlink's own
       const p = path === null ? this.stat() : this.statAt(flags, path);
       stats = await p;
     }
@@ -980,7 +1085,11 @@ class Descriptor {
 
   // WASI paths are always relative to a directory descriptor. During path
   // resolution, both `..` and symlinks must not escape that descriptor's base.
-  async #ensureSandboxedPath(subpath) {
+  //
+  // `followFinal` says whether the operation follows a symlink in the final
+  // path component. An operation that does not, such as `lstat` or `unlink`,
+  // acts on the symlink itself, so the symlink's target is not checked
+  async #ensureSandboxedPath(subpath, followFinal: boolean) {
     if (!this.#isDirectory) {
       throw new FSError("not-directory");
     }
@@ -991,9 +1100,10 @@ class Descriptor {
     // Otherwise an ENOENT segment followed by `..` can stop validation before a
     // surviving symlink that #getFullPath later exposes.
     const segments = this.#normalizeSubpath(subpath);
+    const checkedSegments = followFinal ? segments : segments.slice(0, -1);
     let current = baseResolved;
 
-    for (const seg of segments) {
+    for (const seg of checkedSegments) {
       current = nodePath.join(current, seg);
       let stat;
       try {
