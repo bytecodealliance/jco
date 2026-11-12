@@ -17,33 +17,36 @@ test("host extensions survive operation errors and retain their worker state", (
     expect(callExtension(module, "count", [])).toBe(2);
 });
 
-test.each(["error", "close"])("input drains buffered data before reporting %s", (ending): void => {
-    const ids = callExtension(module, `buffered-input-${ending}`, []);
-    assert(ids !== null && typeof ids === "object" && "input" in ids && "output" in ids);
-    assert(typeof ids.input === "number" && typeof ids.output === "number");
-    const input = inputStreamCreate(ids.input);
-    const output = outputStreamCreate(ids.output);
-    const pollable = input.subscribe();
-    const errorTag = ending === "error" ? "last-operation-failed" : "closed";
-    try {
-        assert.equal(pollable.ready(), true);
-        assert.deepEqual(input.read(0n), new Uint8Array());
-        assert.equal(new TextDecoder().decode(input.read(3n)), "buf");
-        // The shared duplex's buffered input must not hide output errors.
-        assert.throws(() => output.checkWrite(), { tag: errorTag });
-        assert.equal(new TextDecoder().decode(input.blockingRead(1024n)), "fered response");
-        assert.equal(pollable.ready(), true);
-        assert.throws(() => input.read(1n), { tag: errorTag });
-        assert.throws(() => input.blockingRead(1n), { tag: errorTag });
-    } finally {
-        assert(Symbol.dispose in pollable);
-        const dispose = pollable[Symbol.dispose];
-        assert(typeof dispose === "function");
-        dispose.call(pollable);
-        input[Symbol.dispose]();
-        output[Symbol.dispose]();
-    }
-});
+test.concurrent.each(["error", "close"])(
+    "input drains buffered data before reporting %s",
+    (ending): void => {
+        const ids = callExtension(module, `buffered-input-${ending}`, []);
+        assert(ids !== null && typeof ids === "object" && "input" in ids && "output" in ids);
+        assert(typeof ids.input === "number" && typeof ids.output === "number");
+        const input = inputStreamCreate(ids.input);
+        const output = outputStreamCreate(ids.output);
+        const pollable = input.subscribe();
+        const errorTag = ending === "error" ? "last-operation-failed" : "closed";
+        try {
+            assert.equal(pollable.ready(), true);
+            assert.deepEqual(input.read(0n), new Uint8Array());
+            assert.equal(new TextDecoder().decode(input.read(3n)), "buf");
+            // The shared duplex's buffered input must not hide output errors.
+            assert.throws(() => output.checkWrite(), { tag: errorTag });
+            assert.equal(new TextDecoder().decode(input.blockingRead(1024n)), "fered response");
+            assert.equal(pollable.ready(), true);
+            assert.throws(() => input.read(1n), { tag: errorTag });
+            assert.throws(() => input.blockingRead(1n), { tag: errorTag });
+        } finally {
+            assert(Symbol.dispose in pollable);
+            const dispose = pollable[Symbol.dispose];
+            assert(typeof dispose === "function");
+            dispose.call(pollable);
+            input[Symbol.dispose]();
+            output[Symbol.dispose]();
+        }
+    },
+);
 
 test("extension futures preserve rejection, polling and single-consumption ownership", (): void => {
     const before = callExtension(module, "resources", []);
