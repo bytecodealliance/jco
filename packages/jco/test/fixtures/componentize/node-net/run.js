@@ -16,7 +16,11 @@ imports["wasi:sockets/network"].networkErrorCode ??= () => undefined;
 const instance = await instantiate(undefined, imports);
 if (argv[3] === "server") {
     const port = await instance.startServer();
-    stdout.write(`${port}\n`);
+    // serveOne can block the host thread in a synchronous WASI socket poll.
+    // Flush the port first so the parent can connect even when stdout is queued.
+    await new Promise((resolve, reject) => {
+        stdout.write(`${port}\n`, (error) => (error ? reject(error) : resolve()));
+    });
     await instance.serveOne();
     process.exit(0);
 }
