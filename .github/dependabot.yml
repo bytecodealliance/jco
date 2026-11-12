@@ -34,8 +34,9 @@ updates:
 
   - package-ecosystem: "cargo"
     directories:
-      - '/crates/*'
-      - '/packages/jco-node-fs'
+      # Workspace members inherit dependencies from the root manifest.
+      - '/'
+      - '/crates/test-components'
     schedule:
       interval: 'weekly'
       day: 'monday'
