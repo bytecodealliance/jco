@@ -25,18 +25,83 @@ function worker() {
  *
  * @param {import("node:fs/promises").FileHandle} handle The open file
  * @param {object} data A readable byte stream
- * @param {bigint | number} offset The offset within the file
+ * @param {{ offset: bigint | number } | { append: true }} position Where to write, either
+ *   at an offset within the file or at its end, wherever that is when each chunk is written
  * @returns {Promise<void>}
  * @throws {FSError} `payload.tag` contains mapped WASI error code
  */
-async function writeFileViaStream(handle, data, offset) {
+async function writeFileViaStream(handle, data, position) {
   const stream = readableByteStreamFromReader(data, { name: "file write data" });
 
   try {
-    await worker().run({ op: "write", fd: handle.fd, offset, stream }, [stream]);
+    await worker().run({ op: "write", fd: handle.fd, ...position, stream }, [stream]);
   } catch (err) {
     throw FSError.from(err);
   }
+}
+
+/**
+ * Code of the error a worker operation fails with when the stream it was
+ * producing could not take more output, see the filesystem worker
+ */
+const STREAM_CLOSED = "ERR_JCO_STREAM_CLOSED";
+
+/**
+ * Start a worker operation that produces a stream, ex: the contents of a file
+ *
+ * The operation ends when the consumer releases the stream before its end, ex:
+ * when the guest drops it. As in Wasmtime, that is not an error. A stream that
+ * is garbage collected without being released ends the operation the same
+ * way, so that the worker does not wait on it forever.
+ *
+ * @param {(writable: WritableStream) => Promise<unknown>} start Starts the
+ *   operation that writes to the transferable `writable`
+ * @returns {[StreamReader, FutureReader]} The stream and the operation's result
+ */
+function streamFromWorker(start) {
+  const transform = new TransformStream();
+  const reader = transform.readable.getReader();
+
+  // Shared with the finalizer, so it must not refer to `iterator`
+  const state = { cancelled: false };
+  const cancel = () => {
+    state.cancelled = true;
+    return reader.cancel().catch(() => {});
+  };
+
+  const iterator = {
+    next() {
+      return reader.read();
+    },
+    async return(value) {
+      await cancel();
+      return { done: true, value };
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+
+  // Generated bindings take the iterator out of the `StreamReader` and drop the
+  // reader, so the iterator is the object whose collection means nothing can
+  // read the stream anymore
+  registerDispose(iterator, null, cancel, (cancelStream) => void cancelStream());
+
+  const promise = start(transform.writable).catch((err) => {
+    if (err?.code === STREAM_CLOSED) {
+      if (state.cancelled) {
+        return undefined;
+      }
+      // The stream failed although nothing here cancelled it, so the consumer
+      // may have received only part of the output
+      throw new FSError("io", "stream closed before all output was delivered", undefined, {
+        cause: err,
+      });
+    }
+    throw FSError.from(err);
+  });
+
+  return [new StreamReader(iterator), new FutureReader(promise)];
 }
 
 /**
@@ -93,7 +158,9 @@ class SharedFileHandle {
     if (this.#closeRequested && this.#operations === 0 && this.#handle) {
       const handle = this.#handle;
       this.#handle = null;
-      void handle.close();
+      // This runs once the descriptor is gone and the last operation has
+      // settled, so no caller is left that a failure to close could be reported to
+      handle.close().catch(() => {});
     }
   }
 }
@@ -197,29 +264,12 @@ class Descriptor {
    */
   readViaStream(offset) {
     this.#ensureHandle();
-    const transform = new TransformStream();
-    const promise = this.#sharedHandle
-      .use((handle) =>
-        worker().run(
-          {
-            op: "read",
-            fd: handle.fd,
-            offset,
-            stream: transform.writable,
-          },
-          [transform.writable],
-        ),
-      )
-      .catch((err) => {
-        throw FSError.from(err);
-      });
-
-    // Cancel the transferred stream when the reader is released, so that a
-    // guest dropping the stream before end of file also ends the worker's read
-    return [
-      new StreamReader(transform.readable, { preventCancel: false }),
-      new FutureReader(promise),
-    ];
+    const sharedHandle = this.#sharedHandle;
+    return streamFromWorker((stream) =>
+      sharedHandle.use((handle) =>
+        worker().run({ op: "read", fd: handle.fd, offset, stream }, [stream]),
+      ),
+    );
   }
 
   /**
@@ -237,7 +287,7 @@ class Descriptor {
    */
   async writeViaStream(data, offset) {
     this.#ensureWritable(data);
-    return this.#sharedHandle.use((handle) => writeFileViaStream(handle, data, offset));
+    return this.#sharedHandle.use((handle) => writeFileViaStream(handle, data, { offset }));
   }
 
   /**
@@ -254,12 +304,8 @@ class Descriptor {
    */
   async appendViaStream(data) {
     this.#ensureWritable(data);
-    // Hold the handle from the size lookup through the write, in case the
-    // descriptor is dropped in between
-    return this.#sharedHandle.use(async (handle) => {
-      const offset = await handle.stat().then((s) => s.size);
-      return writeFileViaStream(handle, data, offset);
-    });
+    // The worker looks up the end of the file for each chunk as it writes it
+    return this.#sharedHandle.use((handle) => writeFileViaStream(handle, data, { append: true }));
   }
 
   /**
@@ -422,27 +468,9 @@ class Descriptor {
 
     const preopens = preopenEntries.map(([desc, _virtualPath]) => desc.#hostPreopen);
 
-    const transform = new TransformStream();
-    const promise = worker()
-      .run(
-        {
-          op: "readDir",
-          fullPath,
-          stream: transform.writable,
-          preopens,
-        },
-        [transform.writable],
-      )
-      .catch((err) => {
-        throw FSError.from(err);
-      });
-
-    // Cancel the transferred stream when the reader is released, so that a
-    // guest dropping the stream before the last entry also ends the worker's listing
-    return [
-      new StreamReader(transform.readable, { preventCancel: false }),
-      new FutureReader(promise),
-    ];
+    return streamFromWorker((stream) =>
+      worker().run({ op: "readDir", fullPath, stream, preopens }, [stream]),
+    );
   }
 
   /**
@@ -615,8 +643,10 @@ class Descriptor {
    */
   async linkAt(oldFlags, oldPath, newDesc, newPath) {
     // `fs.link` follows a symlink in `oldPath` on some platforms, such as
-    // macOS, regardless of `oldFlags`, so that symlink's target is checked
-    await this.#ensureSandboxedPath(oldPath, true);
+    // macOS, regardless of `oldFlags`, so that symlink's target is checked.
+    // Linux links the symlink itself unless asked to follow it
+    const followsOldPath = Boolean(oldFlags.symlinkFollow) || process.platform !== "linux";
+    await this.#ensureSandboxedPath(oldPath, followsOldPath);
     await newDesc.#ensureSandboxedPath(newPath, false);
     const src = this.#getFullPath(oldPath, oldFlags.symlinkFollow);
     const dst = newDesc.#getFullPath(newPath, false);
@@ -660,8 +690,10 @@ class Descriptor {
     }
 
     // Windows has no `O_NOFOLLOW`, so opening can follow a symlink in the final
-    // component even without `symlinkFollow`, and that symlink's target is checked
-    await this.#ensureSandboxedPath(path, true);
+    // component even without `symlinkFollow`, and that symlink's target is checked.
+    // Elsewhere `O_NOFOLLOW` makes the open itself fail on a final symlink
+    const followsFinal = Boolean(pf.symlinkFollow) || process.platform === "win32";
+    await this.#ensureSandboxedPath(path, followsFinal);
     const fullPath = this.#getFullPath(path, pf.symlinkFollow);
     const target = stripTrailingSlash(fullPath);
 
