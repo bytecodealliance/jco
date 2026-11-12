@@ -201,6 +201,7 @@ export interface Stream {
     flushPromise: Promise<void> | null;
     pollState;
     fileResourceId?: number;
+    closed?: boolean;
 }
 
 export interface Future {
@@ -220,7 +221,7 @@ export const streams = new Map();
 /** @type {Map<number, Future>} */
 export const futures = new Map();
 
-export function createReadableStreamPollState(nodeStream) {
+export function createReadableStreamPollState(nodeStream): PollState {
     const pollState = {
         ready: true,
         listener: null,
@@ -302,17 +303,24 @@ function streamError(err) {
 }
 
 /**
+ * Look up a stream, optionally draining buffered input before a Node failure.
+ * Explicit WASI shutdown still takes precedence over any buffered data.
+ *
  * @param {number} streamId
- * @returns {{ stream: NodeJS.ReadableStream | NodeJS.WritableStream, polls: number[] }}
+ * @param {boolean} allowBufferedInput Return buffered input before reporting a Node stream error.
+ * @returns {Stream} The stream record and its poll state.
  */
-export function getStreamOrThrow(streamId) {
+export function getStreamOrThrow(streamId, allowBufferedInput = false) {
     if (!streamId) {
         throw new Error("wasi-io trap: no stream id provided");
     }
     const stream = streams.get(streamId);
     // not in unfinished streams <=> closed
-    if (!stream) {
+    if (!stream || stream.closed) {
         throw { tag: "closed" };
+    }
+    if (allowBufferedInput && stream.stream.readableLength > 0) {
+        return stream;
     }
     if (stream.stream.errored) {
         throw streamError(stream.stream.errored);
@@ -321,6 +329,17 @@ export function getStreamOrThrow(streamId) {
         throw { tag: "closed" };
     }
     return stream;
+}
+
+/** Close one WASI stream without destroying its shared Node duplex stream. */
+export function closeStream(streamId: number): void {
+    const stream = streams.get(streamId);
+    if (!stream) {
+        return;
+    }
+    stream.closed = true;
+    stream.pollState.parentStream = null;
+    pollStateReady(stream.pollState);
 }
 
 const extensions = new Map<string, Promise<WorkerExtension>>();
@@ -684,7 +703,7 @@ function handle(call, id, payload) {
     // Generic call implementations (streams + polls)
     switch (call & CALL_MASK) {
         case INPUT_STREAM_READ: {
-            const stream = getStreamOrThrow(id);
+            const stream = getStreamOrThrow(id, true);
             if (!stream.pollState.ready) {
                 return new Uint8Array();
             }
@@ -1069,7 +1088,9 @@ function pollStateCheck(pollState) {
             pollState.ready &&
             stream.readableLength === 0 &&
             !stream.readableEnded &&
-            !stream.errored
+            !stream.errored &&
+            !stream.closed &&
+            !stream.destroyed
         ) {
             pollState.ready = false;
             stream.once("readable", () => {
