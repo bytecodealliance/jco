@@ -1,4 +1,5 @@
 import {
+    closeStream,
     createFuture,
     createReadableStream,
     createReadableStreamPollState,
@@ -29,6 +30,7 @@ import {
 } from "./worker-sockets.js";
 import { Server, Socket as TcpSocket } from "node:net";
 import { IpSocketAddress } from "../../types/interfaces/wasi-sockets-network.js";
+import type { ShutdownType } from "../../types/interfaces/wasi-sockets-tcp.js";
 
 interface PendingAccept {
     tcpSocket: TcpSocket | null;
@@ -41,6 +43,8 @@ interface TcpSocketRecord {
     future: number | null;
     tcpSocket: TcpSocket | null;
     server: Server | null;
+    inputStream: number | null;
+    outputStream: number | null;
     localAddress: IpSocketAddress | null;
     listenBacklogSize: number;
     keepAlive: boolean;
@@ -59,6 +63,8 @@ export function createTcpSocket() {
         future: null,
         tcpSocket: null,
         server: null,
+        inputStream: null,
+        outputStream: null,
         localAddress: null,
         listenBacklogSize: 128,
         keepAlive: false,
@@ -246,7 +252,9 @@ export function socketTcpConnectStart(id: number, remoteAddress: IpSocketAddress
                     localPort: localAddress?.val.port,
                 });
             });
-            return [createReadableStream(tcpSocket), createWritableStream(tcpSocket)];
+            socket.inputStream = createReadableStream(tcpSocket);
+            socket.outputStream = createWritableStream(tcpSocket);
+            return [socket.inputStream, socket.outputStream];
         })(),
         socket.pollState,
     );
@@ -277,11 +285,15 @@ export function socketTcpAccept(id: number) {
     if (socket.pollState && socket.pendingAccepts.length === 0) {
         socket.pollState.ready = false;
     }
+    const inputStream = createReadableStream(accept.tcpSocket, accept.pollState ?? undefined);
+    const outputStream = createWritableStream(accept.tcpSocket);
     tcpSockets.set(++tcpSocketCnt, {
         state: SOCKET_STATE_CONNECTION,
         future: null,
         tcpSocket: accept.tcpSocket,
         server: null,
+        inputStream,
+        outputStream,
         localAddress: null,
         listenBacklogSize: 128,
         keepAlive: false,
@@ -289,12 +301,7 @@ export function socketTcpAccept(id: number) {
         pendingAccepts: [],
         pollState: accept.pollState,
     });
-    return [
-        tcpSocketCnt,
-        // @ts-expect-error
-        createReadableStream(accept.tcpSocket, accept.pollState ?? undefined),
-        createWritableStream(accept.tcpSocket),
-    ];
+    return [tcpSocketCnt, inputStream, outputStream];
 }
 
 export function socketTcpSetListenBacklogSize(id: number, backlogSize) {
@@ -332,12 +339,32 @@ export function socketTcpGetRemoteAddress(id: number) {
     return ipSocketAddress(tcpSocket.remoteFamily, tcpSocket.remoteAddress, tcpSocket.remotePort);
 }
 
-export function socketTcpShutdown(id: number, _shutdownType) {
+/** Shut down only the requested directions, preserving queued writes and the socket resource. */
+export function socketTcpShutdown(id: number, shutdownType: ShutdownType) {
     const socket = tcpSockets.get(id)!;
     if (socket.state !== SOCKET_STATE_CONNECTION) {
         throw "invalid-state";
     }
-    socket.tcpSocket?.destroy();
+    const tcpSocket = socket.tcpSocket!;
+    if ((shutdownType === "receive" || shutdownType === "both") && socket.inputStream !== null) {
+        closeStream(socket.inputStream);
+        socket.inputStream = null;
+
+        // Node has no public SHUT_RD operation. Discard buffered and subsequent
+        // input while leaving the writable half available to the guest.
+        const discardInput = () => {
+            while (tcpSocket.read() !== null) {
+                // Drain all chunks currently available.
+            }
+        };
+        tcpSocket.on("readable", discardInput);
+        discardInput();
+    }
+    if ((shutdownType === "send" || shutdownType === "both") && socket.outputStream !== null) {
+        closeStream(socket.outputStream);
+        socket.outputStream = null;
+        tcpSocket.end();
+    }
 }
 
 export function socketTcpSetKeepAlive(id: number, { keepAlive, keepAliveIdleTime }) {

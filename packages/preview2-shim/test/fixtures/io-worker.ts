@@ -1,5 +1,5 @@
 import type { WorkerExtension, WorkerExtensionContext } from "../../src/io/extension.ts";
-import { Writable } from "node:stream";
+import { PassThrough, Writable } from "node:stream";
 
 export default function create(context: WorkerExtensionContext): WorkerExtension {
     let calls = 0;
@@ -26,6 +26,22 @@ export default function create(context: WorkerExtensionContext): WorkerExtension
                 );
             case "written-bytes":
                 return writtenBytes;
+            case "buffered-input-error":
+            case "buffered-input-close": {
+                const stream = new PassThrough();
+                const input = context.createReadableStream(stream);
+                const output = context.createWritableStream(stream);
+                stream.write(Buffer.from("buffered response"));
+                const closed = new Promise((resolve) => {
+                    stream.once("close", () => resolve({ input, output }));
+                });
+                stream.destroy(
+                    operation === "buffered-input-error"
+                        ? Object.assign(new Error("connection reset"), { code: "ECONNRESET" })
+                        : undefined,
+                );
+                return closed;
+            }
             default:
                 throw new Error("unknown test operation");
         }
