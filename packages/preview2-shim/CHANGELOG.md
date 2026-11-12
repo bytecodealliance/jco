@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.31.1] - 2026-11-12
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ preserve TCP input and directional shutdown by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ restore original TCP regression setup by @vados-cosmonic in #2450
+
+- _(p2-shim)_ run TCP stream regressions concurrently by @vados-cosmonic
+
 ## [0.31.0] - 2026-10-27
 
 ### 🐛 Bug Fixes
