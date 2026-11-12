@@ -789,21 +789,32 @@ describe("Descriptor#setTimes and #setTimesAt", () => {
 });
 
 /**
- * Add a preopen for a new temporary directory
+ * Tests that each get their own temporary directory and a preopen for it
  *
- * @param {string} prefix Prefix for the temporary directory's name
- * @returns {Promise<{ tmpDir: string, preopen: object }>} The directory and its preopen descriptor
+ * Every test sets up what it needs, so the tests share no files and can run
+ * concurrently. The directory and its preopen are removed after the test.
  */
-async function addTmpPreopen(prefix) {
-  const { filesystem } = await import("@bytecodealliance/preview3-shim");
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
-  const virtualPath = `/${path.basename(tmpDir)}`;
-  filesystem._addPreopen(virtualPath, tmpDir);
-  const [preopen] = filesystem.preopens
-    .getDirectories()
-    .find(([_desc, preopenPath]) => preopenPath === virtualPath);
-  return { tmpDir, preopen };
-}
+const preopenTest = test.extend({
+  // eslint-disable-next-line no-empty-pattern -- fixtures must destructure their first parameter
+  tmpDir: async ({}, use) => {
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), "preview3-test-"));
+    await use(tmpDir);
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  },
+
+  preopen: async ({ tmpDir }, use) => {
+    const { filesystem } = await import("@bytecodealliance/preview3-shim");
+    const virtualPath = `/${path.basename(tmpDir)}`;
+    filesystem._addPreopen(virtualPath, tmpDir);
+    const preopenEntries = filesystem.preopens.getDirectories();
+    const entry = preopenEntries.find(([_desc, preopenPath]) => preopenPath === virtualPath);
+
+    await use(entry[0]);
+
+    // Later tests must not find a preopen for a directory that no longer exists
+    preopenEntries.splice(preopenEntries.indexOf(entry), 1);
+  },
+});
 
 /**
  * Report how a promise settles, or "pending" if it has not settled within `ms`
@@ -862,194 +873,204 @@ function patternedBytes(length, seed) {
 
 describe("Descriptor stream operations", () => {
   const CHUNK_BYTES = 64 * 1024;
-  let tmpDir;
-  let preopen;
-
-  beforeAll(async () => {
-    ({ tmpDir, preopen } = await addTmpPreopen("preview3-stream-ops-"));
-  });
-
-  afterAll(async () => {
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  });
 
   // A guest can drop a descriptor without awaiting a write it started, Rust's
   // `std::fs::write` does this once the stream has accepted the last bytes
-  test("writeViaStream finishes after the descriptor is dropped", async () => {
-    const data = patternedBytes(4 * 1024 * 1024 + 7, 1);
-    const file = await preopen.openAt(
-      {},
-      "dropped-write.bin",
-      { create: true, truncate: true },
-      { write: true },
-    );
-
-    async function* chunks() {
-      for (let offset = 0; offset < data.length; offset += CHUNK_BYTES) {
-        yield data.subarray(offset, offset + CHUNK_BYTES);
-      }
-    }
-    const write = file.writeViaStream(chunks(), 0n);
-    file[Symbol.dispose]();
-
-    await expect(write).resolves.toBeUndefined();
-    const written = await fs.readFile(path.join(tmpDir, "dropped-write.bin"));
-    expect(written.length).toBe(data.length);
-    expect(written.equals(data)).toBe(true);
-  });
-
-  test("appendViaStream finishes after the descriptor is dropped", async () => {
-    const prefix = Buffer.from("prefix:");
-    const data = patternedBytes(4 * 1024 * 1024 + 7, 2);
-    await fs.writeFile(path.join(tmpDir, "dropped-append.bin"), prefix);
-    const file = await preopen.openAt({}, "dropped-append.bin", {}, { write: true });
-
-    const { tx, rx } = stream();
-    const append = file.appendViaStream(rx);
-    file[Symbol.dispose]();
-    for (let offset = 0; offset < data.length; offset += CHUNK_BYTES) {
-      await tx.write(data.subarray(offset, offset + CHUNK_BYTES));
-    }
-    await tx.close();
-
-    await expect(append).resolves.toBeUndefined();
-    const written = await fs.readFile(path.join(tmpDir, "dropped-append.bin"));
-    expect(written.length).toBe(prefix.length + data.length);
-    expect(written.equals(Buffer.concat([prefix, data]))).toBe(true);
-  });
-
-  test("readViaStream finishes after the descriptor is dropped", async () => {
-    const data = patternedBytes(16 * CHUNK_BYTES + 7, 3);
-    await fs.writeFile(path.join(tmpDir, "dropped-read.bin"), data);
-    const file = await preopen.openAt({}, "dropped-read.bin", {}, { read: true });
-
-    const [reader, future] = file.readViaStream(0n);
-    file[Symbol.dispose]();
-
-    const read = await reader.readAll();
-    await expect(future.read()).resolves.toBeDefined();
-    expect(read.length).toBe(data.length);
-    expect(read.equals(data)).toBe(true);
-  });
-
-  // Each append goes through its own descriptor, as when two guests share a log file
-  test("concurrent appendViaStream operations do not overwrite each other", async () => {
-    const prefix = Buffer.from("prefix:");
-    const filePath = path.join(tmpDir, "concurrent-append.bin");
-    await fs.writeFile(filePath, prefix);
-
-    const CHUNKS_PER_APPEND = 8;
-    const appends = await Promise.all(
-      [9, 10, 11].map(async (seed) => {
-        const file = await preopen.openAt({}, "concurrent-append.bin", {}, { write: true });
-        const { tx, rx } = stream();
-        return { seed, file, tx, done: file.appendViaStream(rx) };
-      }),
-    );
-    await Promise.all(
-      appends.map(async ({ seed, tx }) => {
-        for (let i = 0; i < CHUNKS_PER_APPEND; i++) {
-          await tx.write(Buffer.alloc(CHUNK_BYTES, seed));
-        }
-        await tx.close();
-      }),
-    );
-    for (const { file, done } of appends) {
-      await expect(done).resolves.toBeUndefined();
-      file[Symbol.dispose]();
-    }
-
-    // Chunks from different appends may interleave, but each one is intact
-    const written = await fs.readFile(filePath);
-    expect(written.length).toBe(prefix.length + appends.length * CHUNKS_PER_APPEND * CHUNK_BYTES);
-    expect(written.subarray(0, prefix.length).equals(prefix)).toBe(true);
-    const chunksBySeed = new Map();
-    for (let offset = prefix.length; offset < written.length; offset += CHUNK_BYTES) {
-      const chunk = written.subarray(offset, offset + CHUNK_BYTES);
-      expect(chunk.every((byte) => byte === chunk[0])).toBe(true);
-      chunksBySeed.set(chunk[0], (chunksBySeed.get(chunk[0]) ?? 0) + 1);
-    }
-    expect(chunksBySeed).toEqual(new Map(appends.map(({ seed }) => [seed, CHUNKS_PER_APPEND])));
-  });
-
-  // A stream that is neither read to its end nor released would otherwise keep
-  // the worker's read, and with it the file, open for the life of the process
-  test.runIf(collectGarbage)(
-    "a readViaStream stream that is garbage collected ends the read",
-    async () => {
-      await fs.writeFile(
-        path.join(tmpDir, "abandoned-stream.bin"),
-        patternedBytes(16 * CHUNK_BYTES, 12),
+  preopenTest.concurrent(
+    "writeViaStream finishes after the descriptor is dropped",
+    async ({ tmpDir, preopen }) => {
+      const data = patternedBytes(4 * 1024 * 1024 + 7, 1);
+      const file = await preopen.openAt(
+        {},
+        "dropped-write.bin",
+        { create: true, truncate: true },
+        { write: true },
       );
-      const file = await preopen.openAt({}, "abandoned-stream.bin", {}, { read: true });
 
-      // Read one chunk in a separate function, so that nothing here refers to the stream
-      const { future } = await (async () => {
-        const [reader, readFuture] = file.readViaStream(0n);
-        await reader.read();
-        return { future: readFuture };
-      })();
+      async function* chunks() {
+        for (let offset = 0; offset < data.length; offset += CHUNK_BYTES) {
+          yield data.subarray(offset, offset + CHUNK_BYTES);
+        }
+      }
+      const write = file.writeViaStream(chunks(), 0n);
       file[Symbol.dispose]();
 
-      const read = future.read();
-      let outcome = "pending";
-      for (let attempt = 0; attempt < 50 && outcome === "pending"; attempt++) {
-        collectGarbage();
-        outcome = await settlement(read, 100);
-      }
-      expect(outcome).toBe("resolved");
+      await expect(write).resolves.toBeUndefined();
+      const written = await fs.readFile(path.join(tmpDir, "dropped-write.bin"));
+      expect(written.length).toBe(data.length);
+      expect(written.equals(data)).toBe(true);
     },
   );
 
+  preopenTest.concurrent(
+    "appendViaStream finishes after the descriptor is dropped",
+    async ({ tmpDir, preopen }) => {
+      const prefix = Buffer.from("prefix:");
+      const data = patternedBytes(4 * 1024 * 1024 + 7, 2);
+      await fs.writeFile(path.join(tmpDir, "dropped-append.bin"), prefix);
+      const file = await preopen.openAt({}, "dropped-append.bin", {}, { write: true });
+
+      const { tx, rx } = stream();
+      const append = file.appendViaStream(rx);
+      file[Symbol.dispose]();
+      for (let offset = 0; offset < data.length; offset += CHUNK_BYTES) {
+        await tx.write(data.subarray(offset, offset + CHUNK_BYTES));
+      }
+      await tx.close();
+
+      await expect(append).resolves.toBeUndefined();
+      const written = await fs.readFile(path.join(tmpDir, "dropped-append.bin"));
+      expect(written.length).toBe(prefix.length + data.length);
+      expect(written.equals(Buffer.concat([prefix, data]))).toBe(true);
+    },
+  );
+
+  preopenTest.concurrent(
+    "readViaStream finishes after the descriptor is dropped",
+    async ({ tmpDir, preopen }) => {
+      const data = patternedBytes(16 * CHUNK_BYTES + 7, 3);
+      await fs.writeFile(path.join(tmpDir, "dropped-read.bin"), data);
+      const file = await preopen.openAt({}, "dropped-read.bin", {}, { read: true });
+
+      const [reader, future] = file.readViaStream(0n);
+      file[Symbol.dispose]();
+
+      const read = await reader.readAll();
+      await expect(future.read()).resolves.toBeDefined();
+      expect(read.length).toBe(data.length);
+      expect(read.equals(data)).toBe(true);
+    },
+  );
+
+  // Each append goes through its own descriptor, as when two guests share a log file
+  preopenTest.concurrent(
+    "concurrent appendViaStream operations do not overwrite each other",
+    async ({ tmpDir, preopen }) => {
+      const prefix = Buffer.from("prefix:");
+      const filePath = path.join(tmpDir, "concurrent-append.bin");
+      await fs.writeFile(filePath, prefix);
+
+      const CHUNKS_PER_APPEND = 8;
+      const appends = await Promise.all(
+        [9, 10, 11].map(async (seed) => {
+          const file = await preopen.openAt({}, "concurrent-append.bin", {}, { write: true });
+          const { tx, rx } = stream();
+          return { seed, file, tx, done: file.appendViaStream(rx) };
+        }),
+      );
+      await Promise.all(
+        appends.map(async ({ seed, tx }) => {
+          for (let i = 0; i < CHUNKS_PER_APPEND; i++) {
+            await tx.write(Buffer.alloc(CHUNK_BYTES, seed));
+          }
+          await tx.close();
+        }),
+      );
+      for (const { file, done } of appends) {
+        await expect(done).resolves.toBeUndefined();
+        file[Symbol.dispose]();
+      }
+
+      // Chunks from different appends may interleave, but each one is intact
+      const written = await fs.readFile(filePath);
+      expect(written.length).toBe(prefix.length + appends.length * CHUNKS_PER_APPEND * CHUNK_BYTES);
+      expect(written.subarray(0, prefix.length).equals(prefix)).toBe(true);
+      const chunksBySeed = new Map();
+      for (let offset = prefix.length; offset < written.length; offset += CHUNK_BYTES) {
+        const chunk = written.subarray(offset, offset + CHUNK_BYTES);
+        expect(chunk.every((byte) => byte === chunk[0])).toBe(true);
+        chunksBySeed.set(chunk[0], (chunksBySeed.get(chunk[0]) ?? 0) + 1);
+      }
+      expect(chunksBySeed).toEqual(new Map(appends.map(({ seed }) => [seed, CHUNKS_PER_APPEND])));
+    },
+  );
+
+  // A stream that is neither read to its end nor released would otherwise keep
+  // the worker's read, and with it the file, open for the life of the process
+  preopenTest
+    .runIf(collectGarbage)
+    .concurrent(
+      "a readViaStream stream that is garbage collected ends the read",
+      async ({ tmpDir, preopen }) => {
+        await fs.writeFile(
+          path.join(tmpDir, "abandoned-stream.bin"),
+          patternedBytes(16 * CHUNK_BYTES, 12),
+        );
+        const file = await preopen.openAt({}, "abandoned-stream.bin", {}, { read: true });
+
+        // Read one chunk in a separate function, so that nothing here refers to the stream
+        const { future } = await (async () => {
+          const [reader, readFuture] = file.readViaStream(0n);
+          await reader.read();
+          return { future: readFuture };
+        })();
+        file[Symbol.dispose]();
+
+        const read = future.read();
+        let outcome = "pending";
+        for (let attempt = 0; attempt < 50 && outcome === "pending"; attempt++) {
+          collectGarbage();
+          outcome = await settlement(read, 100);
+        }
+        expect(outcome).toBe("resolved");
+      },
+    );
+
   // The filesystem worker hands each chunk to the reader's thread when the
   // reader pulls it, so a chunk cannot share its buffer with another read
-  test("concurrent readViaStream operations each read their own file", async () => {
-    const files = [4, 5, 6, 7].map((seed) => ({
-      name: `concurrent-read-${seed}.bin`,
-      data: patternedBytes(4 * CHUNK_BYTES, seed),
-    }));
-    for (const { name, data } of files) {
-      await fs.writeFile(path.join(tmpDir, name), data);
-    }
+  preopenTest.concurrent(
+    "concurrent readViaStream operations each read their own file",
+    async ({ tmpDir, preopen }) => {
+      const files = [4, 5, 6, 7].map((seed) => ({
+        name: `concurrent-read-${seed}.bin`,
+        data: patternedBytes(4 * CHUNK_BYTES, seed),
+      }));
+      for (const { name, data } of files) {
+        await fs.writeFile(path.join(tmpDir, name), data);
+      }
 
-    const descriptors = await Promise.all(
-      files.map(({ name }) => preopen.openAt({}, name, {}, { read: true })),
-    );
-    const reads = descriptors.map((descriptor) => descriptor.readViaStream(0n));
-    const contents = await Promise.all(reads.map(([reader]) => reader.readAll()));
-    await Promise.all(reads.map(([, future]) => future.read()));
+      const descriptors = await Promise.all(
+        files.map(({ name }) => preopen.openAt({}, name, {}, { read: true })),
+      );
+      const reads = descriptors.map((descriptor) => descriptor.readViaStream(0n));
+      const contents = await Promise.all(reads.map(([reader]) => reader.readAll()));
+      await Promise.all(reads.map(([, future]) => future.read()));
 
-    for (const [index, { data }] of files.entries()) {
-      expect(contents[index].length).toBe(data.length);
-      expect(contents[index].equals(data), `contents of ${files[index].name}`).toBe(true);
-    }
-    for (const descriptor of descriptors) {
-      descriptor[Symbol.dispose]();
-    }
-  });
+      for (const [index, { data }] of files.entries()) {
+        expect(contents[index].length).toBe(data.length);
+        expect(contents[index].equals(data), `contents of ${files[index].name}`).toBe(true);
+      }
+      for (const descriptor of descriptors) {
+        descriptor[Symbol.dispose]();
+      }
+    },
+  );
 
   // The worker reuses one buffer for the chunks of a read, which must not
   // change a chunk that the reader has not pulled yet
-  test("readViaStream delivers intact chunks to a slow reader", async () => {
-    const data = patternedBytes(8 * CHUNK_BYTES + 7, 13);
-    await fs.writeFile(path.join(tmpDir, "slow-read.bin"), data);
-    const file = await preopen.openAt({}, "slow-read.bin", {}, { read: true });
+  preopenTest.concurrent(
+    "readViaStream delivers intact chunks to a slow reader",
+    async ({ tmpDir, preopen }) => {
+      const data = patternedBytes(8 * CHUNK_BYTES + 7, 13);
+      await fs.writeFile(path.join(tmpDir, "slow-read.bin"), data);
+      const file = await preopen.openAt({}, "slow-read.bin", {}, { read: true });
 
-    const [reader, future] = file.readViaStream(0n);
-    const chunks = [];
-    let chunk;
-    while ((chunk = await reader.read()) !== null) {
-      chunks.push(chunk);
-      // Give the worker time to read ahead of this reader
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
-    await future.read();
-    file[Symbol.dispose]();
+      const [reader, future] = file.readViaStream(0n);
+      const chunks = [];
+      let chunk;
+      while ((chunk = await reader.read()) !== null) {
+        chunks.push(chunk);
+        // Give the worker time to read ahead of this reader
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+      await future.read();
+      file[Symbol.dispose]();
 
-    const read = Buffer.concat(chunks);
-    expect(read.length).toBe(data.length);
-    expect(read.equals(data)).toBe(true);
-  });
+      const read = Buffer.concat(chunks);
+      expect(read.length).toBe(data.length);
+      expect(read.equals(data)).toBe(true);
+    },
+  );
 
   // Generated bindings read a host stream through its async iterator and call
   // `return()` on it when the guest drops the stream. Host code calls `close()`.
@@ -1070,9 +1091,9 @@ describe("Descriptor stream operations", () => {
     ],
   ];
 
-  test.each(READER_RELEASES)(
+  preopenTest.concurrent.for(READER_RELEASES)(
     "dropping a readViaStream stream ends the read when %s",
-    async (_name, iterate) => {
+    async ([_name, iterate], { tmpDir, preopen }) => {
       await fs.writeFile(
         path.join(tmpDir, "dropped-stream.bin"),
         patternedBytes(16 * CHUNK_BYTES, 8),
@@ -1090,12 +1111,11 @@ describe("Descriptor stream operations", () => {
     },
   );
 
-  test.each(READER_RELEASES)(
+  preopenTest.concurrent.for(READER_RELEASES)(
     "dropping a readDirectory stream ends the listing when %s",
-    async (_name, iterate) => {
+    async ([_name, iterate], { tmpDir, preopen }) => {
       // Enough entries that the worker is still listing when the stream is dropped
       const listingPath = path.join(tmpDir, "dropped-listing");
-      await fs.rm(listingPath, { recursive: true, force: true });
       await fs.mkdir(listingPath);
       for (let i = 0; i < 32; i++) {
         await fs.writeFile(path.join(listingPath, `entry-${i}.txt`), "");
@@ -1122,96 +1142,97 @@ describe("Descriptor stream operations", () => {
 });
 
 describe("Descriptor path operations on a symlink that leads outside the directory", () => {
-  let tmpDir;
-  let preopen;
-  let sub;
+  // Each test gets its own `dir/outside.txt` and a descriptor for `dir/sub`, which
+  // contains a fresh `loop -> ..` that leads from `sub` to its parent
+  const symlinkTest = preopenTest.extend({
+    sub: async ({ tmpDir, preopen }, use) => {
+      await fs.mkdir(path.join(tmpDir, "dir/sub"), { recursive: true });
+      await fs.writeFile(path.join(tmpDir, "dir/outside.txt"), "outside");
+      await fs.symlink("..", path.join(tmpDir, "dir/sub/loop"));
+      const sub = await preopen.openAt(
+        { symlinkFollow: true },
+        "dir/sub",
+        { directory: true },
+        {
+          read: true,
+          mutateDirectory: true,
+        },
+      );
 
-  beforeAll(async () => {
-    ({ tmpDir, preopen } = await addTmpPreopen("preview3-symlink-escape-"));
-    await fs.mkdir(path.join(tmpDir, "dir/sub"), { recursive: true });
-    await fs.writeFile(path.join(tmpDir, "dir/outside.txt"), "outside");
-    sub = await preopen.openAt(
-      { symlinkFollow: true },
-      "dir/sub",
-      { directory: true },
-      {
-        read: true,
-        mutateDirectory: true,
-      },
-    );
+      await use(sub);
+
+      sub[Symbol.dispose]();
+    },
   });
 
-  afterAll(async () => {
-    sub[Symbol.dispose]();
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  });
+  symlinkTest.concurrent(
+    "statAt without symlink-follow returns the symlink's own metadata",
+    async ({ sub }) => {
+      const stat = await sub.statAt({ symlinkFollow: false }, "loop");
+      expect(stat.type).toEqual({ tag: "symbolic-link" });
+    },
+  );
 
-  // Each test gets a fresh `sub/loop -> ..`, which leads from `sub` to its parent
-  beforeEach(async () => {
-    await fs.rm(path.join(tmpDir, "dir/sub/loop"), { force: true });
-    await fs.symlink("..", path.join(tmpDir, "dir/sub/loop"));
-  });
+  symlinkTest.concurrent(
+    "metadataHashAt without symlink-follow hashes the symlink itself",
+    async ({ tmpDir, sub }) => {
+      const linkStat = await fs.lstat(path.join(tmpDir, "dir/sub/loop"), { bigint: true });
+      const hash = await sub.metadataHashAt({ symlinkFollow: false }, "loop");
+      expect(hash.lower).toBe(linkStat.ino);
+    },
+  );
 
-  test("statAt without symlink-follow returns the symlink's own metadata", async () => {
-    const stat = await sub.statAt({ symlinkFollow: false }, "loop");
-    expect(stat.type).toEqual({ tag: "symbolic-link" });
-  });
-
-  test("metadataHashAt without symlink-follow hashes the symlink itself", async () => {
-    const linkStat = await fs.lstat(path.join(tmpDir, "dir/sub/loop"), { bigint: true });
-    const hash = await sub.metadataHashAt({ symlinkFollow: false }, "loop");
-    expect(hash.lower).toBe(linkStat.ino);
-  });
-
-  test("readlinkAt returns the symlink's relative target", async () => {
+  symlinkTest.concurrent("readlinkAt returns the symlink's relative target", async ({ sub }) => {
     await expect(sub.readlinkAt("loop")).resolves.toBe("..");
   });
 
-  test("readlinkAt rejects an absolute target", async () => {
-    const absoluteLink = path.join(tmpDir, "dir/sub/absolute.cleanup");
+  symlinkTest.concurrent("readlinkAt rejects an absolute target", async ({ tmpDir, sub }) => {
+    const absoluteLink = path.join(tmpDir, "dir/sub/absolute");
     await fs.symlink(path.join(tmpDir, "dir/outside.txt"), absoluteLink);
-    try {
-      await expect(sub.readlinkAt("absolute.cleanup")).rejects.toMatchObject({
-        payload: { tag: "not-permitted" },
-      });
-    } finally {
-      await fs.rm(absoluteLink, { force: true });
-    }
-  });
-
-  test("setTimesAt without symlink-follow updates only the symlink", async () => {
-    const linkPath = path.join(tmpDir, "dir/sub/loop");
-    await fs.lutimes(linkPath, 1_000, 2_000);
-    const targetBefore = await fs.stat(path.join(tmpDir, "dir"));
-
-    await sub.setTimesAt(
-      { symlinkFollow: false },
-      "loop",
-      { tag: "no-change" },
-      { tag: "timestamp", val: { seconds: 3_000n, nanoseconds: 0 } },
-    );
-
-    const linkAfter = await fs.lstat(linkPath);
-    expect(Math.round(linkAfter.atimeMs / 1_000)).toBe(1_000);
-    expect(Math.round(linkAfter.mtimeMs / 1_000)).toBe(3_000);
-    const targetAfter = await fs.stat(path.join(tmpDir, "dir"));
-    expect(targetAfter.mtimeMs).toBe(targetBefore.mtimeMs);
-  });
-
-  test("renameAt and unlinkFileAt act on the symlink itself", async () => {
-    await sub.renameAt("loop", sub, "renamed-loop");
-    await expect(fs.readlink(path.join(tmpDir, "dir/sub/renamed-loop"))).resolves.toBe("..");
-
-    await sub.unlinkFileAt("renamed-loop");
-    await expect(fs.lstat(path.join(tmpDir, "dir/sub/renamed-loop"))).rejects.toMatchObject({
-      code: "ENOENT",
+    await expect(sub.readlinkAt("absolute")).rejects.toMatchObject({
+      payload: { tag: "not-permitted" },
     });
-    await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
-      "outside",
-    );
   });
 
-  test("operations that follow the symlink still reject it", async () => {
+  symlinkTest.concurrent(
+    "setTimesAt without symlink-follow updates only the symlink",
+    async ({ tmpDir, sub }) => {
+      const linkPath = path.join(tmpDir, "dir/sub/loop");
+      await fs.lutimes(linkPath, 1_000, 2_000);
+      const targetBefore = await fs.stat(path.join(tmpDir, "dir"));
+
+      await sub.setTimesAt(
+        { symlinkFollow: false },
+        "loop",
+        { tag: "no-change" },
+        { tag: "timestamp", val: { seconds: 3_000n, nanoseconds: 0 } },
+      );
+
+      const linkAfter = await fs.lstat(linkPath);
+      expect(Math.round(linkAfter.atimeMs / 1_000)).toBe(1_000);
+      expect(Math.round(linkAfter.mtimeMs / 1_000)).toBe(3_000);
+      const targetAfter = await fs.stat(path.join(tmpDir, "dir"));
+      expect(targetAfter.mtimeMs).toBe(targetBefore.mtimeMs);
+    },
+  );
+
+  symlinkTest.concurrent(
+    "renameAt and unlinkFileAt act on the symlink itself",
+    async ({ tmpDir, sub }) => {
+      await sub.renameAt("loop", sub, "renamed-loop");
+      await expect(fs.readlink(path.join(tmpDir, "dir/sub/renamed-loop"))).resolves.toBe("..");
+
+      await sub.unlinkFileAt("renamed-loop");
+      await expect(fs.lstat(path.join(tmpDir, "dir/sub/renamed-loop"))).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+      await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
+        "outside",
+      );
+    },
+  );
+
+  symlinkTest.concurrent("operations that follow the symlink still reject it", async ({ sub }) => {
     await expect(sub.statAt({ symlinkFollow: true }, "loop")).rejects.toMatchObject({
       payload: { tag: "not-permitted" },
     });
@@ -1223,50 +1244,50 @@ describe("Descriptor path operations on a symlink that leads outside the directo
     ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
   });
 
-  test("operations without symlink-follow still reject it before the final component", async () => {
-    await expect(sub.statAt({ symlinkFollow: false }, "loop/outside.txt")).rejects.toMatchObject({
-      payload: { tag: "not-permitted" },
-    });
-    await expect(sub.readlinkAt("loop/sub/loop")).rejects.toMatchObject({
-      payload: { tag: "not-permitted" },
-    });
-    await expect(sub.unlinkFileAt("loop/outside.txt")).rejects.toMatchObject({
-      payload: { tag: "not-permitted" },
-    });
-    await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
-      "outside",
-    );
-  });
+  symlinkTest.concurrent(
+    "operations without symlink-follow still reject it before the final component",
+    async ({ tmpDir, sub }) => {
+      await expect(sub.statAt({ symlinkFollow: false }, "loop/outside.txt")).rejects.toMatchObject({
+        payload: { tag: "not-permitted" },
+      });
+      await expect(sub.readlinkAt("loop/sub/loop")).rejects.toMatchObject({
+        payload: { tag: "not-permitted" },
+      });
+      await expect(sub.unlinkFileAt("loop/outside.txt")).rejects.toMatchObject({
+        payload: { tag: "not-permitted" },
+      });
+      await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
+        "outside",
+      );
+    },
+  );
 
   // With `O_NOFOLLOW` the open fails on the symlink itself, as it does in Wasmtime
-  test.skipIf(process.platform === "win32")(
-    "openAt without symlink-follow reports the symlink as a loop",
-    async () => {
+  symlinkTest
+    .skipIf(process.platform === "win32")
+    .concurrent("openAt without symlink-follow reports the symlink as a loop", async ({ sub }) => {
       await expect(
         sub.openAt({ symlinkFollow: false }, "loop", {}, { read: true }),
       ).rejects.toMatchObject({ payload: { tag: "loop" } });
-    },
-  );
+    });
 
   // Only Linux is known to link the symlink itself rather than its target
-  test.runIf(process.platform === "linux")(
-    "linkAt without symlink-follow links the symlink itself",
-    async () => {
-      const linkPath = path.join(tmpDir, "dir/sub/hard-link.cleanup");
-      try {
-        await sub.linkAt({ symlinkFollow: false }, "loop", sub, "hard-link.cleanup");
-        await expect(fs.readlink(linkPath)).resolves.toBe("..");
-      } finally {
-        await fs.rm(linkPath, { force: true });
-      }
-    },
-  );
+  symlinkTest
+    .runIf(process.platform === "linux")
+    .concurrent(
+      "linkAt without symlink-follow links the symlink itself",
+      async ({ tmpDir, sub }) => {
+        await sub.linkAt({ symlinkFollow: false }, "loop", sub, "hard-link");
+        await expect(fs.readlink(path.join(tmpDir, "dir/sub/hard-link"))).resolves.toBe("..");
+      },
+    );
 
   // `chain -> loop -> ..` only leads outside once the second symlink is followed
-  test("a symlink that leads outside through another symlink is rejected", async () => {
-    const chainPath = path.join(tmpDir, "dir/sub/chain");
-    await fs.symlink("loop", chainPath);
-    try {
+  symlinkTest.concurrent(
+    "a symlink that leads outside through another symlink is rejected",
+    async ({ tmpDir, sub }) => {
+      await fs.symlink("loop", path.join(tmpDir, "dir/sub/chain"));
+
       await expect(
         sub.openAt({ symlinkFollow: true }, "chain/outside.txt", {}, { read: true }),
       ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
@@ -1274,7 +1295,9 @@ describe("Descriptor path operations on a symlink that leads outside the directo
         payload: { tag: "not-permitted" },
       });
       await expect(sub.statAt({ symlinkFollow: false }, "chain/outside.txt")).rejects.toMatchObject(
-        { payload: { tag: "not-permitted" } },
+        {
+          payload: { tag: "not-permitted" },
+        },
       );
       await expect(sub.unlinkFileAt("chain/outside.txt")).rejects.toMatchObject({
         payload: { tag: "not-permitted" },
@@ -1282,40 +1305,29 @@ describe("Descriptor path operations on a symlink that leads outside the directo
       await expect(fs.readFile(path.join(tmpDir, "dir/outside.txt"), "utf8")).resolves.toBe(
         "outside",
       );
-    } finally {
-      await fs.rm(chainPath, { force: true });
-    }
-  });
+    },
+  );
 
-  test("symlinks that stay inside the directory are followed", async () => {
-    await fs.mkdir(path.join(tmpDir, "dir/sub/inner/nested"), { recursive: true });
-    await fs.writeFile(path.join(tmpDir, "dir/sub/inner/inside.txt"), "inside");
-    // `up -> nested/..` leaves `nested` but not the directory, and `via -> up` chains to it
-    const upPath = path.join(tmpDir, "dir/sub/inner/up");
-    const viaPath = path.join(tmpDir, "dir/sub/via");
-    await fs.symlink("nested/..", upPath);
-    await fs.symlink("inner/up", viaPath);
-    try {
+  symlinkTest.concurrent(
+    "symlinks that stay inside the directory are followed",
+    async ({ tmpDir, sub }) => {
+      await fs.mkdir(path.join(tmpDir, "dir/sub/inner/nested"), { recursive: true });
+      await fs.writeFile(path.join(tmpDir, "dir/sub/inner/inside.txt"), "inside");
+      // `up -> nested/..` leaves `nested` but not the directory, and `via -> up` chains to it
+      await fs.symlink("nested/..", path.join(tmpDir, "dir/sub/inner/up"));
+      await fs.symlink("inner/up", path.join(tmpDir, "dir/sub/via"));
+
       const stat = await sub.statAt({ symlinkFollow: true }, "via/inside.txt");
       expect(stat.type).toEqual({ tag: "regular-file" });
-    } finally {
-      await fs.rm(upPath, { force: true });
-      await fs.rm(viaPath, { force: true });
-    }
-  });
+    },
+  );
 
-  test("a symlink cycle is reported as a loop", async () => {
-    const firstPath = path.join(tmpDir, "dir/sub/cycle-a");
-    const secondPath = path.join(tmpDir, "dir/sub/cycle-b");
-    await fs.symlink("cycle-b", firstPath);
-    await fs.symlink("cycle-a", secondPath);
-    try {
-      await expect(sub.statAt({ symlinkFollow: true }, "cycle-a")).rejects.toMatchObject({
-        payload: { tag: "loop" },
-      });
-    } finally {
-      await fs.rm(firstPath, { force: true });
-      await fs.rm(secondPath, { force: true });
-    }
+  symlinkTest.concurrent("a symlink cycle is reported as a loop", async ({ tmpDir, sub }) => {
+    await fs.symlink("cycle-b", path.join(tmpDir, "dir/sub/cycle-a"));
+    await fs.symlink("cycle-a", path.join(tmpDir, "dir/sub/cycle-b"));
+
+    await expect(sub.statAt({ symlinkFollow: true }, "cycle-a")).rejects.toMatchObject({
+      payload: { tag: "loop" },
+    });
   });
 });
