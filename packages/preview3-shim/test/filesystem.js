@@ -1028,6 +1028,29 @@ describe("Descriptor stream operations", () => {
     }
   });
 
+  // The worker reuses one buffer for the chunks of a read, which must not
+  // change a chunk that the reader has not pulled yet
+  test("readViaStream delivers intact chunks to a slow reader", async () => {
+    const data = patternedBytes(8 * CHUNK_BYTES + 7, 13);
+    await fs.writeFile(path.join(tmpDir, "slow-read.bin"), data);
+    const file = await preopen.openAt({}, "slow-read.bin", {}, { read: true });
+
+    const [reader, future] = file.readViaStream(0n);
+    const chunks = [];
+    let chunk;
+    while ((chunk = await reader.read()) !== null) {
+      chunks.push(chunk);
+      // Give the worker time to read ahead of this reader
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    await future.read();
+    file[Symbol.dispose]();
+
+    const read = Buffer.concat(chunks);
+    expect(read.length).toBe(data.length);
+    expect(read.equals(data)).toBe(true);
+  });
+
   // Generated bindings read a host stream through its async iterator and call
   // `return()` on it when the guest drops the stream. Host code calls `close()`.
   // Both work with the async iterator protocol
