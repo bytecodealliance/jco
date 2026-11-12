@@ -105,20 +105,23 @@ function streamFromWorker(start) {
 }
 
 /**
- * Owns a Node.js `FileHandle` on behalf of a descriptor and the stream
- * operations started from it
+ * Owns a Node.js `FileHandle` on behalf of a descriptor and the operations
+ * started from it
  *
  * Stream operations run in the filesystem worker with the raw fd, and the
  * guest can drop the descriptor while one is still running, ex: by
  * dropping a `write-via-stream` result without awaiting it. Closing the handle
  * would fail the operation's remaining reads/writes or let them use
  * whichever file reuses the fd number. Closing therefore waits until the last
- * stream operation settles
+ * operation settles
+ *
+ * Every use of the handle goes through `use`, so that no operation can be
+ * left holding a handle, or its fd, that has since been closed
  */
 class SharedFileHandle {
   /** The Node.js file handle, or null once closed */
   #handle;
-  /** Number of stream operations that are using the fd */
+  /** Number of operations that are using the handle */
   #operations = 0;
   /** Whether the owning descriptor has been disposed */
   #closeRequested = false;
@@ -131,7 +134,7 @@ class SharedFileHandle {
   }
 
   /**
-   * Run a stream operation, keeping the handle open until the operation settles
+   * Run an operation, keeping the handle open until the operation settles
    *
    * @template T
    * @param {(handle: import("node:fs/promises").FileHandle) => Promise<T>} operation
@@ -148,7 +151,7 @@ class SharedFileHandle {
     }
   }
 
-  /** Close the handle now, or once the last stream operation using it settles */
+  /** Close the handle now, or once the last operation using it settles */
   close() {
     this.#closeRequested = true;
     this.#closeIfUnused();
@@ -166,9 +169,11 @@ class SharedFileHandle {
 }
 
 class Descriptor {
-  /** Node.js file handle for file operations (FileHandle from fs.promises.open) */
-  #handle;
-  /** Owner of `#handle` that keeps it open for in-flight stream operations */
+  /**
+   * Owner of the Node.js file handle for file operations (FileHandle from
+   * fs.promises.open), which keeps it open for in-flight operations. Null
+   * for preopens and once the descriptor is disposed
+   */
   #sharedHandle;
   /** Descriptor flags */
   #mode;
@@ -201,7 +206,6 @@ class Descriptor {
     };
 
     const desc = new Descriptor();
-    desc.#handle = handle;
     desc.#sharedHandle = new SharedFileHandle(handle);
     desc.#fullPath = fullPath;
     desc.#isDirectory = isDirectory;
@@ -246,7 +250,6 @@ class Descriptor {
       earlyDispose(this.#finalizer);
       this.#finalizer = null;
     }
-    this.#handle = null;
     this.#sharedHandle = null;
   }
 
@@ -325,8 +328,11 @@ class Descriptor {
   async advise(offset, length, advice) {
     this.#ensureHandle();
     try {
-      const { fadvise } = await import("@bytecodealliance/jco-node-fs");
-      fadvise(this.#handle.fd, offset, length, advice);
+      // The fd is only read once the module has loaded, so the handle is held until then
+      await this.#sharedHandle.use(async (handle) => {
+        const { fadvise } = await import("@bytecodealliance/jco-node-fs");
+        fadvise(handle.fd, offset, length, advice);
+      });
     } catch (error) {
       throw FSError.from(error);
     }
@@ -346,7 +352,7 @@ class Descriptor {
   async syncData() {
     this.#ensureHandle();
     try {
-      await this.#handle.datasync();
+      await this.#sharedHandle.use((handle) => handle.datasync());
     } catch (e) {
       // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
       // the file is not upen for writing. Ignore this error, for POSIX compatibility.
@@ -388,7 +394,8 @@ class Descriptor {
       return { tag: "directory" };
     }
     try {
-      const stats = await this.#handle.stat();
+      this.#ensureHandle();
+      const stats = await this.#sharedHandle.use((handle) => handle.stat());
       return wasiTypeFromDirent(stats);
     } catch (e) {
       throw FSError.from(e);
@@ -415,7 +422,7 @@ class Descriptor {
     }
 
     try {
-      await this.#handle.truncate(Number(size));
+      await this.#sharedHandle.use((handle) => handle.truncate(Number(size)));
     } catch (e) {
       if (process.platform === "win32" && e.code === "EPERM") {
         throw new FSError("access");
@@ -439,11 +446,12 @@ class Descriptor {
    */
   async setTimes(atimeDesc, mtimeDesc) {
     this.#ensureHandle();
+    const sharedHandle = this.#sharedHandle;
 
-    const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc);
+    const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc, () => this.stat());
 
     try {
-      await this.#handle.utimes(atime, mtime);
+      await sharedHandle.use((handle) => handle.utimes(atime, mtime));
     } catch (e) {
       throw FSError.from(e);
     }
@@ -528,17 +536,10 @@ class Descriptor {
         s = await fs.stat(this.#hostPreopen, { bigint: true });
       } else {
         this.#ensureHandle();
-        s = await this.#handle.stat({ bigint: true });
+        s = await this.#sharedHandle.use((handle) => handle.stat({ bigint: true }));
       }
 
-      return {
-        type: wasiTypeFromDirent(s),
-        linkCount: s.nlink,
-        size: s.size,
-        dataAccessTimestamp: nsToDateTime(s.atimeNs),
-        dataModificationTimestamp: nsToDateTime(s.mtimeNs),
-        statusChangeTimestamp: nsToDateTime(s.ctimeNs),
-      };
+      return descriptorStat(s);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -567,20 +568,7 @@ class Descriptor {
   async statAt(flags, path) {
     await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
     const full = this.#getFullPath(path, flags.symlinkFollow);
-    try {
-      const statFn = flags.symlinkFollow ? fs.stat : fs.lstat;
-      const s = await statFn(full, { bigint: true });
-      return {
-        type: wasiTypeFromDirent(s),
-        linkCount: s.nlink,
-        size: s.size,
-        dataAccessTimestamp: nsToDateTime(s.atimeNs),
-        dataModificationTimestamp: nsToDateTime(s.mtimeNs),
-        statusChangeTimestamp: nsToDateTime(s.ctimeNs),
-      };
-    } catch (e) {
-      throw FSError.from(e);
-    }
+    return this.#statPath(full, Boolean(flags.symlinkFollow));
   }
 
   /**
@@ -605,13 +593,18 @@ class Descriptor {
    */
   async setTimesAt(flags, path, atimeDesc, mtimeDesc) {
     await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
-    const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc, path, flags);
+    const full = this.#getFullPath(path, flags.symlinkFollow);
+
+    // The path was checked above, so it is not checked again for the lookup of
+    // the current timestamps. Without symlink-follow, an unchanged timestamp
+    // is the symlink's own
+    const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc, () =>
+      this.#statPath(full, Boolean(flags.symlinkFollow)),
+    );
 
     if (!flags.symlinkFollow && !fs.lutimes) {
       throw new FSError("unsupported");
     }
-
-    const full = this.#getFullPath(path, flags.symlinkFollow);
 
     try {
       const utimesFn = flags.symlinkFollow ? fs.utimes : fs.lutimes;
@@ -1027,7 +1020,7 @@ class Descriptor {
   async #syncFile() {
     this.#ensureHandle();
     try {
-      await this.#handle.sync();
+      await this.#sharedHandle.use((handle) => handle.sync());
     } catch (e) {
       // On windows, `sync_data` uses `FileFlushBuffers` which fails with `EPERM` if
       // the file is not upen for writing. Ignore this error, for POSIX compatibility.
@@ -1051,17 +1044,42 @@ class Descriptor {
     }
   }
 
-  async #computeTimestamps(atimeDesc, mtimeDesc, path = null, flags = { symlinkFollow: true }) {
+  /**
+   * Resolve a pair of `new-timestamp` values to the times to set
+   *
+   * @param {object} atimeDesc New access timestamp
+   * @param {object} mtimeDesc New modification timestamp
+   * @param {() => Promise<object>} currentStat Looks up the `descriptor-stat` of the
+   *   object whose times are set, called only if a timestamp is `no-change`
+   * @returns {Promise<{ atime: number, mtime: number }>} The times in seconds
+   * @throws {FSError} `payload.tag` contains mapped WASI error code
+   */
+  async #computeTimestamps(atimeDesc, mtimeDesc, currentStat) {
     let stats;
     if (atimeDesc.tag === "no-change" || mtimeDesc.tag === "no-change") {
-      // Without symlink-follow, an unchanged timestamp is the symlink's own
-      const p = path === null ? this.stat() : this.statAt(flags, path);
-      stats = await p;
+      stats = await currentStat();
     }
 
     const atime = this.#getNewTimestamp(atimeDesc, stats?.dataAccessTimestamp);
     const mtime = this.#getNewTimestamp(mtimeDesc, stats?.dataModificationTimestamp);
     return { atime, mtime };
+  }
+
+  /**
+   * Return attributes of the object at a path that has passed the sandbox check
+   *
+   * @param {string} full Absolute host path
+   * @param {boolean} followSymlinks Whether to stat a final symlink's target or the symlink
+   * @returns {Promise<object>} The `descriptor-stat`
+   * @throws {FSError} `payload.tag` contains mapped WASI error code
+   */
+  async #statPath(full, followSymlinks) {
+    try {
+      const statFn = followSymlinks ? fs.stat : fs.lstat;
+      return descriptorStat(await statFn(full, { bigint: true }));
+    } catch (e) {
+      throw FSError.from(e);
+    }
   }
 
   /**
@@ -1112,7 +1130,7 @@ class Descriptor {
       return fs.stat(this.#hostPreopen, { bigint: true });
     }
     this.#ensureHandle();
-    return this.#handle.stat({ bigint: true });
+    return this.#sharedHandle.use((handle) => handle.stat({ bigint: true }));
   }
 
   // WASI paths are always relative to a directory descriptor. During path
@@ -1200,7 +1218,7 @@ class Descriptor {
   }
 
   #ensureHandle() {
-    if (!this.#handle) {
+    if (!this.#sharedHandle) {
       throw new FSError("bad-descriptor");
     }
   }
@@ -1220,6 +1238,23 @@ delete Descriptor._createPreopen;
 
 const descriptorCreate = Descriptor._create;
 delete Descriptor._create;
+
+/**
+ * Build a WASI `descriptor-stat` from Node.js file attributes
+ *
+ * @param {import("node:fs").BigIntStats} s The attributes
+ * @returns {object} The `descriptor-stat`
+ */
+function descriptorStat(s) {
+  return {
+    type: wasiTypeFromDirent(s),
+    linkCount: s.nlink,
+    size: s.size,
+    dataAccessTimestamp: nsToDateTime(s.atimeNs),
+    dataModificationTimestamp: nsToDateTime(s.mtimeNs),
+    statusChangeTimestamp: nsToDateTime(s.ctimeNs),
+  };
+}
 
 const NS_PER_SEC = 1_000_000_000n;
 function nsToDateTime(ns) {

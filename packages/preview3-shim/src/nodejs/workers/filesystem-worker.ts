@@ -53,12 +53,15 @@ async function handleRead({ fd, offset, stream }) {
     throw err;
   }
 
+  // Each read operation needs its own buffer. A written chunk is only copied to
+  // the reader's thread once the reader pulls it, a buffer shared with other
+  // read operations could be overwritten by their reads before then. Within
+  // one operation the buffer is reused, since the write of a chunk is awaited,
+  // and so the chunk has been copied, before the next read fills the buffer
+  const buffer = Buffer.allocUnsafe(CHUNK_BYTES);
+
   const start = pos;
   while (true) {
-    // Each chunk needs its own buffer. A written chunk is only copied to the
-    // reader's thread once the reader pulls it, a buffer shared with other
-    // read operations could be overwritten by their reads before then
-    const buffer = Buffer.alloc(CHUNK_BYTES);
     let bytesRead;
     try {
       ({ bytesRead } = await readAsync(fd, buffer, 0, CHUNK_BYTES, filePosition(pos)));
