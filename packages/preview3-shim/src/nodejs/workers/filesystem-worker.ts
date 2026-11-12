@@ -8,10 +8,29 @@ import { wasiTypeFromDirent } from "../filesystem/utils.js";
 import fs from "fs";
 const readAsync = promisify(fs.read);
 const writeAsync = promisify(fs.write);
+const fstatAsync = promisify(fs.fstat);
 const { opendir } = fs.promises;
 
 const CHUNK_BYTES = 64 * 1024;
 const MAX_SAFE_FILE_POSITION = BigInt(Number.MAX_SAFE_INTEGER);
+
+/**
+ * Code of the error an operation fails with when the stream it was producing
+ * could not take more output. The main thread knows whether its reader
+ * cancelled the stream, which is the only expected cause, so it decides
+ * whether this is a failure
+ */
+const STREAM_CLOSED = "ERR_JCO_STREAM_CLOSED";
+
+/**
+ * Build the error for an output stream that could not take more output
+ *
+ * @param {unknown} cause Why the stream rejected the output
+ * @returns {Error} An error whose `code` is `STREAM_CLOSED`
+ */
+function streamClosedError(cause) {
+  return Object.assign(new Error("output stream was closed", { cause }), { code: STREAM_CLOSED });
+}
 
 /** Auto‐dispatch all ops */
 Router().op("read", handleRead).op("write", handleWrite).op("readDir", handleReadDir);
@@ -53,21 +72,78 @@ async function handleRead({ fd, offset, stream }) {
 
     try {
       await writer.write(buffer.subarray(0, bytesRead));
-    } catch {
-      // The stream only errors when the reader cancels it, ex: when the guest
-      // drops the stream before end of file. As in Wasmtime, that ends the
-      // read without an error
-      return { bytesRead: pos - start };
+    } catch (err) {
+      // Expected when the reader cancels the stream, ex: when the guest drops
+      // it before end of file
+      throw streamClosedError(err);
     }
     pos += BigInt(bytesRead);
   }
 
-  // A reader that cancels after the last chunk also ends the read without an error
-  await writer.close().catch(() => {});
+  try {
+    await writer.close();
+  } catch (err) {
+    // Expected when the reader cancels the stream after the last chunk
+    throw streamClosedError(err);
+  }
   return { bytesRead: pos - start };
 }
 
-async function handleWrite({ fd, offset, stream }) {
+/**
+ * Write a whole buffer to a file, continuing after short writes
+ *
+ * @param {number} fd The file descriptor
+ * @param {Buffer} buf The bytes to write
+ * @param {bigint} position The offset within the file
+ * @returns {Promise<void>}
+ */
+async function writeAll(fd, buf, position) {
+  let written = 0;
+  while (written < buf.length) {
+    const { bytesWritten } = await writeAsync(
+      fd,
+      buf,
+      written,
+      buf.length - written,
+      filePosition(position + BigInt(written)),
+    );
+    written += bytesWritten;
+  }
+}
+
+/** Settles when the last queued append has finished */
+let appendQueue: Promise<void> = Promise.resolve();
+
+/**
+ * Write a buffer at the end of a file
+ *
+ * The size lookup and the write happen one append at a time, so appends that
+ * run concurrently through this worker cannot write over each other
+ *
+ * @param {number} fd The file descriptor
+ * @param {Buffer} buf The bytes to append
+ * @returns {Promise<void>}
+ */
+function appendAll(fd, buf) {
+  const append = appendQueue.then(async () => {
+    const { size } = await fstatAsync(fd, { bigint: true });
+    await writeAll(fd, buf, size);
+  });
+  appendQueue = append.catch(() => {});
+  return append;
+}
+
+/**
+ * Write a byte stream to a file
+ *
+ * @param {object} msg
+ * @param {number} msg.fd The file descriptor
+ * @param {bigint | number} [msg.offset] The offset within the file, unused when appending
+ * @param {boolean} [msg.append] Write each chunk at the end of the file instead of at `offset`
+ * @param {ReadableStream<Uint8Array>} msg.stream The bytes to write
+ * @returns {Promise<{ bytesWritten: bigint }>}
+ */
+async function handleWrite({ fd, offset = 0n, append = false, stream }) {
   if (typeof fd !== "number" || fd < 0) {
     throw new TypeError(`Invalid file descriptor: ${fd}`);
   }
@@ -79,18 +155,24 @@ async function handleWrite({ fd, offset, stream }) {
   const reader = stream.getReader();
   try {
     let pos = BigInt(offset);
-    const start = pos;
+    let bytesWritten = 0n;
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) {
         break;
       }
+
       const buf = Buffer.from(value);
-      const { bytesWritten } = await writeAsync(fd, buf, 0, buf.length, filePosition(pos));
-      pos += BigInt(bytesWritten);
+      if (append) {
+        await appendAll(fd, buf);
+      } else {
+        await writeAll(fd, buf, pos);
+        pos += BigInt(buf.length);
+      }
+      bytesWritten += BigInt(buf.length);
     }
-    return { bytesWritten: pos - start };
+    return { bytesWritten };
   } catch (err) {
     await reader.cancel(err);
     throw err;
@@ -128,19 +210,24 @@ async function handleReadDir({ fullPath, stream, preopens }) {
       };
       try {
         await writer.write(entry);
-      } catch {
-        // The stream only errors when the reader cancels it. Ex: when
-        // the guest drops the stream before the last entry. As in Wasmtime,
-        // that ends the listing without an error
-        return { ok: true };
+      } catch (err) {
+        // Expected when the reader cancels the stream, ex: when the guest
+        // drops it before the last entry
+        throw streamClosedError(err);
       }
     }
   } catch (err) {
-    await writer.abort(err);
+    if (err?.code !== STREAM_CLOSED) {
+      await writer.abort(err);
+    }
     throw err;
   }
 
-  // A reader that cancels after the last entry also ends the listing without an error
-  await writer.close().catch(() => {});
+  try {
+    await writer.close();
+  } catch (err) {
+    // Expected when the reader cancels the stream after the last entry
+    throw streamClosedError(err);
+  }
   return { ok: true };
 }

@@ -1,6 +1,8 @@
 import os from "node:os";
 import path from "node:path";
 import process from "node:process";
+import v8 from "node:v8";
+import vm from "node:vm";
 import * as fs from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
@@ -829,6 +831,21 @@ async function settlement(promise, ms) {
 }
 
 /**
+ * Run a full garbage collection, or null where the engine does not allow
+ * exposing one at runtime
+ *
+ * @type {(() => void) | null}
+ */
+const collectGarbage = (() => {
+  try {
+    v8.setFlagsFromString("--expose-gc");
+    return vm.runInNewContext("gc");
+  } catch {
+    return null;
+  }
+})();
+
+/**
  * Build file contents whose bytes differ between chunks and between files
  *
  * @param {number} length Number of bytes
@@ -914,6 +931,75 @@ describe("Descriptor stream operations", () => {
     expect(read.length).toBe(data.length);
     expect(read.equals(data)).toBe(true);
   });
+
+  // Each append goes through its own descriptor, as when two guests share a log file
+  test("concurrent appendViaStream operations do not overwrite each other", async () => {
+    const prefix = Buffer.from("prefix:");
+    const filePath = path.join(tmpDir, "concurrent-append.bin");
+    await fs.writeFile(filePath, prefix);
+
+    const CHUNKS_PER_APPEND = 8;
+    const appends = await Promise.all(
+      [9, 10, 11].map(async (seed) => {
+        const file = await preopen.openAt({}, "concurrent-append.bin", {}, { write: true });
+        const { tx, rx } = stream();
+        return { seed, file, tx, done: file.appendViaStream(rx) };
+      }),
+    );
+    await Promise.all(
+      appends.map(async ({ seed, tx }) => {
+        for (let i = 0; i < CHUNKS_PER_APPEND; i++) {
+          await tx.write(Buffer.alloc(CHUNK_BYTES, seed));
+        }
+        await tx.close();
+      }),
+    );
+    for (const { file, done } of appends) {
+      await expect(done).resolves.toBeUndefined();
+      file[Symbol.dispose]();
+    }
+
+    // Chunks from different appends may interleave, but each one is intact
+    const written = await fs.readFile(filePath);
+    expect(written.length).toBe(prefix.length + appends.length * CHUNKS_PER_APPEND * CHUNK_BYTES);
+    expect(written.subarray(0, prefix.length).equals(prefix)).toBe(true);
+    const chunksBySeed = new Map();
+    for (let offset = prefix.length; offset < written.length; offset += CHUNK_BYTES) {
+      const chunk = written.subarray(offset, offset + CHUNK_BYTES);
+      expect(chunk.every((byte) => byte === chunk[0])).toBe(true);
+      chunksBySeed.set(chunk[0], (chunksBySeed.get(chunk[0]) ?? 0) + 1);
+    }
+    expect(chunksBySeed).toEqual(new Map(appends.map(({ seed }) => [seed, CHUNKS_PER_APPEND])));
+  });
+
+  // A stream that is neither read to its end nor released would otherwise keep
+  // the worker's read, and with it the file, open for the life of the process
+  test.runIf(collectGarbage)(
+    "a readViaStream stream that is garbage collected ends the read",
+    async () => {
+      await fs.writeFile(
+        path.join(tmpDir, "abandoned-stream.bin"),
+        patternedBytes(16 * CHUNK_BYTES, 12),
+      );
+      const file = await preopen.openAt({}, "abandoned-stream.bin", {}, { read: true });
+
+      // Read one chunk in a separate function, so that nothing here refers to the stream
+      const { future } = await (async () => {
+        const [reader, readFuture] = file.readViaStream(0n);
+        await reader.read();
+        return { future: readFuture };
+      })();
+      file[Symbol.dispose]();
+
+      const read = future.read();
+      let outcome = "pending";
+      for (let attempt = 0; attempt < 50 && outcome === "pending"; attempt++) {
+        collectGarbage();
+        outcome = await settlement(read, 100);
+      }
+      expect(outcome).toBe("resolved");
+    },
+  );
 
   // The filesystem worker hands each chunk to the reader's thread when the
   // reader pulls it, so a chunk cannot share its buffer with another read
@@ -1128,6 +1214,30 @@ describe("Descriptor path operations on a symlink that leads outside the directo
       "outside",
     );
   });
+
+  // With `O_NOFOLLOW` the open fails on the symlink itself, as it does in Wasmtime
+  test.skipIf(process.platform === "win32")(
+    "openAt without symlink-follow reports the symlink as a loop",
+    async () => {
+      await expect(
+        sub.openAt({ symlinkFollow: false }, "loop", {}, { read: true }),
+      ).rejects.toMatchObject({ payload: { tag: "loop" } });
+    },
+  );
+
+  // Only Linux is known to link the symlink itself rather than its target
+  test.runIf(process.platform === "linux")(
+    "linkAt without symlink-follow links the symlink itself",
+    async () => {
+      const linkPath = path.join(tmpDir, "dir/sub/hard-link.cleanup");
+      try {
+        await sub.linkAt({ symlinkFollow: false }, "loop", sub, "hard-link.cleanup");
+        await expect(fs.readlink(linkPath)).resolves.toBe("..");
+      } finally {
+        await fs.rm(linkPath, { force: true });
+      }
+    },
+  );
 
   // `chain -> loop -> ..` only leads outside once the second symlink is followed
   test("a symlink that leads outside through another symlink is rejected", async () => {
