@@ -1,5 +1,133 @@
 # Changelog
 
+## [2.19.0] - 2026-11-12
+
+### 🚀 Features
+
+- _(bindgen)_ add embedded-cm-runtime feature to bundle the runtime by @vados-cosmonic
+
+- _(bindgen)_ make declaration contracts configurable by @vados-cosmonic
+
+- _(bindgen)_ document the layers of async future results by @vados-cosmonic
+
+- _(bindgen)_ throw named result errors as typed classes by @vados-cosmonic
+
+- _(bindgen)_ make resources the bindings provide nominal types by @vados-cosmonic
+
+- _(bindgen)_ declare import and export sides of interfaces apart by @vados-cosmonic
+
+- _(bindgen)_ let host-only async imports return values directly by @vados-cosmonic
+
+- _(bindgen)_ let result arms without a payload omit val by @vados-cosmonic
+
+- _(bindgen)_ document WIT item stability with JSDoc tags by @vados-cosmonic
+
+- _(bindgen)_ replace task groups with optional call tracking by @vados-cosmonic
+
+- _(bindgen)_ await individual call task groups by @vados-cosmonic
+
+- _(bindgen)_ await guest task quiescence by @vados-cosmonic
+
+- _(bindgen)_ notify hosts of background traps by @vados-cosmonic
+
+- _(bindgen)_ use external component state and scheduling intrinsics by @vados-cosmonic in #2378
+
+- _(bindgen)_ add instance stop utility by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ reject invalid strings when lowering chars by @vados-cosmonic
+
+- _(bindgen)_ keep the published EsmBindgen render signatures by @vados-cosmonic
+
+- _(bindgen)_ omit wit introduction versions from declarations by @vados-cosmonic in #2436
+
+- _(bindgen)_ preserve export names and resource identities by @vados-cosmonic
+
+- _(bindgen)_ declare one short alias for same-named exports by @vados-cosmonic
+
+- _(bindgen)_ brand resources by semver compatible track by @vados-cosmonic
+
+- _(bindgen)_ support static functions named like class members by @vados-cosmonic
+
+- _(bindgen)_ gate optional result payloads and fix doc tags by @vados-cosmonic
+
+- _(bindgen)_ reference globals shadowed by world-level types by @vados-cosmonic
+
+- _(bindgen)_ correct invalid and incomplete type declarations by @vados-cosmonic
+
+- _(bindgen)_ select inline trap and idle functions for every context that calls them by @vados-cosmonic
+
+- _(bindgen)_ correct flat lowering of chars, lists, enums and error contexts by @vados-cosmonic
+
+- _(bindgen)_ recognize component errors with a private predicate by @vados-cosmonic
+
+- _(bindgen)_ expose the component error constructor in utilities by @vados-cosmonic
+
+- _(bindgen)_ dispose late host stream values by @vados-cosmonic
+
+- _(bindgen)_ preserve external runtime trap notifications by @vados-cosmonic
+
+- _(bindgen)_ preserve future payload ownership during disposal by @vados-cosmonic
+
+- _(bindgen)_ close streams and futures when stopping by @vados-cosmonic
+
+- _(bindgen)_ deduplicate host disposal during shutdown by @vados-cosmonic
+
+- _(bindgen)_ dispose host futures and unblock writers by @vados-cosmonic
+
+- _(bindgen)_ preserve lazy futures returned by async exports by @vados-cosmonic
+
+- _(bindgen)_ lift streamed host resources from the correct instance table by @vados-cosmonic
+
+- _(bindgen)_ enforce canonical memory and string bounds by @vados-cosmonic
+
+- _(bindgen)_ provide task context for core start imports by @vados-cosmonic
+
+- _(bindgen)_ resolve type-only imported resources used by async exports by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ drop the dead stream code the runtime no longer carries by @vados-cosmonic
+
+- _(bindgen)_ name stream contexts after their runtime exports by @vados-cosmonic
+
+- _(bindgen)_ align external intrinsic context enum style by @vados-cosmonic
+
+- _(bindgen)_ clarify dependency discovery helper names by @vados-cosmonic
+
+- _(bindgen)_ align task context intrinsic names by @vados-cosmonic
+
+- _(bindgen)_ clarify external error-context intrinsic names by @vados-cosmonic in #2380
+
+- _(bindgen)_ clarify external context intrinsic names by @vados-cosmonic
+
+- _(bindgen)_ name channel instance-stop hooks explicitly by @vados-cosmonic
+
+- _(bindgen)_ collapse initialization context guard by @vados-cosmonic in #2407
+
+
+### ⚡ Performance
+
+- _(bindgen)_ omit unused future task dependencies by @vados-cosmonic
+
+- _(bindgen)_ bulk copy numeric lists by @vados-cosmonic
+
+
+### 🧪 Testing
+
+- _(bindgen)_ simplify error context lowering assertions by @vados-cosmonic
+
+- _(bindgen)_ cover late stream resource cleanup by @vados-cosmonic in #2421
+
+
+
+## New Contributors
+* @zion-sati made their first contribution in [#2437](https://github.com/bytecodealliance/jco/pull/2437)
+
+
 ## [2.18.0] - 2026-10-31
 
 ### 🚀 Features
