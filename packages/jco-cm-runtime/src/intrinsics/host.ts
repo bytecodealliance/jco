@@ -693,6 +693,8 @@ export async function syncStartCall(
     args: HostSyncStartOptions,
     callee: HostCallee,
     paramCount: number,
+    resultCount = 0,
+    flags = 1,
 ): ReturnType<HostModule['syncStartCall']> {
     const componentIdx = _context.componentIdxs.at(-1)!;
 
@@ -719,7 +721,12 @@ export async function syncStartCall(
         throw new Error('missing subtask meta from prepare');
     }
 
-    preparedTask.setCalleeIsAsync(true);
+    const calleeIsAsync = (flags & 1) !== 0;
+    preparedTask.setCalleeIsAsync(calleeIsAsync);
+    preparedTask.setPostReturnFn(args.getPostReturnFn?.());
+    if (resultCount < 0 || resultCount > 1) {
+        throw new Error(`unsupported result count [${resultCount}]`);
+    }
     const { subtask, calleeComponentIdx, callerComponentIdx } = preparedTask.subtaskMeta;
     if (!subtask) {
         throw new Error('missing subtask from prepare during sync start call');
@@ -864,14 +871,17 @@ export async function syncStartCall(
                 preparedTask.endFirstSlice();
 
                 if (!callbackFn) {
-                    // Async-lifted without a callback (stackful lift): the callee
-                    // ran to completion above; task.return already ran within it.
+                    // A sync lift returns its value here; a stackful async lift
+                    // has already supplied it through task.return.
                     debugLog('[_syncStartCall()] no callback, resolving w/ callee result', {
                         taskID: preparedTask.id(),
                         componentIdx: preparedTask.componentIdx(),
                     });
+                    if (preparedTask.needsExclusiveLock()) {
+                        calleeComponentState.exclusiveRelease(preparedTask.id());
+                    }
                     if (!preparedTask.isResolved()) {
-                        preparedTask.resolve([callbackResult]);
+                        preparedTask.resolve(resultCount === 0 ? [] : [callbackResult]);
                     }
                     preparedTask.exit({ skipExclusiveLockCheck: true });
                     return;

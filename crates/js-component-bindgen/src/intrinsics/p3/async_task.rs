@@ -2371,7 +2371,7 @@ impl AsyncTaskIntrinsic {
                                         subtaskID: this.#parentSubtask.id(),
                                     }});
                                     const callerTask = this.#parentSubtask.getParentTask();
-                                    {with_global_current_thread_meta_fn}{{
+                                    meta.returnFnResult = {with_global_current_thread_meta_fn}{{
                                         taskID: callerTask.id(),
                                         threadID: meta.callerThreadID,
                                         componentIdx: callerTask.componentIdx(),

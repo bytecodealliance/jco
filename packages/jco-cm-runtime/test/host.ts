@@ -524,3 +524,57 @@ test.concurrent('prepare preserves core ToUint32 pointer coercion and rejects un
         s.cleanup();
     }
 });
+
+test.concurrent('sync start honors a synchronous lift and runs post-return', async () => {
+    const store = setup({
+        platform: {
+            WebAssembly: {
+                RuntimeError: WebAssembly.RuntimeError,
+                Global: WebAssembly.Global,
+                promising:
+                    (fn) =>
+                    async (...args) =>
+                        fn(...args),
+            },
+        },
+    });
+    try {
+        const [parent] = store.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        store.core.setCurrentTaskMeta({ componentIdx: 0, taskID: parent.id(), threadID: parent.defaultThread().id() });
+        store.host.prepareCall(
+            0,
+            () => undefined,
+            () => [],
+            () => 77,
+            0,
+            1,
+            0,
+            1,
+            0,
+            1,
+        );
+        const child = store.asyncTask.getCurrentTask(1)!.task;
+        const postReturn = vi.fn();
+        const callee = () => {
+            expect(child.calleeIsAsync()).toBe(false);
+            return 42;
+        };
+        expect(
+            await store.host.syncStartCall(
+                {
+                    getCallbackFn: () => null,
+                    getPostReturnFn: () => postReturn,
+                },
+                callee,
+                0,
+                1,
+                0,
+            ),
+        ).toBe(77);
+        await child.exitPromise();
+        expect(postReturn).toHaveBeenCalledExactlyOnceWith(42);
+        finish(parent);
+    } finally {
+        store.cleanup();
+    }
+});

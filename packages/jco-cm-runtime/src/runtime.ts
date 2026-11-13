@@ -1780,6 +1780,7 @@ export interface AsyncTaskModule {
 
 /** Per-call fused-call metadata; runtime owners are separate context operands. */
 export interface HostSyncStartOptions {
+    readonly getPostReturnFn?: () => TaskPostReturn | null | undefined;
     readonly callbackIdx?: number | null;
     readonly getCallbackFn: () => (TaskCallback & { fnName?: string }) | null | undefined;
 }
@@ -1851,6 +1852,8 @@ export interface HostModule {
         args: HostSyncStartOptions,
         callee: HostCallee,
         paramCount: number,
+        resultCount?: number,
+        flags?: number,
     ) => Promise<unknown>;
     readonly storeEventInComponentMemory: (args: StoreEventOptions) => number;
 }
