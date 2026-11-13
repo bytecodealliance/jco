@@ -1,5 +1,149 @@
 # Changelog
 
+## [0.24.0] - 2026-11-13
+
+### 🐛 Bug Fixes
+
+- _(transpile)_ [**breaking**] keep tool filesystem access private by @vados-cosmonic
+
+- _(transpile)_ handle normalized wasm2js export accesses by @vados-cosmonic
+
+- _(transpile)_ keep the runtime mode helper inside the package by @vados-cosmonic
+
+- _(transpile)_ give the task class benchmark case its store trap by @vados-cosmonic
+
+- _(transpile)_ remove empty list item in test config by @vados-cosmonic
+
+- _(transpile)_ resolve component assets when bundled by @vados-cosmonic
+
+- _(transpile)_ recreate bindgen instances after traps by @vados-cosmonic
+
+### 🚜 Refactor
+
+- _(transpile)_ remove stored benchmark snapshots by @vados-cosmonic
+
+- _(transpile)_ consolidate runtime benchmark verification by @vados-cosmonic
+
+### 🎨 Styling
+
+- _(transpile)_ format component bundling fixture by @vados-cosmonic in #2422
+
+### 🧪 Testing
+
+- _(transpile)_ budget unbundled runtime calls separately by @vados-cosmonic
+
+- _(transpile)_ move char component into a documented fixture by @vados-cosmonic in #2438
+
+- _(transpile)_ verify char validation before guest calls by @vados-cosmonic
+
+- _(transpile)_ cover labeled exports and anonymous resources by @vados-cosmonic
+
+- _(transpile)_ read cm map declarations from the exports path by @vados-cosmonic
+
+- _(transpile)_ use rust components for error class and static tests by @vados-cosmonic
+
+- _(transpile)_ share type-check and component loading helpers by @vados-cosmonic
+
+- _(transpile)_ allow 8% gzip overhead for the external runtime by @vados-cosmonic
+
+- _(transpile)_ run suites against a custom runtime with JCO_TEST_RUNTIME=custom by @vados-cosmonic
+
+- _(transpile)_ allow 6% brotli overhead for the external runtime by @vados-cosmonic
+
+- _(transpile)_ share provider helpers across external runtime tests by @vados-cosmonic
+
+- _(transpile)_ give conversion and WebIDL providers every runtime module by @vados-cosmonic
+
+- _(transpile)_ share one runtime provider helper across families by @vados-cosmonic
+
+- _(transpile)_ explain parity failures and tune gzip budget by @vados-cosmonic in #2387
+
+- _(transpile)_ require JSPI for future provider execution by @vados-cosmonic
+
+- _(transpile)_ verify selected future providers by @vados-cosmonic
+
+- _(transpile)_ widen compressed size budgets for the external runtime by @vados-cosmonic in #2433
+
+- _(transpile)_ await idle notifications without timer races by @vados-cosmonic in #2385
+
+- _(transpile)_ select runtime packages for external benchmarks by @vados-cosmonic
+
+- _(transpile)_ cover invocation handles and provider compatibility by @vados-cosmonic
+
+- _(transpile)_ cover task group waits and isolation by @vados-cosmonic
+
+- _(transpile)_ assert unused future bridges are omitted by @vados-cosmonic in #2383
+
+- _(transpile)_ assemble browser host runtime with shared helper by @vados-cosmonic in #2382
+
+- _(transpile)_ guard host integration tests for JSPI by @vados-cosmonic
+
+- _(transpile)_ decouple task probes from utility exports by @vados-cosmonic
+
+- _(transpile)_ allow trailing commas in runtime probes by @vados-cosmonic
+
+- _(transpile)_ skip JSPI receiver test when unsupported by @vados-cosmonic
+
+- _(transpile)_ adapt task probes to instance utilities by @vados-cosmonic
+
+- _(transpile)_ verify provider idle-check capability by @vados-cosmonic in #2423
+
+- _(transpile)_ cover instance task quiescence by @vados-cosmonic
+
+- _(transpile)_ cover component loading with Vite by @vados-cosmonic
+
+- _(transpile)_ cover component error identity and utility exports by @vados-cosmonic
+
+- _(transpile)_ require JSPI for composed error-context tests by @vados-cosmonic
+
+- _(transpile)_ include trap reporting in provider contracts by @vados-cosmonic in #2420
+
+- _(transpile)_ extract instance stop WAT fixtures by @vados-cosmonic
+
+- _(transpile)_ require JSPI for async waitable fixtures by @vados-cosmonic in #2379
+
+- _(transpile)_ require JSPI for async channel shutdown tests by @vados-cosmonic in #2419
+
+- _(transpile)_ run disposal regression with generated fixtures by @vados-cosmonic in #2418
+
+- _(transpile)_ check named async type compatibility by @vados-cosmonic in #2417
+
+- _(transpile)_ cover future disposal and writer ownership by @vados-cosmonic
+
+- _(transpile)_ cover lazy exported futures by @vados-cosmonic in #2416
+
+- _(transpile)_ cover numeric list ownership and bulk lifting by @vados-cosmonic in #2415
+
+- _(transpile)_ measure call overhead with thread CPU time by @vados-cosmonic in #2414
+
+- _(transpile)_ cover streamed host resources across component instances by @vados-cosmonic
+
+- _(transpile)_ skip instance stop suite without JSPI by @vados-cosmonic in #2413
+
+- _(transpile)_ cover instance stopping and resource cleanup by @vados-cosmonic
+
+- _(transpile)_ cover canonical memory bounds and string traps by @vados-cosmonic in #2409
+
+- _(transpile)_ allow 20 MB host-call memory growth by @vados-cosmonic in #2402
+
+- _(transpile)_ run issue 2393 cases concurrently by @vados-cosmonic
+
+- _(transpile)_ cover bindgen recovery and the browser facade by @vados-cosmonic
+
+- _(transpile)_ roundtrip async resources from type-only imports by @vados-cosmonic
+
+- _(transpile)_ sync upstream component-model WAST coverage by @vados-cosmonic in #2401
+
+- _(transpile)_ cover Rust P3 fat LTO argument regression by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(transpile)_ update preview2 and preview3 shim dependencies by @vados-cosmonic in #2466
+
+## New Contributors
+
+- @zion-sati made their first contribution in [#2437](https://github.com/bytecodealliance/jco/pull/2437)
+
 ## [0.23.0] - 2026-10-31
 
 ### ⚙️ Miscellaneous Tasks
