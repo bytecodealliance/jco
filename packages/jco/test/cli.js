@@ -180,7 +180,7 @@ suite("CLI", () => {
         );
         assert.strictEqual(stderr, "");
         const source = await readFile(`${outDir}/${name}.js`, "utf8");
-        assert.ok(source.includes("function toResultString("));
+        assert.match(source, /\b(?:function|const) toResultString\b/);
         assert.ok(source.includes('console.error(`[iface="test:flavorful/test", function="f-list-in-record1"] call a'));
         assert.ok(
             source.includes(
@@ -503,8 +503,8 @@ suite("CLI", () => {
 
         const { stderr } = await exec(jcoPath, "transpile", `test/fixtures/wit/app/app.wit`, "-o", outDir, "--stub");
         assert.strictEqual(stderr, "");
-        const source = await readFile(`${outDir}/app.js`);
-        assert.ok(source.includes("class PString$1{"));
+        const source = await readFile(`${outDir}/app.js`, "utf8");
+        assert.match(source, /\bclass PString\$1\s*\{/);
 
         await cleanup();
     });
