@@ -14,20 +14,7 @@ import {
   type ResultRow,
 } from "./sqlite/codec.js";
 
-// Runtime additions in 24.20.0 not yet present in the matching-major @types/node.
-interface NativeDatabase extends native.DatabaseSync {
-  limits: Record<string, number>;
-
-  loadExtension(path: string, entryPoint?: string): void;
-
-  serialize(dbName?: string): Uint8Array;
-
-  deserialize(bytes: Uint8Array, options?: { dbName?: string }): void;
-
-  prepare(sql: string, options?: Wit.StatementOptions): native.StatementSync;
-}
-
-const limitKeys: Record<Wit.LimitName, string> = {
+const limitKeys: Record<Wit.LimitName, keyof native.DatabaseLimits> = {
   length: "length",
   "sql-length": "sqlLength",
   column: "column",
@@ -76,7 +63,7 @@ export function openDatabase(path: Wit.Path, options: Wit.DatabaseOptions): Data
       ...statement,
       limits: Object.fromEntries(limits.map(([k, v]) => [limitKeys[k], v])),
     };
-    return new Database(new native.DatabaseSync(nativePath(path), opts) as NativeDatabase);
+    return new Database(new native.DatabaseSync(nativePath(path), opts));
   });
 }
 
@@ -97,7 +84,7 @@ export async function backup(
 }
 
 export class Database implements Wit.Database {
-  constructor(readonly native: NativeDatabase) {}
+  constructor(readonly native: native.DatabaseSync) {}
 
   open(): void {
     capture(() => this.native.open());
