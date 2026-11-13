@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.42.0] - 2026-11-13
+
+### 🐛 Bug Fixes
+
+- _(jco)_ preserve filesystem access when componentizing by @vados-cosmonic in #2443
+
+- _(jco)_ support published transpiler declarations during builds by @vados-cosmonic in #2434
+
+- _(jco)_ preserve declaration compatibility by default by @vados-cosmonic
+
+- _(jco)_ tolerate unmapped optional output shims by @vados-cosmonic
+
+- _(jco)_ retain local binding for the shared test executor by @vados-cosmonic
+
+- _(jco)_ drain Preview 3 output before exiting by @darshpatel1052
+
+- _(jco)_ wait for bindgen recovery in queued component API calls by @vados-cosmonic
+
+### 🎨 Styling
+
+- _(jco)_ use suites, document helpers, and name globals by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(jco)_ adapt CLI assertions to the released transpiler by @vados-cosmonic in #2471
+
+- _(jco)_ flush TCP readiness before blocking socket polls by @vados-cosmonic
+
+- _(jco)_ make release fixtures portable on Windows by @vados-cosmonic
+
+- _(jco)_ cover the workspace runtime through transpile and run by @vados-cosmonic
+
+- _(jco)_ defer call tracking CLI coverage until release by @vados-cosmonic
+
+- _(jco)_ run output lifecycle regressions concurrently by @vados-cosmonic
+
+- _(jco)_ drain subprocess output before returning by @vados-cosmonic in #2375
+
+- _(jco)_ cover component resources and queued recovery by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(jco)_ update internal dependencies for 1.42.0 by @vados-cosmonic
+
 ## [1.41.0] - 2026-11-02
 
 ### 🧪 Testing
