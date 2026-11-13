@@ -30,7 +30,9 @@ const isWindows = platform === "win32";
 // - (2026/08/11) increased due to transpile fixes
 // - (2026/09/08) jco-transpile 0.13 adds scheduler/cancellation, borrow tracking,
 //   and trap handling: 181,694 -> 194,146 bytes with the same Binaryen and minifier.
-const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 200_000;
+// - (2026/11/13) jco-transpile 0.24 embeds the shared runtime; the fixture produces
+//   204,561 bytes with the same Binaryen and minifier versions.
+const FLAVORFUL_WASM_TRANSPILED_CODE_CHAR_LIMIT = 210_000;
 
 suite("API", () => {
     let flavorfulWasmBytes;
