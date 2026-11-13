@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { create, clearDeadlockCheck, task } from './component-helpers.js';
 import type { ComponentDeadlockDetail } from '../src/index.js';
 
@@ -284,5 +284,83 @@ test.concurrent('a component trap wakes suspended threads with a failed resume r
         expect(state.tick()).toBe('done');
     } finally {
         clearDeadlockCheck(component);
+    }
+});
+
+// The tick loop's own scheduling: only setTimeout is faked, so a slice that runs without
+// advancing the clock was scheduled on the next macrotask, not on a timer.
+function scriptedTicks(results: string[]) {
+    const state = create().component.getOrCreateAsyncState(0);
+    const ticks: string[] = [];
+    Object.defineProperty(state, 'tick', {
+        value: () => {
+            const result = results.shift()!;
+            ticks.push(result);
+            return result;
+        },
+    });
+    return { state, ticks };
+}
+
+async function drainMacrotasks(count = 5) {
+    for (let i = 0; i < count; i++) {
+        await new Promise<void>((resolve) => {
+            const channel = new MessageChannel();
+            channel.port1.onmessage = () => {
+                channel.port1.close();
+                resolve();
+            };
+            channel.port2.postMessage(null);
+        });
+    }
+}
+
+test('the tick loop starts and resumes on the next macrotask, without a timer', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+        const { state, ticks } = scriptedTicks(['resumed', 'resumed', 'done']);
+        state.runTickLoop();
+        await drainMacrotasks();
+        expect(ticks).toEqual(['resumed', 'resumed', 'done']);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+test('an idle tick loop polls again after the idle interval', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+        const { state, ticks } = scriptedTicks(['idle', 'done']);
+        state.runTickLoop();
+        await drainMacrotasks();
+        expect(ticks).toEqual(['idle']);
+        vi.advanceTimersByTime(9);
+        expect(ticks).toEqual(['idle']);
+        vi.advanceTimersByTime(1);
+        expect(ticks).toEqual(['idle', 'done']);
+    } finally {
+        vi.useRealTimers();
+    }
+});
+
+test('stopping the state cancels the scheduled tick', async () => {
+    const { state, ticks } = scriptedTicks(['resumed', 'done']);
+    state.runTickLoop();
+    state.stop();
+    await drainMacrotasks();
+    expect(ticks).toEqual([]);
+});
+
+test('without setImmediate the tick loop resumes through a MessageChannel', async () => {
+    vi.stubGlobal('setImmediate', undefined);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+        const { state, ticks } = scriptedTicks(['resumed', 'done']);
+        state.runTickLoop();
+        await drainMacrotasks();
+        expect(ticks).toEqual(['resumed', 'done']);
+    } finally {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
     }
 });
