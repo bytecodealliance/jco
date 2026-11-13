@@ -838,7 +838,7 @@ impl HostIntrinsic {
                 // silently: a trapped callee traps a sync caller.
                 output.push_str(&format!(
                     r#"
-                    async function {sync_start_call_fn}(args, callee, paramCount) {{
+                    async function {sync_start_call_fn}(args, callee, paramCount, resultCount = 0, flags = 1) {{
                         const componentIdx = {current_component_idx_globals}.at(-1);
 
                         const globalTaskMeta = {get_global_current_thread_meta_fn}componentIdx);
@@ -856,9 +856,12 @@ impl HostIntrinsic {
                         if (!preparedTask) {{ throw new Error('unexpectedly missing current (prepared) task'); }}
                         if (!preparedTask.subtaskMeta) {{ throw new Error('missing subtask meta from prepare'); }}
 
-                        // sync-start lowers the caller synchronously but invokes an
-                        // asynchronously lifted callee (callback or stackful).
-                        preparedTask.setCalleeIsAsync(true);
+                        const calleeIsAsync = (flags & 1) !== 0;
+                        preparedTask.setCalleeIsAsync(calleeIsAsync);
+                        preparedTask.setPostReturnFn(args.getPostReturnFn?.());
+                        if (resultCount < 0 || resultCount > 1) {{
+                            throw new Error(`unsupported result count [${{resultCount}}]`);
+                        }}
 
                         const {{ subtask, calleeComponentIdx, callerComponentIdx }} = preparedTask.subtaskMeta;
                         if (!subtask) {{ throw new Error('missing subtask from prepare during sync start call'); }}
@@ -994,13 +997,18 @@ impl HostIntrinsic {
                                 preparedTask.endFirstSlice();
 
                                 if (!callbackFn) {{
-                                    // Async-lifted without a callback (stackful lift): the callee
-                                    // ran to completion above; task.return already ran within it.
+                                    // A sync lift returns its value here; a stackful async lift
+                                    // has already supplied it through task.return.
                                     {debug_log_fn}('[{sync_start_call_fn}()] no callback, resolving w/ callee result', {{
                                         taskID: preparedTask.id(),
                                         componentIdx: preparedTask.componentIdx(),
                                     }});
-                                    if (!preparedTask.isResolved()) {{ preparedTask.resolve([callbackResult]); }}
+                                    if (preparedTask.needsExclusiveLock()) {{
+                                        calleeComponentState.exclusiveRelease(preparedTask.id());
+                                    }}
+                                    if (!preparedTask.isResolved()) {{
+                                        preparedTask.resolve(resultCount === 0 ? [] : [callbackResult]);
+                                    }}
                                     preparedTask.exit({{ skipExclusiveLockCheck: true }});
                                     return;
                                 }}

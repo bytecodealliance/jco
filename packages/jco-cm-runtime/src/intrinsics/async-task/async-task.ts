@@ -871,7 +871,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                         subtaskID: this.#parentSubtask!.id(),
                     });
                     const callerTask = this.#parentSubtask!.getParentTask();
-                    withCurrentTaskMeta(_registers, {
+                    meta.returnFnResult = withCurrentTaskMeta(_registers, {
                         taskID: callerTask.id(),
                         threadID: meta.callerThreadID!,
                         componentIdx: callerTask.componentIdx(),
