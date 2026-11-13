@@ -277,6 +277,43 @@ const TICK_DONE = 'done';
 const TICK_RESUMED = 'resumed';
 const TICK_IDLE = 'idle';
 
+const IDLE_POLL_MS = 10;
+
+/**
+ * Run `callback` on the next macrotask, after the current microtasks have drained, as
+ * `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
+ * browsers to 4 ms once timers nest, which a guest that yields often pays on every yield.
+ * Returns a function that cancels the callback.
+ */
+function onNextMacrotask(callback: () => void): () => void {
+    if (typeof setImmediate === 'function') {
+        const handle = setImmediate(callback);
+        return () => clearImmediate(handle);
+    }
+    if (typeof MessageChannel === 'function') {
+        const channel = new MessageChannel();
+        let cancelled = false;
+        channel.port1.onmessage = () => {
+            channel.port1.close();
+            if (!cancelled) {
+                callback();
+            }
+        };
+        channel.port2.postMessage(null);
+        return () => {
+            cancelled = true;
+            channel.port1.close();
+        };
+    }
+    const handle = setTimeout(callback, 0);
+    return () => clearTimeout(handle);
+}
+
+function afterDelay(callback: () => void, ms: number): () => void {
+    const handle = setTimeout(callback, ms);
+    return () => clearTimeout(handle);
+}
+
 export function initializeComponentAsyncStateClass(
     context: ComponentAsyncStateContext,
 ): ComponentAsyncStateConstructor {
@@ -322,7 +359,8 @@ export function initializeComponentAsyncStateClass(
         #handlers: { id: bigint; fn(value: number): void; event: string }[] = [];
         #nextHandlerID = 0n;
 
-        #tickLoop: ReturnType<typeof setTimeout> | null = null;
+        /** Cancels the scheduled tick while the tick loop runs. */
+        #tickLoop: (() => void) | null = null;
 
         #onExclusiveReleaseHandlers: ((() => void) | null)[] = [];
 
@@ -895,9 +933,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         stop() {
-            if (this.#tickLoop !== null) {
-                clearTimeout(this.#tickLoop);
-            }
+            this.#tickLoop?.();
             this.#tickLoop = null;
             this.abandonLockWaiters();
             this.abandonAdmissionWaiters();
@@ -924,10 +960,9 @@ export function initializeComponentAsyncStateClass(
                     checkForDeadlock(deadlock);
                 }
                 // Let resumed microtasks drain before the next slice; otherwise poll at the idle cadence.
-                const delay = result === TICK_RESUMED ? 0 : 10;
-                this.#tickLoop = setTimeout(run, delay);
+                this.#tickLoop = result === TICK_RESUMED ? onNextMacrotask(run) : afterDelay(run, IDLE_POLL_MS);
             };
-            this.#tickLoop = setTimeout(run, 10);
+            this.#tickLoop = onNextMacrotask(run);
         }
 
         tick() {
