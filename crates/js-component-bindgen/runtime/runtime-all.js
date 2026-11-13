@@ -1,5 +1,5 @@
-// @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit c1e4baf5c08eb609a9d01e9367df3eb5aa559e94
+// @bytecodealliance/jco-cm-runtime@0.0.1
+// generated from commit 74bccaa98dc28ee94342f22beb12574d727715da
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -2952,7 +2952,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 	}
 	return Number(subtask.ensureHandle()) << 4 | subtaskState;
 }
-async function syncStartCall(_context, args, callee, paramCount) {
+async function syncStartCall(_context, args, callee, paramCount, resultCount = 0, flags = 1) {
 	const componentIdx = _context.componentIdxs.at(-1);
 	const globalTaskMeta = getCurrentTaskMeta(_context.registers, componentIdx);
 	if (!globalTaskMeta) throw new Error("missing global current task meta during sync start call");
@@ -2969,7 +2969,10 @@ async function syncStartCall(_context, args, callee, paramCount) {
 	const preparedTask = preparedTaskMeta.task;
 	if (!preparedTask) throw new Error("unexpectedly missing current (prepared) task");
 	if (!preparedTask.subtaskMeta) throw new Error("missing subtask meta from prepare");
-	preparedTask.setCalleeIsAsync(true);
+	const calleeIsAsync = (flags & 1) !== 0;
+	preparedTask.setCalleeIsAsync(calleeIsAsync);
+	preparedTask.setPostReturnFn(args.getPostReturnFn?.());
+	if (resultCount < 0 || resultCount > 1) throw new Error(`unsupported result count [${resultCount}]`);
 	const { subtask, calleeComponentIdx, callerComponentIdx } = preparedTask.subtaskMeta;
 	if (!subtask) throw new Error("missing subtask from prepare during sync start call");
 	if (calleeComponentIdx !== preparedTask.componentIdx()) throw new Error(`meta callee idx [${calleeComponentIdx}] != current task idx [${preparedTask.componentIdx()}] during sync start call`);
@@ -3049,7 +3052,8 @@ async function syncStartCall(_context, args, callee, paramCount) {
 						taskID: preparedTask.id(),
 						componentIdx: preparedTask.componentIdx()
 					});
-					if (!preparedTask.isResolved()) preparedTask.resolve([callbackResult]);
+					if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
+					if (!preparedTask.isResolved()) preparedTask.resolve(resultCount === 0 ? [] : [callbackResult]);
 					preparedTask.exit({ skipExclusiveLockCheck: true });
 					return;
 				}
@@ -4303,7 +4307,7 @@ function initializeAsyncTaskClass(context) {
 						subtaskID: this.#parentSubtask.id()
 					});
 					const callerTask = this.#parentSubtask.getParentTask();
-					withCurrentTaskMeta(_registers, {
+					meta.returnFnResult = withCurrentTaskMeta(_registers, {
 						taskID: callerTask.id(),
 						threadID: meta.callerThreadID,
 						componentIdx: callerTask.componentIdx(),

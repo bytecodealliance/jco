@@ -328,6 +328,7 @@ pub fn ts_bindgen(
     type_generation: TypeGenerationConfig,
     files: &mut Files,
 ) -> Result<()> {
+    crate::ensure_supported_functions(resolve)?;
     let (async_imports, async_exports) = match opts.async_mode.clone() {
         None | Some(AsyncMode::Sync) => (Default::default(), Default::default()),
         Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => {
@@ -2010,6 +2011,14 @@ impl<'a> TsInterface<'a> {
 
         if declaration {
             match func.kind {
+                FunctionKind::Getter
+                | FunctionKind::Setter
+                | FunctionKind::MethodGetter(_)
+                | FunctionKind::MethodSetter(_)
+                | FunctionKind::StaticGetter(_)
+                | FunctionKind::StaticSetter(_) => {
+                    unreachable!("WIT accessors are rejected before binding generation")
+                }
                 FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                     if let Some(local_name) = &renamed_local_name {
                         // Guest declarations are nested in an ambient `declare module`
@@ -2044,6 +2053,14 @@ impl<'a> TsInterface<'a> {
         iface.src.push_str("(");
 
         let param_start = match &func.kind {
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("WIT accessors are rejected before binding generation")
+            }
             FunctionKind::Freestanding => 0,
             FunctionKind::Method(_) => 1,
             FunctionKind::Static(_) => 0,
@@ -2627,7 +2644,7 @@ fn resource_brand(resolve: &Resolve, id: TypeId) -> String {
     };
     let package = &resolve.packages[package].name;
     let track = match &package.version {
-        Some(version) => format!("@{}", PackageName::version_compat_track_string(version)),
+        Some(version) => format!("@{}", PackageName::version_compat_track_string(version).0),
         None => String::new(),
     };
     format!(

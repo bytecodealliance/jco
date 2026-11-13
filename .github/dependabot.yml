@@ -37,6 +37,17 @@ updates:
       # Workspace members inherit dependencies from the root manifest.
       - '/'
       - '/crates/test-components'
+      - '/test/components/rust'
+      - '/examples/transpile/p3-stream-chat/guest'
+    groups:
+      upstream-wasm:
+        patterns:
+          - 'wasm*'
+          - 'wat'
+          - 'wast'
+          - 'wit-*'
+          - 'cranelift-*'
+          - 'webidl2wit'
     schedule:
       interval: 'weekly'
       day: 'monday'
