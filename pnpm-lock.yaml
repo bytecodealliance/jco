@@ -29,6 +29,7 @@ catalogs:
       version: 2.0.2
 
 overrides:
+  '@bytecodealliance/componentize-js@0.23.0>@bytecodealliance/jco': 1.31.0
   '@bytecodealliance/weval': 0.5.0
   brace-expansion: 5.0.12
   cookie@<1: 0.7.2
@@ -5536,7 +5537,7 @@ snapshots:
 
   '@bytecodealliance/componentize-js@0.23.0':
     dependencies:
-      '@bytecodealliance/jco': 1.41.0
+      '@bytecodealliance/jco': 1.31.0
       '@bytecodealliance/weval': 0.5.0
       '@bytecodealliance/wizer': 10.0.0
       es-module-lexer: 1.7.0
