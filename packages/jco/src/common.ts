@@ -106,7 +106,7 @@ async function readFileCli(filePath: string | URL): Promise<Buffer>;
 async function readFileCli(filePath: string | URL, encoding: BufferEncoding): Promise<string>;
 async function readFileCli(filePath: string | URL, encoding?: BufferEncoding): Promise<Buffer | string> {
     try {
-        return await readFile(filePath, encoding);
+        return await readFile(filePath, encoding ?? null);
     } catch {
         throw `Unable to read file ${styleText("bold", String(filePath))}`;
     }
