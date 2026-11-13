@@ -6,6 +6,8 @@ allowBuilds:
   puppeteer: true
 
 overrides:
+  # ComponentizeJS 0.23's engine metadata needs the older WASI sockets encoder.
+  '@bytecodealliance/componentize-js@0.23.0>@bytecodealliance/jco': 1.31.0
   '@bytecodealliance/weval': 0.5.0
   brace-expansion: 5.0.12
   'cookie@<1': 0.7.2
