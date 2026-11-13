@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.14.1] - 2026-11-13
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ release files and report failures of filesystem streams by @vados-cosmonic
+
+- _(p3-shim)_ fix filesystem streams and no-follow symlink checks by @landonxjames
+
+### 🚜 Refactor
+
+- _(p3-shim)_ give file handles one owner and trim repeated work by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p3-shim)_ run filesystem stream and symlink tests concurrently by @vados-cosmonic in #2448
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p3-shim)_ update preview2-shim to v0.31.1 by @vados-cosmonic
+
+### 🔒️ Security
+
+- _(p3-shim)_ check every level of a symlink chain in the sandbox by @vados-cosmonic
+
 ## [0.14.0] - 2026-11-12
 
 ### 🚀 Features
