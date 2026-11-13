@@ -14,58 +14,60 @@ const fixture = fileURLToPath(new URL('../fixtures/components/p3/context-resourc
 const taskUrl = new URL('intrinsics/async-task.js', defaultRuntimeUrl).href;
 const execAsync = promisify(execFile);
 
-test.concurrent.for([false, true])('symmetric entry preserves its callback receiver (jspi=%s)', async (jspi, ctx) => {
-    if (jspi && !hasJspi) {
-        ctx.skip();
-    }
+test.concurrent.for([false, true])(
+    'symmetric entry preserves its caller and provider context (jspi=%s)',
+    async (jspi, ctx) => {
+        if (jspi && !hasJspi) {
+            ctx.skip();
+        }
 
-    const dir = await getTmpDir();
-    try {
-        await writeRuntimeProvider(
-            dir,
-            'async-task',
-            `import * as defaults from ${JSON.stringify(taskUrl)};
+        const dir = await getTmpDir();
+        try {
+            await writeRuntimeProvider(
+                dir,
+                'async-task',
+                `import * as defaults from ${JSON.stringify(taskUrl)};
 export * from ${JSON.stringify(taskUrl)};
+export const calls = [];
 export function symmetricSyncGuestCallEnter(context, ...args) {
- if (args[0] === -99) {
-  if (this !== ${jspi ? 'null' : 'undefined'}) throw new Error('lost symmetric entry callback receiver');
-  return 42;
- }
+ if (this !== undefined) throw new Error('lost symmetric entry receiver');
+ if (context.registers.current?.componentIdx !== args[0]) throw new Error('lost caller component');
+ if (args[1] !== 0 || !Number.isInteger(args[2])) throw new Error('invalid callee operands');
+ calls.push(args.slice());
  return defaults.symmetricSyncGuestCallEnter(context, ...args);
 }`,
-        );
-        const { files } = await transpile(
-            fileURLToPath(new URL('../fixtures/components/p3/context-fused.wat', import.meta.url)),
-            {
-                name: 'receiver',
-                instantiation: 'sync',
-                asyncMode: jspi ? 'jspi' : undefined,
-                asyncImports: jspi ? ['pause'] : [],
-                asyncExports: jspi ? ['run'] : [],
-                cmRuntimeEsModule: './provider/',
-            },
-        );
-        const source = new TextDecoder().decode(files['receiver.js']);
-        // Exercise the actual emitted partial application. The slow wrapper
-        // invokes its callback with apply(null, args); the plain core import
-        // binds the direct-call receiver. Neither path may lose its context.
-        const callback = source.match(/_symmetricSyncGuestCallEnter\.bind\([^)]*\)/)?.[0];
-        assert.isString(callback);
-        const exports = /return \{[^\n]*\bpostCount, run,\s*\};/;
-        assert.match(source, exports);
-        files['receiver.js'] = new TextEncoder().encode(
-            source.replace(exports, `return { testCallback: () => (${callback}).apply(null, [-99, false, 0]) };`),
-        );
-        await writeFiles(files, { baseDir: dir });
-        const bindings = await import(pathToFileURL(join(dir, 'receiver.js')).href);
-        const instance = await bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {
-            pause: { default() {} },
-        });
-        assert.strictEqual(instance.testCallback(), 42);
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-});
+            );
+            const { files } = await transpile(
+                fileURLToPath(new URL('../fixtures/components/p3/context-fused.wat', import.meta.url)),
+                {
+                    name: 'receiver',
+                    instantiation: 'sync',
+                    asyncMode: jspi ? 'jspi' : undefined,
+                    asyncImports: jspi ? ['pause'] : [],
+                    asyncExports: jspi ? ['run'] : [],
+                    cmRuntimeEsModule: './provider/',
+                },
+            );
+            await writeFiles(files, { baseDir: dir });
+            const bindings = await import(pathToFileURL(join(dir, 'receiver.js')).href);
+            const instance = await bindings.instantiate((name: string) => new WebAssembly.Module(files[name]), {
+                pause: { default: jspi ? async () => Promise.resolve() : () => {} },
+            });
+            const provider = await import(pathToFileURL(join(dir, 'provider/intrinsics/async-task.js')).href);
+            for (let call = 1; call <= 2; call++) {
+                const result = instance.run();
+                assert.strictEqual(jspi ? await result : result, 42);
+                assert.strictEqual(instance.postCount(), call);
+            }
+            assert.lengthOf(provider.calls, 2);
+            for (const [caller, , callee] of provider.calls) {
+                assert.notStrictEqual(caller, callee);
+            }
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    },
+);
 
 function providerSource() {
     return `import * as defaults from ${JSON.stringify(taskUrl)};
