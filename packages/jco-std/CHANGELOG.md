@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.11.0] - 2026-11-13
+
+### 🐛 Bug Fixes
+
+- _(std)_ preserve node debug callback and logging semantics by @vados-cosmonic
+
+- _(std)_ make checked-in type generation reproducible by @vados-cosmonic
+
+### ⚙️ Miscellaneous Tasks
+
+- _(std)_ update preview2-shim to v0.31.1 by @vados-cosmonic
+
+- _(std)_ remove generated wasi types that no world produces by @vados-cosmonic
+
+- _(std)_ regenerate wasi types with the current bindgen by @vados-cosmonic
+
 ## [0.10.0] - 2026-10-28
 
 ### ⚙️ Miscellaneous Tasks
