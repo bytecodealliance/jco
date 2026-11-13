@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.19.1] - 2026-11-13
+
+### ⚡ Performance
+
+- _(bindgen)_ resume the tick loop on the next macrotask, not a clamped timer by @zion-sati in #2468
+
+
+
+
 ## [2.19.0] - 2026-11-12
 
 ### 🚀 Features
