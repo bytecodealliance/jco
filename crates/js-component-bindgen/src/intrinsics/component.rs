@@ -723,7 +723,36 @@ impl ComponentIntrinsic {
                         #handlerMap = new Map();
                         #nextHandlerID = 0n;
 
+                        // Cancels the scheduled tick while the tick loop runs.
                         #tickLoop = null;
+
+                        // Runs the callback on the next macrotask, after the current microtasks have
+                        // drained, as setTimeout(callback, 0) would, but without its minimum delay:
+                        // Node.js clamps it to 1 ms and browsers to 4 ms once timers nest, which a
+                        // guest that yields often pays on every yield. Returns a cancel function.
+                        static #onNextMacrotask(callback) {{
+                            if (typeof setImmediate === 'function') {{
+                                const handle = setImmediate(callback);
+                                return () => clearImmediate(handle);
+                            }}
+                            if (typeof MessageChannel === 'function') {{
+                                const channel = new MessageChannel();
+                                let cancelled = false;
+                                channel.port1.onmessage = () => {{
+                                    channel.port1.close();
+                                    if (!cancelled) {{ callback(); }}
+                                }};
+                                channel.port2.postMessage(null);
+                                return () => {{ cancelled = true; channel.port1.close(); }};
+                            }}
+                            const handle = setTimeout(callback, 0);
+                            return () => clearTimeout(handle);
+                        }}
+
+                        static #afterDelay(callback, ms) {{
+                            const handle = setTimeout(callback, ms);
+                            return () => clearTimeout(handle);
+                        }}
 
                         #onExclusiveReleaseHandlers = [];
 
@@ -1220,7 +1249,7 @@ impl ComponentIntrinsic {
                         }}
 
                         stop() {{
-                            clearTimeout(this.#tickLoop);
+                            this.#tickLoop?.();
                             this.#tickLoop = null;
                             this.abandonLockWaiters();
                             this.abandonAdmissionWaiters();
@@ -1243,10 +1272,11 @@ impl ComponentIntrinsic {
                                 }}
                                 // Let resumed microtasks drain before the next slice;
                                 // otherwise poll at the idle cadence.
-                                const delay = result === {component_async_state_class}.TickResult.RESUMED ? 0 : 10;
-                                this.#tickLoop = setTimeout(run, delay);
+                                this.#tickLoop = result === {component_async_state_class}.TickResult.RESUMED
+                                    ? {component_async_state_class}.#onNextMacrotask(run)
+                                    : {component_async_state_class}.#afterDelay(run, 10);
                             }};
-                            this.#tickLoop = setTimeout(run, 10);
+                            this.#tickLoop = {component_async_state_class}.#onNextMacrotask(run);
                         }}
 
                         tick() {{
