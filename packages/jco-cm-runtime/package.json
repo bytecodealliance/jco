@@ -1,6 +1,6 @@
 {
     "name": "@bytecodealliance/jco-cm-runtime",
-    "version": "0.0.1",
+    "version": "0.1.0",
     "description": "Default Component Model runtime for Jco-generated JavaScript",
     "keywords": [
         "Component",
