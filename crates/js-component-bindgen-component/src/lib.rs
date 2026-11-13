@@ -37,7 +37,6 @@ mod bindings {
     //! of the js-component-bindgen Wasm component used by Jco
 
     use super::JsComponentBindgenComponent;
-    use wit_bindgen::rt::WitMap as _;
     wit_bindgen::generate!({
         world: "js-component-bindgen"
     });

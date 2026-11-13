@@ -987,16 +987,6 @@ impl JsBindgen<'_> {
         self.runtime().callback_reference(intrinsic)
     }
 
-    fn intrinsic_callback_reference_with_receiver(
-        &mut self,
-        intrinsic: Intrinsic,
-        receiver: &str,
-    ) -> String {
-        self.all_intrinsics.insert(intrinsic);
-        self.runtime()
-            .callback_reference_with_receiver(intrinsic, receiver)
-    }
-
     /// Write out utility helpers/objects (available via esModule._util)
     fn write_util_export(&mut self, output: &mut source::Source, util_members: &str) {
         // Future` class that can be used by external consumers (e.g. host code) to build nested future values
@@ -1863,8 +1853,7 @@ impl<'a> Instantiator<'a, '_> {
             | Trampoline::ResourceTransferOwn
             | Trampoline::ResourceTransferBorrow
             | Trampoline::PrepareCall { .. }
-            | Trampoline::SyncStartCall { .. }
-            | Trampoline::AsyncStartCall { .. }
+            | Trampoline::StartCall { .. }
             | Trampoline::FutureTransfer
             | Trampoline::StreamTransfer
             | Trampoline::ErrorContextTransfer
@@ -1980,13 +1969,7 @@ impl<'a> Instantiator<'a, '_> {
             // sync-lowered call into an async-lifted callee suspends the caller
             // while the callee blocks. Every core function that can reach it
             // must therefore run in a promising activation (callbacks included).
-            Trampoline::SyncStartCall { .. } => true,
-            // The enter trampoline is a plain function outside JSPI; counting it
-            // as suspending would add promising wrappers to sync output.
-            Trampoline::EnterSyncCall => matches!(
-                self.bindgen.opts.async_mode,
-                Some(AsyncMode::JavaScriptPromiseIntegration { .. })
-            ),
+            Trampoline::StartCall { .. } => true,
             _ => false,
         }
     }
@@ -2099,7 +2082,7 @@ impl<'a> Instantiator<'a, '_> {
     fn is_early_trampoline(trampoline: &Trampoline) -> bool {
         matches!(
             trampoline,
-            Trampoline::AsyncStartCall { .. }
+            Trampoline::StartCall { .. }
                 | Trampoline::BackpressureDec { .. }
                 | Trampoline::BackpressureInc { .. }
                 | Trampoline::EnterSyncCall
@@ -2133,7 +2116,6 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::StreamWrite { .. }
                 | Trampoline::SubtaskCancel { .. }
                 | Trampoline::SubtaskDrop { .. }
-                | Trampoline::SyncStartCall { .. }
                 | Trampoline::TaskCancel { .. }
                 | Trampoline::TaskReturn { .. }
                 | Trampoline::ThreadIndex { .. }
@@ -2255,7 +2237,6 @@ impl<'a> Instantiator<'a, '_> {
                 let CanonicalOptions {
                     instance,
                     async_,
-                    cancellable,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
                     ..
@@ -2270,7 +2251,7 @@ impl<'a> Instantiator<'a, '_> {
                     .as_u32();
                 let wait_callback = self.bindgen.intrinsic_bind_callback(
                     Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait),
-                    &format!("{{ componentIdx: {instance_idx}, isAsync: {async_}, isCancellable: {cancellable}, memoryIdx: {memory_idx}, getMemoryFn: () => memory{memory_idx} }}"),
+                    &format!("{{ componentIdx: {instance_idx}, isAsync: {async_}, isCancellable: false, memoryIdx: {memory_idx}, getMemoryFn: () => memory{memory_idx} }}"),
                 );
                 let suspending_wrap_fn = self
                     .bindgen
@@ -2297,7 +2278,6 @@ impl<'a> Instantiator<'a, '_> {
                     async_,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
-                    cancellable,
                     ..
                 } = self
                     .component
@@ -2314,7 +2294,7 @@ impl<'a> Instantiator<'a, '_> {
                     .as_u32();
                 let poll_callback = self.bindgen.intrinsic_bind_callback(
                     Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll),
-                    &format!("{{ componentIdx: {instance_idx}, isAsync: {async_}, isCancellable: {cancellable}, memoryIdx: {memory_idx}, getMemoryFn: () => memory{memory_idx} }}"),
+                    &format!("{{ componentIdx: {instance_idx}, isAsync: {async_}, isCancellable: false, memoryIdx: {memory_idx}, getMemoryFn: () => memory{memory_idx} }}"),
                 );
 
                 uwriteln!(
@@ -3056,29 +3036,7 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "const trampoline{i} = {callback};",)
             }
 
-            Trampoline::SyncStartCall { callback } => {
-                let (callback_idx, callback_fn) = callback
-                    .map(|v| (v.as_u32().to_string(), format!("callback_{}", v.as_u32())))
-                    .unwrap_or_else(|| ("null".into(), "null".into()));
-                let callback = self.bindgen.intrinsic_bind_callback(
-                    Intrinsic::Host(HostIntrinsic::SyncStartCall),
-                    &format!(
-                        "{{ callbackIdx: {callback_idx}, getCallbackFn: () => {callback_fn} }}"
-                    ),
-                );
-
-                // NOTE: the intrinsic blocks the (sync-lowered) caller until the
-                // async-lifted callee resolves via task.return, so it must be
-                // JSPI-wrapped.
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = new WebAssembly.Suspending({callback});",
-                );
-            }
-
-            // This actually starts a Task (whose parent is a subtask generated during PrepareCall)
-            // for a from-component async import call
-            Trampoline::AsyncStartCall {
+            Trampoline::StartCall {
                 callback,
                 post_return,
             } => {
@@ -3088,13 +3046,30 @@ impl<'a> Instantiator<'a, '_> {
                 let (post_return_idx, post_return_fn) = post_return
                     .map(|v| (v.as_u32().to_string(), format!("postReturn{}", v.as_u32())))
                     .unwrap_or_else(|| ("null".into(), "null".into()));
-                let callback = self.bindgen.intrinsic_bind_callback(
-                    Intrinsic::Host(HostIntrinsic::AsyncStartCall),
-                    &format!(
-                        "{{ postReturnIdx: {post_return_idx}, getPostReturnFn: () => {post_return_fn}, callbackIdx: {callback_idx}, getCallbackFn: () => {callback_fn} }}"
-                    ),
+                let options = format!(
+                    "{{ postReturnIdx: {post_return_idx}, getPostReturnFn: () => {post_return_fn}, callbackIdx: {callback_idx}, getCallbackFn: () => {callback_fn} }}"
                 );
-                uwriteln!(self.src.js, "const trampoline{i} = {callback};",);
+                let async_start = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Host(HostIntrinsic::AsyncStartCall),
+                    &options,
+                );
+                let sync_start = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::Host(HostIntrinsic::SyncStartCall),
+                    &options,
+                );
+                let async_caller = wasmtime_environ::component::START_FLAG_ASYNC_CALLER;
+                // FACT selects blocking or status-returning calls with a runtime flag.
+                uwriteln!(
+                    self.src.js,
+                    r#"
+                    const trampoline{i}Async = {async_start};
+                    const trampoline{i}Sync = {sync_start};
+                    const trampoline{i} = new WebAssembly.Suspending((callee, paramCount, resultCount, flags) =>
+                        (flags & {async_caller}) !== 0
+                            ? trampoline{i}Async(callee, paramCount, resultCount, flags)
+                            : trampoline{i}Sync(callee, paramCount, resultCount, flags));
+                "#
+                );
             }
 
             Trampoline::LowerImport {
@@ -3116,7 +3091,8 @@ impl<'a> Instantiator<'a, '_> {
                 let component_idx = canon_opts.instance.as_u32();
                 let is_async = canon_opts.async_;
 
-                let cancellable = canon_opts.cancellable;
+                // Stackful calls no longer have a cancellable canonical option.
+                let cancellable = false;
 
                 let func_ty = self.types.index(*lower_ty);
 
@@ -3855,14 +3831,11 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ThreadYield {
-                cancellable,
-                instance,
-            } => {
+            Trampoline::ThreadYield { instance } => {
                 self.thread_concede_trampoline(
                     i,
                     AsyncTaskIntrinsic::ThreadYield,
-                    *cancellable,
+                    false,
                     instance.as_u32(),
                 );
             }
@@ -3891,58 +3864,43 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::ThreadSuspend {
-                cancellable,
-                instance,
-            } => {
+            Trampoline::ThreadSuspend { instance } => {
                 self.thread_concede_trampoline(
                     i,
                     AsyncTaskIntrinsic::ThreadSuspend,
-                    *cancellable,
+                    false,
                     instance.as_u32(),
                 );
             }
-            Trampoline::ThreadSuspendThenResume {
-                cancellable,
-                instance,
-            } => {
+            Trampoline::ThreadSuspendThenResume { instance } => {
                 self.thread_concede_trampoline(
                     i,
                     AsyncTaskIntrinsic::ThreadSuspendThenResume,
-                    *cancellable,
+                    false,
                     instance.as_u32(),
                 );
             }
-            Trampoline::ThreadSuspendThenPromote {
-                cancellable,
-                instance,
-            } => {
+            Trampoline::ThreadSuspendThenPromote { instance } => {
                 self.thread_concede_trampoline(
                     i,
                     AsyncTaskIntrinsic::ThreadSuspendThenPromote,
-                    *cancellable,
+                    false,
                     instance.as_u32(),
                 );
             }
-            Trampoline::ThreadYieldThenResume {
-                cancellable,
-                instance,
-            } => {
+            Trampoline::ThreadYieldThenResume { instance } => {
                 self.thread_concede_trampoline(
                     i,
                     AsyncTaskIntrinsic::ThreadYieldThenResume,
-                    *cancellable,
+                    false,
                     instance.as_u32(),
                 );
             }
-            Trampoline::ThreadYieldThenPromote {
-                cancellable,
-                instance,
-            } => {
+            Trampoline::ThreadYieldThenPromote { instance } => {
                 self.thread_concede_trampoline(
                     i,
                     AsyncTaskIntrinsic::ThreadYieldThenPromote,
-                    *cancellable,
+                    false,
                     instance.as_u32(),
                 );
             }
@@ -3975,60 +3933,22 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::EnterSyncCall => {
-                let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic_call_prefix(
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
+                let enter = self.bindgen.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
+                ));
+                let current = self
+                    .bindgen
+                    .intrinsic_call(Intrinsic::GetGlobalCurrentThreadMetaFn, "");
+                // Wasmtime 50 supplies only the callee type flag and instance.
+                // Async-typed calls use StartCall; this synchronous entry cannot
+                // suspend and takes its caller from the active thread register.
+                uwriteln!(
+                    self.src.js,
+                    r#"
+                    const trampoline{i} = (calleeIsAsync, calleeComponentIdx) =>
+                        {enter}{current}.componentIdx, calleeIsAsync, calleeComponentIdx);
+                "#
                 );
-                let enter_symmetric_sync_guest_call_callback = self
-                    .bindgen
-                    .intrinsic_callback_reference(Intrinsic::AsyncTask(
-                        AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
-                    ));
-                let suspending_wrap_fn = self
-                    .bindgen
-                    .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
-                let conditional_suspending_fn = self
-                    .bindgen
-                    .intrinsic_call_prefix(Intrinsic::ConditionalSuspending3I32ToVoidFn);
-                let guard_trap_fn = self
-                    .bindgen
-                    .intrinsic_call_prefix(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
-                // Under JSPI, contended entry queues for the callee's per-slice
-                // exclusive lock by returning a promise, which requires the
-                // trampoline to be Suspending (fused sync calls then run inside
-                // promising activations). Outside JSPI a Suspending import
-                // would trap on every call from the plain (non-promising)
-                // stacks such transpiles use, so the trampoline stays plain
-                // and contended entry traps (uncontended entry is fully
-                // synchronous either way).
-                let uses_jspi = matches!(
-                    self.bindgen.opts.async_mode,
-                    Some(AsyncMode::JavaScriptPromiseIntegration { .. })
-                );
-                if uses_jspi {
-                    // The suspending wrapper invokes callbacks with
-                    // fn.apply(null, args), including before context binding.
-                    let enter_symmetric_sync_guest_call_slow_callback =
-                        self.bindgen.intrinsic_callback_reference_with_receiver(
-                            Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
-                            "null",
-                        );
-                    uwriteln!(
-                        self.src.js,
-                        r#"
-                          const trampoline{i} = {conditional_suspending_fn}
-                              {guard_trap_fn}null, (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}callerComponentIdx, calleeIsAsync, calleeComponentIdx, true), true),
-                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}callerComponentIdx, {enter_symmetric_sync_guest_call_slow_callback}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
-                          );
-                        "#,
-                    );
-                } else {
-                    uwriteln!(
-                        self.src.js,
-                        r#"
-                          const trampoline{i} = {enter_symmetric_sync_guest_call_callback};
-                        "#,
-                    );
-                }
             }
 
             Trampoline::ExitSyncCall => {
@@ -4302,7 +4222,7 @@ impl<'a> Instantiator<'a, '_> {
                 CoreDef::Trampoline(index)
                     if matches!(
                         self.translation.trampolines[*index],
-                        Trampoline::EnterSyncCall | Trampoline::SyncStartCall { .. }
+                        Trampoline::EnterSyncCall | Trampoline::StartCall { .. }
                     )
             )
         });
@@ -4554,10 +4474,13 @@ impl<'a> Instantiator<'a, '_> {
         // `implements` feature) falls back to a mapping for the implemented
         // interface id when the label itself has no mapping, so that e.g.
         // WASI shim mappings apply to labeled imports as well.
-        let implements = self.resolve.implements_value(
-            world_key,
-            &self.resolve.worlds[self.world].imports[world_key],
-        );
+        let implements = self
+            .resolve
+            .implements_interface(
+                world_key,
+                &self.resolve.worlds[self.world].imports[world_key],
+            )
+            .and_then(|id| self.resolve.id_of(id));
 
         // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import_with_implements(
@@ -4566,6 +4489,14 @@ impl<'a> Instantiator<'a, '_> {
                 import_name
             } else {
                 match func.kind {
+                    FunctionKind::Getter
+                    | FunctionKind::Setter
+                    | FunctionKind::MethodGetter(_)
+                    | FunctionKind::MethodSetter(_)
+                    | FunctionKind::StaticGetter(_)
+                    | FunctionKind::StaticSetter(_) => {
+                        unreachable!("WIT accessors are rejected before binding generation")
+                    }
                     FunctionKind::Method(_) => {
                         let stripped = import_name.strip_prefix("[method]").unwrap();
                         &stripped[0..stripped.find(".").unwrap()]
@@ -4597,6 +4528,14 @@ impl<'a> Instantiator<'a, '_> {
         self.create_resource_fn_map(func, func_ty, &mut import_resource_map);
 
         let (callee_name, call_type) = match func.kind {
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("WIT accessors are rejected before binding generation")
+            }
             FunctionKind::Freestanding => (
                 self.bindgen
                     .local_names
@@ -4809,6 +4748,14 @@ impl<'a> Instantiator<'a, '_> {
             };
 
             let callee_name = match func.kind {
+                FunctionKind::Getter
+                | FunctionKind::Setter
+                | FunctionKind::MethodGetter(_)
+                | FunctionKind::MethodSetter(_)
+                | FunctionKind::StaticGetter(_)
+                | FunctionKind::StaticSetter(_) => {
+                    unreachable!("WIT accessors are rejected before binding generation")
+                }
                 FunctionKind::Constructor(_) => callee_name[4..].to_string(),
 
                 FunctionKind::Static(_)
@@ -4889,6 +4836,14 @@ impl<'a> Instantiator<'a, '_> {
 
         // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("WIT accessors are rejected before binding generation")
+            }
             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                 (func_name.to_lower_camel_case(), callee_name)
             }
@@ -5222,7 +5177,11 @@ impl<'a> Instantiator<'a, '_> {
             let implements = self.resolve.worlds[self.world]
                 .imports
                 .get(&world_key)
-                .and_then(|item| self.resolve.implements_value(&world_key, item));
+                .and_then(|item| {
+                    self.resolve
+                        .implements_interface(&world_key, item)
+                        .and_then(|id| self.resolve.id_of(id))
+                });
             let (local_name, _) = self
                 .bindgen
                 .local_names
@@ -6193,6 +6152,14 @@ impl<'a> Instantiator<'a, '_> {
                     self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
                     let local_name = String::from(match func.kind {
+                        FunctionKind::Getter
+                        | FunctionKind::Setter
+                        | FunctionKind::MethodGetter(_)
+                        | FunctionKind::MethodSetter(_)
+                        | FunctionKind::StaticGetter(_)
+                        | FunctionKind::StaticSetter(_) => {
+                            unreachable!("WIT accessors are rejected before binding generation")
+                        }
                         // For resources, we must take the type name (adding `.prototype.<fn name>` later)
                         FunctionKind::Constructor(resource_id)
                         | FunctionKind::Method(resource_id)
@@ -6228,6 +6195,14 @@ impl<'a> Instantiator<'a, '_> {
                     );
 
                     let js_binding_name = match func.kind {
+                        FunctionKind::Getter
+                        | FunctionKind::Setter
+                        | FunctionKind::MethodGetter(_)
+                        | FunctionKind::MethodSetter(_)
+                        | FunctionKind::StaticGetter(_)
+                        | FunctionKind::StaticSetter(_) => {
+                            unreachable!("WIT accessors are rejected before binding generation")
+                        }
                         // For resources, we must take the type name (adding `.prototype.<fn name>` later)
                         FunctionKind::Constructor(ty)
                         | FunctionKind::Method(ty)
@@ -6359,6 +6334,14 @@ impl<'a> Instantiator<'a, '_> {
                         self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
                         let local_name = String::from(match func.kind {
+                            FunctionKind::Getter
+                            | FunctionKind::Setter
+                            | FunctionKind::MethodGetter(_)
+                            | FunctionKind::MethodSetter(_)
+                            | FunctionKind::StaticGetter(_)
+                            | FunctionKind::StaticSetter(_) => {
+                                unreachable!("WIT accessors are rejected before binding generation")
+                            }
                             // For resources, we must use the name of the type
                             FunctionKind::Constructor(resource_id)
                             | FunctionKind::Method(resource_id)
@@ -6404,6 +6387,14 @@ impl<'a> Instantiator<'a, '_> {
 
                         // Determine the export func name (this can also be a class name)
                         let export_binding_name = match func.kind {
+                            FunctionKind::Getter
+                            | FunctionKind::Setter
+                            | FunctionKind::MethodGetter(_)
+                            | FunctionKind::MethodSetter(_)
+                            | FunctionKind::StaticGetter(_)
+                            | FunctionKind::StaticSetter(_) => {
+                                unreachable!("WIT accessors are rejected before binding generation")
+                            }
                             // For resources, we must use the type name (later adding `.prototype.<actual fn>`)
                             FunctionKind::Constructor(ty)
                             | FunctionKind::Method(ty)
@@ -6540,6 +6531,14 @@ impl<'a> Instantiator<'a, '_> {
             ""
         };
         let wrapped_function_target = wrap_async_future_result.then(|| match func.kind {
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("WIT accessors are rejected before binding generation")
+            }
             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => local_name.to_string(),
             FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => format!(
                 "{local_name}.prototype.{}",
@@ -6582,6 +6581,14 @@ impl<'a> Instantiator<'a, '_> {
 
         // Write function preamble (everything up to the `(` in `function (...`)
         match func.kind {
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("WIT accessors are rejected before binding generation")
+            }
             FunctionKind::Freestanding => {
                 uwrite!(self.src.js, "\n{maybe_async}function {local_name}")
             }
@@ -6652,6 +6659,14 @@ impl<'a> Instantiator<'a, '_> {
         self.bindgen(JsFunctionBindgenArgs {
             nparams: func.params.len(),
             call_type: match func.kind {
+                FunctionKind::Getter
+                | FunctionKind::Setter
+                | FunctionKind::MethodGetter(_)
+                | FunctionKind::MethodSetter(_)
+                | FunctionKind::StaticGetter(_)
+                | FunctionKind::StaticSetter(_) => {
+                    unreachable!("WIT accessors are rejected before binding generation")
+                }
                 FunctionKind::Method(_) => CallType::FirstArgIsThis,
                 FunctionKind::AsyncMethod(_) => CallType::AsyncFirstArgIsThis,
                 FunctionKind::Freestanding
@@ -6686,6 +6701,14 @@ impl<'a> Instantiator<'a, '_> {
 
         // End the function
         match func.kind {
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("WIT accessors are rejected before binding generation")
+            }
             FunctionKind::AsyncFreestanding | FunctionKind::Freestanding => self.src.js("\n"),
             FunctionKind::AsyncMethod(_)
             | FunctionKind::AsyncStatic(_)
@@ -6698,6 +6721,14 @@ impl<'a> Instantiator<'a, '_> {
                 .bindgen
                 .intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking));
             let target = match func.kind {
+                FunctionKind::Getter
+                | FunctionKind::Setter
+                | FunctionKind::MethodGetter(_)
+                | FunctionKind::MethodSetter(_)
+                | FunctionKind::StaticGetter(_)
+                | FunctionKind::StaticSetter(_) => {
+                    unreachable!("WIT accessors are rejected before binding generation")
+                }
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => format!(
                     "{local_name}.prototype.{}",
                     func.item_name().to_lower_camel_case()

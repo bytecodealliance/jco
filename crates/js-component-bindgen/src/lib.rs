@@ -146,6 +146,35 @@ pub struct TranspileConfig {
     pub cm_runtime_es_module: Option<String>,
 }
 
+/// Reject accessor functions until JavaScript property bindings are implemented.
+fn ensure_supported_functions(resolve: &Resolve) -> Result<()> {
+    use wit_parser::WorldItem;
+
+    let functions = resolve
+        .interfaces
+        .iter()
+        .flat_map(|(_, interface)| interface.functions.values())
+        .chain(resolve.worlds.iter().flat_map(|(_, world)| {
+            world
+                .imports
+                .values()
+                .chain(world.exports.values())
+                .filter_map(|item| match item {
+                    WorldItem::Function(function) => Some(function),
+                    _ => None,
+                })
+        }));
+    for function in functions {
+        if function.kind.accessor().is_some() {
+            bail!(
+                "WIT accessor functions are not supported: {}",
+                function.name
+            );
+        }
+    }
+    Ok(())
+}
+
 pub fn generate_types(
     name: &str,
     resolve: Resolve,
@@ -241,6 +270,8 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         DecodedWasm::WitPackage(_, _) => bail!("unexpected wit package as input"),
         DecodedWasm::Component(resolve, world_id) => (resolve, world_id),
     };
+
+    ensure_supported_functions(&resolve)?;
 
     // Components are complicated, there's no real way around that. To
     // handle all the work of parsing a component and figuring out how to
@@ -588,6 +619,25 @@ trait ManagesIntrinsics {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn accessors_report_an_error_before_generating_types() {
+        let mut resolve = Resolve::default();
+        let package = resolve
+            .push_str(
+                "accessors.wit",
+                r#"
+            package test:accessors;
+            interface api { value: get() -> u32; }
+            world example { export api; }
+        "#,
+            )
+            .unwrap();
+        let world = resolve.select_world(&[package], Some("example")).unwrap();
+        let error =
+            generate_types("example", resolve, world, TranspileOpts::default()).unwrap_err();
+        assert!(format!("{error:#}").contains("WIT accessor functions are not supported"));
+    }
 
     const FLAGS_WIT: &str = r#"
         package test:flag-values;

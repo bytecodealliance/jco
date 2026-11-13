@@ -90,6 +90,7 @@ pub fn engine_world(inputs: &[WitInput], backend: Backend) -> Result<EngineWorld
         let (pkg, _) = input_resolve
             .push_path(&input.path)
             .with_context(|| format!("parsing WIT at [{}]", input.path.display()))?;
+        crate::ensure_supported_functions(&input_resolve)?;
         let world = input_resolve
             .select_world(&[pkg], input.world.as_deref())
             .with_context(|| format!("selecting a world in [{}]", input.path.display()))?;
@@ -434,6 +435,14 @@ fn interface_export(
             format!("resource [{resource_name}] is not defined in [{key_name}]")
         })?;
         match function.kind {
+            FunctionKind::Getter
+            | FunctionKind::Setter
+            | FunctionKind::MethodGetter(_)
+            | FunctionKind::MethodSetter(_)
+            | FunctionKind::StaticGetter(_)
+            | FunctionKind::StaticSetter(_) => {
+                unreachable!("WIT accessors are rejected before binding generation")
+            }
             FunctionKind::Constructor(_) => export.has_constructor = true,
             FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => export
                 .methods
