@@ -7,7 +7,7 @@ import { fileURLToPath, URL } from 'node:url';
 import { suite, test, assert } from 'vitest';
 
 import { componentNew, componentEmbed } from '../src/wasm-tools.js';
-import { transpileBytes, generateGuestTypes } from './transpilation.js';
+import { transpileBytes, generateGuestTypes, unlinkedRuntimeBase } from './transpilation.js';
 import { getTmpDir, typeCheck } from './helpers.js';
 
 const typescriptFixturesDir = fileURLToPath(new URL('./fixtures/typescript/', import.meta.url));
@@ -43,6 +43,42 @@ suite(`TypeScript`, async () => {
                 await rm(dir, { recursive: true, force: true });
             }
         });
+    }
+
+    for (const instantiation of ['async', 'sync'] as const) {
+        // Only bindings that contain their runtime configure logging per instance.
+        const runtimes = [
+            { runtime: 'bundled', cmRuntimeEsModule: undefined, fixture: 'instantiate-options.debug.mts' },
+            {
+                runtime: 'external',
+                cmRuntimeEsModule: unlinkedRuntimeBase,
+                fixture: 'instantiate-options.external-runtime.mts',
+            },
+        ];
+        for (const { runtime, cmRuntimeEsModule, fixture } of runtimes) {
+            test.concurrent(`debug option types (${instantiation}, ${runtime} runtime)`, async () => {
+                const component = await componentNew(
+                    await componentEmbed({
+                        witSource: 'package test:debug; world test { export run: func(); }',
+                        dummy: true,
+                    }),
+                );
+                const { files } = await transpileBytes(component, {
+                    name: 'component',
+                    instantiation,
+                    cmRuntimeEsModule,
+                });
+                const dir = await getTmpDir();
+                try {
+                    await writeFile(join(dir, 'component.d.ts'), files['component.d.ts']);
+                    const testFile = join(dir, fixture);
+                    await copyFile(join(typescriptFixturesDir, fixture), testFile);
+                    assert.deepStrictEqual(typeCheck([testFile]), []);
+                } finally {
+                    await rm(dir, { recursive: true, force: true });
+                }
+            });
+        }
     }
 
     test.concurrent(`TS aliasing`, async () => {
