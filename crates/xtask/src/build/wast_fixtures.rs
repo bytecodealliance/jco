@@ -465,6 +465,18 @@ fn cm_val_to_js_param(wast_val: &wast::component::WastVal<'_>) -> Result<String>
             .collect::<Result<Vec<String>>>()
             .map(|parts| parts.join(","))
             .map(|v| format!("{{{v}}}")),
+        wast::component::WastVal::Map(entries) => entries
+            .iter()
+            .map(|(k, v)| {
+                Ok(format!(
+                    "[{}, {}]",
+                    cm_val_to_js_param(k)?,
+                    cm_val_to_js_param(v)?
+                ))
+            })
+            .collect::<Result<Vec<String>>>()
+            .map(|parts| parts.join(","))
+            .map(|v| format!("new Map([{v}])")),
         wast::component::WastVal::Variant(tag, wast_val) => match wast_val {
             Some(v) => Ok(format!(
                 "{{ tag: {}, val: {} }}",
