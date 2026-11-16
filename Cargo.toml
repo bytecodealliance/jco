@@ -92,16 +92,18 @@ webidl2wit = { version = "0.1.1", default-features = false }
 xshell = { version = "0.2.7", default-features = false }
 
 # Wasmtime 50 uses wasmparser 0.261 internally; use its re-export for Wasmtime types.
-# The public WIT toolchain must match wit-bindgen-core 0.63 (wasm-tools 0.262).
+# The WIT toolchain (wit-parser, wit-component, wasm-metadata) must match the
+# wit-parser used by wit-bindgen-core 0.63 (wasm-tools 0.262), since a single
+# `Resolve` is shared with it -- bump those together with wit-bindgen-core.
 wasmtime-environ = { version = "50.0.1", features= [ "component-model", "compile", "anyhow" ] }
 
 wasm-encoder = { version = "0.263.0", default-features = false }
-wasm-metadata = { version = "0.263.0", default-features = false }
+wasm-metadata = { version = "0.262.0", default-features = false }
 wasmparser = { version = "0.263.0", default-features = false }
 wasmprinter = { version = "0.263.0", default-features = false }
 wit-encoder = { version = "0.263.0", default-features = false }
-wit-component = { version = "0.263.0", features = ["dummy-module"] }
-wit-parser = { version = "0.263.0", default-features = false }
+wit-component = { version = "0.262.0", features = ["dummy-module"] }
+wit-parser = { version = "0.262.0", default-features = false }
 
 wat = { version = "~1.263.0", default-features = false }
 
