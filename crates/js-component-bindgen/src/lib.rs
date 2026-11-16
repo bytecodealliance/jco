@@ -196,6 +196,10 @@ pub fn generate_types_with_config(
     world_id: WorldId,
     mut config: TranspileConfig,
 ) -> Result<Vec<(String, Vec<u8>)>> {
+    #[cfg(feature = "external-runtime")]
+    let external_runtime = config.cm_runtime_es_module.is_some();
+    #[cfg(not(feature = "external-runtime"))]
+    let external_runtime = false;
     let opts = &mut config.opts;
     normalize_namespace_object_options(opts)?;
     let mut files = files::Files::default();
@@ -208,6 +212,7 @@ pub fn generate_types_with_config(
         config.call_tracking,
         config.optional_result_payloads,
         config.type_generation,
+        external_runtime,
         &mut files,
     )
     .context("failed to generate Typescript bindings")?;
@@ -245,6 +250,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     } = config;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
+    let external_runtime = cm_runtime_es_module.is_some();
     // TODO(breaking): bundle the runtime unconditionally at the next major release,
     // and remove the inline intrinsics that it stands in for here.
     // Without an external provider, bindings are generated against the runtime
@@ -371,6 +377,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
             call_tracking,
             optional_result_payloads,
             type_generation,
+            external_runtime,
             &mut files,
         )
         .context("failed to generate Typescript bindings")?;
@@ -382,7 +389,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         if bundle_runtime && name.ends_with(".js") {
             let source = std::str::from_utf8(source)
                 .with_context(|| format!("generated module {name} is not UTF-8"))?;
-            if let Some(linked) = embedded_runtime::link(source)
+            if let Some(linked) = embedded_runtime::link(source, opts.instantiation_mode.is_some())
                 .with_context(|| format!("failed to bundle the runtime into {name}"))?
             {
                 files_out.push((name.to_string(), linked.into_bytes()));
@@ -664,6 +671,93 @@ mod tests {
                     .then(|| std::str::from_utf8(contents).unwrap())
             })
             .unwrap()
+    }
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn debug_logger_is_initialized_once_for_a_module_or_an_instance() {
+        // Getting and setting a context value logs through the runtime.
+        let component = wat::parse_str(
+            r#"
+                (component
+                    (core module $helper
+                        (import "" "context.set" (func $set (param i32)))
+                        (import "" "context.get" (func $get (result i32)))
+                        (func (export "push") (param i32) (result i32)
+                            (call $set (local.get 0))
+                            (local.get 0))
+                        (func (export "pull") (result i32) (call $get))
+                    )
+                    (canon context.set i32 0 (core func $set))
+                    (canon context.get i32 0 (core func $get))
+                    (core instance $instance (instantiate $helper
+                        (with "" (instance
+                            (export "context.set" (func $set))
+                            (export "context.get" (func $get))))))
+                    (func (export "push") (param "value" u32) (result u32)
+                        (canon lift (core func $instance "push")))
+                    (func (export "pull") (result u32)
+                        (canon lift (core func $instance "pull")))
+                )
+            "#,
+        )
+        .unwrap();
+        let logger = |instantiation_mode: Option<InstantiationMode>| {
+            let transpiled = transpile(
+                &component,
+                TranspileOpts::builder()
+                    .name("context".into())
+                    .maybe_instantiation_mode(instantiation_mode)
+                    .build(),
+            )
+            .unwrap();
+            let source = generated_javascript(&transpiled);
+            assert_eq!(source.matches("JCO_DEBUG").count(), 1);
+            let instantiate = source.find("export function instantiate(");
+            let logger = source.find("JCO_DEBUG").unwrap();
+            let initializer = source[..logger].rfind('\n').map_or(0, |start| start + 1);
+            let line = source[initializer..].lines().next().unwrap().trim();
+            (line.to_string(), instantiate.map(|start| start < logger))
+        };
+
+        // A module reads the environment once, as it loads.
+        let (per_module, _) = logger(None);
+        assert!(per_module.contains("globalThis?.process?.env?.JCO_DEBUG"));
+        assert!(per_module.contains("console.debug(...args) : () => {}"));
+        assert!(!per_module.contains("??"));
+
+        // An instance prefers its own choice, and otherwise reads the environment
+        // once as it is instantiated.
+        let (per_instance, inside_instantiate) = logger(Some(InstantiationMode::Sync));
+        assert!(per_instance.contains("?? ") && per_instance.contains("JCO_DEBUG"));
+        assert!(per_instance.contains("console.debug(...args) : () => {}"));
+        #[cfg(not(feature = "embedded-cm-runtime"))]
+        {
+            // Inline intrinsics are defined in `instantiate`, where `options` is.
+            assert!(
+                per_instance
+                    .contains("(options?.debug ?? !!globalThis?.process?.env?.JCO_DEBUG) ?")
+            );
+            assert_eq!(inside_instantiate, Some(true));
+        }
+        // The bundled runtime of an instance is created outside `instantiate`,
+        // which passes its choice in.
+        #[cfg(feature = "embedded-cm-runtime")]
+        {
+            assert_eq!(inside_instantiate, Some(false));
+            let source = transpile(
+                &component,
+                TranspileOpts::builder()
+                    .name("context".into())
+                    .instantiation_mode(InstantiationMode::Sync)
+                    .build(),
+            )
+            .unwrap();
+            assert!(generated_javascript(&source).contains("$instance(options?.debug);"));
+        }
+
+        // Neither calls a global that a local name of the bindings could capture.
+        assert!(!per_module.contains("Boolean(") && !per_instance.contains("Boolean("));
     }
 
     #[cfg(feature = "transpile-bindgen")]
