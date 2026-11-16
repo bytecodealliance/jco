@@ -1,9 +1,12 @@
 import type { CoreModule } from '../../runtime.js';
 
-export const debugLog: CoreModule['debugLog'] = (...args) => {
-    const host = globalThis as typeof globalThis & { process?: { env?: { JCO_DEBUG?: unknown } } };
-    if (!host?.process?.env?.JCO_DEBUG) {
-        return;
-    }
-    console.debug(...args);
-};
+/**
+ * Log runtime diagnostics when enabled at module load. Snapshot the environment
+ * so hot runtime operations never read process.env.
+ * @param args Values to log.
+ */
+export const debugLog: CoreModule['debugLog'] = (
+    globalThis as typeof globalThis & { process?: { env?: { JCO_DEBUG?: unknown } } }
+)?.process?.env?.JCO_DEBUG
+    ? (...args) => console.debug(...args)
+    : () => {};
