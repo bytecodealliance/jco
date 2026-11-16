@@ -626,10 +626,11 @@ impl Intrinsic {
                 let fn_name = args.require_intrinsic(Intrinsic::DebugLog);
                 output.push_str(&format!(
                     "
-                    const {fn_name} = (...args) => {{
-                        if (!globalThis?.process?.env?.JCO_DEBUG) {{ return; }}
-                        console.debug(...args);
-                    }};
+                    // `JCO_DEBUG` is read once: on Node.js every `process.env` access is a
+                    // native lookup, and hot intrinsics such as `context.get` log.
+                    const {fn_name} = globalThis?.process?.env?.JCO_DEBUG
+                        ? (...args) => {{ console.debug(...args); }}
+                        : () => {{}};
                 "
                 ));
             }
