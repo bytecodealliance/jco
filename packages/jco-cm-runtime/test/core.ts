@@ -232,3 +232,24 @@ test('optional host APIs remain lazy and preserve existing fallbacks', async () 
     }
     await expect(pending).resolves.toBe(42);
 });
+
+test('debugLog follows JCO_DEBUG as it was when the runtime loaded', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    try {
+        vi.stubEnv('JCO_DEBUG', '');
+        vi.resetModules();
+        const quiet = await import('../src/intrinsics/core/debug.js');
+        vi.stubEnv('JCO_DEBUG', '1');
+        quiet.debugLog('after load');
+        expect(debug).not.toHaveBeenCalled();
+
+        vi.resetModules();
+        const verbose = await import('../src/intrinsics/core/debug.js');
+        verbose.debugLog('message', 1);
+        expect(debug).toHaveBeenCalledWith('message', 1);
+    } finally {
+        vi.unstubAllEnvs();
+        vi.resetModules();
+        debug.mockRestore();
+    }
+});
