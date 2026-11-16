@@ -40,6 +40,10 @@ updates:
       - '/test/components/rust'
       - '/examples/transpile/p3-stream-chat/guest'
     groups:
+      napi:
+        patterns:
+          - 'napi'
+          - 'napi-*'
       upstream-wasm:
         patterns:
           - 'wasm*'
