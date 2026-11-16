@@ -8,8 +8,8 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-napi = { version = "3.12.2", default-features = false, features = ["napi6"] }
-napi-derive = "3.6.3"
+napi = { version = "3.16.0", default-features = false, features = ["napi6"] }
+napi-derive = "3.7.0"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 rustix = { version = "1.1.4", features = ["fs"] }
