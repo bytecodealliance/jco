@@ -317,6 +317,11 @@ struct TsInterface<'a> {
     references: BTreeSet<String>,
 }
 
+/// Generate TypeScript declarations for the bindings of a world.
+///
+/// `external_runtime` tells whether the bindings import their runtime from a
+/// provider, which configures its own debug logging: the options of `instantiate`
+/// then have no `debug` property.
 #[allow(clippy::too_many_arguments)]
 pub fn ts_bindgen(
     name: &str,
@@ -326,6 +331,7 @@ pub fn ts_bindgen(
     call_tracking: bool,
     optional_result_payloads: bool,
     type_generation: TypeGenerationConfig,
+    external_runtime: bool,
     files: &mut Files,
 ) -> Result<()> {
     crate::ensure_supported_functions(resolve)?;
@@ -774,13 +780,27 @@ pub fn ts_bindgen(
         }
     } else {
         if opts.instantiation_mode.is_some() {
+            // A runtime provider configures its own logging, so only bindings that
+            // contain their runtime take the logging choice of an instance.
+            let debug_option = if external_runtime {
+                ""
+            } else {
+                "
+                    /**
+                     * Whether this instance logs debugging information with `console.debug`.
+                     * Defaults to whether the JCO_DEBUG environment variable is set when
+                     * instantiation begins. Later changes to the options or to the
+                     * environment do not affect the instance.
+                     */
+                    debug?: boolean;"
+            };
             uwriteln!(
                 bindgen.src,
                 "
                 /**
                  * Options accepted by `instantiate`.
                  */
-                export interface InstantiateOptions {{
+                export interface InstantiateOptions {{{debug_option}
                     /**
                      * Called with each trap of this instance as it happens, in whichever
                      * task: including one a guest left running, which no call of the host's

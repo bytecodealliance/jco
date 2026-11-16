@@ -274,6 +274,24 @@ impl_from_intrinsic! {
     HostIntrinsic => Host,
 }
 
+/// The initializer of the debug logger, which chooses once between logging with
+/// `console.debug` and doing nothing so that logging calls never read the environment.
+///
+/// `setting` is an expression for the logging choice of a single instance. Where
+/// there is none, or it evaluates to a nullish value, logging is enabled by a truthy
+/// `JCO_DEBUG` in the environment at the time the initializer runs.
+///
+/// The condition calls no global function such as `Boolean`: the logger is
+/// initialized in the scope of the bindings' own names, which may include the
+/// local name of an import.
+pub(crate) fn debug_log_initializer(setting: Option<&str>) -> String {
+    let enabled = match setting {
+        Some(setting) => format!("{setting} ?? !!globalThis?.process?.env?.JCO_DEBUG"),
+        None => "globalThis?.process?.env?.JCO_DEBUG".to_string(),
+    };
+    format!("({enabled}) ? (...args) => console.debug(...args) : () => {{}}")
+}
+
 fn fact_trap_messages_js() -> String {
     let messages = (0..=u8::MAX)
         .filter_map(|code| {
@@ -624,14 +642,9 @@ impl Intrinsic {
 
             Intrinsic::DebugLog => {
                 let fn_name = args.require_intrinsic(Intrinsic::DebugLog);
-                output.push_str(&format!(
-                    "
-                    const {fn_name} = (...args) => {{
-                        if (!globalThis?.process?.env?.JCO_DEBUG) {{ return; }}
-                        console.debug(...args);
-                    }};
-                "
-                ));
+                let initializer =
+                    debug_log_initializer(args.instantiation_occurred.then_some("options?.debug"));
+                output.push_str(&format!("const {fn_name} = {initializer};"));
             }
 
             Intrinsic::PromiseWithResolversPonyfill => {
@@ -3078,6 +3091,7 @@ impl Intrinsic {
                 "fetch",
                 "Float32Array",
                 "Float64Array",
+                "globalThis",
                 "Int32Array",
                 "Object",
                 "process",

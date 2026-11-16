@@ -78,6 +78,10 @@ With the feature enabled, and unless `cm_runtime_es_module` selects an external 
 - only the runtime code the component reaches is kept;
 - other imports, such as the component's own, stay external.
 
+Bindings generated with an instantiation mode create that runtime anew
+for each call of `instantiate`, in a function of its own at module scope,
+so each instance can take the `debug` option that turns its logging on or off.
+
 Bundling uses Oxc directly in Rust, so it also runs inside the bindgen Wasm
 component used by jco's JavaScript API and CLI, which enables the feature.
 The feature brings in the Oxc dependencies and the runtime's source text;
