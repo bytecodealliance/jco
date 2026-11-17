@@ -7,7 +7,7 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
-import { getCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister } from '../task-context.js';
 
 export function getCurrentThread(
     context: ThreadLookupContext,
@@ -26,7 +26,7 @@ export function getCurrentThread(
     return { id: threadID, componentIdx, taskID: thread.taskID(), task: thread.task(), thread };
 }
 export function currentThreadOrThrow(context: ThreadLookupContext, componentIdx: number): AsyncThreadMeta {
-    const meta = getCurrentTaskMeta(context.registers, componentIdx);
+    const meta = readTaskRegister(context.registers, componentIdx);
     if (!meta) {
         throw new Error(`missing/incomplete global current thread meta for component idx [${componentIdx}]`);
     }
@@ -67,7 +67,7 @@ export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationO
 
 /** Implements `canon thread.index`. */
 export function threadIndex(_context: ThreadLookupContext, componentIdx: number) {
-    const meta = getCurrentTaskMeta(_context.registers, componentIdx);
+    const meta = readTaskRegister(_context.registers, componentIdx);
     if (!meta) {
         throw new Error('missing/incomplete global current thread meta for component idx [' + componentIdx + ']');
     }

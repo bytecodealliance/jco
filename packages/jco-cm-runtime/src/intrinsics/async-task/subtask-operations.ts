@@ -1,7 +1,7 @@
 import type { SubtaskDropContext, AsyncTaskModule, SubtaskCancelContext } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
-import { getCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';
 
 /** Implements `canon subtask.drop`. */
@@ -77,7 +77,7 @@ export function subtaskCancel(
                 if (isAsync) {
                     return 0xffffffff;
                 }
-                const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx)!;
+                const { taskID } = readTaskRegister(_context.registers, componentIdx)!;
                 const taskMeta = getCurrentTask(_context, componentIdx, taskID);
                 if (!taskMeta || !taskMeta.task) {
                     throw new Error('invalid/missing async task');
@@ -90,7 +90,7 @@ export function subtaskCancel(
                     .then(finishCancel);
             });
         }
-        const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx)!;
+        const { taskID } = readTaskRegister(_context.registers, componentIdx)!;
         const taskMeta = getCurrentTask(_context, componentIdx, taskID);
         if (!taskMeta || !taskMeta.task) {
             throw new Error('invalid/missing async task');
@@ -144,7 +144,7 @@ export function subtaskCancel(
             if (!slowOnly) {
                 return 0xfffffffe;
             }
-            const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx)!;
+            const { taskID } = readTaskRegister(_context.registers, componentIdx)!;
             const taskMeta = getCurrentTask(_context, componentIdx, taskID);
             if (!taskMeta || !taskMeta.task) {
                 throw new Error('invalid/missing async task');

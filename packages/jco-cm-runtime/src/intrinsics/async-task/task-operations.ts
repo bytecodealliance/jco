@@ -14,7 +14,7 @@ import type {
     AsyncTaskMeta,
     TaskIdentity,
 } from '../../runtime.js';
-import { getCurrentTaskMeta, registerSlot, withCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, registerSlot, withCurrentTaskMeta } from '../task-context.js';
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 
@@ -33,8 +33,10 @@ export function getCurrentTask<T extends TaskIdentity = AsyncTask>(
     if (taskMetas === undefined || taskMetas.length === 0) {
         return undefined;
     }
+    // Calls nest, so the task asked for is nearly always the most recent one.
+    const last = taskMetas[taskMetas.length - 1];
     if (taskID) {
-        return taskMetas.find((meta) => meta.task.id() === taskID);
+        return last.task.id() === taskID ? last : taskMetas.find((meta) => meta.task.id() === taskID);
     }
     // The task whose guest code is running is the one the metadata
     // wrappers record for the component (and restore when a suspended
@@ -43,7 +45,8 @@ export function getCurrentTask<T extends TaskIdentity = AsyncTask>(
     // while an earlier task of the component is suspended.
     const current = _context.registers[registerSlot(componentIdx)];
     if (current && current.taskID !== undefined) {
-        const currentMeta = taskMetas.find((meta) => meta.task.id() === current.taskID);
+        const currentMeta =
+            last.task.id() === current.taskID ? last : taskMetas.find((meta) => meta.task.id() === current.taskID);
         if (currentMeta) {
             return currentMeta;
         }
@@ -180,7 +183,7 @@ export function taskReturn(
     const { componentIdx, getMemoryFn, memoryIdx, callbackFnIdx, liftFns, lowerFns, stringEncoding } = ctx;
     const memory = getMemoryFn();
     let useDirectParams = ctx.useDirectParams;
-    const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx)!;
+    const { taskID } = readTaskRegister(_context.registers, componentIdx)!;
     const taskMeta = getCurrentTask(_context, componentIdx, taskID);
     if (!taskMeta) {
         throw new Error('failed to retrieve current task metadata');
@@ -284,7 +287,7 @@ export function taskCancel(
     if (!state.mayLeave) {
         throw new Error('component instance is not marked as may leave, cannot be cancelled');
     }
-    const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx)!;
+    const { taskID } = readTaskRegister(_context.registers, componentIdx)!;
     const taskMeta = getCurrentTask(_context, componentIdx, taskID);
     if (!taskMeta) {
         throw new Error('invalid/missing async task meta');

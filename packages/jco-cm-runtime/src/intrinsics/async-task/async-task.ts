@@ -19,12 +19,15 @@ import type {
     CreateSubtaskOptions,
 } from '../../runtime.js';
 import { promiseWithResolvers } from '../core/promises.js';
-import { withCurrentTaskMeta, withCurrentTaskMetaAsync, getCurrentTaskMeta } from '../task-context.js';
+import { withCurrentTaskMeta, withCurrentTaskMetaAsync, readTaskRegister } from '../task-context.js';
 import { getOrCreateAsyncState, postReturnTrap, recordTrap } from '../component.js';
 import { debugLog } from '../core/debug.js';
 import { coinFlip as _coinFlip } from '../core.js';
 import { clearCurrentThread } from './task-operations.js';
 import { syncContextSlots } from './context.js';
+
+/** Stands in for a list that was never allocated. */
+const NONE: readonly never[] = [];
 
 const TASK_INITIAL = 'initial';
 const TASK_CANCELLED = 'cancelled';
@@ -69,8 +72,10 @@ class AsyncTask {
     #lockFreeEntry = false;
     #preserveFutureResult!: boolean;
     #entryFnName: string | undefined;
-    #onResolveHandlers: ((value: unknown) => void)[] = [];
-    #progressWaiters: (() => void)[] = [];
+    // Most tasks never use the lists below, and every call creates a task, so
+    // each list is only allocated once something is added to it.
+    #onResolveHandlers: ((value: unknown) => void)[] | null = null;
+    #progressWaiters: (() => void)[] | null = null;
     // The promises of a task are created when first needed: a sync task that
     // completes normally is never awaited, and every call creates a task.
     #completionPromise: Promise<unknown> | undefined;
@@ -97,12 +102,14 @@ class AsyncTask {
     #returnLowerFns: TaskLowerFn[] | null = null;
     #resourceScopeId!: number;
     #resourceBorrowCount = 0;
-    #resourceLenders: {
-        table: ResourceTable;
-        handle: number;
-    }[] = [];
+    #resourceLenders:
+        | {
+              table: ResourceTable;
+              handle: number;
+          }[]
+        | null = null;
     #resourceScopeExited = false;
-    #subtasks: AsyncSubtaskType[] = [];
+    #subtasks: AsyncSubtaskType[] | null = null;
     #threads: AsyncThreadType[] = [];
     #entered = false;
     #exited = false;
@@ -141,7 +148,7 @@ class AsyncTask {
         // the result, from the start.
         if (this.#isAsync || this.#isManualAsync) {
             this.#ensureCompletionPromise();
-            this.#onResolveHandlers.push((results) => {
+            (this.#onResolveHandlers ??= []).push((results) => {
                 if (this.#parentSubtask !== null) {
                     return;
                 }
@@ -200,7 +207,7 @@ class AsyncTask {
         if (this.#resourceScopeExited) {
             throw new Error('cannot add a lender to an exited resource scope');
         }
-        this.#resourceLenders.push({ table, handle });
+        (this.#resourceLenders ??= []).push({ table, handle });
     }
     validateResourceBorrowScope() {
         if (this.#resourceScopeExited) {
@@ -209,7 +216,7 @@ class AsyncTask {
         // Stopping abandons guest stacks, including borrows they
         // have not had a chance to drop. This is not a normal return.
         if (this.#context.storeTrap.stopped) {
-            this.#resourceLenders = [];
+            this.#resourceLenders = null;
             this.#resourceScopeExited = true;
             this.#context.scopeTasks.delete(this.#resourceScopeId);
             return;
@@ -217,7 +224,7 @@ class AsyncTask {
         if (this.#resourceBorrowCount !== 0) {
             throw new this.#context.RuntimeError('borrow handles still remain at the end of the call');
         }
-        for (const { table, handle } of this.#resourceLenders) {
+        for (const { table, handle } of this.#resourceLenders ?? NONE) {
             const idx = handle << 1;
             const lendCount = table[idx];
             if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2 ** 30) {
@@ -225,7 +232,7 @@ class AsyncTask {
             }
             table[idx] = lendCount - 1;
         }
-        this.#resourceLenders = [];
+        this.#resourceLenders = null;
         this.#resourceScopeExited = true;
         this.#context.scopeTasks.delete(this.#resourceScopeId);
     }
@@ -291,12 +298,15 @@ class AsyncTask {
     }
     waitForProgress() {
         const { promise, resolve } = promiseWithResolvers<void>();
-        this.#progressWaiters.push(resolve);
+        (this.#progressWaiters ??= []).push(resolve);
         return promise;
     }
     notifyProgress() {
         const waiters = this.#progressWaiters;
-        this.#progressWaiters = [];
+        if (waiters === null) {
+            return;
+        }
+        this.#progressWaiters = null;
         for (const resolve of waiters) {
             resolve();
         }
@@ -770,7 +780,7 @@ class AsyncTask {
         // Entry can wait on backpressure before a guest register window exists.
         const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
         const thread = this.#entered
-            ? (cstate.threads.get(getCurrentTaskMeta(this.#context.registers, this.#componentIdx)!.threadID) as
+            ? (cstate.threads.get(readTaskRegister(this.#context.registers, this.#componentIdx)!.threadID) as
                   | AsyncThreadType
                   | undefined)
             : this.defaultThread();
@@ -864,8 +874,8 @@ class AsyncTask {
         }
     }
     onResolve(taskValue: unknown) {
-        const handlers = this.#onResolveHandlers;
-        this.#onResolveHandlers = [];
+        const handlers = this.#onResolveHandlers ?? NONE;
+        this.#onResolveHandlers = null;
         for (const f of handlers) {
             try {
                 f(taskValue);
@@ -930,7 +940,7 @@ class AsyncTask {
         }
     }
     registerOnResolveHandler(f: (value: unknown) => void) {
-        this.#onResolveHandlers.push(f);
+        (this.#onResolveHandlers ??= []).push(f);
     }
     isRejected() {
         return this.#rejected;
@@ -1127,7 +1137,7 @@ class AsyncTask {
             fnName,
             waitable,
         });
-        this.#subtasks.push(newSubtask);
+        (this.#subtasks ??= []).push(newSubtask);
         newSubtask.setTarget(
             `subtask (internal ID [${newSubtask.id()}], waitable [${waitable.idx()}], component [${componentIdx}])`,
         );
@@ -1136,26 +1146,33 @@ class AsyncTask {
         return newSubtask;
     }
     getLatestSubtask() {
-        return this.#subtasks.at(-1);
+        return this.#subtasks?.at(-1);
     }
     getSubtaskByWaitableRep(rep: number) {
         if (rep === undefined) {
             throw new TypeError('missing rep');
         }
-        return this.#subtasks.find((s) => s.waitableRep() === rep);
+        return this.#subtasks?.find((s) => s.waitableRep() === rep);
     }
     currentSubtask() {
         DEBUG: debugLog('[AsyncTask#currentSubtask()]');
-        if (this.#subtasks.length === 0) {
+        if (this.#subtasks === null || this.#subtasks.length === 0) {
             return undefined;
         }
-        return this.#subtasks.at(-1);
+        return this.#subtasks?.at(-1);
     }
     removeSubtask(subtask: AsyncSubtaskType) {
-        if (this.#subtasks.length === 0) {
+        const subtasks = this.#subtasks;
+        if (subtasks === null || subtasks.length === 0) {
             throw new Error('cannot end current subtask: no current subtask');
         }
-        this.#subtasks = this.#subtasks.filter((t) => t !== subtask);
+
+        // The subtask that ends is nearly always the one started last.
+        if (subtasks[subtasks.length - 1] === subtask) {
+            subtasks.pop();
+        } else {
+            this.#subtasks = subtasks.filter((t) => t !== subtask);
+        }
         return subtask;
     }
     cancellationPending() {
@@ -1199,7 +1216,11 @@ class AsyncTask {
             const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             cstate.threads.remove(thread.id());
         }
-        this.#threads = this.#threads.filter((t) => t !== thread);
+        if (this.#threads[this.#threads.length - 1] === thread) {
+            this.#threads.pop();
+        } else {
+            this.#threads = this.#threads.filter((t) => t !== thread);
+        }
         syncContextSlots(this.#context.registers);
         if (this.#exited && this.#threads.length === 0) {
             clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);

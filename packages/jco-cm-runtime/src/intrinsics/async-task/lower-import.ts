@@ -1,7 +1,7 @@
 import type { TaskLowerImportRuntimeContext, TaskLowerImportOptions, AsyncTaskModule } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
-import { getCurrentTaskMeta, withCurrentTaskMetaAsync, withCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, withCurrentTaskMetaAsync, withCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';
 import { promiseWithResolvers } from '../core/promises.js';
 
@@ -26,7 +26,7 @@ export function lowerImport(
         importFn,
     } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
-    const { taskID, threadID } = getCurrentTaskMeta(_context.registers, componentIdx)!;
+    const { taskID, threadID } = readTaskRegister(_context.registers, componentIdx)!;
     const taskMeta = getCurrentTask(_context, componentIdx, taskID);
     if (!taskMeta) {
         throw new Error('invalid/missing async task meta');

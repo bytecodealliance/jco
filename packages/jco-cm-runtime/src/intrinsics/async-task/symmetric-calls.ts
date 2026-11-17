@@ -7,7 +7,7 @@ import type {
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
-import { getCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, setCurrentTaskMeta } from '../task-context.js';
 
 // EnterSymmetricSyncGuestCall
 export function symmetricSyncGuestCallEnter(
@@ -30,7 +30,7 @@ export function symmetricSyncGuestCallEnter(
     if (syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()) {
         return 0;
     }
-    const callerThreadMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+    const callerThreadMeta = readTaskRegister(_context.registers, callerComponentIdx);
     if (!callerThreadMeta) {
         throw new Error('missing current caller thread metadata');
     }

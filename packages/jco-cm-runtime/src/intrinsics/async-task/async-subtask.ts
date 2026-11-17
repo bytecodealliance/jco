@@ -23,6 +23,9 @@ const STARTED = 1;
 const RETURNED = 2;
 const CANCELLED_BEFORE_STARTED = 3;
 const CANCELLED_BEFORE_RETURNED = 4;
+
+/** Stands in for a list that was never allocated. */
+const NONE: readonly never[] = [];
 type SubtaskState = 0 | 1 | 2 | 3 | 4;
 
 class AsyncSubtask {
@@ -61,8 +64,9 @@ class AsyncSubtask {
     #onProgressFn: (() => void) | null = null;
     #callMetadata: TaskCallMetadata = {};
     #resolved = false;
-    #onResolveHandlers: ((value: unknown) => void)[] = [];
-    #onStartHandlers: (() => void)[] = [];
+    // Allocated when a handler is first registered: most subtasks have none.
+    #onResolveHandlers: ((value: unknown) => void)[] | null = null;
+    #onStartHandlers: (() => void)[] | null = null;
     #result: unknown = null;
     #resultSet = false;
     // Pending value returned by a host implementation of this (async import)
@@ -275,7 +279,7 @@ class AsyncSubtask {
         disposeHostValue(this.#context.disposeSymbol, pending);
     }
     registerOnStartHandler(f: () => void) {
-        this.#onStartHandlers.push(f);
+        (this.#onStartHandlers ??= []).push(f);
     }
     onStart(args?: { startFnParams?: unknown[] }) {
         DEBUG: debugLog('[AsyncSubtask#onStart()] args', {
@@ -307,7 +311,7 @@ class AsyncSubtask {
         return result;
     }
     registerOnResolveHandler(f: (value: unknown) => void) {
-        this.#onResolveHandlers.push(f);
+        (this.#onResolveHandlers ??= []).push(f);
     }
     reject(subtaskErr: unknown) {
         if (this.#resolved) {
@@ -351,7 +355,7 @@ class AsyncSubtask {
             this.#hostPendingResult = null;
         }
         this.setResult(subtaskValue);
-        for (const f of this.#onResolveHandlers) {
+        for (const f of this.#onResolveHandlers ?? NONE) {
             try {
                 f(subtaskValue);
             } catch (err) {

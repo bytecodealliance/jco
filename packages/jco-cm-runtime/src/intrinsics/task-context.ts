@@ -33,10 +33,29 @@ function validate(args: TaskMeta) {
     }
 }
 
-export const getCurrentTaskMeta: CoreModule['getCurrentTaskMeta'] = (registers, componentIdx) => {
+/**
+ * Read a task register without copying what it holds.
+ *
+ * A register is only ever replaced, never changed in place, so the runtime reads it
+ * directly. The value must not be modified; `getCurrentTaskMeta` hands out a copy
+ * to callers outside the runtime.
+ *
+ * @param registers - the task registers of the store
+ * @param componentIdx - index of a component instance, or nothing for the executing task
+ * @returns the identity the register holds, if any
+ */
+export function readTaskRegister(
+    registers: TaskRegisters,
+    componentIdx?: number | null,
+): Readonly<TaskMeta> | undefined {
     const value =
         componentIdx === undefined || componentIdx === null ? registers.current : registers[registerSlot(componentIdx)];
-    return value === undefined || value === null ? undefined : { ...value };
+    return value === undefined || value === null ? undefined : value;
+}
+
+export const getCurrentTaskMeta: CoreModule['getCurrentTaskMeta'] = (registers, componentIdx) => {
+    const value = readTaskRegister(registers, componentIdx);
+    return value === undefined ? undefined : { ...value };
 };
 
 export const setCurrentTaskMeta: CoreModule['setCurrentTaskMeta'] = (registers, args) => {

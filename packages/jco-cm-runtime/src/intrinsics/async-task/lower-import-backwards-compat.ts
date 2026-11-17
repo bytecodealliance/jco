@@ -7,7 +7,7 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
-import { getCurrentTaskMeta, clearCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, clearCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
 import { promiseWithResolvers } from '../core/promises.js';
 
@@ -32,7 +32,7 @@ export function lowerImportBackwardsCompat(
         stringEncoding,
     } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
-    const meta = getCurrentTaskMeta(_context.registers, componentIdx);
+    const meta = readTaskRegister(_context.registers, componentIdx);
     let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
     let createdTask: AsyncTaskType | undefined;
     // Some components depend on initialization logic (i.e. `_initialize` or some such

@@ -12,12 +12,7 @@ import type {
 } from '../runtime.js';
 import { debugLog } from './core/debug.js';
 import { promiseWithResolvers } from './core/promises.js';
-import {
-    getCurrentTaskMeta,
-    setCurrentTaskMeta,
-    withCurrentTaskMeta,
-    withCurrentTaskMetaAsync,
-} from './task-context.js';
+import { readTaskRegister, setCurrentTaskMeta, withCurrentTaskMeta, withCurrentTaskMetaAsync } from './task-context.js';
 import { lookupMemories } from './core.js';
 import { getOrCreateAsyncState } from './component.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './async-task/task-operations.js';
@@ -74,7 +69,7 @@ export function prepareCall(
         hasResultPointer = true;
     }
 
-    const currentCallerThreadMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+    const currentCallerThreadMeta = readTaskRegister(_context.registers, callerComponentIdx);
     const currentCallerTaskMeta =
         currentCallerThreadMeta && getCurrentTask(_context, callerComponentIdx, currentCallerThreadMeta.taskID);
     if (!currentCallerTaskMeta) {
@@ -187,7 +182,7 @@ export function asyncStartCall(
 ): ReturnType<HostModule['asyncStartCall']> {
     const componentIdx = _context.componentIdxs.at(-1)!;
 
-    const globalTaskMeta = getCurrentTaskMeta(_context.registers, componentIdx);
+    const globalTaskMeta = readTaskRegister(_context.registers, componentIdx);
     if (!globalTaskMeta) {
         throw new Error('missing global current task globalTaskMeta');
     }
@@ -702,7 +697,7 @@ export async function syncStartCall(
 ): ReturnType<HostModule['syncStartCall']> {
     const componentIdx = _context.componentIdxs.at(-1)!;
 
-    const globalTaskMeta = getCurrentTaskMeta(_context.registers, componentIdx);
+    const globalTaskMeta = readTaskRegister(_context.registers, componentIdx);
     if (!globalTaskMeta) {
         throw new Error('missing global current task meta during sync start call');
     }
@@ -746,7 +741,7 @@ export async function syncStartCall(
     // and move its current-task register. Capture the entry at call
     // time and restore it before the caller resumes (the same
     // discipline as the suspending-import wrapper).
-    const savedCallerTaskMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+    const savedCallerTaskMeta = readTaskRegister(_context.registers, callerComponentIdx);
     try {
         const callbackFn = getCallbackFn();
         preparedTask.setCallbackFn(callbackFn, 'callback_' + callbackIdx);
