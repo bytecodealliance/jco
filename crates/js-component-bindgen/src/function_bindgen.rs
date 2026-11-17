@@ -462,6 +462,14 @@ impl FunctionBindgen<'_> {
         self.result_error_class.clone().unwrap_or(component_err)
     }
 
+    /// The diagnostic logger, as the start of a statement labeled `DEBUG`.
+    ///
+    /// Every use must begin a statement, so that the profile of the bundled runtime
+    /// can remove the call together with its arguments.
+    fn labeled_debug_log(&mut self) -> String {
+        format!("DEBUG: {}", self.intrinsic(Intrinsic::DebugLog))
+    }
+
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
         crate::intrinsics::runtime::select(self.external_runtime)
@@ -798,7 +806,7 @@ impl FunctionBindgen<'_> {
         let preserve_future_result = self.wrap_async_future_result;
         let fn_name = self.callee;
         let err_handling = self.err.to_js_string();
-        let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+        let debug_log_fn = self.labeled_debug_log();
         let get_component_state = self.intrinsic_call_prefix(Intrinsic::Component(
             ComponentIntrinsic::GetOrCreateAsyncState,
         ));
@@ -1513,7 +1521,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results: result_types,
                 ..
             } => {
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 let (mut some, some_results) = self.blocks.pop().unwrap();
                 let (mut none, none_results) = self.blocks.pop().unwrap();
 
@@ -1628,7 +1636,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 results: result_types,
                 ..
             } => {
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 let (mut err, err_results) = self.blocks.pop().unwrap();
                 let (mut ok, ok_results) = self.blocks.pop().unwrap();
 
@@ -2233,7 +2241,7 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::IterBasePointer => results.push("base".to_string()),
 
             Instruction::CallWasm { name, sig } => {
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 let get_component_state = self.task_intrinsic_call_prefix(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
@@ -2425,7 +2433,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             // Call to an imported interface (normally provided by the host)
             Instruction::CallInterface { func, async_ } => {
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 let get_component_state = self.task_intrinsic_call_prefix(Intrinsic::Component(
                     ComponentIntrinsic::GetOrCreateAsyncState,
                 ));
@@ -2815,7 +2823,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 func,
                 amt: stack_value_count,
             } => {
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::Return]', {{
@@ -3511,7 +3519,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     return;
                 }
 
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 let get_or_create_async_state_fn = self.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -3879,7 +3887,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     return;
                 }
 
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 let async_iterator_symbol = self.intrinsic(Intrinsic::SymbolAsyncIterator);
                 let iterator_symbol = self.intrinsic(Intrinsic::SymbolIterator);
                 let external_readable_stream_class =
@@ -4207,7 +4215,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     direct_result.clone()
                 };
-                let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let debug_log_fn = self.labeled_debug_log();
                 let is_async_js = self.requires_async_porcelain | self.is_async;
                 let async_driver_loop_fn = self
                     .intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));

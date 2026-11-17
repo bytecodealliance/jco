@@ -11,7 +11,7 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use js_component_bindgen::{
-    InstantiationMode, TranspileConfig, TranspileOpts, transpile_with_config,
+    InstantiationMode, RuntimeProfile, TranspileConfig, TranspileOpts, transpile_with_config,
 };
 
 fn main() -> Result<()> {
@@ -33,6 +33,7 @@ fn main() -> Result<()> {
         ..Default::default()
     };
     let mut map = HashMap::new();
+    let mut runtime_profile = RuntimeProfile::default();
     #[cfg(feature = "external-runtime")]
     let mut cm_runtime_es_module = None;
 
@@ -47,6 +48,9 @@ fn main() -> Result<()> {
             None if arg == "--valid-lifting-optimization" => opts.valid_lifting_optimization = true,
             None if arg == "--tracing" => opts.tracing = true,
             None if arg == "--tla-compat" => opts.tla_compat = true,
+            Some(("--profile", "checked")) => runtime_profile = RuntimeProfile::Checked,
+            Some(("--profile", "debug")) => runtime_profile = RuntimeProfile::Debug,
+            Some(("--profile", "unchecked")) => runtime_profile = RuntimeProfile::Unchecked,
             Some(("--map", mapping)) => {
                 let (from, to) = mapping.split_once('=').context("--map takes from=to")?;
                 map.insert(from.to_string(), to.to_string());
@@ -62,7 +66,9 @@ fn main() -> Result<()> {
 
     let component = fs::read(&component_path)
         .with_context(|| format!("reading [{}]", component_path.display()))?;
-    let config = TranspileConfig::builder().opts(opts);
+    let config = TranspileConfig::builder()
+        .opts(opts)
+        .runtime_profile(runtime_profile);
     #[cfg(feature = "external-runtime")]
     let config = config.maybe_cm_runtime_es_module(cm_runtime_es_module);
     let transpiled = transpile_with_config(&component, config.build())?;

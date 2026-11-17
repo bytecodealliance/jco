@@ -42,6 +42,7 @@ use oxc_semantic::SemanticBuilder;
 use oxc_span::SourceType;
 use oxc_str::Ident;
 
+use crate::RuntimeProfile;
 use crate::intrinsics::{debug_log_enabled, debug_log_initializer, debug_logger};
 
 /// The base that generated bindings import the shipped runtime from before linking.
@@ -284,7 +285,11 @@ fn instantiate_function<'a, 'b>(
 /// Returns `None` when `generated` imports nothing from the runtime, in which case
 /// it needs no linking and is best left exactly as generated. All other imports,
 /// such as a component's own imports, are left in place.
-pub(crate) fn link(generated: &str, per_instance: bool) -> Result<Option<String>> {
+pub(crate) fn link(
+    generated: &str,
+    per_instance: bool,
+    profile: RuntimeProfile,
+) -> Result<Option<String>> {
     if !generated.contains(PACKAGE) {
         return Ok(None);
     }
@@ -427,10 +432,18 @@ pub(crate) fn link(generated: &str, per_instance: bool) -> Result<Option<String>
         parsed.diagnostics
     );
     let mut program = parsed.program;
+    // Labeled statements go before what only they reach is looked for, so that
+    // the arguments of a removed diagnostic are removed with it.
+    let mut compress = CompressOptions::dce();
+    compress.drop_labels = profile
+        .dropped_labels()
+        .iter()
+        .map(|label| label.to_string())
+        .collect();
     let reduced = Minifier::new(MinifierOptions {
         mangle: None,
         mangle_properties: None,
-        compress: Some(CompressOptions::dce()),
+        compress: Some(compress),
     })
     .minify(&allocator, &mut program);
     let code = Codegen::new()
@@ -447,7 +460,13 @@ pub(crate) fn link(generated: &str, per_instance: bool) -> Result<Option<String>
 
 #[cfg(test)]
 mod tests {
-    use super::{NAMESPACE, PACKAGE, RUNTIME_SOURCE, link};
+    use super::{NAMESPACE, PACKAGE, RUNTIME_SOURCE};
+    use crate::RuntimeProfile;
+
+    /// Link with every labeled statement kept, as the tests of linking itself expect.
+    fn link(generated: &str, per_instance: bool) -> anyhow::Result<Option<String>> {
+        super::link(generated, per_instance, RuntimeProfile::Debug)
+    }
 
     #[test]
     fn shipped_runtime_uses_only_reserved_globals() {
@@ -575,6 +594,30 @@ mod tests {
         assert!(linked.contains(&format!("return {{ {NAMESPACE}toInt8 }};")));
         assert!(!linked.contains("TextEncoder"));
         assert!(!linked.contains("console.debug"));
+    }
+
+    #[test]
+    fn profiles_remove_labeled_statements_and_what_only_they_reach() {
+        let source = r#"
+            import { initializeRepTableClass } from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
+            export const RepTable = initializeRepTableClass({ RuntimeError: Error });
+        "#;
+        let diagnostic = "[RepTable#insert()] args";
+        let assertion = "corrupt rep table freelist";
+        let trap = "invalid resource rep during get";
+        for (profile, diagnostics, assertions) in [
+            (RuntimeProfile::Debug, true, true),
+            (RuntimeProfile::Checked, false, true),
+            (RuntimeProfile::Unchecked, false, false),
+        ] {
+            let linked = super::link(source, false, profile).unwrap().unwrap();
+            assert_eq!(linked.contains(diagnostic), diagnostics, "{profile:?}");
+            assert_eq!(linked.contains("DEBUG:"), diagnostics, "{profile:?}");
+            assert_eq!(linked.contains(assertion), assertions, "{profile:?}");
+            // Validation of what callers pass is kept by every profile.
+            assert!(linked.contains(trap), "{profile:?}");
+        }
+        assert_eq!(RuntimeProfile::default(), RuntimeProfile::Checked);
     }
 
     #[test]

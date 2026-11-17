@@ -202,6 +202,14 @@ program
     )
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
+    .addOption(
+        new Option(
+            "--runtime-profile <profile>",
+            "what the bundled Component Model runtime keeps: checked removes diagnostics, debug keeps them (logged with JCO_DEBUG), unchecked also removes internal assertions",
+        )
+            .choices(["checked", "debug", "unchecked"])
+            .default("checked"),
+    )
     .option(
         "--cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base (named runtime and intrinsics/* subpaths)",

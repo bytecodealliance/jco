@@ -115,6 +115,39 @@ impl TypeGenerationConfig {
 
 // TODO(breaking): merge TranspileOpts into this non-exhaustive configuration at
 // the next major release, so new options no longer need a separate type.
+/// Which removable statements of the Component Model runtime generated bindings keep.
+///
+/// The runtime labels its diagnostic statements `DEBUG` and its assertions about
+/// internal invariants `SAFETY`. Canonical ABI traps and validation of what a guest
+/// or host passes are never labeled, and are kept by every profile.
+///
+/// A profile applies where the runtime is bundled into the bindings. Bindings that
+/// import a runtime take what that runtime was built with.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RuntimeProfile {
+    /// Remove diagnostics and keep assertions.
+    #[default]
+    Checked,
+    /// Keep diagnostics and assertions. Diagnostics are logged when `JCO_DEBUG` is
+    /// set, or when an instance is created with the `debug` option.
+    Debug,
+    /// Remove diagnostics and assertions.
+    Unchecked,
+}
+
+impl RuntimeProfile {
+    /// The statement labels that this profile removes.
+    #[cfg(feature = "embedded-cm-runtime")]
+    pub(crate) fn dropped_labels(self) -> &'static [&'static str] {
+        match self {
+            Self::Checked => &["DEBUG"],
+            Self::Debug => &[],
+            Self::Unchecked => &["DEBUG", "SAFETY"],
+        }
+    }
+}
+
 /// Extensible configuration for `transpile_with_config`.
 ///
 /// `TranspileOpts` keeps its published fields so existing struct literals remain
@@ -136,6 +169,9 @@ pub struct TranspileConfig {
     /// Controls declaration contracts independently of the embedding tool defaults.
     #[builder(default)]
     pub type_generation: TypeGenerationConfig,
+    /// Which diagnostics and assertions the bundled runtime keeps.
+    #[builder(default)]
+    pub runtime_profile: RuntimeProfile,
     /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     /// Intrinsics are generated inline when this is `None` (the default),
@@ -245,9 +281,13 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         call_tracking,
         optional_result_payloads,
         type_generation,
+        runtime_profile,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
     } = config;
+    // Only the bundled runtime is reduced to a profile.
+    #[cfg(not(feature = "embedded-cm-runtime"))]
+    let _ = runtime_profile;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
     let external_runtime = cm_runtime_es_module.is_some();
@@ -389,8 +429,9 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         if bundle_runtime && name.ends_with(".js") {
             let source = std::str::from_utf8(source)
                 .with_context(|| format!("generated module {name} is not UTF-8"))?;
-            if let Some(linked) = embedded_runtime::link(source, opts.instantiation_mode.is_some())
-                .with_context(|| format!("failed to bundle the runtime into {name}"))?
+            if let Some(linked) =
+                embedded_runtime::link(source, opts.instantiation_mode.is_some(), runtime_profile)
+                    .with_context(|| format!("failed to bundle the runtime into {name}"))?
             {
                 files_out.push((name.to_string(), linked.into_bytes()));
                 continue;
