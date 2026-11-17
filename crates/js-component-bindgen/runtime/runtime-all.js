@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit c87541ae519d24491467587a93bd432b05d7da7c
+// generated from commit 78b818b6ea80a85966fa8b07e56bca6fe4af60c0
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -3807,8 +3807,12 @@ function initializeThreadStartChecks(platform) {
 * A guest that imports these functions reads and writes its context slots
 * without leaving WebAssembly. Toolchains keep the shadow stack pointer in a
 * context slot, so a guest may do so in every function prologue.
+*
+* The bytes are only created for an instance which accesses its context.
+*
+* @returns the bytes of the module
 */
-const CONTEXT_SLOTS_MODULE = new Uint8Array([
+const contextSlotsModule = () => new Uint8Array([
 	0,
 	97,
 	115,
@@ -4171,7 +4175,7 @@ function contextSlotGlobals(context, componentIdx) {
 	if (typeof wasm?.Module !== "function" || typeof wasm.Instance !== "function") return;
 	let exports;
 	try {
-		exports = new wasm.Instance(new wasm.Module(CONTEXT_SLOTS_MODULE), { context: {
+		exports = new wasm.Instance(new wasm.Module(contextSlotsModule()), { context: {
 			get0: contextGet.bind(null, context, {
 				componentIdx,
 				slot: 0
