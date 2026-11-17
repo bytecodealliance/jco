@@ -3,12 +3,16 @@ import { join } from 'node:path';
 
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { suite, test, expect, onTestFinished } from 'vitest';
+import { afterAll, suite, test, expect } from 'vitest';
 
 import { getTmpDir } from '../helpers.js';
 import { transpile, writeFiles } from '../transpilation.js';
 
 const P3_COMPONENT_FIXTURES_DIR = fileURLToPath(new URL('../fixtures/components/p3', import.meta.url));
+
+/** Output directories of the transpiled fixtures, removed after the suite. */
+const outputDirs: string[] = [];
+afterAll(() => Promise.all(outputDirs.map((dir) => rm(dir, { recursive: true, force: true }))));
 
 /** The exports of an instantiated fixture; the fixtures only pass numbers. */
 type Instance = Record<string, (...args: number[]) => number | Promise<number>>;
@@ -19,7 +23,11 @@ interface FixtureOptions {
     /** Exports which run on a stack that may suspend. */
     asyncExports?: string[];
     minify?: boolean;
-    /** Rewrites the generated bindings before they are loaded. */
+    /**
+     * Rewrites the generated bindings before they are loaded. The runtime is
+     * then bundled into them whichever runtime the suite selects, so that the
+     * rewrite reaches it.
+     */
     mutate?: (source: string) => string;
 }
 
@@ -33,7 +41,7 @@ interface FixtureOptions {
  */
 async function loadFixture(fixture: string, options: FixtureOptions = {}) {
     const dir = await getTmpDir();
-    onTestFinished(() => rm(dir, { recursive: true, force: true }));
+    outputDirs.push(dir);
 
     const { files } = await transpile(join(P3_COMPONENT_FIXTURES_DIR, fixture), {
         name: 'component',
@@ -42,6 +50,7 @@ async function loadFixture(fixture: string, options: FixtureOptions = {}) {
         asyncImports: options.asyncImports ?? [],
         asyncExports: options.asyncExports ?? [],
         minify: options.minify ?? false,
+        ...(options.mutate ? { cmRuntimeEsModule: undefined } : {}),
     });
     await writeFiles(files, { baseDir: dir });
 
