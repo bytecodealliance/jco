@@ -114,6 +114,8 @@ export function create(options: Options = {}) {
             operations.contextSet(threadLookup, ...args),
         contextGet: (...args: Tail<Parameters<typeof operations.contextGet>>) =>
             operations.contextGet(threadLookup, ...args),
+        isolateRealloc: (...args: Tail<Parameters<typeof operations.isolateRealloc>>) =>
+            operations.isolateRealloc(threadLookup, ...args),
         taskReturn: (...args: Tail<Parameters<typeof operations.taskReturn>>) =>
             operations.taskReturn(taskReturn, ...args),
         subtaskDrop: (...args: Tail<Parameters<typeof operations.subtaskDrop>>) =>
