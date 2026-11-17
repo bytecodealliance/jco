@@ -352,6 +352,26 @@ export interface TaskRegisters {
      * by `guardCannotLeave` with fresh context slots runs.
      */
     freshContextSlots?: number[];
+    /** Context slots kept in WebAssembly globals, which follow these registers. */
+    contextSlots?: {
+        readonly context: ThreadLookupContext;
+        readonly components: ContextSlotGlobals[];
+    };
+}
+/** WebAssembly globals which hold the context slots a component instance's code accesses. */
+export interface ContextSlotGlobals {
+    readonly componentIdx: number;
+    /** Nonzero while `storage` is set; the accessors call into JS otherwise. */
+    readonly loaded: WebAssembly.Global<'i32'>;
+    readonly slots: readonly WebAssembly.Global<'i32'>[];
+    /** WebAssembly functions reading each slot. */
+    readonly getters: readonly (() => number)[];
+    /** WebAssembly functions writing each slot. */
+    readonly setters: readonly ((value: number) => void)[];
+    /** The context slots whose values live in the globals, not in this array, while it is set. */
+    storage: number[] | undefined;
+    /** Whether the instance's own register names no live thread, so that of the executing task selects one. */
+    followsExecutingTask: boolean;
 }
 export interface MemoryMeta {
     componentIdx: number;
@@ -1724,6 +1744,12 @@ export interface AsyncTaskModule {
         value: number,
     ) => void;
     readonly contextGet: (context: ThreadLookupContext, options: { componentIdx?: number; slot: number }) => number;
+    /** Create the function a core module imports for `canon context.get` or `canon context.set`. */
+    readonly contextSlotAccessor: (
+        context: ThreadLookupContext,
+        options: { componentIdx?: number; slot: number },
+        operation: 'get' | 'set',
+    ) => (() => number) | ((value: number) => void);
     readonly guardCannotLeave: <A extends unknown[], T>(
         context: ThreadLookupContext,
         componentIdx: number,
