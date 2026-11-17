@@ -29,6 +29,27 @@ use crate::names::js_string_literal;
 use crate::{ManagesIntrinsics, get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
+/// The `getCallbackFn` property of the options a task is created with.
+///
+/// A function without a callback has none to look up, so its tasks are created
+/// without the property rather than with a closure that returns `null`.
+fn callback_fn_property(get_callback_fn_expr: &str) -> String {
+    if get_callback_fn_expr == "() => null" {
+        String::new()
+    } else {
+        format!("getCallbackFn: {get_callback_fn_expr},")
+    }
+}
+
+/// Whether a JavaScript expression is a lone identifier, which costs nothing to repeat.
+fn is_js_identifier(expression: &str) -> bool {
+    let mut chars = expression.chars();
+    chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+        && chars.all(|char| char.is_ascii_alphanumeric() || char == '_' || char == '$')
+}
+
 /// Method of error handling
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrHandling {
@@ -801,6 +822,7 @@ impl FunctionBindgen<'_> {
                 ("1".into(), "() => null".into(), "null".into())
             };
 
+        let get_callback_fn_property = callback_fn_property(&get_callback_fn_expr);
         uwriteln!(
             self.src,
             r#"
@@ -813,7 +835,7 @@ impl FunctionBindgen<'_> {
                   isManualAsync: {is_manual_async},
                   preserveFutureResult: {preserve_future_result},
                   entryFnName: '{fn_name}',
-                  getCallbackFn: {get_callback_fn_expr},
+                  {get_callback_fn_property}
                   callbackFnName: {callback_fn_name},
                   errHandling: '{err_handling}',
                   callingWasmExport: true,
@@ -903,15 +925,15 @@ impl FunctionBindgen<'_> {
         } else {
             ("null".into(), "() => null".into())
         };
-        uwriteln!(
-            self.src,
-            r#"
-              if ({memory_idx_expr} !== null) {{
+        if memory_idx_expr != "null" {
+            uwriteln!(
+                self.src,
+                r#"
                   task.setReturnMemoryIdx({memory_idx_expr});
                   task.setReturnMemory(({get_memory_fn_expr})());
-              }}
-            "#
-        );
+                "#
+            );
+        }
     }
 
     /// Run the full canonical adapter body with the export task installed as
@@ -1839,7 +1861,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 self.emit_realloc_check(&format!("ptr{tmp}"), &format!("len{tmp}"), size, align);
 
                 // Determine what methods to use with a DataView when setting the data
-                let (dataview_set_method, check_fn_intrinsic) =
+                let (dataview_set_method, check_call_prefix) =
                     gen_dataview_set_and_check_fn_js_for_numeric_type(resolve, element);
 
                 // Detect whether we're dealing with a regular array
@@ -1853,7 +1875,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             let offset = 0;
                             const dv{tmp} = new DataView({memory}.buffer);
                             for (const v of val{tmp}) {{
-                                {check_fn_intrinsic}(v);
+                                {check_call_prefix}v);
                                 dv{tmp}.{dataview_set_method}(ptr{tmp} + offset, v, true);
                                 offset += {size};
                             }}
@@ -2332,9 +2354,27 @@ impl Bindgen for FunctionBindgen<'_> {
                 // whatever the component's ambient register names: another task's
                 // async wrapper may have overwritten and then cleared that register
                 // while this call was suspended in argument lowering.
+                //
+                // A sync export never suspends between installing its task for the
+                // body and this call: realloc and post-return may not leave their
+                // component instance, and every nested call restores the registers
+                // it changes. The task is therefore still installed.
                 let call_wrapper =
                     self.task_intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
-                if task_managed {
+                if task_managed && !(self.requires_async_porcelain || self.is_async) {
+                    uwriteln!(
+                        self.src,
+                        r#"
+                      {vars_init}
+                      try {{
+                           {assignment_lhs} {callee_invoke};
+                      }} catch (err) {{
+                          {call_err_cleanup}
+                      }}
+                      task.endFirstSlice();
+                    "#,
+                    );
+                } else if task_managed {
                     uwriteln!(
                         self.src,
                         r#"
@@ -2467,7 +2507,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             componentIdx: -1,
                             isAsync: {is_async},
                             entryFnName: '{fn_name}',
-                            getCallbackFn: {get_callback_fn_expr},
+                            {get_callback_fn_property}
                             callbackFnName: {callback_fn_name_expr},
                             errHandling: '{err_handling}',
                             callingWasmExport: false,
@@ -2499,6 +2539,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         is_async = self.is_async,
                         fn_name = self.callee,
                         err_handling = self.err.to_js_string(),
+                        get_callback_fn_property = callback_fn_property(&get_callback_fn_expr),
                     );
                 }
 
@@ -2907,6 +2948,15 @@ impl Bindgen for FunctionBindgen<'_> {
                             ),
                             1 => operands[0].to_string(),
                             _ => format!("[{}]", operands.join(", ")),
+                        };
+                        // The result goes both to the task and to the caller. Unless it
+                        // is already a variable, evaluate it once: it may convert or copy.
+                        let ret_val = if task_managed && !is_js_identifier(&ret_val) {
+                            let result_var = format!("taskResult{}", self.tmp());
+                            uwriteln!(self.src, "const {result_var} = {ret_val};");
+                            result_var
+                        } else {
+                            ret_val
                         };
                         // The surrounding FutureValue represents the future returned by the WIT
                         // function, so the manual async transport must consume the lifted future
@@ -4488,6 +4538,9 @@ pub fn js_array_ty(resolve: &Resolve, element_ty: &Type) -> Option<&'static str>
 
 /// Generate the JS `DataView` set and numeric checks for a given numeric type
 ///
+/// Returns the name of the `DataView` method that writes the type, and the start of a
+/// call that checks a value of it, to be completed with the value and `)`.
+///
 /// # Arguments
 ///
 /// * `ty` - the [`Type`] to check
@@ -4499,19 +4552,19 @@ fn gen_dataview_set_and_check_fn_js_for_numeric_type(
     let check_fn = Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
     match ty {
         // Unsigned Integers
-        Type::Bool => ("setUint8", format!("{check_fn}.bind(null, 'u8')",)),
-        Type::U8 => ("setUint8", format!("{check_fn}.bind(null, 'u8')",)),
-        Type::U16 => ("setUint16", format!("{check_fn}.bind(null, 'u16')",)),
-        Type::U32 => ("setUint32", format!("{check_fn}.bind(null, 'u32')",)),
-        Type::U64 => ("setBigUint64", format!("{check_fn}.bind(null, 'u64')",)),
+        Type::Bool => ("setUint8", format!("{check_fn}('u8', ")),
+        Type::U8 => ("setUint8", format!("{check_fn}('u8', ")),
+        Type::U16 => ("setUint16", format!("{check_fn}('u16', ")),
+        Type::U32 => ("setUint32", format!("{check_fn}('u32', ")),
+        Type::U64 => ("setBigUint64", format!("{check_fn}('u64', ")),
         // Signed integers
-        Type::S8 => ("setInt8", format!("{check_fn}.bind(null, 's8')",)),
-        Type::S16 => ("setInt16", format!("{check_fn}.bind(null, 's16')",)),
-        Type::S32 => ("setInt32", format!("{check_fn}.bind(null, 's32')",)),
-        Type::S64 => ("setBigInt64", format!("{check_fn}.bind(null, 's64')",)),
+        Type::S8 => ("setInt8", format!("{check_fn}('s8', ")),
+        Type::S16 => ("setInt16", format!("{check_fn}('s16', ")),
+        Type::S32 => ("setInt32", format!("{check_fn}('s32', ")),
+        Type::S64 => ("setBigInt64", format!("{check_fn}('s64', ")),
         // Floating point
-        Type::F32 => ("setFloat32", format!("{check_fn}.bind(null, 'f32')",)),
-        Type::F64 => ("setFloat64", format!("{check_fn}.bind(null, 'f64')",)),
+        Type::F32 => ("setFloat32", format!("{check_fn}('f32', ")),
+        Type::F64 => ("setFloat64", format!("{check_fn}('f64', ")),
         Type::Id(id) => match resolve.types.get(*id) {
             // Type aliases should resolve to types that have the kind `TypeDefKind::Type`
             Some(TypeDef {
@@ -4708,7 +4761,7 @@ mod tests {
 
         let ty_ = Type::Id(ty_id);
 
-        let (dataview_set_method, check_fn_intrinsic) =
+        let (dataview_set_method, check_call_prefix) =
             gen_dataview_set_and_check_fn_js_for_numeric_type(&resolve, &ty_);
 
         assert_eq!(dataview_set_method, "setBigUint64");
@@ -4716,6 +4769,6 @@ mod tests {
         let check_fn =
             Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
 
-        assert_eq!(check_fn_intrinsic, format!("{check_fn}.bind(null, 'u64')",));
+        assert_eq!(check_call_prefix, format!("{check_fn}('u64', "));
     }
 }

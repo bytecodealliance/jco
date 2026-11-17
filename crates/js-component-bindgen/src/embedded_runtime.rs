@@ -18,9 +18,16 @@
 //! are embedded.
 //!
 //! Bindings that export `instantiate` take a logging choice for each instance. For
-//! them the runtime becomes the body of a function at module scope, which
-//! `instantiate` calls for a runtime of its own. Being outside `instantiate`, the
+//! them the runtime becomes the body of a function at module scope, which creates
+//! a runtime that logs or one that does not. `instantiate` uses the runtime for the
+//! choice of its instance, which is created when first needed and then shared by
+//! every instance that makes the same choice. Being outside `instantiate`, the
 //! runtime sees none of the names declared there, such as the local names of imports.
+//!
+//! Instances share a runtime because engines share inline caches between the
+//! closures created from one function body. A runtime for each instance would give
+//! every instance classes with private names of their own, and once two instances
+//! exist no access to a private field could be cached for either.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::OnceLock;
@@ -35,7 +42,7 @@ use oxc_semantic::SemanticBuilder;
 use oxc_span::SourceType;
 use oxc_str::Ident;
 
-use crate::intrinsics::debug_log_initializer;
+use crate::intrinsics::{debug_log_enabled, debug_log_initializer, debug_logger};
 
 /// The base that generated bindings import the shipped runtime from before linking.
 pub(crate) const PACKAGE: &str = "@bytecodealliance/jco-cm-runtime";
@@ -47,11 +54,17 @@ const RUNTIME_EXPORT_MAP: &str = include_str!("../runtime/runtime-export-map.tsv
 /// captured by names in generated bindings.
 const NAMESPACE: &str = "__jcoEmbeddedRuntime$";
 
-/// Name, within the namespace, of the function that creates the runtime of one instance.
+/// Name, within the namespace, of the function that creates a runtime for one logging choice.
 const INSTANCE_RUNTIME: &str = "$instance";
 
-/// Name, within the namespace, of that function's parameter for the logging choice.
+/// Name, within the namespace, of the parameter for the logging choice.
 const INSTANCE_DEBUG: &str = "$debug";
+
+/// Name, within the namespace, of the runtimes created so far, by logging choice.
+const RUNTIMES: &str = "$runtimes";
+
+/// Name, within the namespace, of the function that finds the runtime for an instance.
+const RUNTIME_OF_INSTANCE: &str = "$runtime";
 
 /// Key of the runtime's debug logger in the export map.
 const DEBUG_LOG_EXPORT: &str = "intrinsics/core:debugLog";
@@ -103,8 +116,13 @@ impl Runtime {
 
         // The setting is a parameter of the function the statements are placed in,
         // so it stays a free name here and is not moved into the namespace below.
-        let setting = per_instance.then(|| format!("{namespace}{INSTANCE_DEBUG}"));
-        let initializer = allocator.alloc_str(&debug_log_initializer(setting.as_deref()));
+        // There it has already been resolved against the environment.
+        let initializer = if per_instance {
+            debug_logger(&format!("{namespace}{INSTANCE_DEBUG}"))
+        } else {
+            debug_log_initializer(None)
+        };
+        let initializer = allocator.alloc_str(&initializer);
         let mut replaced = false;
         for statement in &mut program.body {
             let Statement::VariableDeclaration(declaration) = statement else {
@@ -142,7 +160,13 @@ impl Runtime {
         for symbol in symbols {
             let original = scoping.symbol_name(symbol);
             ensure!(
-                original != INSTANCE_RUNTIME && original != INSTANCE_DEBUG,
+                ![
+                    INSTANCE_RUNTIME,
+                    INSTANCE_DEBUG,
+                    RUNTIMES,
+                    RUNTIME_OF_INSTANCE
+                ]
+                .contains(&original),
                 "the shipped runtime declares {original}, which the linker reserves"
             );
             let name = format!("{namespace}{original}");
@@ -171,9 +195,14 @@ impl Runtime {
             bail!("the shipped runtime contains {unsupported}");
         }
 
+        // Keep the annotations that mark calls as free of side effects: this code is
+        // parsed again once linked, and what is unreachable is only removed then.
         let code = Codegen::new()
             .with_options(CodegenOptions {
-                comments: CommentOptions::disabled(),
+                comments: CommentOptions {
+                    annotation: true,
+                    ..CommentOptions::disabled()
+                },
                 ..Default::default()
             })
             .with_scoping(Some(scoping))
@@ -248,8 +277,9 @@ fn instantiate_function<'a, 'b>(
 /// Bundle the shipped runtime into `generated`, keeping only the code it uses.
 ///
 /// `per_instance` gives each call of the `instantiate` function that `generated`
-/// exports a runtime of its own, whose debug logging follows the `debug` property
-/// of that function's fourth parameter. Otherwise the module has a single runtime.
+/// exports the runtime whose debug logging follows the `debug` property of that
+/// function's fourth parameter, shared with the other calls that choose the same.
+/// Otherwise the module has a single runtime.
 ///
 /// Returns `None` when `generated` imports nothing from the runtime, in which case
 /// it needs no linking and is best left exactly as generated. All other imports,
@@ -330,15 +360,18 @@ pub(crate) fn link(generated: &str, per_instance: bool) -> Result<Option<String>
             _ => "undefined".to_string(),
         };
 
-        // Create the instance's runtime before anything else in `instantiate`,
+        // Find the instance's runtime before anything else in `instantiate`,
         // binding the imported names there as the import declarations did.
         let function = format!("{namespace}{INSTANCE_RUNTIME}");
+        let lookup = format!("{namespace}{RUNTIME_OF_INSTANCE}");
+        let runtimes = format!("{namespace}{RUNTIMES}");
+        let debug = format!("{namespace}{INSTANCE_DEBUG}");
         let bound: Vec<String> = imported
             .iter()
             .map(|(local, target)| format!("{target}: {local}"))
             .collect();
         let binding = allocator.alloc_str(&format!(
-            "const {{ {} }} = {function}({setting});",
+            "const {{ {} }} = {lookup}({setting});",
             bound.join(", ")
         ));
         let parsed = Parser::new(&allocator, binding, SourceType::mjs()).parse();
@@ -356,8 +389,16 @@ pub(crate) fn link(generated: &str, per_instance: bool) -> Result<Option<String>
         // Returning only what the bindings import leaves the rest unreachable.
         let targets: BTreeSet<&str> = imported.iter().map(|(_, target)| *target).collect();
         let targets: Vec<&str> = targets.into_iter().collect();
+        // The environment is read for each instance that makes no choice of its
+        // own, as it would be were the runtime created for that instance alone.
+        let enabled = debug_log_enabled(Some(&debug));
         format!(
-            "function {function}({namespace}{INSTANCE_DEBUG}) {{\n{}\nreturn {{ {} }};\n}}\n",
+            "function {function}({debug}) {{\n{}\nreturn {{ {} }};\n}}\n\
+             const {runtimes} = [void 0, void 0];\n\
+             function {lookup}({debug}) {{\n\
+             const logging = ({enabled}) ? 1 : 0;\n\
+             if ({runtimes}[logging] === void 0) {{ {runtimes}[logging] = {function}(logging === 1); }}\n\
+             return {runtimes}[logging];\n}}\n",
             runtime.code,
             targets.join(", ")
         )
@@ -485,7 +526,7 @@ mod tests {
     }
 
     #[test]
-    fn creates_a_runtime_for_each_instance_outside_instantiate() {
+    fn shares_a_runtime_between_instances_outside_instantiate() {
         // The local names of imports are declared in `instantiate`, and may be those
         // of globals the runtime uses.
         let source = r#"
@@ -505,20 +546,23 @@ mod tests {
         let implementation = format!("{NAMESPACE}withCurrentTaskMeta");
         assert!(linked.find(&implementation).unwrap() < instantiate);
         let binding =
-            format!("{{ {implementation}: runTask }} = {NAMESPACE}$instance(settings?.debug);");
+            format!("{{ {implementation}: runTask }} = {NAMESPACE}$runtime(settings?.debug);");
         assert!(linked[instantiate..].contains(&binding));
         assert_eq!(linked[instantiate..].matches(NAMESPACE).count(), 2);
 
-        // The choice of the instance takes precedence over the environment.
-        let logger = linked
+        // The choice of the instance takes precedence over the environment, and
+        // selects one of the two runtimes that instances share.
+        let choice = linked
             .lines()
             .find(|line| line.contains("JCO_DEBUG"))
-            .expect("the runtime of an instance defines its logger");
+            .expect("the runtime of an instance is chosen by its logging");
         assert!(
-            logger.contains(&format!("{NAMESPACE}$debug ?? ")),
-            "{logger}"
+            choice.contains(&format!("{NAMESPACE}$debug ?? ")),
+            "{choice}"
         );
         assert_eq!(linked.matches("JCO_DEBUG").count(), 1);
+        assert_eq!(linked.matches(&format!("{NAMESPACE}$instance(")).count(), 2);
+        assert!(linked.contains(&format!("{NAMESPACE}$runtimes[")));
     }
 
     #[test]

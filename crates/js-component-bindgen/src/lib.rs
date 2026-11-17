@@ -731,18 +731,19 @@ mod tests {
         // once as it is instantiated.
         let (per_instance, inside_instantiate) = logger(Some(InstantiationMode::Sync));
         assert!(per_instance.contains("?? ") && per_instance.contains("JCO_DEBUG"));
-        assert!(per_instance.contains("console.debug(message, ...args) : () => {}"));
         #[cfg(not(feature = "embedded-cm-runtime"))]
         {
             // Inline intrinsics are defined in `instantiate`, where `options` is.
+            assert!(per_instance.contains("console.debug(message, ...args) : () => {}"));
             assert!(
                 per_instance
                     .contains("(options?.debug ?? !!globalThis?.process?.env?.JCO_DEBUG) ?")
             );
             assert_eq!(inside_instantiate, Some(true));
         }
-        // The bundled runtime of an instance is created outside `instantiate`,
-        // which passes its choice in.
+        // The bundled runtime of an instance is found outside `instantiate`, which
+        // passes its choice in. Instances that choose alike share a runtime, whose
+        // logger follows the choice already resolved against the environment.
         #[cfg(feature = "embedded-cm-runtime")]
         {
             assert_eq!(inside_instantiate, Some(false));
@@ -754,7 +755,11 @@ mod tests {
                     .build(),
             )
             .unwrap();
-            assert!(generated_javascript(&source).contains("$instance(options?.debug);"));
+            let source = generated_javascript(&source);
+            assert!(source.contains("$runtime(options?.debug);"));
+            assert!(source.contains(
+                "$debug ? (message, ...args) => console.debug(message, ...args) : () => {}"
+            ));
         }
 
         // Neither calls a global that a local name of the bindings could capture.
