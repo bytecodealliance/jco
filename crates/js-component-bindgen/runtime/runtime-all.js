@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 97de4e07944f19b0da5d87123acacdf1606b2133
+// generated from commit c87541ae519d24491467587a93bd432b05d7da7c
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -29,9 +29,13 @@ function isPromiseLike(value) {
 /**
 * Log runtime diagnostics when enabled at module load. Snapshot the environment
 * so hot runtime operations never read process.env.
+*
+* A logger which logs declares the message it takes and one which does nothing
+* declares no parameter, so that operations can tell them apart by `length` and
+* skip work which only serves logging.
 * @param args Values to log.
 */
-const debugLog = globalThis?.process?.env?.JCO_DEBUG ? (...args) => console.debug(...args) : () => {};
+const debugLog = globalThis?.process?.env?.JCO_DEBUG ? (message, ...args) => console.debug(message, ...args) : () => {};
 
 //#endregion
 //#region runtime/intrinsics/task-context.js
@@ -2375,20 +2379,43 @@ const suspendingImport = (context, componentIdx, fn, syncOnly = false, switchesT
 			}
 			return result;
 		}
-		return (async () => {
+		const settled = (async () => fn.apply(null, args))();
+		const resumption = promiseWithResolvers();
+		/** Restore this stack's task, then let the stack resume. */
+		const resume = (deliver) => resumeInTurn(currentTaskMeta, () => {
+			currentTaskMeta[componentIdx] = saved;
+			if (!switchesTask) currentTaskMeta.current = saved;
 			try {
-				const result = await fn.apply(null, args);
-				getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
-				return result;
+				resumption.resolve(deliver());
 			} catch (error) {
-				throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
-			} finally {
-				currentTaskMeta[componentIdx] = saved;
-				if (!switchesTask) currentTaskMeta.current = saved;
+				resumption.reject(recordTrap(context.traps, componentIdx, error, convertsRangeErrors));
 			}
-		})();
+			return resumption.promise;
+		});
+		settled.then((result) => resume(() => {
+			getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
+			return result;
+		}), (error) => resume(() => {
+			throw error;
+		}));
+		return resumption.promise;
 	};
 };
+/**
+* Resume a suspended stack once every stack resumed before it has run.
+*
+* A suspended stack continues in a job after the one which settles the promise
+* it waits for. Were two stacks of a store released in the same turn, the
+* second would restore its task before the first had continued, and the first
+* would run as the second's task.
+*
+* @param registers The task registers of the store.
+* @param release Restores the stack's task and settles the promise the stack
+*   waits for, returning that promise.
+*/
+function resumeInTurn(registers, release) {
+	registers.resumed = (registers.resumed ?? Promise.resolve()).then(() => release().then(emptyFunc, emptyFunc));
+}
 function instantiateTrampoline(platform, module, fast, slow) {
 	return new platform.Instance(module, { "": {
 		fast,
@@ -3749,6 +3776,542 @@ function initializeThreadStartChecks(platform) {
 }
 
 //#endregion
+//#region runtime/intrinsics/async-task/context.js
+/**
+* A core module that keeps the context slots a component instance's code
+* accesses in mutable globals, and exports a getter and a setter function for
+* each slot. While no slots are loaded into the globals, the functions call the
+* imported JS implementations instead:
+*
+* ```wat
+* (module
+*   (import "context" "get0" (func $get0 (result i32)))
+*   (import "context" "set0" (func $set0 (param i32)))
+*   (import "context" "get1" (func $get1 (result i32)))
+*   (import "context" "set1" (func $set1 (param i32)))
+*   (global $loaded (export "loaded") (mut i32) (i32.const 0))
+*   (global $slot0 (export "slot0") (mut i32) (i32.const 0))
+*   (global $slot1 (export "slot1") (mut i32) (i32.const 0))
+*   (func (export "get0") (result i32)
+*     (if (result i32) (global.get $loaded)
+*       (then (global.get $slot0))
+*       (else (call $get0))))
+*   (func (export "set0") (param i32)
+*     (if (global.get $loaded)
+*       (then (global.set $slot0 (local.get 0)))
+*       (else (call $set0 (local.get 0)))))
+*   ;; ... and likewise "get1" and "set1" for $slot1
+* )
+* ```
+*
+* A guest that imports these functions reads and writes its context slots
+* without leaving WebAssembly. Toolchains keep the shadow stack pointer in a
+* context slot, so a guest may do so in every function prologue.
+*/
+const CONTEXT_SLOTS_MODULE = new Uint8Array([
+	0,
+	97,
+	115,
+	109,
+	1,
+	0,
+	0,
+	0,
+	1,
+	9,
+	2,
+	96,
+	0,
+	1,
+	127,
+	96,
+	1,
+	127,
+	0,
+	2,
+	61,
+	4,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	103,
+	101,
+	116,
+	48,
+	0,
+	0,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	115,
+	101,
+	116,
+	48,
+	0,
+	1,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	103,
+	101,
+	116,
+	49,
+	0,
+	0,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	115,
+	101,
+	116,
+	49,
+	0,
+	1,
+	3,
+	5,
+	4,
+	0,
+	1,
+	0,
+	1,
+	6,
+	16,
+	3,
+	127,
+	1,
+	65,
+	0,
+	11,
+	127,
+	1,
+	65,
+	0,
+	11,
+	127,
+	1,
+	65,
+	0,
+	11,
+	7,
+	54,
+	7,
+	6,
+	108,
+	111,
+	97,
+	100,
+	101,
+	100,
+	3,
+	0,
+	5,
+	115,
+	108,
+	111,
+	116,
+	48,
+	3,
+	1,
+	5,
+	115,
+	108,
+	111,
+	116,
+	49,
+	3,
+	2,
+	4,
+	103,
+	101,
+	116,
+	48,
+	0,
+	4,
+	4,
+	115,
+	101,
+	116,
+	48,
+	0,
+	5,
+	4,
+	103,
+	101,
+	116,
+	49,
+	0,
+	6,
+	4,
+	115,
+	101,
+	116,
+	49,
+	0,
+	7,
+	10,
+	61,
+	4,
+	12,
+	0,
+	35,
+	0,
+	4,
+	127,
+	35,
+	1,
+	5,
+	16,
+	0,
+	11,
+	11,
+	16,
+	0,
+	35,
+	0,
+	4,
+	64,
+	32,
+	0,
+	36,
+	1,
+	5,
+	32,
+	0,
+	16,
+	1,
+	11,
+	11,
+	12,
+	0,
+	35,
+	0,
+	4,
+	127,
+	35,
+	2,
+	5,
+	16,
+	2,
+	11,
+	11,
+	16,
+	0,
+	35,
+	0,
+	4,
+	64,
+	32,
+	0,
+	36,
+	2,
+	5,
+	32,
+	0,
+	16,
+	3,
+	11,
+	11
+]);
+/** The number of context slots each thread has. */
+const SLOT_COUNT = 2;
+/**
+* Find the live thread that a task register names.
+*
+* @param context - capabilities for locating a component's threads
+* @param meta - the identity the register holds, if any
+* @returns the thread, or `undefined` when the register is empty or its thread no longer exists
+*/
+function resolveThread(context, meta) {
+	if (!meta || meta.componentIdx === -1 || !meta.threadID) return;
+	const { threads } = getOrCreateAsyncState(context.lookup, meta.componentIdx);
+	const thread = threads.get(meta.threadID);
+	return thread && thread.taskID() === meta.taskID ? thread : void 0;
+}
+/**
+* Find the context slots that `context.get` and `context.set` act on.
+*
+* A guest function called through {@link guardCannotLeave} with fresh context slots uses those.
+* Otherwise guest code uses the register of its own component. A FACT adapter has no component
+* index, and a post-return may run after the thread its component's register names has exited;
+* both use the executing thread.
+*
+* @param context - capabilities for locating a component's threads and the executing registers
+* @param componentIdx - index of the component instance calling the built-in, if it has one
+* @param operation - name of the calling built-in, for the error message
+* @returns the slots of the thread the call runs on
+*/
+function activeSlots(context, componentIdx, operation) {
+	const { registers } = context;
+	const own = componentIdx === void 0 || componentIdx === null ? void 0 : resolveThread(context, registers[componentIdx]);
+	const slots = registers.freshContextSlots ?? (own ?? resolveThread(context, registers.current))?.storage;
+	if (!slots) throw new Error(`missing/incomplete global current thread meta for component idx [${componentIdx}] during context ${operation}`);
+	return slots;
+}
+/**
+* Find the globals which hold the values of some context slots, if any do.
+*
+* @param registers - the task registers of the store
+* @param storage - the context slots
+* @returns the globals `storage` is loaded into
+*/
+function globalsHolding(registers, storage) {
+	return registers.contextSlots?.components.find((globals) => globals.storage === storage);
+}
+/**
+* Make a component instance's globals hold the values of `next`, after moving
+* the values they hold now back to the slots those belong to.
+*
+* @param globals - the globals of the instance
+* @param next - the context slots to load, if any
+*/
+function loadSlots(globals, next) {
+	const previous = globals.storage;
+	if (previous === next) return;
+	for (let slot = 0; slot < SLOT_COUNT; slot++) {
+		if (previous !== void 0) previous[slot] = globals.slots[slot].value;
+		if (next !== void 0) globals.slots[slot].value = next[slot];
+	}
+	globals.storage = next;
+	globals.loaded.value = next === void 0 ? 0 : 1;
+}
+/**
+* Load a component instance's globals with the context slots of the thread its
+* code accesses, selected as {@link activeSlots} does.
+*
+* @param context - capabilities for locating a component's threads and the executing registers
+* @param globals - the globals of the instance
+*/
+function syncInstance(context, globals) {
+	const { registers } = context;
+	if (registers.freshContextSlots !== void 0) {
+		loadSlots(globals, void 0);
+		return;
+	}
+	const own = resolveThread(context, registers[globals.componentIdx]);
+	globals.followsExecutingTask = own === void 0;
+	const thread = own ?? resolveThread(context, registers.current);
+	loadSlots(globals, thread?.componentIdx() === globals.componentIdx ? thread.storage : void 0);
+}
+/**
+* Bring the context slot globals of every component instance up to date.
+*
+* Which slots an instance's code accesses depends on the task registers and on
+* which threads are live. Registers are watched for writes (see
+* {@link watchRegister}); code which changes a component's thread table must
+* call this.
+*
+* @param registers - the task registers of the store
+*/
+function syncContextSlots(registers) {
+	const state = registers.contextSlots;
+	if (state === void 0) return;
+	for (const globals of state.components) syncInstance(state.context, globals);
+}
+/**
+* Run `onWrite` after every write to one task register.
+*
+* Registers are written from many places (entering and leaving tasks, and
+* restoring a task when a suspended stack resumes), including by runtime
+* providers which replace those operations. Watching the register itself keeps
+* the globals correct whichever code performs the write.
+*
+* @param registers - the task registers of the store
+* @param key - the register to watch
+* @param onWrite - brings the globals which depend on the register up to date
+*/
+function watchRegister(registers, key, onWrite) {
+	let value = registers[key];
+	Object.defineProperty(registers, key, {
+		enumerable: true,
+		configurable: true,
+		get: () => value,
+		set(next) {
+			value = next;
+			onWrite();
+		}
+	});
+}
+/**
+* Get the context slot globals of a component instance, creating them when the
+* host can instantiate WebAssembly modules synchronously.
+*
+* @param context - capabilities for locating a component's threads and the executing registers
+* @param componentIdx - index of the component instance
+* @returns the globals, or `undefined` if they cannot be created
+*/
+function contextSlotGlobals(context, componentIdx) {
+	const { registers } = context;
+	const existing = registers.contextSlots?.components.find((globals) => globals.componentIdx === componentIdx);
+	if (existing) return existing;
+	const wasm = globalThis.WebAssembly;
+	if (typeof wasm?.Module !== "function" || typeof wasm.Instance !== "function") return;
+	let exports;
+	try {
+		exports = new wasm.Instance(new wasm.Module(CONTEXT_SLOTS_MODULE), { context: {
+			get0: contextGet.bind(null, context, {
+				componentIdx,
+				slot: 0
+			}),
+			set0: contextSet.bind(null, context, {
+				componentIdx,
+				slot: 0
+			}),
+			get1: contextGet.bind(null, context, {
+				componentIdx,
+				slot: 1
+			}),
+			set1: contextSet.bind(null, context, {
+				componentIdx,
+				slot: 1
+			})
+		} }).exports;
+	} catch {
+		return;
+	}
+	const globals = {
+		componentIdx,
+		loaded: exports.loaded,
+		slots: [exports.slot0, exports.slot1],
+		getters: [exports.get0, exports.get1],
+		setters: [exports.set0, exports.set1],
+		storage: void 0,
+		followsExecutingTask: true
+	};
+	if (registers.contextSlots === void 0) {
+		const components = [];
+		registers.contextSlots = {
+			context,
+			components
+		};
+		watchRegister(registers, "freshContextSlots", () => syncContextSlots(registers));
+		watchRegister(registers, "current", () => {
+			for (const other of components) if (other.followsExecutingTask) syncInstance(context, other);
+		});
+	}
+	registers.contextSlots.components.push(globals);
+	watchRegister(registers, componentIdx, () => syncInstance(context, globals));
+	syncInstance(context, globals);
+	return globals;
+}
+/**
+* Create the function a core module imports for `canon context.get` or
+* `canon context.set` on one slot.
+*
+* Code that belongs to a component instance gets a WebAssembly function over
+* that instance's context slot globals where possible, and a JS function
+* otherwise. Debug logging also selects JS functions, which log each access.
+*
+* @param _context - capabilities for locating a component's threads and the executing registers
+* @param ctx - the slot, and the component instance of the importing code, if any
+* @param operation - whether the function reads or writes the slot
+* @returns the function to import
+*/
+const contextSlotAccessor = (_context, ctx, operation) => {
+	const { componentIdx, slot } = ctx;
+	if (slot === void 0 || slot < 0 || slot >= SLOT_COUNT) throw new TypeError("invalid slot");
+	const logs = debugLog.length > 0;
+	const globals = componentIdx === void 0 || logs ? void 0 : contextSlotGlobals(_context, componentIdx);
+	if (globals === void 0) return operation === "get" ? contextGet.bind(null, _context, ctx) : contextSet.bind(null, _context, ctx);
+	return operation === "get" ? globals.getters[slot] : globals.setters[slot];
+};
+/** Implements `canon context.set`. */
+function contextSet(_context, ctx, value) {
+	const { slot } = ctx;
+	if (slot === void 0) throw new TypeError("missing slot");
+	if (!typeCheckValidI32(value)) throw new Error("invalid value for context set (not valid i32)");
+	const storage = activeSlots(_context, ctx.componentIdx, "set");
+	debugLog("[contextSet()] args", {
+		slot,
+		value,
+		storage,
+		componentIdx: ctx.componentIdx
+	});
+	if (slot < 0 || slot >= storage.length) throw new Error("invalid slot for current thread");
+	const globals = globalsHolding(_context.registers, storage);
+	if (globals === void 0) storage[slot] = value;
+	else globals.slots[slot].value = value;
+}
+/** Implements `canon context.get`. */
+function contextGet(_context, ctx) {
+	const { slot } = ctx;
+	if (slot === void 0) throw new TypeError("missing slot");
+	const storage = activeSlots(_context, ctx.componentIdx, "get");
+	debugLog("[contextGet()] args", {
+		slot,
+		storage,
+		componentIdx: ctx.componentIdx
+	});
+	if (slot < 0 || slot >= storage.length) throw new Error("invalid slot for current thread");
+	const globals = globalsHolding(_context.registers, storage);
+	return globals === void 0 ? storage[slot] : globals.slots[slot].value;
+}
+/**
+* Wrap a guest function that the host calls while lifting or lowering (a realloc or a
+* post-return) so that each call runs without leaving its component instance.
+*
+* The Canonical ABI clears `may_leave` around both. A function that may not leave its component
+* instance can neither call out of it nor suspend, so it has finished by the time the call
+* returns, even where the call yields a promise; `may_leave` is therefore restored on return.
+*
+* A realloc additionally runs as though on a fresh thread (`freshContextSlots`): the host may
+* call it while one of the guest's tasks is suspended or while none of its threads is executing,
+* so it reads zeroed context slots and what it writes to them is discarded when it returns. No
+* thread's own slots are involved, and the registers keep naming what was executing. Only the
+* wrapped function can run until the call returns, so one set of fresh slots serves every
+* component.
+*
+* @param context - capabilities for locating component state and the executing registers
+* @param componentIdx - index of the component instance that owns the function
+* @param fn - the guest function to wrap
+* @param freshContextSlots - whether calls run with zeroed context slots of their own
+* @returns a function with the same signature
+*/
+function guardCannotLeave(context, componentIdx, fn, freshContextSlots = false) {
+	const { registers } = context;
+	return (...args) => {
+		const state = getOrCreateAsyncState(context.lookup, componentIdx);
+		const previousMayLeave = state.mayLeave;
+		state.mayLeave = false;
+		if (freshContextSlots) {
+			const slots = [0, 0];
+			registers.freshContextSlots = slots;
+			const globals = registers.contextSlots?.components.find((other) => other.componentIdx === componentIdx);
+			if (globals !== void 0) loadSlots(globals, slots);
+		}
+		try {
+			return fn(...args);
+		} finally {
+			if (freshContextSlots) registers.freshContextSlots = void 0;
+			state.mayLeave = previousMayLeave;
+		}
+	};
+}
+
+//#endregion
 //#region runtime/intrinsics/async-task/async-task.js
 const TASK_INITIAL = "initial";
 const TASK_CANCELLED = "cancelled";
@@ -4540,6 +5103,7 @@ function initializeAsyncTaskClass(context) {
 			this.settleCompletion();
 			if (this.#componentIdx !== -1) getOrCreateAsyncState(_lookup, this.#componentIdx).threads.remove(thread.id());
 			this.#threads = this.#threads.filter((t) => t !== thread);
+			syncContextSlots(_registers);
 			if (this.#exited && this.#threads.length === 0) clearCurrentThread(_clearing, this.#componentIdx, this.#id);
 		}
 		#checkThreadExit() {
@@ -4557,6 +5121,7 @@ function initializeAsyncTaskClass(context) {
 			const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
 			thread.setId(cstate.threads.insert(thread));
 			this.#threads.push(thread);
+			syncContextSlots(_registers);
 			return thread;
 		}
 		calleeIsAsync() {
@@ -4890,103 +5455,6 @@ function initializeAsyncSubtaskClass(context) {
 		}
 	}
 	return AsyncSubtask;
-}
-
-//#endregion
-//#region runtime/intrinsics/async-task/context.js
-/**
-* Find the context slots of the thread a register names.
-*
-* @param context - capabilities for locating a component's threads
-* @param meta - the identity the register holds, if any
-* @returns the slots, or `undefined` when the register is empty or its thread no longer exists
-*/
-function threadSlots(context, meta) {
-	if (!meta) return;
-	return getCurrentThread(context, meta.componentIdx, meta.threadID, meta.taskID)?.thread?.storage;
-}
-/**
-* Find the context slots that `context.get` and `context.set` act on.
-*
-* A guest function called through {@link guardCannotLeave} with fresh context slots uses those.
-* Otherwise guest code uses the register of its own component. A FACT adapter has no component
-* index, and a post-return may run after the thread its component's register names has exited;
-* both use the executing thread.
-*
-* @param context - capabilities for locating a component's threads and the executing registers
-* @param componentIdx - index of the component instance calling the built-in, if it has one
-* @param operation - name of the calling built-in, for the error message
-* @returns the slots of the thread the call runs on
-*/
-function activeSlots(context, componentIdx, operation) {
-	const { registers } = context;
-	const slots = registers.freshContextSlots ?? (componentIdx === void 0 || componentIdx === null ? void 0 : threadSlots(context, registers[componentIdx])) ?? threadSlots(context, registers.current);
-	if (!slots) throw new Error(`missing/incomplete global current thread meta for component idx [${componentIdx}] during context ${operation}`);
-	return slots;
-}
-/** Implements `canon context.set`. */
-function contextSet(_context, ctx, value) {
-	const { slot } = ctx;
-	if (slot === void 0) throw new TypeError("missing slot");
-	if (!typeCheckValidI32(value)) throw new Error("invalid value for context set (not valid i32)");
-	const storage = activeSlots(_context, ctx.componentIdx, "set");
-	debugLog("[contextSet()] args", {
-		slot,
-		value,
-		storage,
-		componentIdx: ctx.componentIdx
-	});
-	if (slot < 0 || slot >= storage.length) throw new Error("invalid slot for current thread");
-	storage[slot] = value;
-}
-/** Implements `canon context.get`. */
-function contextGet(_context, ctx) {
-	const { slot } = ctx;
-	if (slot === void 0) throw new TypeError("missing slot");
-	const storage = activeSlots(_context, ctx.componentIdx, "get");
-	debugLog("[contextGet()] args", {
-		slot,
-		storage,
-		componentIdx: ctx.componentIdx
-	});
-	if (slot < 0 || slot >= storage.length) throw new Error("invalid slot for current thread");
-	return storage[slot];
-}
-/**
-* Wrap a guest function that the host calls while lifting or lowering (a realloc or a
-* post-return) so that each call runs without leaving its component instance.
-*
-* The Canonical ABI clears `may_leave` around both. A function that may not leave its component
-* instance can neither call out of it nor suspend, so it has finished by the time the call
-* returns, even where the call yields a promise; `may_leave` is therefore restored on return.
-*
-* A realloc additionally runs as though on a fresh thread (`freshContextSlots`): the host may
-* call it while one of the guest's tasks is suspended or while none of its threads is executing,
-* so it reads zeroed context slots and what it writes to them is discarded when it returns. No
-* thread's own slots are involved, and the registers keep naming what was executing. Only the
-* wrapped function can run until the call returns, so one set of fresh slots serves every
-* component.
-*
-* @param context - capabilities for locating component state and the executing registers
-* @param componentIdx - index of the component instance that owns the function
-* @param fn - the guest function to wrap
-* @param freshContextSlots - whether calls run with zeroed context slots of their own
-* @returns a function with the same signature
-*/
-function guardCannotLeave(context, componentIdx, fn, freshContextSlots = false) {
-	const { registers } = context;
-	return (...args) => {
-		const state = getOrCreateAsyncState(context.lookup, componentIdx);
-		const previousMayLeave = state.mayLeave;
-		state.mayLeave = false;
-		if (freshContextSlots) registers.freshContextSlots = [0, 0];
-		try {
-			return fn(...args);
-		} finally {
-			if (freshContextSlots) registers.freshContextSlots = void 0;
-			state.mayLeave = previousMayLeave;
-		}
-	};
 }
 
 //#endregion
@@ -9501,4 +9969,4 @@ function streamTransfer(_context, srcStreamWaitableIdx, srcTableIdx, destTableId
 }
 
 //#endregion
-export { CM_RUNTIME_API_VERSION as runtimeExport0, callDestructor as runtimeExport1, tableCreateBorrow as runtimeExport10, initializeSymbolResourceRep as runtimeExport100, initializeTaskRegisters as runtimeExport101, instantiateCore as runtimeExport102, lookupMemories as runtimeExport103, promiseWithResolvers as runtimeExport104, registerMemory as runtimeExport105, setCurrentTaskMeta as runtimeExport106, suspendingImport as runtimeExport107, throwInvalidBool as runtimeExport108, throwUninitialized as runtimeExport109, tableCreateOwn as runtimeExport11, typeCheckAsyncFn as runtimeExport110, typeCheckValidI32 as runtimeExport111, withCurrentTaskMeta as runtimeExport112, withCurrentTaskMetaAsync as runtimeExport113, backpressureDec as runtimeExport114, backpressureInc as runtimeExport115, checkForDeadlock as runtimeExport116, checkIdle as runtimeExport117, checkMayLeave as runtimeExport118, getOrCreateAsyncState as runtimeExport119, tableEnsureBorrowDrop as runtimeExport12, guardMayLeave as runtimeExport120, guardPostReturn as runtimeExport121, guardTrap as runtimeExport122, initializeCallTracking as runtimeExport123, initializeComponentAsyncStateClass as runtimeExport124, initializeComponentAsyncStates as runtimeExport125, initializeCoreTrapMessages as runtimeExport126, initializeInstanceFlags as runtimeExport127, initializeStoreAsyncState as runtimeExport128, initializeStoreTrap as runtimeExport129, tableFlag as runtimeExport13, normalizeCoreTrap as runtimeExport130, postReturnTrap as runtimeExport131, recordTrap as runtimeExport132, reportTrap as runtimeExport133, setAllError as runtimeExport134, stopInstance as runtimeExport135, trackHostOperation as runtimeExport136, whenIdle as runtimeExport137, initializeWaitableClass as runtimeExport138, initializeWaitableSetClass as runtimeExport139, tableGet as runtimeExport14, removeWaitableSet as runtimeExport140, waitableJoin as runtimeExport141, waitableSetDrop as runtimeExport142, waitableSetNew as runtimeExport143, waitableSetPoll as runtimeExport144, waitableSetWait as runtimeExport145, errCtxCreateLocalHandle as runtimeExport146, errCtxDebugMessage as runtimeExport147, errCtxDrop as runtimeExport148, errCtxGetLocalTable as runtimeExport149, tableOwn as runtimeExport15, errCtxGlobalRefCountAdd as runtimeExport150, errCtxNew as runtimeExport151, errCtxReserveGlobalRep as runtimeExport152, errCtxTransfer as runtimeExport153, initializeErrorContextTableRegistrations as runtimeExport154, initializeGlobalErrorContextTableClass as runtimeExport155, initializeLocalErrorContextTables as runtimeExport156, asyncBlockedCode as runtimeExport157, asyncYield as runtimeExport158, clearCurrentTask as runtimeExport159, tableRemove as runtimeExport16, clearCurrentThread as runtimeExport160, contextGet as runtimeExport161, contextSet as runtimeExport162, createNewCurrentImplicitThread as runtimeExport163, createNewCurrentTask as runtimeExport164, currentThreadOrThrow as runtimeExport165, driverLoop as runtimeExport166, getCurrentTask as runtimeExport167, getCurrentThread as runtimeExport168, guardCannotLeave as runtimeExport169, transferBorrow as runtimeExport17, initializeAsyncBlockingCallDepth as runtimeExport170, initializeAsyncSubtaskClass as runtimeExport171, initializeAsyncTaskClass as runtimeExport172, initializeAsyncThreadClass as runtimeExport173, initializeCurrentComponentIdxs as runtimeExport174, initializeCurrentTaskIds as runtimeExport175, initializeCurrentTaskMayBlock as runtimeExport176, initializeSymmetricSyncGuestCallStack as runtimeExport177, initializeTasksByComponent as runtimeExport178, initializeThreadStartChecks as runtimeExport179, transferBorrowValidLifting as runtimeExport18, lowerImport as runtimeExport180, lowerImportBackwardsCompat as runtimeExport181, subtaskCancel as runtimeExport182, subtaskDrop as runtimeExport183, symmetricSyncGuestCallEnter as runtimeExport184, symmetricSyncGuestCallExit as runtimeExport185, taskCancel as runtimeExport186, taskReturn as runtimeExport187, threadIndex as runtimeExport188, threadNewIndirect as runtimeExport189, transferOwn as runtimeExport19, threadResumeLater as runtimeExport190, threadSuspend as runtimeExport191, threadSuspendThenPromote as runtimeExport192, threadSuspendThenResume as runtimeExport193, threadYieldThenPromote as runtimeExport194, threadYieldThenResume as runtimeExport195, unpackCallbackResult as runtimeExport196, asyncStartCall as runtimeExport197, prepareCall as runtimeExport198, storeEventInComponentMemory as runtimeExport199, getHandleIndexSpace as runtimeExport2, f32ToI32 as runtimeExport20, syncStartCall as runtimeExport200, decodeUtf8 as runtimeExport201, initializeLiftVariant as runtimeExport202, liftFlatBool as runtimeExport203, liftFlatBorrow as runtimeExport204, liftFlatChar as runtimeExport205, liftFlatEnum as runtimeExport206, liftFlatErrorContext as runtimeExport207, liftFlatFlags as runtimeExport208, liftFlatFloat32 as runtimeExport209, f64ToI64 as runtimeExport21, liftFlatFloat64 as runtimeExport210, liftFlatFuture as runtimeExport211, liftFlatList as runtimeExport212, liftFlatMap as runtimeExport213, liftFlatOption as runtimeExport214, liftFlatOwn as runtimeExport215, liftFlatRecord as runtimeExport216, liftFlatResult as runtimeExport217, liftFlatS16 as runtimeExport218, liftFlatS32 as runtimeExport219, i32ToChar as runtimeExport22, liftFlatS64 as runtimeExport220, liftFlatS8 as runtimeExport221, liftFlatStream as runtimeExport222, liftFlatStringAny as runtimeExport223, liftFlatStringUTF16 as runtimeExport224, liftFlatStringUTF8 as runtimeExport225, liftFlatTuple as runtimeExport226, liftFlatU16 as runtimeExport227, liftFlatU32 as runtimeExport228, liftFlatU64 as runtimeExport229, i32ToF32 as runtimeExport23, liftFlatU8 as runtimeExport230, liftFlatVariant as runtimeExport231, lowerFlatBool as runtimeExport232, lowerFlatBorrow as runtimeExport233, lowerFlatChar as runtimeExport234, lowerFlatEnum as runtimeExport235, lowerFlatErrorContext as runtimeExport236, lowerFlatFlags as runtimeExport237, lowerFlatFloat32 as runtimeExport238, lowerFlatFloat64 as runtimeExport239, i64ToF64 as runtimeExport24, lowerFlatFuture as runtimeExport240, lowerFlatList as runtimeExport241, lowerFlatMap as runtimeExport242, lowerFlatOption as runtimeExport243, lowerFlatOwn as runtimeExport244, lowerFlatRecord as runtimeExport245, lowerFlatResult as runtimeExport246, lowerFlatS16 as runtimeExport247, lowerFlatS32 as runtimeExport248, lowerFlatS64 as runtimeExport249, initializeBitcast32 as runtimeExport25, lowerFlatS8 as runtimeExport250, lowerFlatStream as runtimeExport251, lowerFlatStringAny as runtimeExport252, lowerFlatStringUTF16 as runtimeExport253, lowerFlatStringUTF8 as runtimeExport254, lowerFlatTuple as runtimeExport255, lowerFlatU16 as runtimeExport256, lowerFlatU32 as runtimeExport257, lowerFlatU64 as runtimeExport258, lowerFlatU8 as runtimeExport259, initializeBitcast64 as runtimeExport26, lowerFlatVariant as runtimeExport260, addFutureEndToTable as runtimeExport261, createFuture as runtimeExport262, futureCancelRead as runtimeExport263, futureCancelWrite as runtimeExport264, futureDropReadable as runtimeExport265, futureDropWritable as runtimeExport266, futureNew as runtimeExport267, futureNewFromLift as runtimeExport268, futureRead as runtimeExport269, isValidNumericPrimitive as runtimeExport27, futureTransfer as runtimeExport270, futureWrite as runtimeExport271, genFutureHostInjectFn as runtimeExport272, getFutureEnd as runtimeExport273, initializeFutureEndClass as runtimeExport274, initializeFutureReadableEndClass as runtimeExport275, initializeFutureTables as runtimeExport276, initializeFutureValueClass as runtimeExport277, initializeFutureWritableEndClass as runtimeExport278, initializeFutures as runtimeExport279, mergeInt64 as runtimeExport28, initializeHostFutureClass as runtimeExport280, initializeInternalFutureClass as runtimeExport281, initializeNestedFutureSymbol as runtimeExport282, isFutureLowerableObject as runtimeExport283, removeFutureEndFromTable as runtimeExport284, addStreamEndToTable as runtimeExport285, createStream as runtimeExport286, genReadFnFromLowerableStream as runtimeExport287, genStreamHostInjectFn as runtimeExport288, getStreamEnd as runtimeExport289, requireValidNumericPrimitive as runtimeExport29, initializeExternalStreamClass as runtimeExport290, initializeHostStreamClass as runtimeExport291, initializeInternalStreamClass as runtimeExport292, initializePendingValueQueueClass as runtimeExport293, initializeStreamEndClass as runtimeExport294, initializeStreamReadableEndClass as runtimeExport295, initializeStreamTables as runtimeExport296, initializeStreamWritableEndClass as runtimeExport297, initializeStreams as runtimeExport298, isStreamLowerableObject as runtimeExport299, initializeCallBorrows as runtimeExport3, splitInt64 as runtimeExport30, removeStreamEndFromTable as runtimeExport300, streamCancelRead as runtimeExport301, streamCancelWrite as runtimeExport302, streamDropReadable as runtimeExport303, streamDropWritable as runtimeExport304, streamNew as runtimeExport305, streamNewFromLift as runtimeExport306, streamRead as runtimeExport307, streamTransfer as runtimeExport308, streamWrite as runtimeExport309, toInt16 as runtimeExport31, toInt32 as runtimeExport32, toInt64 as runtimeExport33, toInt8 as runtimeExport34, toResultString as runtimeExport35, toString as runtimeExport36, toUint16 as runtimeExport37, toUint32 as runtimeExport38, toUint64 as runtimeExport39, initializeCurrentBorrows as runtimeExport4, toUint8 as runtimeExport40, conditionalSuspendingHostImport as runtimeExport41, dataView as runtimeExport42, emptyFunc as runtimeExport43, initializeDataViewCache as runtimeExport44, maybeSyncGenerator as runtimeExport45, compactUtf16Decode as runtimeExport46, compactUtf16Encode as runtimeExport47, initializeUtf16Decoder as runtimeExport48, initializeUtf16Encoding as runtimeExport49, initializeHandleIndexSpaces as runtimeExport5, initializeUtf8Decoder as runtimeExport50, initializeUtf8Encoder as runtimeExport51, utf16Encode as runtimeExport52, utf16EncodeAsync as runtimeExport53, utf16ValidatingCopy as runtimeExport54, utf8Encode as runtimeExport55, utf8EncodeAsync as runtimeExport56, validateGuestChar as runtimeExport57, validateHostChar as runtimeExport58, globalThisIdlProxy as runtimeExport59, initializeHandleTables as runtimeExport6, initializeWebIdlProxyCache as runtimeExport60, base64Compile as runtimeExport61, clampGuest as runtimeExport62, clearCurrentTaskMeta as runtimeExport63, coinFlip as runtimeExport64, conditionalSuspending1I32ToI32 as runtimeExport65, conditionalSuspending2I32ToI32 as runtimeExport66, conditionalSuspending3I32ToI32 as runtimeExport67, conditionalSuspending3I32ToVoid as runtimeExport68, debugLog as runtimeExport69, initializeResourceScopeCounter as runtimeExport7, disposeHostValue as runtimeExport70, fetchCompile as runtimeExport71, finalizationRegistryCreate as runtimeExport72, getCurrentTaskMeta as runtimeExport73, getErrorPayload as runtimeExport74, getErrorPayloadString as runtimeExport75, i32Max as runtimeExport76, i32Min as runtimeExport77, initializeAsyncDeterminism as runtimeExport78, initializeAsyncEventCodes as runtimeExport79, initializeResourceScopeTasks as runtimeExport8, initializeAsyncFunctionConstructor as runtimeExport80, initializeBufferManager as runtimeExport81, initializeBufferManagerClass as runtimeExport82, initializeComponentErrorClass as runtimeExport83, initializeComponentMemoryMap as runtimeExport84, initializeConditionalSuspendingWasm as runtimeExport85, initializeEndianness as runtimeExport86, initializeFactTrapMessages as runtimeExport87, initializeFileCompileCache as runtimeExport88, initializeHasOwnProperty as runtimeExport89, initializeScopeId as runtimeExport9, initializeManagedBufferClass as runtimeExport90, initializeReadableStream as runtimeExport91, initializeRepTableClass as runtimeExport92, initializeRuntimeErrorConstructor as runtimeExport93, initializeSymbolAsyncIterator as runtimeExport94, initializeSymbolCabiDispose as runtimeExport95, initializeSymbolCabiLower as runtimeExport96, initializeSymbolDispose as runtimeExport97, initializeSymbolIterator as runtimeExport98, initializeSymbolResourceHandle as runtimeExport99 };
+export { CM_RUNTIME_API_VERSION as runtimeExport0, callDestructor as runtimeExport1, tableCreateBorrow as runtimeExport10, initializeSymbolResourceRep as runtimeExport100, initializeTaskRegisters as runtimeExport101, instantiateCore as runtimeExport102, lookupMemories as runtimeExport103, promiseWithResolvers as runtimeExport104, registerMemory as runtimeExport105, setCurrentTaskMeta as runtimeExport106, suspendingImport as runtimeExport107, throwInvalidBool as runtimeExport108, throwUninitialized as runtimeExport109, tableCreateOwn as runtimeExport11, typeCheckAsyncFn as runtimeExport110, typeCheckValidI32 as runtimeExport111, withCurrentTaskMeta as runtimeExport112, withCurrentTaskMetaAsync as runtimeExport113, backpressureDec as runtimeExport114, backpressureInc as runtimeExport115, checkForDeadlock as runtimeExport116, checkIdle as runtimeExport117, checkMayLeave as runtimeExport118, getOrCreateAsyncState as runtimeExport119, tableEnsureBorrowDrop as runtimeExport12, guardMayLeave as runtimeExport120, guardPostReturn as runtimeExport121, guardTrap as runtimeExport122, initializeCallTracking as runtimeExport123, initializeComponentAsyncStateClass as runtimeExport124, initializeComponentAsyncStates as runtimeExport125, initializeCoreTrapMessages as runtimeExport126, initializeInstanceFlags as runtimeExport127, initializeStoreAsyncState as runtimeExport128, initializeStoreTrap as runtimeExport129, tableFlag as runtimeExport13, normalizeCoreTrap as runtimeExport130, postReturnTrap as runtimeExport131, recordTrap as runtimeExport132, reportTrap as runtimeExport133, setAllError as runtimeExport134, stopInstance as runtimeExport135, trackHostOperation as runtimeExport136, whenIdle as runtimeExport137, initializeWaitableClass as runtimeExport138, initializeWaitableSetClass as runtimeExport139, tableGet as runtimeExport14, removeWaitableSet as runtimeExport140, waitableJoin as runtimeExport141, waitableSetDrop as runtimeExport142, waitableSetNew as runtimeExport143, waitableSetPoll as runtimeExport144, waitableSetWait as runtimeExport145, errCtxCreateLocalHandle as runtimeExport146, errCtxDebugMessage as runtimeExport147, errCtxDrop as runtimeExport148, errCtxGetLocalTable as runtimeExport149, tableOwn as runtimeExport15, errCtxGlobalRefCountAdd as runtimeExport150, errCtxNew as runtimeExport151, errCtxReserveGlobalRep as runtimeExport152, errCtxTransfer as runtimeExport153, initializeErrorContextTableRegistrations as runtimeExport154, initializeGlobalErrorContextTableClass as runtimeExport155, initializeLocalErrorContextTables as runtimeExport156, asyncBlockedCode as runtimeExport157, asyncYield as runtimeExport158, clearCurrentTask as runtimeExport159, tableRemove as runtimeExport16, clearCurrentThread as runtimeExport160, contextGet as runtimeExport161, contextSet as runtimeExport162, contextSlotAccessor as runtimeExport163, createNewCurrentImplicitThread as runtimeExport164, createNewCurrentTask as runtimeExport165, currentThreadOrThrow as runtimeExport166, driverLoop as runtimeExport167, getCurrentTask as runtimeExport168, getCurrentThread as runtimeExport169, transferBorrow as runtimeExport17, guardCannotLeave as runtimeExport170, initializeAsyncBlockingCallDepth as runtimeExport171, initializeAsyncSubtaskClass as runtimeExport172, initializeAsyncTaskClass as runtimeExport173, initializeAsyncThreadClass as runtimeExport174, initializeCurrentComponentIdxs as runtimeExport175, initializeCurrentTaskIds as runtimeExport176, initializeCurrentTaskMayBlock as runtimeExport177, initializeSymmetricSyncGuestCallStack as runtimeExport178, initializeTasksByComponent as runtimeExport179, transferBorrowValidLifting as runtimeExport18, initializeThreadStartChecks as runtimeExport180, lowerImport as runtimeExport181, lowerImportBackwardsCompat as runtimeExport182, subtaskCancel as runtimeExport183, subtaskDrop as runtimeExport184, symmetricSyncGuestCallEnter as runtimeExport185, symmetricSyncGuestCallExit as runtimeExport186, taskCancel as runtimeExport187, taskReturn as runtimeExport188, threadIndex as runtimeExport189, transferOwn as runtimeExport19, threadNewIndirect as runtimeExport190, threadResumeLater as runtimeExport191, threadSuspend as runtimeExport192, threadSuspendThenPromote as runtimeExport193, threadSuspendThenResume as runtimeExport194, threadYieldThenPromote as runtimeExport195, threadYieldThenResume as runtimeExport196, unpackCallbackResult as runtimeExport197, asyncStartCall as runtimeExport198, prepareCall as runtimeExport199, getHandleIndexSpace as runtimeExport2, f32ToI32 as runtimeExport20, storeEventInComponentMemory as runtimeExport200, syncStartCall as runtimeExport201, decodeUtf8 as runtimeExport202, initializeLiftVariant as runtimeExport203, liftFlatBool as runtimeExport204, liftFlatBorrow as runtimeExport205, liftFlatChar as runtimeExport206, liftFlatEnum as runtimeExport207, liftFlatErrorContext as runtimeExport208, liftFlatFlags as runtimeExport209, f64ToI64 as runtimeExport21, liftFlatFloat32 as runtimeExport210, liftFlatFloat64 as runtimeExport211, liftFlatFuture as runtimeExport212, liftFlatList as runtimeExport213, liftFlatMap as runtimeExport214, liftFlatOption as runtimeExport215, liftFlatOwn as runtimeExport216, liftFlatRecord as runtimeExport217, liftFlatResult as runtimeExport218, liftFlatS16 as runtimeExport219, i32ToChar as runtimeExport22, liftFlatS32 as runtimeExport220, liftFlatS64 as runtimeExport221, liftFlatS8 as runtimeExport222, liftFlatStream as runtimeExport223, liftFlatStringAny as runtimeExport224, liftFlatStringUTF16 as runtimeExport225, liftFlatStringUTF8 as runtimeExport226, liftFlatTuple as runtimeExport227, liftFlatU16 as runtimeExport228, liftFlatU32 as runtimeExport229, i32ToF32 as runtimeExport23, liftFlatU64 as runtimeExport230, liftFlatU8 as runtimeExport231, liftFlatVariant as runtimeExport232, lowerFlatBool as runtimeExport233, lowerFlatBorrow as runtimeExport234, lowerFlatChar as runtimeExport235, lowerFlatEnum as runtimeExport236, lowerFlatErrorContext as runtimeExport237, lowerFlatFlags as runtimeExport238, lowerFlatFloat32 as runtimeExport239, i64ToF64 as runtimeExport24, lowerFlatFloat64 as runtimeExport240, lowerFlatFuture as runtimeExport241, lowerFlatList as runtimeExport242, lowerFlatMap as runtimeExport243, lowerFlatOption as runtimeExport244, lowerFlatOwn as runtimeExport245, lowerFlatRecord as runtimeExport246, lowerFlatResult as runtimeExport247, lowerFlatS16 as runtimeExport248, lowerFlatS32 as runtimeExport249, initializeBitcast32 as runtimeExport25, lowerFlatS64 as runtimeExport250, lowerFlatS8 as runtimeExport251, lowerFlatStream as runtimeExport252, lowerFlatStringAny as runtimeExport253, lowerFlatStringUTF16 as runtimeExport254, lowerFlatStringUTF8 as runtimeExport255, lowerFlatTuple as runtimeExport256, lowerFlatU16 as runtimeExport257, lowerFlatU32 as runtimeExport258, lowerFlatU64 as runtimeExport259, initializeBitcast64 as runtimeExport26, lowerFlatU8 as runtimeExport260, lowerFlatVariant as runtimeExport261, addFutureEndToTable as runtimeExport262, createFuture as runtimeExport263, futureCancelRead as runtimeExport264, futureCancelWrite as runtimeExport265, futureDropReadable as runtimeExport266, futureDropWritable as runtimeExport267, futureNew as runtimeExport268, futureNewFromLift as runtimeExport269, isValidNumericPrimitive as runtimeExport27, futureRead as runtimeExport270, futureTransfer as runtimeExport271, futureWrite as runtimeExport272, genFutureHostInjectFn as runtimeExport273, getFutureEnd as runtimeExport274, initializeFutureEndClass as runtimeExport275, initializeFutureReadableEndClass as runtimeExport276, initializeFutureTables as runtimeExport277, initializeFutureValueClass as runtimeExport278, initializeFutureWritableEndClass as runtimeExport279, mergeInt64 as runtimeExport28, initializeFutures as runtimeExport280, initializeHostFutureClass as runtimeExport281, initializeInternalFutureClass as runtimeExport282, initializeNestedFutureSymbol as runtimeExport283, isFutureLowerableObject as runtimeExport284, removeFutureEndFromTable as runtimeExport285, addStreamEndToTable as runtimeExport286, createStream as runtimeExport287, genReadFnFromLowerableStream as runtimeExport288, genStreamHostInjectFn as runtimeExport289, requireValidNumericPrimitive as runtimeExport29, getStreamEnd as runtimeExport290, initializeExternalStreamClass as runtimeExport291, initializeHostStreamClass as runtimeExport292, initializeInternalStreamClass as runtimeExport293, initializePendingValueQueueClass as runtimeExport294, initializeStreamEndClass as runtimeExport295, initializeStreamReadableEndClass as runtimeExport296, initializeStreamTables as runtimeExport297, initializeStreamWritableEndClass as runtimeExport298, initializeStreams as runtimeExport299, initializeCallBorrows as runtimeExport3, splitInt64 as runtimeExport30, isStreamLowerableObject as runtimeExport300, removeStreamEndFromTable as runtimeExport301, streamCancelRead as runtimeExport302, streamCancelWrite as runtimeExport303, streamDropReadable as runtimeExport304, streamDropWritable as runtimeExport305, streamNew as runtimeExport306, streamNewFromLift as runtimeExport307, streamRead as runtimeExport308, streamTransfer as runtimeExport309, toInt16 as runtimeExport31, streamWrite as runtimeExport310, toInt32 as runtimeExport32, toInt64 as runtimeExport33, toInt8 as runtimeExport34, toResultString as runtimeExport35, toString as runtimeExport36, toUint16 as runtimeExport37, toUint32 as runtimeExport38, toUint64 as runtimeExport39, initializeCurrentBorrows as runtimeExport4, toUint8 as runtimeExport40, conditionalSuspendingHostImport as runtimeExport41, dataView as runtimeExport42, emptyFunc as runtimeExport43, initializeDataViewCache as runtimeExport44, maybeSyncGenerator as runtimeExport45, compactUtf16Decode as runtimeExport46, compactUtf16Encode as runtimeExport47, initializeUtf16Decoder as runtimeExport48, initializeUtf16Encoding as runtimeExport49, initializeHandleIndexSpaces as runtimeExport5, initializeUtf8Decoder as runtimeExport50, initializeUtf8Encoder as runtimeExport51, utf16Encode as runtimeExport52, utf16EncodeAsync as runtimeExport53, utf16ValidatingCopy as runtimeExport54, utf8Encode as runtimeExport55, utf8EncodeAsync as runtimeExport56, validateGuestChar as runtimeExport57, validateHostChar as runtimeExport58, globalThisIdlProxy as runtimeExport59, initializeHandleTables as runtimeExport6, initializeWebIdlProxyCache as runtimeExport60, base64Compile as runtimeExport61, clampGuest as runtimeExport62, clearCurrentTaskMeta as runtimeExport63, coinFlip as runtimeExport64, conditionalSuspending1I32ToI32 as runtimeExport65, conditionalSuspending2I32ToI32 as runtimeExport66, conditionalSuspending3I32ToI32 as runtimeExport67, conditionalSuspending3I32ToVoid as runtimeExport68, debugLog as runtimeExport69, initializeResourceScopeCounter as runtimeExport7, disposeHostValue as runtimeExport70, fetchCompile as runtimeExport71, finalizationRegistryCreate as runtimeExport72, getCurrentTaskMeta as runtimeExport73, getErrorPayload as runtimeExport74, getErrorPayloadString as runtimeExport75, i32Max as runtimeExport76, i32Min as runtimeExport77, initializeAsyncDeterminism as runtimeExport78, initializeAsyncEventCodes as runtimeExport79, initializeResourceScopeTasks as runtimeExport8, initializeAsyncFunctionConstructor as runtimeExport80, initializeBufferManager as runtimeExport81, initializeBufferManagerClass as runtimeExport82, initializeComponentErrorClass as runtimeExport83, initializeComponentMemoryMap as runtimeExport84, initializeConditionalSuspendingWasm as runtimeExport85, initializeEndianness as runtimeExport86, initializeFactTrapMessages as runtimeExport87, initializeFileCompileCache as runtimeExport88, initializeHasOwnProperty as runtimeExport89, initializeScopeId as runtimeExport9, initializeManagedBufferClass as runtimeExport90, initializeReadableStream as runtimeExport91, initializeRepTableClass as runtimeExport92, initializeRuntimeErrorConstructor as runtimeExport93, initializeSymbolAsyncIterator as runtimeExport94, initializeSymbolCabiDispose as runtimeExport95, initializeSymbolCabiLower as runtimeExport96, initializeSymbolDispose as runtimeExport97, initializeSymbolIterator as runtimeExport98, initializeSymbolResourceHandle as runtimeExport99 };
