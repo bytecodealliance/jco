@@ -108,6 +108,11 @@ export function contextSet(context, options, value) {
  if (this !== null || Object.keys(context).sort().join() !== 'lookup,registers') throw new Error('lost context.set receiver/capabilities');
  if (!contexts.some(selected => selected.lookup === context.lookup && selected.registers === context.registers)) throw new Error('detached thread lookup'); calls.push('set'); return defaults.contextSet(context, options, value);
 }
+// A provider chooses how core modules reach its context operations.
+export function contextSlotAccessor(context, options, operation) {
+ if (this !== undefined || Object.keys(context).sort().join() !== 'lookup,registers') throw new Error('lost context accessor receiver/capabilities');
+ return operation === 'get' ? contextGet.bind(null, context, options) : contextSet.bind(null, context, options);
+}
 // Defaults compose their own state-based dependency; a sibling override must
 // not implicitly intercept context.get/set or resource destructor operations.
 export function getCurrentTask() { throw new Error('unexpected sibling lookup override'); }
@@ -195,7 +200,7 @@ test.concurrent.each([
     'initializeAsyncTaskClass',
     'initializeAsyncSubtaskClass',
     'initializeTasksByComponent',
-    'contextGet',
+    'contextSlotAccessor',
 ])('native ESM rejects a missing task export: %s', async (missing) => {
     const dir = await getTmpDir();
     try {
