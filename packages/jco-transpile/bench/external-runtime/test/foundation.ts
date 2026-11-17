@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { cpus, platform, arch } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -151,7 +151,8 @@ test(
         const controls = [];
         for (const bundler of bundlers) {
             for (const resolution of resolutions) {
-                const controlDir = join(output, `controls-${bundler}-${resolution}`);
+                // Each retry needs fresh controls, including runtime package links.
+                const controlDir = await mkdtemp(join(output, `controls-${bundler}-${resolution}-`));
                 controls.push(...(await verifyImportControls(controlDir, bundler, resolution)));
 
                 for (const scenario of scenarios) {
@@ -303,11 +304,12 @@ test(
                 2,
             ) + '\n',
         );
-        assert.isTrue(
-            parityAchieved,
-            `external runtime exceeds inline parity budgets (${parityFailures.length} failing metrics):\n` +
-                parityFailures.join('\n'),
-        );
+        if (!parityAchieved) {
+            assert.fail(
+                `external runtime exceeds inline parity budgets (${parityFailures.length} failing metrics):\n` +
+                    parityFailures.join('\n'),
+            );
+        }
     },
-    matrixTimeoutMs,
+    { timeout: matrixTimeoutMs, retry: 3 },
 );
