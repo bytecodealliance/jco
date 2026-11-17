@@ -972,14 +972,6 @@ impl JsBindgen<'_> {
         self.runtime().call_prefix(intrinsic, true)
     }
 
-    /// Wrap a guest realloc so each call runs with fresh context slots (see
-    /// [`AsyncTaskIntrinsic::IsolateRealloc`]).
-    fn isolate_realloc(&mut self, realloc_fn: &str, component_idx: u32) -> String {
-        let isolate_realloc =
-            self.intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::IsolateRealloc));
-        format!("{isolate_realloc}{component_idx}, {realloc_fn})")
-    }
-
     fn intrinsic_bind_callback_prefix(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
         self.runtime().bind_callback_prefix(intrinsic, true)
@@ -2384,15 +2376,10 @@ impl<'a> Instantiator<'a, '_> {
                     ),
                     None => ("undefined".into(), "undefined".into()),
                 };
-                // Elements are lowered when the host writes, possibly while the reading task is
-                // suspended.
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(v) => {
                         let v = v.as_u32().to_string();
-                        let realloc_fn = self
-                            .bindgen
-                            .isolate_realloc(&format!("realloc{v}"), instance.as_u32());
-                        (v.to_string(), format!("() => {realloc_fn}"))
+                        (v.to_string(), format!("() => realloc{v}"))
                     }
                     None => ("undefined".into(), "undefined".into()),
                 };
@@ -2500,10 +2487,7 @@ impl<'a> Instantiator<'a, '_> {
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(v) => {
                         let v = v.as_u32().to_string();
-                        let realloc_fn = self
-                            .bindgen
-                            .isolate_realloc(&format!("realloc{v}"), instance.as_u32());
-                        (v.to_string(), format!("() => {realloc_fn}"))
+                        (v.to_string(), format!("() => realloc{v}"))
                     }
                     None => ("undefined".into(), "undefined".into()),
                 };
@@ -2749,18 +2733,10 @@ impl<'a> Instantiator<'a, '_> {
                     ),
                     None => ("undefined".into(), "undefined".into()),
                 };
-                // A read value is lowered when the host resolves the future, possibly while the
-                // reading task is suspended.
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(idx) => (
                         idx.as_u32().to_string(),
-                        format!(
-                            "() => {}",
-                            self.bindgen.isolate_realloc(
-                                &format!("realloc{}", idx.as_u32()),
-                                instance.as_u32()
-                            )
-                        ),
+                        format!("() => realloc{}", idx.as_u32()),
                     ),
                     None => ("undefined".into(), "undefined".to_string()),
                 };
@@ -2985,12 +2961,9 @@ impl<'a> Instantiator<'a, '_> {
                         StringIntrinsic::CompactUtf16Encode
                     }
                 };
-                let realloc_fn = self
-                    .bindgen
-                    .isolate_realloc(&format!("realloc{realloc_fn_idx}"), instance.as_u32());
                 let encode_fn = self.bindgen.intrinsic_call(
                     Intrinsic::String(encode_intrinsic),
-                    &format!("s, {realloc_fn}, memory"),
+                    &format!("s, realloc{realloc_fn_idx}, memory"),
                 );
                 uwriteln!(
                     self.src.js,
@@ -3162,17 +3135,7 @@ impl<'a> Instantiator<'a, '_> {
                                     format!("() => memory{}", idx.as_u32()),
                                 )
                             }),
-                            realloc.map(|idx| {
-                                // A result is lowered when the subtask resolves, possibly
-                                // while the calling task is suspended.
-                                format!(
-                                    "() => {}",
-                                    self.bindgen.isolate_realloc(
-                                        &format!("realloc{}", idx.as_u32()),
-                                        component_idx
-                                    )
-                                )
-                            }),
+                            realloc.map(|idx| format!("() => realloc{}", idx.as_u32())),
                         )
                     } else {
                         (None, None)
@@ -4074,21 +4037,36 @@ impl<'a> Instantiator<'a, '_> {
             GlobalInitializer::ExtractRealloc(r) => {
                 let def = self.core_def(&r.def);
                 let idx = r.index.as_u32();
+                let owner = self.canonical_options_owner(|options| {
+                    matches!(
+                        options.data_model,
+                        CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
+                            realloc: Some(realloc),
+                            ..
+                        }) if realloc == r.index
+                    )
+                });
+                let guard =
+                    |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, true);
                 uwriteln!(self.src.js, "let realloc{idx};");
                 uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // Core functions return pointers as signed 32-bit integers, which are negative
                 // for allocations at or above 2GiB, so make them unsigned for use as offsets
-                uwriteln!(
-                    self.src.js_init,
-                    "realloc{idx} = (oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize) >>> 0;",
+                let realloc = guard(
+                    self,
+                    &format!(
+                        "(oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize) >>> 0"
+                    ),
                 );
+                uwriteln!(self.src.js_init, "realloc{idx} = {realloc};");
                 // NOTE: sometimes we may be fed a realloc that isn't a webassembly function at all
                 // but has instead been converted to JS (see 'flavorful' test in test/runtime.js')
+                let realloc_promising = guard(self, &format!("WebAssembly.promising({def})"));
                 uwriteln!(
                     self.src.js_init,
                     r#"
                       try {{
-                          const realloc{idx}Promising = WebAssembly.promising({def});
+                          const realloc{idx}Promising = {realloc_promising};
                           realloc{idx}Async = async (oldPtr, oldSize, align, newSize) => (await realloc{idx}Promising(oldPtr, oldSize, align, newSize)) >>> 0;
                       }} catch(err) {{
                           realloc{idx}Async = realloc{idx};
@@ -4100,18 +4078,24 @@ impl<'a> Instantiator<'a, '_> {
             GlobalInitializer::ExtractPostReturn(p) => {
                 let def = self.core_def(&p.def);
                 let idx = p.index.as_u32();
+                let owner =
+                    self.canonical_options_owner(|options| options.post_return == Some(p.index));
+                let guard =
+                    |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, false);
                 uwriteln!(self.src.js, "let postReturn{idx};");
                 uwriteln!(self.src.js, "let postReturn{idx}Async;");
-                uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
+                let post_return = guard(self, &def);
+                uwriteln!(self.src.js_init, "postReturn{idx} = {post_return};");
                 // NOTE: sometimes we may be fed a post return fn that isn't a webassembly function
                 // at all but has instead been converted to JS (see 'flavorful' test in test/runtime.js)
+                let post_return_promising = guard(self, &format!("WebAssembly.promising({def})"));
                 uwriteln!(
                     self.src.js_init,
                     r#"
                       try {{
-                          postReturn{idx}Async = WebAssembly.promising({def});
+                          postReturn{idx}Async = {post_return_promising};
                       }} catch(err) {{
-                          postReturn{idx}Async = {def};
+                          postReturn{idx}Async = postReturn{idx};
                       }}
                     "#
                 );
@@ -4126,6 +4110,43 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js_init, "table{idx} = {def};");
             }
         }
+    }
+
+    /// Return the component instance whose canonical options select a function, such as a
+    /// realloc or a post-return, as determined by `selects`.
+    ///
+    /// Canonical options only name core functions of their own component instance, so every
+    /// bundle selecting the same function agrees on the instance.
+    fn canonical_options_owner(
+        &self,
+        selects: impl Fn(&CanonicalOptions) -> bool,
+    ) -> Option<RuntimeComponentInstanceIndex> {
+        self.component
+            .options
+            .values()
+            .find(|options| selects(options))
+            .map(|options| options.instance)
+    }
+
+    /// Wrap a guest function which the host calls while lifting or lowering so that it runs
+    /// without leaving its component instance, and with fresh context slots if it is a realloc
+    /// (see [`AsyncTaskIntrinsic::GuardCannotLeave`]).
+    ///
+    /// Wrapping the function once, where it is extracted, covers every host call to it. A
+    /// function which no canonical options select is never called by the host and stays as is.
+    fn guard_cannot_leave(
+        &mut self,
+        owner: Option<RuntimeComponentInstanceIndex>,
+        func: &str,
+        fresh_context_slots: bool,
+    ) -> String {
+        let Some(owner) = owner else {
+            return func.to_string();
+        };
+        let guard = self
+            .bindgen
+            .intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GuardCannotLeave));
+        format!("{guard}{}, {func}, {fresh_context_slots})", owner.as_u32())
     }
 
     fn instantiate_static_module(
@@ -4764,13 +4785,7 @@ impl<'a> Instantiator<'a, '_> {
                 {
                     (
                         memory.map(|idx| format!(" memory: memory{},", idx.as_u32())),
-                        realloc.map(|idx| {
-                            let realloc_fn = self.bindgen.isolate_realloc(
-                                &format!("realloc{}", idx.as_u32()),
-                                options.instance.as_u32(),
-                            );
-                            format!(" realloc: {realloc_fn},")
-                        }),
+                        realloc.map(|idx| format!(" realloc: realloc{},", idx.as_u32())),
                     )
                 } else {
                     (None, None)
@@ -5554,7 +5569,7 @@ impl<'a> Instantiator<'a, '_> {
             result_error_class,
         } = args;
 
-        let (memory, mut realloc) =
+        let (memory, realloc) =
             if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions {
                 memory,
                 realloc,
@@ -5577,13 +5592,6 @@ impl<'a> Instantiator<'a, '_> {
             } else {
                 (None, None)
             };
-
-        if let Some(realloc_fn) = realloc.take() {
-            realloc = Some(
-                self.bindgen
-                    .isolate_realloc(&realloc_fn, opts.instance.as_u32()),
-            );
-        }
 
         let post_return = opts.post_return.map(|idx| {
             format!(

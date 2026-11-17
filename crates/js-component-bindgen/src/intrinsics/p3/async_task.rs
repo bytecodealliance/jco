@@ -23,18 +23,15 @@ fn render_active_context_slots(render_args: &RenderIntrinsicsArgs<'_>, operation
     );
     format!(
         r#"
-                          // Guest code uses the register of its own component, unless the host
-                          // is calling that component's realloc, which runs with slots of its
-                          // own. A FACT adapter has no component index, and a post-return may
-                          // run after the thread its component's register names has exited;
-                          // both use the executing thread.
-                          let storage;
-                          if (ctx.componentIdx !== undefined && ctx.componentIdx !== null) {{
-                              storage = {registers}.contextSlots?.[ctx.componentIdx];
-                              if (!storage) {{
-                                  const frame = {registers}[ctx.componentIdx];
-                                  storage = frame ? {frame_slots} : undefined;
-                              }}
+                          // A guest function wrapped with fresh context slots uses those.
+                          // Otherwise guest code uses the register of its own component. A FACT
+                          // adapter has no component index, and a post-return may run after the
+                          // thread its component's register names has exited; both use the
+                          // executing thread.
+                          let storage = {registers}.freshContextSlots;
+                          if (!storage && ctx.componentIdx !== undefined && ctx.componentIdx !== null) {{
+                              const frame = {registers}[ctx.componentIdx];
+                              storage = frame ? {frame_slots} : undefined;
                           }}
                           if (!storage) {{
                               const frame = {registers}.current;
@@ -85,24 +82,27 @@ pub enum AsyncTaskIntrinsic {
     ///
     ContextGet,
 
-    /// Wrap a guest realloc so each call runs with fresh context slots
+    /// Wrap a guest function that the host calls while lifting or lowering (a realloc or a
+    /// post-return) so that each call runs without leaving its component instance
     ///
-    /// The host calls a guest's realloc to lower values into its memory, possibly while one of
-    /// the guest's tasks is suspended. Every such call runs as though on a fresh thread: it reads
-    /// zeroed context slots, and what it writes to them is discarded when it returns. No thread's
-    /// own slots are involved, and the registers keep naming what was executing. Realloc also runs
-    /// without leaving the component.
+    /// The Canonical ABI clears `may_leave` around both. A function that may not leave its
+    /// component instance can neither call out of it nor suspend, so it has finished by the time
+    /// the call returns, even where the call yields a promise.
+    ///
+    /// A realloc additionally runs as though on a fresh thread: the host may call it while one of
+    /// the guest's tasks is suspended, so it reads zeroed context slots, and what it writes to
+    /// them is discarded when it returns. No thread's own slots are involved, and the registers
+    /// keep naming what was executing.
     ///
     /// # Intrinsic implementation function
     ///
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// type Realloc = (oldPtr: number, oldSize: number, alignment: number, newSize: number) => number | Promise<number>;
-    /// function isolateRealloc(componentIdx: number, realloc: Realloc): Realloc;
+    /// function guardCannotLeave<F extends Function>(componentIdx: number, fn: F, freshContextSlots?: boolean): F;
     /// ```
     ///
-    IsolateRealloc,
+    GuardCannotLeave,
 
     /// Return a value to a caller of an lifted export.
     ///
@@ -384,7 +384,7 @@ impl AsyncTaskIntrinsic {
             Self::AsyncThreadClass.name(),
             Self::ContextGet.name(),
             Self::ContextSet.name(),
-            Self::IsolateRealloc.name(),
+            Self::GuardCannotLeave.name(),
             Self::GetCurrentTask.name(),
             Self::GetCurrentThread.name(),
             Self::CurrentThreadOrThrow.name(),
@@ -426,7 +426,7 @@ impl AsyncTaskIntrinsic {
             Self::AsyncTaskClass => "AsyncTask",
             Self::AsyncThreadClass => "AsyncThread",
             Self::ContextGet => "contextGet",
-            Self::IsolateRealloc => "isolateRealloc",
+            Self::GuardCannotLeave => "guardCannotLeave",
             Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
             Self::GetCurrentThread => "getCurrentThread",
@@ -500,34 +500,31 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!("const {name} = 0xFFFF_FFFF;"));
             }
 
-            Self::IsolateRealloc => {
-                let isolate_realloc_fn = render_args.require_intrinsic(Self::IsolateRealloc);
+            Self::GuardCannotLeave => {
+                let guard_cannot_leave_fn = render_args.require_intrinsic(Self::GuardCannotLeave);
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
-                let global_current_thread_meta =
-                    render_args.require_intrinsic(Intrinsic::GlobalCurrentThreadMeta);
+                let registers = render_args.require_intrinsic(Intrinsic::GlobalCurrentThreadMeta);
 
                 uwriteln!(
                     output,
                     r#"
-                      function {isolate_realloc_fn}(componentIdx, realloc) {{
+                      function {guard_cannot_leave_fn}(componentIdx, fn, freshContextSlots = false) {{
                           return (...args) => {{
                               const state = {get_or_create_async_state_fn}componentIdx);
-                              const contextSlots = {global_current_thread_meta}.contextSlots ??= {{}};
-                              const previousSlots = contextSlots[componentIdx];
                               const previousMayLeave = state.mayLeave;
 
-                              // A realloc which may not leave its component instance cannot suspend,
-                              // so it has finished by the time the call returns, even where the call
-                              // yields a promise.
-                              contextSlots[componentIdx] = [0, 0];
+                              // A function which may not leave its component instance cannot
+                              // suspend, so it has finished by the time the call returns, even
+                              // where the call yields a promise.
                               state.mayLeave = false;
+                              if (freshContextSlots) {{ {registers}.freshContextSlots = [0, 0]; }}
                               try {{
-                                  return realloc(...args);
+                                  return fn(...args);
                               }} finally {{
+                                  if (freshContextSlots) {{ {registers}.freshContextSlots = undefined; }}
                                   state.mayLeave = previousMayLeave;
-                                  contextSlots[componentIdx] = previousSlots;
                               }}
                           }};
                       }}

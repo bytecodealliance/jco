@@ -453,8 +453,8 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
             )),
             RuntimeImportKind::Call,
         ),
-        IsolateRealloc => (
-            "isolateRealloc",
+        GuardCannotLeave => (
+            "guardCannotLeave",
             Some(RuntimeContextIntrinsic::Task(
                 TaskContextIntrinsic::GetCurrentThread,
             )),
@@ -732,7 +732,7 @@ mod tests {
             SymmetricSyncGuestCallStack,
             ContextGet,
             ContextSet,
-            IsolateRealloc,
+            GuardCannotLeave,
             GetCurrentTask,
             SubtaskCancel,
             SubtaskDrop,

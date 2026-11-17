@@ -73,6 +73,7 @@
         "AsyncTask(GlobalAsyncCurrentComponentIdxs)",
         "AsyncTask(GlobalAsyncCurrentTaskIds)",
         "AsyncTask(GlobalAsyncCurrentTaskMap)",
+        "AsyncTask(GuardCannotLeave)",
         "AsyncTask(LowerImport)",
         "AsyncTask(LowerImportBackwardsCompat)",
         "AsyncTask(SubtaskCancel)",
