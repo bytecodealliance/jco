@@ -130,7 +130,16 @@ impl bindings::Guest for Component {
         #[cfg(target_arch = "wasm32")]
         unsafe {
             let pending = PENDING.lock().unwrap().take().unwrap();
-            assert_eq!(stream_write(pending.writer, pending.pair.as_ptr(), 1), 16);
+            // The reader consumed the pending write; collect its completion as an
+            // event rather than re-calling write (which must trap while the
+            // event is pending).
+            let set = set_new();
+            join(pending.writer, set);
+            let mut event = [0; 2];
+            assert_eq!(wait(set, event.as_mut_ptr()), 3);
+            assert_eq!(event, [pending.writer, 16]);
+            join(pending.writer, 0);
+            set_drop(set);
             stream_drop_writer(pending.writer);
         }
     }
