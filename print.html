@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-0b150aa5.js";
+            window.path_to_searchindex_js = "searchindex-6bea628a.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-332598f4.js"></script>
@@ -962,6 +962,51 @@ Jco’s default Node capability map is not applied to instantiation output.</p>
 ): { [exportName: string]: any };
 </code></pre>
 <p>Where instead of promises, all functions are synchronous.</p>
+<h3 id="instantiation-options"><a class="header" href="#instantiation-options">Instantiation options</a></h3>
+<p>Both instantiation modes accept an optional fourth argument, <code>options</code>. Pass <code>undefined</code>
+for the third argument to keep the default core instantiator. The generated bindings export
+its type as <code>InstantiateOptions</code>:</p>
+<pre><code class="language-ts">export interface InstantiateOptions {
+  debug?: boolean;
+  onTrap?: (error: WebAssembly.RuntimeError) =&gt; void;
+  shim?: {
+    globals?: {
+      WebAssembly?: typeof WebAssembly;
+    };
+  };
+}
+</code></pre>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Purpose</th><th>Default</th></tr>
+</thead>
+<tbody>
+<tr><td><a href="#debug-logging"><code>debug</code></a></td><td>Enable or disable debug logging for this instance. Absent when the bindings import an external runtime.</td><td>The truthiness of <code>JCO_DEBUG</code> when instantiation begins.</td></tr>
+<tr><td><a href="#trap-notifications"><code>onTrap</code></a></td><td>Receive traps, including traps from background guest tasks.</td><td>No callback; failed calls still report their errors.</td></tr>
+<tr><td><a href="#runtime-overrides"><code>shim.globals.WebAssembly</code></a></td><td>Supply the WebAssembly implementation used by runtime helpers and the default core instantiator.</td><td><code>globalThis.WebAssembly</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-js">const instance = await instantiate(getCoreModule, imports, undefined, {
+  debug: false,
+  onTrap: (error) =&gt; console.error('Component trapped:', error),
+});
+</code></pre>
+<h4 id="debug-logging"><a class="header" href="#debug-logging">Debug logging</a></h4>
+<p><code>debug: true</code> enables <code>console.debug</code> diagnostics; <code>debug: false</code> disables them even
+when <code>JCO_DEBUG</code> is set. If omitted, the runtime reads <code>JCO_DEBUG</code> once during
+instantiation. Each instance keeps its own setting, so later changes to the
+options object or environment do not affect it.</p>
+<p>The option exists only where the bindings contain their runtime. Bindings that import
+an external runtime share that module’s logger between instances, so their
+<code>InstantiateOptions</code> has no <code>debug</code> property and the provider configures its own
+logging. The default external runtime reads <code>JCO_DEBUG</code> once when it loads.</p>
+<p>Direct ESM output has no instantiation options, and also reads <code>JCO_DEBUG</code> once when
+the module loads. In either case, setting <code>JCO_DEBUG</code> after the module has loaded has
+no effect: set it before starting the process, or before the first import of the
+bindings.</p>
+<h4 id="trap-notifications"><a class="header" href="#trap-notifications">Trap notifications</a></h4>
 <p><code>options.onTrap</code> is called with each trap of the instance, once, as soon as it happens. That includes
 a trap in a task a guest left running, after the calls of the host’s that started it have returned,
 which no promise would otherwise report; a trap that also fails a call does that as well. A deadlock
@@ -971,6 +1016,26 @@ trap, and isn’t reported: the host knows it threw.
 shouldn’t use the instance otherwise. An exception it throws is left uncaught.
 See <a href="#receive-background-traps-with-ontrap">Detecting traps</a>
 for examples of catching failed calls and receiving background trap notifications.</p>
+<h4 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h4>
+<p>Runtime overrides are grouped under <code>shim</code>. Set <code>options.shim.globals.WebAssembly</code> to provide
+a custom <code>WebAssembly</code> implementation for that instance. It defaults to <code>globalThis.WebAssembly</code>
+when the override is omitted or nullish at any level.
+The override applies to the generated component’s helpers and its default core instantiator
+(<code>WebAssembly.instantiate</code> in async mode, <code>new WebAssembly.Instance</code> in sync mode), which calls
+the implementation as a method. An explicit <code>instantiateCore</code> callback still takes precedence.
+When neither an override nor a platform <code>WebAssembly</code> global is available, <code>instantiate</code> throws
+unless an explicit <code>instantiateCore</code> is supplied.</p>
+<pre><code class="language-js">const component = await instantiate(getCoreModule, imports, undefined, {
+  shim: {
+    globals: { WebAssembly: customWebAssembly },
+  },
+});
+</code></pre>
+<p>The supplied WebAssembly implementation must provide the APIs used by the component, including JSPI
+APIs when needed. To override only selected APIs, inherit from the platform implementation
+with <code>Object.create(WebAssembly)</code>; its properties are not enumerable, so object spread does
+not copy them. Callbacks supplied by the caller, such as <code>getCoreModule</code>, must use the custom
+implementation themselves if needed.</p>
 <h3 id="dropping-a-received-future"><a class="header" href="#dropping-a-received-future">Dropping a received future</a></h3>
 <p>A future received from a guest is lazy: receiving it does not consume its value. Read it with
 <code>await future</code>, or call <code>future[Symbol.dispose]?.()</code> to release its readable end. Disposal is
@@ -992,37 +1057,6 @@ export returns. It also resolves when the instance stops or traps. See
 for completion semantics and an orderly shutdown example.</p>
 <p>With <code>--call-tracking</code>, <code>_util.calls.start(fn, ...args)</code> returns a handle with a separate
 <code>finished</code> promise for selected guest execution. See <a href="#tracking-individual-calls">Tracking individual calls</a>.</p>
-<h3 id="runtime-overrides"><a class="header" href="#runtime-overrides">Runtime overrides</a></h3>
-<p>The optional fourth argument, <code>options</code>, configures the instantiation. Its type is exported
-from the generated bindings as <code>InstantiateOptions</code>:</p>
-<pre><code class="language-ts">export interface InstantiateOptions {
-  onTrap?: (error: WebAssembly.RuntimeError) =&gt; void;
-  shim?: {
-    globals?: {
-      WebAssembly?: typeof WebAssembly;
-    };
-  };
-}
-</code></pre>
-<p>Runtime overrides are grouped under <code>shim</code>. Set <code>options.shim.globals.WebAssembly</code> to provide
-a custom <code>WebAssembly</code> implementation for that instance. It defaults to <code>globalThis.WebAssembly</code>
-when the override is omitted or nullish at any level.
-The override applies to the generated component’s helpers and its default core instantiator
-(<code>WebAssembly.instantiate</code> in async mode, <code>new WebAssembly.Instance</code> in sync mode), which calls
-the implementation as a method. An explicit <code>instantiateCore</code> callback still takes precedence.
-When neither an override nor a platform <code>WebAssembly</code> global is available, <code>instantiate</code> throws
-unless an explicit <code>instantiateCore</code> is supplied.</p>
-<pre><code class="language-js">const component = await instantiate(getCoreModule, imports, undefined, {
-  shim: {
-    globals: { WebAssembly: customWebAssembly },
-  },
-});
-</code></pre>
-<p>The supplied WebAssembly implementation must provide the APIs used by the component, including JSPI
-APIs when needed. To override only selected APIs, inherit from the platform implementation
-with <code>Object.create(WebAssembly)</code>; its properties are not enumerable, so object spread does
-not copy them. Callbacks supplied by the caller, such as <code>getCoreModule</code>, must use the custom
-implementation themselves if needed.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="example-workflow"><a href="#example-workflow" class="header">Example Workflow</a></h1>
 <h2 id="jco-example-workflow"><a class="header" href="#jco-example-workflow">Jco Example Workflow</a></h2>
