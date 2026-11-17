@@ -11,7 +11,8 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result, bail};
 use js_component_bindgen::{
-    InstantiationMode, RuntimeProfile, TranspileConfig, TranspileOpts, transpile_with_config,
+    AsyncMode, InstantiationMode, RuntimeProfile, TranspileConfig, TranspileOpts,
+    transpile_with_config,
 };
 
 fn main() -> Result<()> {
@@ -34,6 +35,9 @@ fn main() -> Result<()> {
     };
     let mut map = HashMap::new();
     let mut runtime_profile = RuntimeProfile::default();
+    let mut jspi = false;
+    let mut async_imports = Vec::new();
+    let mut async_exports = Vec::new();
     #[cfg(feature = "external-runtime")]
     let mut cm_runtime_es_module = None;
 
@@ -47,6 +51,9 @@ fn main() -> Result<()> {
             }
             None if arg == "--valid-lifting-optimization" => opts.valid_lifting_optimization = true,
             None if arg == "--tracing" => opts.tracing = true,
+            None if arg == "--jspi" => jspi = true,
+            Some(("--async-import", name)) => async_imports.push(name.to_string()),
+            Some(("--async-export", name)) => async_exports.push(name.to_string()),
             None if arg == "--tla-compat" => opts.tla_compat = true,
             Some(("--profile", "checked")) => runtime_profile = RuntimeProfile::Checked,
             Some(("--profile", "debug")) => runtime_profile = RuntimeProfile::Debug,
@@ -59,6 +66,12 @@ fn main() -> Result<()> {
             Some(("--runtime", base)) => cm_runtime_es_module = Some(base.to_string()),
             _ => bail!("unknown argument [{arg}]"),
         }
+    }
+    if jspi || !async_imports.is_empty() || !async_exports.is_empty() {
+        opts.async_mode = Some(AsyncMode::JavaScriptPromiseIntegration {
+            imports: async_imports,
+            exports: async_exports,
+        });
     }
     if !map.is_empty() {
         opts.map = Some(map);

@@ -19,10 +19,15 @@ Then build variants and compare them:
 node compare.mjs --runs=4 base embedded
 ```
 
+Flags after the runtime are passed on to the transpile example,
+for example `./gen.sh debug embedded --profile=debug` to keep the diagnostics of the bundled runtime.
+
 A variant is a directory under `../output/perf/`.
 To try a runtime change, copy `dist` elsewhere, edit the copy, and pass it to `gen.sh`.
 
-- `bench.mjs` times one variant in one process.
+- `bench.mjs` times one variant in one process:
+  synchronous calls of the `runtime` fixtures,
+  and asynchronous calls, streams and futures of the checked-in `p3` fixtures, awaited one at a time.
 - `compare.mjs` interleaves fresh processes and keeps the fastest observation of each case.
 - `strip.mjs` removes labeled statements, or calls of named functions, from built JavaScript.
 - `profile-summary.mjs` lists self time per function of a `--cpu-prof` profile.

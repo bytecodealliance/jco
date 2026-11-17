@@ -43,3 +43,8 @@ const unused = (name) =>
 
 export const records = unused('records');
 export const lists = unused('lists');
+
+/** Host side of the asynchronous round trip: an async import that settles without waiting. */
+export const p3 = {
+    foo: async (value) => `${value} - entered host - exited host`,
+};
