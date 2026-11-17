@@ -13,6 +13,7 @@ import type {
     StreamEvent,
     StreamCleanup,
 } from '../../runtime.js';
+import { yieldToHost } from '../core/scheduling.js';
 import { debugLog } from '../core/debug.js';
 import { trackHostOperation } from '../component.js';
 import { getCurrentTask } from '../async-task/task-operations.js';
@@ -235,7 +236,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
                     await new Promise<void>((resolve) => this.#pendingEventWaiters.push(resolve));
                 }
                 // The event is set from inside the peer's copy, which must unwind first.
-                await new Promise((resolve) => setTimeout(resolve));
+                await yieldToHost();
             } while (!this.hasPendingEvent());
         }
 
