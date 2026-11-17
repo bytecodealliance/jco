@@ -104,6 +104,28 @@ pub enum AsyncTaskIntrinsic {
     ///
     GuardCannotLeave,
 
+    /// Creates the function that a core module imports for `canon context.get`
+    /// or `canon context.set` on one slot.
+    ///
+    /// A runtime may return a WebAssembly function here, so that a guest which
+    /// accesses a context slot often (e.g. one that keeps its stack pointer
+    /// there) does not call into JS to do so.
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type SlotIndex = 0 | 1;
+    /// function contextSlotAccessor(
+    ///     ctx: { componentIdx?: number, slot: SlotIndex },
+    ///     operation: 'get' | 'set',
+    /// ): (() => i32) | ((value: i32) => void);
+    /// ```
+    ///
+    ContextSlotAccessor,
+
     /// Return a value to a caller of an lifted export.
     ///
     /// Implements `canon task.return`.
@@ -385,6 +407,7 @@ impl AsyncTaskIntrinsic {
             Self::ContextGet.name(),
             Self::ContextSet.name(),
             Self::GuardCannotLeave.name(),
+            Self::ContextSlotAccessor.name(),
             Self::GetCurrentTask.name(),
             Self::GetCurrentThread.name(),
             Self::CurrentThreadOrThrow.name(),
@@ -427,6 +450,7 @@ impl AsyncTaskIntrinsic {
             Self::AsyncThreadClass => "AsyncThread",
             Self::ContextGet => "contextGet",
             Self::GuardCannotLeave => "guardCannotLeave",
+            Self::ContextSlotAccessor => "contextSlotAccessor",
             Self::ContextSet => "contextSet",
             Self::GetCurrentTask => "getCurrentTask",
             Self::GetCurrentThread => "getCurrentThread",
@@ -498,6 +522,24 @@ impl AsyncTaskIntrinsic {
             Self::AsyncBlockedConstant => {
                 let name = render_args.require_intrinsic(Self::AsyncBlockedConstant);
                 output.push_str(&format!("const {name} = 0xFFFF_FFFF;"));
+            }
+
+            Self::ContextSlotAccessor => {
+                let context_slot_accessor_fn =
+                    render_args.require_intrinsic(Self::ContextSlotAccessor);
+                let context_get_fn = render_args.require_intrinsic(Self::ContextGet);
+                let context_set_fn = render_args.require_intrinsic(Self::ContextSet);
+
+                uwriteln!(
+                    output,
+                    r#"
+                      function {context_slot_accessor_fn}(ctx, operation) {{
+                          return operation === 'get'
+                              ? {context_get_fn}.bind(null, ctx)
+                              : {context_set_fn}.bind(null, ctx);
+                      }}
+                    "#
+                );
             }
 
             Self::GuardCannotLeave => {

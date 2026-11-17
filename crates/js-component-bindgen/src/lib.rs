@@ -724,14 +724,14 @@ mod tests {
         // A module reads the environment once, as it loads.
         let (per_module, _) = logger(None);
         assert!(per_module.contains("globalThis?.process?.env?.JCO_DEBUG"));
-        assert!(per_module.contains("console.debug(...args) : () => {}"));
+        assert!(per_module.contains("console.debug(message, ...args) : () => {}"));
         assert!(!per_module.contains("??"));
 
         // An instance prefers its own choice, and otherwise reads the environment
         // once as it is instantiated.
         let (per_instance, inside_instantiate) = logger(Some(InstantiationMode::Sync));
         assert!(per_instance.contains("?? ") && per_instance.contains("JCO_DEBUG"));
-        assert!(per_instance.contains("console.debug(...args) : () => {}"));
+        assert!(per_instance.contains("console.debug(message, ...args) : () => {}"));
         #[cfg(not(feature = "embedded-cm-runtime"))]
         {
             // Inline intrinsics are defined in `instantiate`, where `options` is.

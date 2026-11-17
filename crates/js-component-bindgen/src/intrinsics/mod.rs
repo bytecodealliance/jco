@@ -281,7 +281,11 @@ impl_from_intrinsic! {
 /// there is none, or it evaluates to a nullish value, logging is enabled by a truthy
 /// `JCO_DEBUG` in the environment at the time the initializer runs.
 ///
-/// The condition calls no global function such as `Boolean`: the logger is
+/// A logger which logs declares the message it takes and one which does nothing declares no
+/// parameter, so the runtime can tell them apart by `length` and skip work which only serves
+/// logging.
+///
+/// The initializer calls no global function such as `Boolean`: the logger is
 /// initialized in the scope of the bindings' own names, which may include the
 /// local name of an import.
 pub(crate) fn debug_log_initializer(setting: Option<&str>) -> String {
@@ -289,7 +293,7 @@ pub(crate) fn debug_log_initializer(setting: Option<&str>) -> String {
         Some(setting) => format!("{setting} ?? !!globalThis?.process?.env?.JCO_DEBUG"),
         None => "globalThis?.process?.env?.JCO_DEBUG".to_string(),
     };
-    format!("({enabled}) ? (...args) => console.debug(...args) : () => {{}}")
+    format!("({enabled}) ? (message, ...args) => console.debug(message, ...args) : () => {{}}")
 }
 
 fn fact_trap_messages_js() -> String {

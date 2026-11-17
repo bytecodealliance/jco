@@ -6013,24 +6013,31 @@ impl<'a> Instantiator<'a, '_> {
             }
             CoreDef::UnsafeIntrinsic(ui) => {
                 use wasmtime_environ::component::UnsafeIntrinsic;
-                let (intrinsic, slot) = match ui {
-                    UnsafeIntrinsic::ContextGetI32_0 => (AsyncTaskIntrinsic::ContextGet, 0),
-                    UnsafeIntrinsic::ContextSetI32_0 => (AsyncTaskIntrinsic::ContextSet, 0),
-                    UnsafeIntrinsic::ContextGetI32_1 => (AsyncTaskIntrinsic::ContextGet, 1),
-                    UnsafeIntrinsic::ContextSetI32_1 => (AsyncTaskIntrinsic::ContextSet, 1),
+                let (intrinsic, operation, slot) = match ui {
+                    UnsafeIntrinsic::ContextGetI32_0 => (AsyncTaskIntrinsic::ContextGet, "get", 0),
+                    UnsafeIntrinsic::ContextSetI32_0 => (AsyncTaskIntrinsic::ContextSet, "set", 0),
+                    UnsafeIntrinsic::ContextGetI32_1 => (AsyncTaskIntrinsic::ContextGet, "get", 1),
+                    UnsafeIntrinsic::ContextSetI32_1 => (AsyncTaskIntrinsic::ContextSet, "set", 1),
                     ui => return format!("unsafeIntrinsic{}", ui.index()),
                 };
                 // FACT adapters have no owning component: their context operations
                 // follow the executing task as enter/exit-sync-call switches it.
-                let component = if let Some(component_idx) = self.init_current_module {
-                    self.context_components.borrow_mut().insert(component_idx);
-                    format!("componentIdx: {}, ", component_idx.as_u32())
-                } else {
-                    String::new()
+                let Some(component_idx) = self.init_current_module else {
+                    return self
+                        .bindgen
+                        .intrinsic_bind_callback(intrinsic.into(), &format!("{{ slot: {slot} }}"));
                 };
-                self.bindgen.intrinsic_bind_callback(
-                    intrinsic.into(),
-                    &format!("{{ {component}slot: {slot} }}"),
+                self.context_components.borrow_mut().insert(component_idx);
+
+                // A component's own code may access its context slots in every
+                // function (e.g. for a stack pointer kept there), so let the
+                // runtime choose how such an import is implemented.
+                self.bindgen.intrinsic_call(
+                    AsyncTaskIntrinsic::ContextSlotAccessor.into(),
+                    &format!(
+                        "{{ componentIdx: {}, slot: {slot} }}, '{operation}'",
+                        component_idx.as_u32()
+                    ),
                 )
             }
         }
