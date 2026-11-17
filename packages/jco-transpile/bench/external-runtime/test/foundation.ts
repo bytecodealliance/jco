@@ -42,6 +42,11 @@ const matrixTimeoutMs = Math.max(
 // Serial by design: build every graph before starting ANY measured process.
 test(
     `complete named-runtime ${portfolio} matrix`,
+    {
+        timeout: matrixTimeoutMs,
+        // Allow fresh measurements when CI machine load causes a timing failure.
+        retry: 3,
+    },
     async () => {
         const output = resolve(process.env.JCO_EXTERNAL_RUNTIME_BENCH_RUN!);
         const coverage = await readRuntimeCoverage();
@@ -311,5 +316,4 @@ test(
             );
         }
     },
-    { timeout: matrixTimeoutMs, retry: 3 },
 );
