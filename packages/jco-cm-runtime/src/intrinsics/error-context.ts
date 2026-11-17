@@ -17,23 +17,46 @@ import type {
     LocalErrorContext,
 } from '../runtime.js';
 import { debugLog } from './core/debug.js';
+import { asConstructorOf } from './core/shared-class.js';
 import { getOrCreateAsyncState } from './component.js';
+
+class GlobalErrorContextTable {}
 
 export function initializeGlobalErrorContextTableClass(
     RepTable: RepTableConstructor,
 ): GlobalErrorContextTableConstructor {
-    class GlobalErrorContextTable {
-        static data: RepTableType<GlobalErrorContext> | null = null;
-        static get() {
-            if (GlobalErrorContextTable.data === null) {
-                GlobalErrorContextTable.data = new RepTable<GlobalErrorContext>({
-                    target: 'global error context table',
-                });
-            }
-            return GlobalErrorContextTable.data;
-        }
+    /**
+     * Construct an instance, which has no members: the table is a static member.
+     *
+     * @returns the instance
+     */
+    function StoreGlobalErrorContextTable() {
+        return new GlobalErrorContextTable();
     }
-    return GlobalErrorContextTable;
+
+    /**
+     * The table of the store, created on first use.
+     *
+     * @returns the table
+     */
+    function get(): RepTableType<GlobalErrorContext> {
+        if (StoreTable.data === null) {
+            StoreTable.data = new RepTable<GlobalErrorContext>({
+                target: 'global error context table',
+            });
+        }
+        return StoreTable.data;
+    }
+    const StoreTable = asConstructorOf<GlobalErrorContextTableConstructor>(
+        StoreGlobalErrorContextTable,
+        GlobalErrorContextTable,
+        undefined,
+        {
+            data: { value: null, writable: true, enumerable: true, configurable: true },
+            get: { value: get, writable: true, configurable: true },
+        },
+    );
+    return StoreTable;
 }
 export const initializeErrorContextTableRegistrations: ErrorContextModule['initializeErrorContextTableRegistrations'] =
     () => ({});
