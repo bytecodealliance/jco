@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 86f12365c7c24acee359a92bd1142ad122c50cc7
+// generated from commit 394f0bb4233e2a385e1465909c538eb1027a77e3
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -9735,7 +9735,7 @@ function initializeStreamEndClass(_context) {
 		async waitForPendingEvent() {
 			do {
 				if (!this.hasPendingEvent()) await new Promise((resolve) => this.#pendingEventWaiters.push(resolve));
-				await new Promise((resolve) => setTimeout(resolve));
+				await yieldToHost();
 			} while (!this.hasPendingEvent());
 		}
 		hasPendingEvent() {
