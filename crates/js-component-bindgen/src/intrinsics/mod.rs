@@ -3029,6 +3029,68 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
     0x1a, 0x0b, 0x0b,
 ];
 
+/// Globals of the JavaScript platform that generated bindings, their intrinsics
+/// or the Component Model runtime refer to by name.
+///
+/// Bindings declare local names for a component's imports and exports in the same
+/// scopes, where a local name equal to one of these would be used in place of the
+/// global: a resource named `map` must not become a local `Map` that the bindings
+/// construct for their own tables.
+pub(crate) const PLATFORM_GLOBALS: &[&str] = &[
+    "AggregateError",
+    "Array",
+    "ArrayBuffer",
+    "atob",
+    "BigInt",
+    "BigInt64Array",
+    "BigUint64Array",
+    "Boolean",
+    "Buffer",
+    "clearImmediate",
+    "clearInterval",
+    "clearTimeout",
+    "console",
+    "DataView",
+    "Error",
+    "fetch",
+    "FinalizationRegistry",
+    "Float32Array",
+    "Float64Array",
+    "globalThis",
+    "Int16Array",
+    "Int32Array",
+    "Int8Array",
+    "JSON",
+    "Map",
+    "Math",
+    "Number",
+    "Object",
+    "performance",
+    "process",
+    "Promise",
+    "Proxy",
+    "queueMicrotask",
+    "RangeError",
+    "ReadableStream",
+    "Reflect",
+    "Set",
+    "setImmediate",
+    "setInterval",
+    "setTimeout",
+    "String",
+    "Symbol",
+    "TextDecoder",
+    "TextEncoder",
+    "TypeError",
+    "Uint16Array",
+    "Uint32Array",
+    "Uint8Array",
+    "URL",
+    "WeakMap",
+    "WeakSet",
+    "WebAssembly",
+];
+
 impl Intrinsic {
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         // Every intrinsic is bound in the generated module's scope, so each
@@ -3080,32 +3142,12 @@ impl Intrinsic {
                 "T_OWN",
                 "throwInvalidBool",
                 "throwUninitialized",
-                // JS Globals / non intrinsic names
-                "ArrayBuffer",
-                "BigInt",
-                "BigInt64Array",
-                "DataView",
+                // Other names of generated bindings
                 "dv",
                 "emptyFunc",
-                "Error",
-                "fetch",
-                "Float32Array",
-                "Float64Array",
-                "globalThis",
-                "Int32Array",
-                "Object",
-                "process",
-                "Promise",
-                "String",
-                "TextDecoder",
-                "TextEncoder",
-                "TypeError",
-                "Uint16Array",
-                "Uint8Array",
-                "URL",
-                "WebAssembly",
                 "GlobalComponentMemories",
             ])
+            .chain(PLATFORM_GLOBALS.iter().copied())
     }
 
     pub fn name(&self) -> &'static str {
