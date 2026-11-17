@@ -40,9 +40,13 @@ import { getOrCreateAsyncState } from '../component.js';
  * A guest that imports these functions reads and writes its context slots
  * without leaving WebAssembly. Toolchains keep the shadow stack pointer in a
  * context slot, so a guest may do so in every function prologue.
+ *
+ * The bytes are only created for an instance which accesses its context.
+ *
+ * @returns the bytes of the module
  */
 // prettier-ignore
-const CONTEXT_SLOTS_MODULE = new Uint8Array([
+const contextSlotsModule = () => new Uint8Array([
     0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x09, 0x02, 0x60, 0x00, 0x01, 0x7f, 0x60,
     0x01, 0x7f, 0x00, 0x02, 0x3d, 0x04, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x04, 0x67,
     0x65, 0x74, 0x30, 0x00, 0x00, 0x07, 0x63, 0x6f, 0x6e, 0x74, 0x65, 0x78, 0x74, 0x04, 0x73, 0x65,
@@ -242,7 +246,7 @@ function contextSlotGlobals(context: ThreadLookupContext, componentIdx: number):
     }
     let exports: WebAssembly.Exports;
     try {
-        exports = new wasm.Instance(new wasm.Module(CONTEXT_SLOTS_MODULE), {
+        exports = new wasm.Instance(new wasm.Module(contextSlotsModule()), {
             context: {
                 get0: contextGet.bind(null, context, { componentIdx, slot: 0 }),
                 set0: contextSet.bind(null, context, { componentIdx, slot: 0 }),
