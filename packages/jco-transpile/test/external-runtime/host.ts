@@ -30,7 +30,7 @@ function observe(key, context, keys, receiver) {
  calls.push(key); contexts.push(context);
 }
 export function prepareCall(context, ...args) {
- observe('prepareCall', context, 'RuntimeError,creation,mayBlock,registers,tasks', this);
+ observe('prepareCall', context, 'RuntimeError,creation,lookup,mayBlock,registers,tasks', this);
  if (context.creation.tasks !== context.tasks) throw new Error('detached task creation owner');
  const result = defaults.prepareCall(context, ...args);
  const task = context.tasks.get(args[5]).at(-1).task;

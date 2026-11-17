@@ -45,6 +45,10 @@ export function prepareCall(
         stringEncoding,
         resultCountOrAsync,
     });
+    // Canonical ABI `canon lower`: a call cannot leave an instance which may not be left.
+    if (!getOrCreateAsyncState(_context.lookup, callerComponentIdx).mayLeave) {
+        throw new _context.RuntimeError('cannot leave component instance');
+    }
     const argArray = params;
 
     // value passed in *may* be as large as u32::MAX which may be mangled into -2
