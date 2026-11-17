@@ -657,6 +657,46 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     }
 
+    // A copy completed by the peer leaves its end busy until the completion event
+    // is delivered: another copy on that end must trap rather than be handed the
+    // event, while delivering it (from a waitable set, or by cancelling) frees the end.
+    for (const write of [false, true]) {
+        const builtin = `stream.${write ? 'write' : 'read'}`;
+
+        /** Instantiates the fixture, each call getting its own instance. */
+        const setup = (name: string) =>
+            setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: `stream-copy-undelivered-event-${name}-${write}`,
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'stream-copy-undelivered-event.wat'),
+                },
+            });
+
+        test.concurrent(`${builtin} traps while the previous copy's event is undelivered`, async () => {
+            const { instance, cleanup } = await setup('copy-again');
+            try {
+                const err = await rejection(Promise.resolve().then(() => instance.copyAgain(write)));
+                assert.instanceOf(err, WebAssembly.RuntimeError);
+                assert.match((err as Error).message, /cannot have concurrent operations active on a future\/stream/);
+            } finally {
+                await cleanup();
+            }
+        });
+
+        test.concurrent.each(['pollThenCopy', 'cancelThenCopy'])(
+            `${builtin} is accepted once the previous copy's event is delivered (%s)`,
+            async (fn) => {
+                const { instance, cleanup } = await setup(fn);
+                try {
+                    assert.strictEqual(await instance[fn](write), 0xffffffff);
+                } finally {
+                    await cleanup();
+                }
+            },
+        );
+    }
+
     test.concurrent('a zero-length same-component copy of non-numeric elements traps', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
