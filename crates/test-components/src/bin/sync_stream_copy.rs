@@ -17,6 +17,14 @@ unsafe extern "C" {
     fn drop_readable(handle: u32);
     #[link_name = "[stream-drop-writable-0]payloads"]
     fn drop_writable(handle: u32);
+    #[link_name = "[waitable-set-new]"]
+    fn set_new() -> u32;
+    #[link_name = "[waitable-join]"]
+    fn join(handle: u32, set: u32);
+    #[link_name = "[waitable-set-wait]"]
+    fn wait(set: u32, event: *mut u32) -> u32;
+    #[link_name = "[waitable-set-drop]"]
+    fn set_drop(set: u32);
 }
 impl bindings::Guest for Component {
     fn run() -> Vec<u32> {
@@ -29,7 +37,15 @@ impl bindings::Guest for Component {
             let mut received = vec![0; 2];
             assert_eq!(read_async(reader, received.as_mut_ptr(), 2), u32::MAX);
             assert_eq!(write_sync(writer, values.as_ptr(), 2), 32);
-            assert_eq!(read_async(reader, received.as_mut_ptr(), 2), 32);
+            // The completed read is delivered as an event; re-issuing the read
+            // while the event is pending must trap per the Canonical ABI.
+            let set = set_new();
+            join(reader, set);
+            let mut event = [0; 2];
+            assert_eq!(wait(set, event.as_mut_ptr()), 2);
+            assert_eq!(event, [reader, 32]);
+            join(reader, 0);
+            set_drop(set);
             drop_writable(writer);
             drop_readable(reader);
             received
