@@ -99,23 +99,82 @@ test.concurrent('a guest realloc called by the host cannot start a call out of i
         const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
         s.core.setCurrentTaskMeta({ componentIdx: 0, taskID: parent.id(), threadID: parent.defaultThread().id() });
         const state = s.component.getOrCreateAsyncState(0);
-        const realloc = s.asyncTask.isolateRealloc(0, () => {
-            s.host.prepareCall(
-                0,
-                () => undefined,
-                () => {},
-                () => {},
-                0,
-                1,
-                0,
-                0,
-                0,
-                -1,
-            );
-            return 0;
-        });
-        expect(() => realloc(0, 0, 1, 8)).toThrow('cannot leave component instance');
+        const realloc = s.asyncTask.guardCannotLeave(
+            0,
+            () => {
+                s.host.prepareCall(
+                    0,
+                    () => undefined,
+                    () => {},
+                    () => {},
+                    0,
+                    1,
+                    0,
+                    0,
+                    0,
+                    -1,
+                );
+                return 0;
+            },
+            true,
+        );
+        expect(() => realloc()).toThrow('cannot leave component instance');
         expect(state.mayLeave).toBe(true);
+        finish(parent);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('a guest realloc called by the host runs with context slots of its own', () => {
+    const s = setup();
+    try {
+        const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        s.core.setCurrentTaskMeta({ componentIdx: 0, taskID: parent.id(), threadID: parent.defaultThread().id() });
+        s.asyncTask.contextSet({ componentIdx: 0, slot: 0 }, 7);
+        const realloc = s.asyncTask.guardCannotLeave(
+            0,
+            () => {
+                const entry = s.asyncTask.contextGet({ componentIdx: 0, slot: 0 });
+                s.asyncTask.contextSet({ componentIdx: 0, slot: 0 }, 99);
+                return entry;
+            },
+            true,
+        );
+
+        // Every call starts from zeroed slots, and what it writes is discarded.
+        expect(realloc()).toBe(0);
+        expect(realloc()).toBe(0);
+        expect(s.asyncTask.contextGet({ componentIdx: 0, slot: 0 })).toBe(7);
+
+        // No thread of the component need be executing.
+        s.core.currentTaskMeta[0] = null;
+        s.core.currentTaskMeta.current = null;
+        expect(realloc()).toBe(0);
+        expect(() => s.asyncTask.contextGet({ componentIdx: 0, slot: 0 })).toThrow('missing/incomplete');
+        finish(parent);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('a post-return keeps its own context slots and may leave again once it returns', async () => {
+    const s = setup();
+    try {
+        const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        s.core.setCurrentTaskMeta({ componentIdx: 0, taskID: parent.id(), threadID: parent.defaultThread().id() });
+        s.asyncTask.contextSet({ componentIdx: 0, slot: 0 }, 7);
+        const state = s.component.getOrCreateAsyncState(0);
+        const observed: unknown[] = [];
+
+        // A post-return called through JSPI yields a promise, though it has already finished.
+        const postReturn = s.asyncTask.guardCannotLeave(0, async () => {
+            observed.push(state.mayLeave, s.asyncTask.contextGet({ componentIdx: 0, slot: 0 }));
+        });
+        const pending = postReturn();
+        expect(observed).toEqual([false, 7]);
+        expect(state.mayLeave).toBe(true);
+        await pending;
         finish(parent);
     } finally {
         s.cleanup();

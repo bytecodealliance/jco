@@ -141,7 +141,7 @@ export const importControls = [
         suffix: 'intrinsics/host',
         id: 'host-prepare-selected-trap',
         names: ['prepareCall'],
-        setup: `class Trap extends Error {} const context = { tasks: { get() {} }, registers: {}, mayBlock: { value: 0 }, RuntimeError: Trap, get creation() { throw new Error('unexpected task creation'); } }; let trapped = false; try { prepareCall(context, null, () => null, () => [], () => {}, 0, 1, 0, 0, 0, 0); } catch (error) { trapped = error instanceof Trap && error.message === 'cannot block a synchronous task before returning'; }`,
+        setup: `class Trap extends Error {} const context = { tasks: { get() {} }, registers: {}, mayBlock: { value: 0 }, lookup: { asyncState: { has: () => true, get: () => ({ mayLeave: true }) } }, RuntimeError: Trap, get creation() { throw new Error('unexpected task creation'); } }; let trapped = false; try { prepareCall(context, null, () => null, () => [], () => {}, 0, 1, 0, 0, 0, 0); } catch (error) { trapped = error instanceof Trap && error.message === 'cannot block a synchronous task before returning'; }`,
         answer: 'trapped ? 42 : 0',
         allocations: {},
     },

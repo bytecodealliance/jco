@@ -2798,10 +2798,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 };
 
                 // Build the post return functionality
-                // to clean up tasks and possibly return values
-                let get_or_create_async_state_fn = self.task_intrinsic_call_prefix(
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-                );
+                // to clean up tasks and possibly return values. The post-return function
+                // itself is wrapped where it is extracted, so that it cannot leave its
+                // component instance.
                 let post_return_trap_fn = self.post_return.filter(|_| task_managed).map(|_| {
                     self.task_intrinsic_call_prefix(Intrinsic::Component(
                         ComponentIntrinsic::PostReturnTrap,
@@ -2814,8 +2813,6 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
                         format!(
                             r#"
-                        let cstate = {get_or_create_async_state_fn}{component_idx_expr});
-                        cstate.mayLeave = false;
                         try {{
                             {post_return_call}
                         }} catch (err) {{
@@ -2824,7 +2821,6 @@ impl Bindgen for FunctionBindgen<'_> {
                             task.reject(err);
                             throw err;
                         }}
-                        cstate.mayLeave = true;
                         task.exit();
                         {ret_stmt}
                             "#,

@@ -1,4 +1,4 @@
-import type { ThreadLookupContext, AsyncTaskModule, AsyncStringRealloc, TaskMeta } from '../../runtime.js';
+import type { ThreadLookupContext, AsyncTaskModule, TaskMeta } from '../../runtime.js';
 import { typeCheckValidI32 } from './helpers.js';
 import { getCurrentThread } from './thread-operations.js';
 import { debugLog } from '../core/debug.js';
@@ -21,10 +21,10 @@ function threadSlots(context: ThreadLookupContext, meta: TaskMeta | null | undef
 /**
  * Find the context slots that `context.get` and `context.set` act on.
  *
- * Guest code uses the register of its own component, unless the host is calling that component's
- * realloc, which runs with slots of its own. A FACT adapter has no component index, and a
- * post-return may run after the thread its component's register names has exited; both use the
- * executing thread.
+ * A guest function called through {@link guardCannotLeave} with fresh context slots uses those.
+ * Otherwise guest code uses the register of its own component. A FACT adapter has no component
+ * index, and a post-return may run after the thread its component's register names has exited;
+ * both use the executing thread.
  *
  * @param context - capabilities for locating a component's threads and the executing registers
  * @param componentIdx - index of the component instance calling the built-in, if it has one
@@ -34,9 +34,10 @@ function threadSlots(context: ThreadLookupContext, meta: TaskMeta | null | undef
 function activeSlots(context: ThreadLookupContext, componentIdx: number | undefined, operation: string): number[] {
     const { registers } = context;
     const slots =
+        registers.freshContextSlots ??
         (componentIdx === undefined || componentIdx === null
             ? undefined
-            : (registers.contextSlots?.[componentIdx] ?? threadSlots(context, registers[componentIdx]))) ??
+            : threadSlots(context, registers[componentIdx])) ??
         threadSlots(context, registers.current);
     if (!slots) {
         throw new Error(
@@ -91,39 +92,48 @@ export function contextGet(
 }
 
 /**
- * Wrap a guest realloc so each call runs with fresh context slots and without leaving the component.
+ * Wrap a guest function that the host calls while lifting or lowering (a realloc or a
+ * post-return) so that each call runs without leaving its component instance.
  *
- * The host calls a guest's realloc to lower values into its memory, possibly while one of the guest's
- * tasks is suspended or while none of its threads is executing. Every such call runs as though on a
- * fresh thread: it reads zeroed context slots, and what it writes to them is discarded when it
- * returns. No thread's own slots are involved, and the registers keep naming what was executing.
+ * The Canonical ABI clears `may_leave` around both. A function that may not leave its component
+ * instance can neither call out of it nor suspend, so it has finished by the time the call
+ * returns, even where the call yields a promise; `may_leave` is therefore restored on return.
  *
- * A realloc that may not leave its component instance cannot suspend, so it has finished by the time
- * the call returns, even where the call yields a promise.
+ * A realloc additionally runs as though on a fresh thread (`freshContextSlots`): the host may
+ * call it while one of the guest's tasks is suspended or while none of its threads is executing,
+ * so it reads zeroed context slots and what it writes to them is discarded when it returns. No
+ * thread's own slots are involved, and the registers keep naming what was executing. Only the
+ * wrapped function can run until the call returns, so one set of fresh slots serves every
+ * component.
  *
  * @param context - capabilities for locating component state and the executing registers
- * @param componentIdx - index of the component instance that owns the realloc
- * @param realloc - the guest realloc to wrap
- * @returns a realloc with the same signature
+ * @param componentIdx - index of the component instance that owns the function
+ * @param fn - the guest function to wrap
+ * @param freshContextSlots - whether calls run with zeroed context slots of their own
+ * @returns a function with the same signature
  */
-export function isolateRealloc(
+export function guardCannotLeave<A extends unknown[], T>(
     context: ThreadLookupContext,
     componentIdx: number,
-    realloc: AsyncStringRealloc,
-): ReturnType<AsyncTaskModule['isolateRealloc']> {
-    return (oldPtr, oldSize, alignment, newSize) => {
+    fn: (...args: A) => T,
+    freshContextSlots = false,
+): (...args: A) => T {
+    const { registers } = context;
+    return (...args) => {
         const state = getOrCreateAsyncState(context.lookup, componentIdx);
-        const contextSlots = (context.registers.contextSlots ??= {});
-        const previousSlots = contextSlots[componentIdx];
         const previousMayLeave = state.mayLeave;
 
-        contextSlots[componentIdx] = [0, 0];
         state.mayLeave = false;
+        if (freshContextSlots) {
+            registers.freshContextSlots = [0, 0];
+        }
         try {
-            return realloc(oldPtr, oldSize, alignment, newSize);
+            return fn(...args);
         } finally {
+            if (freshContextSlots) {
+                registers.freshContextSlots = undefined;
+            }
             state.mayLeave = previousMayLeave;
-            contextSlots[componentIdx] = previousSlots;
         }
     };
 }
