@@ -1,0 +1,14 @@
+package jco:test-components;
+
+world context-realloc-async {
+  import echo: async func(value: string) -> string;
+  export run: async func(value: string) -> u32;
+}
+
+world context-realloc-stream-read {
+  export run: async func(values: stream<string>) -> u32;
+}
+
+world context-realloc-future-read {
+  export run: async func(value: future<string>) -> u32;
+}
