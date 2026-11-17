@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 394f0bb4233e2a385e1465909c538eb1027a77e3
+// generated from commit 09be13fdab6ab0b58b9e3bbe2439d4d64a1df6d8
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -759,7 +759,7 @@ function backpressureDec(context, componentIdx) {
 function getOrCreateAsyncState(context, componentIdx) {
 	const { asyncState, ComponentAsyncState } = context;
 	let state = asyncState.get(componentIdx);
-	if (state === void 0) {
+	if (state === void 0 && !asyncState.has(componentIdx)) {
 		state = new ComponentAsyncState({ componentIdx });
 		asyncState.set(componentIdx, state);
 	}
