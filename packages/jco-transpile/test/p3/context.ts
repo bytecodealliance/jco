@@ -4,7 +4,9 @@ import { ReadableStream } from 'node:stream/web';
 import { fileURLToPath } from 'node:url';
 
 import { suite, test, expect } from 'vitest';
+import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
+import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 import { setupAsyncTest } from '../helpers.js';
 
 const COMPONENT_FIXTURES_DIR = fileURLToPath(new URL('../fixtures/components', import.meta.url));
@@ -52,8 +54,9 @@ suite('Context (WASI P3)', () => {
             const { instance, cleanup } = await setupAsyncTest({
                 component: {
                     name: 'context-realloc-async',
-                    path: join(P3_COMPONENT_FIXTURES_DIR, 'context-realloc-async.wat'),
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'context-realloc-async.wasm'),
                     imports: {
+                        ...new WASIShim().getImportObject(),
                         echo: {
                             default: (value: string) =>
                                 new Promise<string>((resolve) => setTimeout(() => resolve(value), 0)),
@@ -78,7 +81,8 @@ suite('Context (WASI P3)', () => {
             const { instance, cleanup } = await setupAsyncTest({
                 component: {
                     name: 'context-realloc-stream-read',
-                    path: join(P3_COMPONENT_FIXTURES_DIR, 'context-realloc-stream-read.wat'),
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'context-realloc-stream-read.wasm'),
+                    imports: new WASIShim().getImportObject(),
                 },
                 jco: { transpile: { extraArgs: { minify } } },
             });
@@ -108,7 +112,8 @@ suite('Context (WASI P3)', () => {
             const { instance, cleanup } = await setupAsyncTest({
                 component: {
                     name: 'context-realloc-future-read',
-                    path: join(P3_COMPONENT_FIXTURES_DIR, 'context-realloc-future-read.wat'),
+                    path: join(LOCAL_TEST_COMPONENTS_DIR, 'context-realloc-future-read.wasm'),
+                    imports: new WASIShim().getImportObject(),
                 },
                 jco: { transpile: { extraArgs: { minify } } },
             });
