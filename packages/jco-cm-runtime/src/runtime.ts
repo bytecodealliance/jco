@@ -347,6 +347,11 @@ export interface TaskMeta {
 export interface TaskRegisters {
     [componentIdx: number]: TaskMeta | null | undefined;
     current?: TaskMeta | null;
+    /**
+     * Context slots in force for a component in place of those of its threads, by component
+     * index. Set for the duration of a host call to the component's realloc.
+     */
+    contextSlots?: { [componentIdx: number]: number[] | undefined };
 }
 export interface MemoryMeta {
     componentIdx: number;
@@ -1719,6 +1724,11 @@ export interface AsyncTaskModule {
         value: number,
     ) => void;
     readonly contextGet: (context: ThreadLookupContext, options: { componentIdx?: number; slot: number }) => number;
+    readonly isolateRealloc: (
+        context: ThreadLookupContext,
+        componentIdx: number,
+        realloc: AsyncStringRealloc,
+    ) => AsyncStringRealloc;
     readonly taskReturn: (context: TaskReturnRuntimeContext, options: TaskReturnOptions, ...params: unknown[]) => void;
     readonly subtaskDrop: (context: SubtaskDropContext, componentIdx: number, rep: number) => void;
     readonly asyncYield: (

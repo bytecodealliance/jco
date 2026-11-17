@@ -2068,7 +2068,7 @@ mod tests {
             let source = render_intrinsic_body(Intrinsic::AsyncTask(intrinsic));
             assert_eq!(
                 source
-                    .matches("getCurrentThread(currentThreadMeta.componentIdx, currentThreadMeta.threadID, currentThreadMeta.taskID)")
+                    .matches("getCurrentThread(frame.componentIdx, frame.threadID, frame.taskID)")
                     .count(),
                 2,
                 "{intrinsic:?}"

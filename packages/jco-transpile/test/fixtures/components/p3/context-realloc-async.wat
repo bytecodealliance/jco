@@ -1,0 +1,87 @@
+;; An async-lowered host call returns a string after the callback-lifted caller
+;; has suspended with live stack/TLS context. Lowering the result calls realloc,
+;; which must see zeros and must not clobber the suspended task's context slots.
+(component
+  (import "echo" (func $echo async (param "value" string) (result string)))
+  (core func $get0 (canon context.get i32 0))
+  (core func $get1 (canon context.get i32 1))
+  (core func $set0 (canon context.set i32 0))
+  (core func $set1 (canon context.set i32 1))
+  (core instance $context
+    (export "get0" (func $get0))
+    (export "get1" (func $get1))
+    (export "set0" (func $set0))
+    (export "set1" (func $set1)))
+  (core module $memory
+    (import "context" "get0" (func $get0 (result i32)))
+    (import "context" "get1" (func $get1 (result i32)))
+    (import "context" "set0" (func $set0 (param i32)))
+    (import "context" "set1" (func $set1 (param i32)))
+    (memory (export "memory") 1)
+    (global $heap (mut i32) (i32.const 64))
+    (func (export "realloc") (param i32 i32 i32) (param $size i32) (result i32)
+      (local $ptr i32)
+      (if (call $get0) (then unreachable))
+      (if (call $get1) (then unreachable))
+      (call $set0 (i32.const 97))
+      (call $set1 (i32.const 98))
+      (local.set $ptr (global.get $heap))
+      (global.set $heap (i32.add (local.get $ptr) (local.get $size)))
+      (local.get $ptr)))
+  (core instance $memory (instantiate $memory (with "context" (instance $context))))
+  ;; async-lowered
+  (core func $echo (canon lower (func $echo) async
+    (memory (core memory $memory "memory")) (realloc (core func $memory "realloc"))))
+  (core func $waitable-set-new (canon waitable-set.new))
+  (core func $waitable-join (canon waitable.join))
+  (core func $subtask-drop (canon subtask.drop))
+  (core func $task-return (canon task.return (result u32)))
+  (core module $guest
+    (import "context" "get0" (func $get0 (result i32)))
+    (import "context" "get1" (func $get1 (result i32)))
+    (import "context" "set0" (func $set0 (param i32)))
+    (import "context" "set1" (func $set1 (param i32)))
+    (import "" "echo" (func $echo (param i32 i32 i32) (result i32)))
+    (import "" "waitable-set.new" (func $waitable-set-new (result i32)))
+    (import "" "waitable.join" (func $waitable-join (param i32 i32)))
+    (import "" "subtask.drop" (func $subtask-drop (param i32)))
+    (import "" "task.return" (func $task-return (param i32)))
+    (import "" "memory" (memory 1))
+    (func (export "run") (param $ptr i32) (param $len i32) (result i32)
+      (local $status i32)
+      (local $set i32)
+      ;; Lowering the export's argument must not leave realloc's context behind.
+      (if (call $get0) (then unreachable))
+      (if (call $get1) (then unreachable))
+      (call $set0 (i32.const 11))
+      (call $set1 (i32.const 22))
+      ;; The host resolves later, so the subtask must still be STARTED (1).
+      (local.set $status (call $echo (local.get $ptr) (local.get $len) (i32.const 8)))
+      (if (i32.ne (i32.and (local.get $status) (i32.const 0xf)) (i32.const 1)) (then unreachable))
+      (local.set $set (call $waitable-set-new))
+      (call $waitable-join (i32.shr_u (local.get $status) (i32.const 4)) (local.get $set))
+      ;; WAIT on the set.
+      (i32.or (i32.const 2) (i32.shl (local.get $set) (i32.const 4))))
+    (func (export "callback") (param $event i32) (param $index i32) (param $payload i32) (result i32)
+      ;; Only a SUBTASK (1) event reporting RETURNED (2) is expected.
+      (if (i32.ne (local.get $event) (i32.const 1)) (then unreachable))
+      (if (i32.ne (local.get $payload) (i32.const 2)) (then unreachable))
+      (call $subtask-drop (local.get $index))
+      ;; The result was lowered (via realloc) while this task was suspended.
+      (if (i32.ne (call $get0) (i32.const 11)) (then unreachable))
+      (if (i32.ne (call $get1) (i32.const 22)) (then unreachable))
+      (if (i32.ne (i32.load8_u (i32.load (i32.const 8))) (i32.const 104)) (then unreachable))
+      (call $task-return (i32.load (i32.const 12)))
+      ;; EXIT
+      (i32.const 0)))
+  (core instance $guest (instantiate $guest
+    (with "context" (instance $context))
+    (with "" (instance (export "echo" (func $echo))
+                       (export "waitable-set.new" (func $waitable-set-new))
+                       (export "waitable.join" (func $waitable-join))
+                       (export "subtask.drop" (func $subtask-drop))
+                       (export "task.return" (func $task-return))
+                       (export "memory" (memory $memory "memory"))))))
+  (func (export "run") async (param "value" string) (result u32)
+    (canon lift (core func $guest "run") async (callback (core func $guest "callback"))
+      (memory (core memory $memory "memory")) (realloc (core func $memory "realloc")))))

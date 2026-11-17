@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { ReadableStream } from 'node:stream/web';
 
 import { fileURLToPath } from 'node:url';
 
@@ -44,6 +45,85 @@ suite('Context (WASI P3)', () => {
             await cleanup();
         }
     });
+
+    test.concurrent.each([false, true])(
+        'realloc isolates both context slots when lowering an async import result (minify=%s)',
+        async (minify: boolean) => {
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    name: 'context-realloc-async',
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'context-realloc-async.wat'),
+                    imports: {
+                        echo: {
+                            default: (value: string) =>
+                                new Promise<string>((resolve) => setTimeout(() => resolve(value), 0)),
+                        },
+                    },
+                },
+                jco: { transpile: { extraArgs: { minify } } },
+            });
+            try {
+                for (let call = 0; call < 2; call++) {
+                    expect(await instance.run('hello')).toBe(5);
+                }
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
+    test.concurrent.each([false, true])(
+        'realloc isolates both context slots when lowering a stream element (minify=%s)',
+        async (minify: boolean) => {
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    name: 'context-realloc-stream-read',
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'context-realloc-stream-read.wat'),
+                },
+                jco: { transpile: { extraArgs: { minify } } },
+            });
+            try {
+                for (let call = 0; call < 2; call++) {
+                    const values = new ReadableStream<string>({
+                        start(controller) {
+                            setTimeout(() => {
+                                controller.enqueue('hello');
+                                controller.close();
+                            }, 0);
+                        },
+                    });
+                    expect(await instance.run(values)).toBe(5);
+                }
+            } finally {
+                await cleanup();
+            }
+        },
+        // A trap while lowering surfaces as an unhandled error rather than a rejected call.
+        10_000,
+    );
+
+    test.concurrent.each([false, true])(
+        'realloc isolates both context slots when lowering a future value (minify=%s)',
+        async (minify: boolean) => {
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    name: 'context-realloc-future-read',
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'context-realloc-future-read.wat'),
+                },
+                jco: { transpile: { extraArgs: { minify } } },
+            });
+            try {
+                for (let call = 0; call < 2; call++) {
+                    const value = new Promise<string>((resolve) => setTimeout(() => resolve('hello'), 0));
+                    expect(await instance.run(value)).toBe(5);
+                }
+            } finally {
+                await cleanup();
+            }
+        },
+        // A trap while lowering surfaces as an unhandled error rather than a rejected call.
+        10_000,
+    );
 
     test.concurrent('context.get/set (sync export, sync call)', async () => {
         const name = 'context-sync';

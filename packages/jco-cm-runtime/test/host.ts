@@ -93,6 +93,35 @@ test.concurrent('prepare rejects implicit synchronous blocking in the selected r
     }
 });
 
+test.concurrent('a guest realloc called by the host cannot start a call out of its component', () => {
+    const s = setup();
+    try {
+        const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        s.core.setCurrentTaskMeta({ componentIdx: 0, taskID: parent.id(), threadID: parent.defaultThread().id() });
+        const state = s.component.getOrCreateAsyncState(0);
+        const realloc = s.asyncTask.isolateRealloc(0, () => {
+            s.host.prepareCall(
+                0,
+                () => undefined,
+                () => {},
+                () => {},
+                0,
+                1,
+                0,
+                0,
+                0,
+                -1,
+            );
+            return 0;
+        });
+        expect(() => realloc(0, 0, 1, 8)).toThrow('cannot leave component instance');
+        expect(state.mayLeave).toBe(true);
+        finish(parent);
+    } finally {
+        s.cleanup();
+    }
+});
+
 test.concurrent('eager direct callee returns in the same slice and restores blocking depth', () => {
     const s = setup();
     try {

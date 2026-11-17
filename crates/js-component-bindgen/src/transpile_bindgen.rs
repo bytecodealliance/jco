@@ -972,6 +972,14 @@ impl JsBindgen<'_> {
         self.runtime().call_prefix(intrinsic, true)
     }
 
+    /// Wrap a guest realloc so each call runs with fresh context slots (see
+    /// [`AsyncTaskIntrinsic::IsolateRealloc`]).
+    fn isolate_realloc(&mut self, realloc_fn: &str, component_idx: u32) -> String {
+        let isolate_realloc =
+            self.intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::IsolateRealloc));
+        format!("{isolate_realloc}{component_idx}, {realloc_fn})")
+    }
+
     fn intrinsic_bind_callback_prefix(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
         self.runtime().bind_callback_prefix(intrinsic, true)
@@ -2376,10 +2384,15 @@ impl<'a> Instantiator<'a, '_> {
                     ),
                     None => ("undefined".into(), "undefined".into()),
                 };
+                // Elements are lowered when the host writes, possibly while the reading task is
+                // suspended.
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(v) => {
                         let v = v.as_u32().to_string();
-                        (v.to_string(), format!("() => realloc{v}"))
+                        let realloc_fn = self
+                            .bindgen
+                            .isolate_realloc(&format!("realloc{v}"), instance.as_u32());
+                        (v.to_string(), format!("() => {realloc_fn}"))
                     }
                     None => ("undefined".into(), "undefined".into()),
                 };
@@ -2487,7 +2500,10 @@ impl<'a> Instantiator<'a, '_> {
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(v) => {
                         let v = v.as_u32().to_string();
-                        (v.to_string(), format!("() => realloc{v}"))
+                        let realloc_fn = self
+                            .bindgen
+                            .isolate_realloc(&format!("realloc{v}"), instance.as_u32());
+                        (v.to_string(), format!("() => {realloc_fn}"))
                     }
                     None => ("undefined".into(), "undefined".into()),
                 };
@@ -2733,10 +2749,18 @@ impl<'a> Instantiator<'a, '_> {
                     ),
                     None => ("undefined".into(), "undefined".into()),
                 };
+                // A read value is lowered when the host resolves the future, possibly while the
+                // reading task is suspended.
                 let (realloc_idx, get_realloc_fn_js) = match realloc {
                     Some(idx) => (
                         idx.as_u32().to_string(),
-                        format!("() => realloc{}", idx.as_u32()),
+                        format!(
+                            "() => {}",
+                            self.bindgen.isolate_realloc(
+                                &format!("realloc{}", idx.as_u32()),
+                                instance.as_u32()
+                            )
+                        ),
                     ),
                     None => ("undefined".into(), "undefined".to_string()),
                 };
@@ -2961,9 +2985,12 @@ impl<'a> Instantiator<'a, '_> {
                         StringIntrinsic::CompactUtf16Encode
                     }
                 };
+                let realloc_fn = self
+                    .bindgen
+                    .isolate_realloc(&format!("realloc{realloc_fn_idx}"), instance.as_u32());
                 let encode_fn = self.bindgen.intrinsic_call(
                     Intrinsic::String(encode_intrinsic),
-                    &format!("s, realloc{realloc_fn_idx}, memory"),
+                    &format!("s, {realloc_fn}, memory"),
                 );
                 uwriteln!(
                     self.src.js,
@@ -3135,7 +3162,17 @@ impl<'a> Instantiator<'a, '_> {
                                     format!("() => memory{}", idx.as_u32()),
                                 )
                             }),
-                            realloc.map(|idx| format!("() => realloc{}", idx.as_u32())),
+                            realloc.map(|idx| {
+                                // A result is lowered when the subtask resolves, possibly
+                                // while the calling task is suspended.
+                                format!(
+                                    "() => {}",
+                                    self.bindgen.isolate_realloc(
+                                        &format!("realloc{}", idx.as_u32()),
+                                        component_idx
+                                    )
+                                )
+                            }),
                         )
                     } else {
                         (None, None)
@@ -4727,7 +4764,13 @@ impl<'a> Instantiator<'a, '_> {
                 {
                     (
                         memory.map(|idx| format!(" memory: memory{},", idx.as_u32())),
-                        realloc.map(|idx| format!(" realloc: realloc{},", idx.as_u32())),
+                        realloc.map(|idx| {
+                            let realloc_fn = self.bindgen.isolate_realloc(
+                                &format!("realloc{}", idx.as_u32()),
+                                options.instance.as_u32(),
+                            );
+                            format!(" realloc: {realloc_fn},")
+                        }),
                     )
                 } else {
                     (None, None)
@@ -5535,47 +5578,11 @@ impl<'a> Instantiator<'a, '_> {
                 (None, None)
             };
 
-        // Realloc runs with fresh context slots, without leaving the component.
-        // In particular, wasi-libc's realloc task hook may replace the TLS base;
-        // it must not overwrite the calling Python/C thread's context.
         if let Some(realloc_fn) = realloc.take() {
-            let get_component_state = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
-                ComponentIntrinsic::GetOrCreateAsyncState,
-            ));
-            let get_current_thread_meta = self
-                .bindgen
-                .intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
-            let get_current_thread = self
-                .bindgen
-                .intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentThread));
-            let component_idx = opts.instance.as_u32();
-            realloc = Some(format!(
-                r#"((...args) => {{
-                    const state = {get_component_state}{component_idx});
-                    const previousMayLeave = state.mayLeave;
-                    const meta = {get_current_thread_meta}{component_idx});
-                    const thread = meta && {get_current_thread}meta.componentIdx, meta.threadID, meta.taskID)?.thread;
-                    const previousStorage = thread?.storage;
-                    if (thread) {{ thread.storage = [0, 0]; }}
-                    state.mayLeave = false;
-                    const restore = () => {{
-                        state.mayLeave = previousMayLeave;
-                        if (thread) {{ thread.storage = previousStorage; }}
-                    }};
-                    let result;
-                    try {{
-                        result = {realloc_fn}(...args);
-                    }} catch (err) {{
-                        restore();
-                        throw err;
-                    }}
-                    if (result && typeof result.then === 'function') {{
-                        return Promise.resolve(result).finally(restore);
-                    }}
-                    restore();
-                    return result;
-                }})"#
-            ));
+            realloc = Some(
+                self.bindgen
+                    .isolate_realloc(&realloc_fn, opts.instance.as_u32()),
+            );
         }
 
         let post_return = opts.post_return.map(|idx| {
