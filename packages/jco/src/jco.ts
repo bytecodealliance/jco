@@ -205,9 +205,9 @@ program
     .addOption(
         new Option(
             "--runtime-profile <profile>",
-            "what the bundled Component Model runtime keeps: checked removes diagnostics, debug keeps them (logged with JCO_DEBUG), unchecked also removes internal assertions",
+            "what the bundled Component Model runtime keeps: checked removes diagnostics, debug keeps them (logged with JCO_DEBUG)",
         )
-            .choices(["checked", "debug", "unchecked"])
+            .choices(["checked", "debug"])
             .default("checked"),
     )
     .option(

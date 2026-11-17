@@ -157,8 +157,8 @@ async function main() {
     const exportMap = [];
     const reexports = [];
     for (const [subpath, conditions] of Object.entries(manifest.exports)) {
-        // Subpaths below a profile directory select that profile of the same modules.
-        if (subpath === '.' || /^\.\/(debug|unchecked)(\/|$)/.test(subpath)) {
+        // Subpaths below `debug` select the debug profile of the same modules.
+        if (subpath === '.' || /^\.\/debug(\/|$)/.test(subpath)) {
             continue;
         }
         const id = `runtime/${conditions.default.slice('./dist/'.length)}`;

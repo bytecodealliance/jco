@@ -169,15 +169,14 @@ export interface TranspilationOptions {
     /**
      * Which removable statements the Component Model runtime bundled into the bindings keeps.
      *
-     * - `checked` (default): diagnostics are removed, assertions about internal invariants are kept.
+     * - `checked` (default): diagnostics are removed.
      * - `debug`: diagnostics are kept, and logged when `JCO_DEBUG` is set or an instance is
      *   created with the `debug` option.
-     * - `unchecked`: diagnostics and assertions are removed.
      *
-     * Canonical ABI traps and validation of guest and host values are kept by every profile.
+     * Assertions, canonical ABI traps and validation of guest and host values are kept by both.
      * Bindings that import a runtime (`cmRuntimeEsModule`) take what that runtime was built with.
      */
-    runtimeProfile?: 'checked' | 'debug' | 'unchecked';
+    runtimeProfile?: 'checked' | 'debug';
 
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;

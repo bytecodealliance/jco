@@ -81,12 +81,10 @@ world js-component-bindgen {
 
   /// Which removable statements a runtime bundled into the bindings keeps.
   enum runtime-profile {
-    /// Remove diagnostics and keep assertions about internal invariants.
+    /// Remove diagnostics.
     checked,
-    /// Keep diagnostics and assertions.
+    /// Keep diagnostics.
     debug,
-    /// Remove diagnostics and assertions.
-    unchecked,
   }
 
   variant instantiation-mode {

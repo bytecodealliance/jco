@@ -76,30 +76,31 @@ See the [intrinsic contracts](intrinsics/README.md) for individual operations an
 
 ## Runtime profiles
 
-Runtime diagnostic statements carry a `DEBUG` JavaScript label,
-and assertions about internal implementation invariants carry a `SAFETY` label.
-A profile is the choice of which labeled statements to keep:
+Runtime diagnostic statements carry a `DEBUG` JavaScript label.
+A profile is the choice of whether to keep them:
 
-| Profile     | Diagnostics (`DEBUG`) | Internal assertions (`SAFETY`) | Package entry                                |
-| ----------- | --------------------- | ------------------------------ | -------------------------------------------- |
-| `checked`   | removed               | kept                           | `@bytecodealliance/jco-cm-runtime` (default) |
-| `debug`     | kept                  | kept                           | `@bytecodealliance/jco-cm-runtime/debug`     |
-| `unchecked` | removed               | removed                        | `@bytecodealliance/jco-cm-runtime/unchecked` |
+| Profile   | Diagnostics (`DEBUG`) | Package entry                                |
+| --------- | --------------------- | -------------------------------------------- |
+| `checked` | removed               | `@bytecodealliance/jco-cm-runtime` (default) |
+| `debug`   | kept                  | `@bytecodealliance/jco-cm-runtime/debug`     |
 
 Removing a labeled statement removes the whole statement,
 including object literals, string formatting, and diagnostic getters passed as log arguments.
 Diagnostic arguments must not perform required work.
 
 Canonical ABI traps, resource-handle validation, Unicode validation, ownership, cancellation,
-and lifecycle checks are never labeled, and remain in every profile.
-The initial `SAFETY` assertion verifies the representation table's internal freelist head.
+and lifecycle checks are never labeled, and remain in both profiles.
+
+Assertions about internal implementation invariants carry a `SAFETY` label, and also remain in both profiles.
+The label marks statements that guard against defects of the runtime itself rather than against its callers,
+such as the check of the representation table's internal freelist head.
 Adding a `SAFETY` label requires auditing both the checked condition
 and any work performed while evaluating it.
 
 Only the `debug` profile logs: when `JCO_DEBUG` is set,
 or for bundled runtimes when an instance is created with the `debug` option.
-The other profiles omit runtime log calls even when `JCO_DEBUG` is set.
-The explicitly exported `debugLog` utility remains callable in every profile.
+The `checked` profile omits runtime log calls even when `JCO_DEBUG` is set.
+The explicitly exported `debugLog` utility remains callable in both profiles.
 
 ### Bindings that bundle the runtime
 
@@ -108,13 +109,12 @@ Select it with `runtimeProfile` (`--runtime-profile` on the command line); the d
 
 ### Bindings that import the runtime
 
-Every profile has the same exports, type declarations, and runtime API version,
+Both profiles have the same exports, type declarations, and runtime API version,
 so the profile is chosen by the base that bindings import:
 
 ```sh
-jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime           # checked
-jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/debug     # debug
-jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/unchecked # unchecked
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime       # checked
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/debug # debug
 ```
 
 Modules of different profiles do not share state or private brands,
@@ -123,8 +123,8 @@ so one program should import a single profile.
 ### Building profiles
 
 `pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
-the `checked` profile at the top of `dist`, with `dist/debug` and `dist/unchecked` beside it.
-The `checked` and `unchecked` profiles are bundled and minified, one module per entry point with shared chunks;
+the `checked` profile at the top of `dist`, with `dist/debug` beside it.
+The `checked` profile is bundled and minified, one module per entry point with shared chunks;
 the `debug` profile keeps one module per source file.
 
 To build one profile into a directory of its own,

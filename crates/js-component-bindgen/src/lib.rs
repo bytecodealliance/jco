@@ -117,23 +117,20 @@ impl TypeGenerationConfig {
 // the next major release, so new options no longer need a separate type.
 /// Which removable statements of the Component Model runtime generated bindings keep.
 ///
-/// The runtime labels its diagnostic statements `DEBUG` and its assertions about
-/// internal invariants `SAFETY`. Canonical ABI traps and validation of what a guest
-/// or host passes are never labeled, and are kept by every profile.
+/// The runtime labels its diagnostic statements `DEBUG`. Assertions, canonical ABI
+/// traps and validation of what a guest or host passes are kept by every profile.
 ///
 /// A profile applies where the runtime is bundled into the bindings. Bindings that
 /// import a runtime take what that runtime was built with.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RuntimeProfile {
-    /// Remove diagnostics and keep assertions.
+    /// Remove diagnostics.
     #[default]
     Checked,
-    /// Keep diagnostics and assertions. Diagnostics are logged when `JCO_DEBUG` is
+    /// Keep diagnostics. They are logged when `JCO_DEBUG` is
     /// set, or when an instance is created with the `debug` option.
     Debug,
-    /// Remove diagnostics and assertions.
-    Unchecked,
 }
 
 impl RuntimeProfile {
@@ -143,7 +140,6 @@ impl RuntimeProfile {
         match self {
             Self::Checked => &["DEBUG"],
             Self::Debug => &[],
-            Self::Unchecked => &["DEBUG", "SAFETY"],
         }
     }
 }

@@ -57,7 +57,6 @@ fn main() -> Result<()> {
             None if arg == "--tla-compat" => opts.tla_compat = true,
             Some(("--profile", "checked")) => runtime_profile = RuntimeProfile::Checked,
             Some(("--profile", "debug")) => runtime_profile = RuntimeProfile::Debug,
-            Some(("--profile", "unchecked")) => runtime_profile = RuntimeProfile::Unchecked,
             Some(("--map", mapping)) => {
                 let (from, to) = mapping.split_once('=').context("--map takes from=to")?;
                 map.insert(from.to_string(), to.to_string());

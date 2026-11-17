@@ -175,8 +175,8 @@ export interface TranspileOpts extends TypegenOptions {
     wasiShim?: boolean;
     /** Optional module specifier imported by generated bindings, never loaded during transpilation. */
     cmRuntimeEsModule?: string;
-    /** Which diagnostics and assertions the bundled Component Model runtime keeps. */
-    runtimeProfile?: "checked" | "debug" | "unchecked";
+    /** Whether the bundled Component Model runtime keeps its diagnostics. */
+    runtimeProfile?: "checked" | "debug";
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
     useNamespaceObjects?: boolean;

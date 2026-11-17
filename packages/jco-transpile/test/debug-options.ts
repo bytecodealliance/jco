@@ -41,7 +41,6 @@ test('bindings contain diagnostics only with the debug runtime profile', async (
         [undefined, false, true],
         ['checked', false, true],
         ['debug', true, true],
-        ['unchecked', false, false],
     ] as const) {
         const { files } = await transpileBytes(component, {
             name: 'component',

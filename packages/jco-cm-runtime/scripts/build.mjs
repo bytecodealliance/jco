@@ -12,14 +12,13 @@ const exec = promisify(execFile);
 /**
  * The statement labels that each profile removes.
  *
- * - `checked` removes diagnostics and keeps assertions about internal invariants;
- * - `debug` keeps both, one module per source file;
- * - `unchecked` removes both.
+ * - `checked` removes diagnostics;
+ * - `debug` keeps them, one module per source file.
  */
-export const profiles = { checked: ['DEBUG'], debug: [], unchecked: ['DEBUG', 'SAFETY'] };
+export const profiles = { checked: ['DEBUG'], debug: [] };
 
 /** Where the package keeps each profile, relative to its output directory. */
-const PACKAGE_LAYOUT = { checked: '.', debug: 'debug', unchecked: 'unchecked' };
+const PACKAGE_LAYOUT = { checked: '.', debug: 'debug' };
 
 /**
  * Compile the sources to one JavaScript module and declaration per source file.
@@ -53,8 +52,8 @@ async function copyMatching(from, to, pattern) {
 /**
  * Write one profile of the compiled runtime into `outDir`.
  *
- * The `debug` profile is the compiled modules as they are. The others are bundled,
- * one module per public entry point with shared chunks, after their labels are removed.
+ * The `debug` profile is the compiled modules as they are. The `checked` profile is
+ * bundled, one module per public entry point with shared chunks, after its labels are removed.
  *
  * @param {string} compiled - directory holding the compiled modules
  * @param {keyof typeof profiles} profile - which statements to keep
@@ -71,8 +70,8 @@ async function emit(compiled, profile, outDir) {
     const manifest = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'));
     const input = Object.fromEntries(
         Object.entries(manifest.exports)
-            // Entries below a profile directory select that profile of the same modules.
-            .filter(([name]) => !/^\.\/(debug|unchecked)(\/|$)/.test(name))
+            // Entries below `debug` select the debug profile of the same modules.
+            .filter(([name]) => !/^\.\/debug(\/|$)/.test(name))
             .map(([name, target]) => [
                 name === '.' ? 'index' : name.slice(2),
                 join(compiled, target.default.slice('./dist/'.length)),
@@ -108,8 +107,8 @@ async function emit(compiled, profile, outDir) {
  * Build the runtime.
  *
  * Without a profile, this builds the package: the `checked` profile at the top of
- * `outDir`, where the package's entry points are, with the `debug` and `unchecked`
- * profiles in directories of their own. With a profile, only that profile is built,
+ * `outDir`, where the package's entry points are, with the `debug`
+ * profile in a directory of its own. With a profile, only that profile is built,
  * at the top of `outDir`. Declarations are written at the top either way.
  *
  * @param {object} [options]

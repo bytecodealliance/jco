@@ -54,8 +54,8 @@ suite('runtime package', () => {
             await exec(process.execPath, ['smoke.mjs', '--runtime-base', 'test-runtime-alias', '--group', 'resource'], {
                 cwd: consumer,
             });
-            // The other profiles are selected by a base below the package.
-            for (const profile of ['debug', 'unchecked']) {
+            // The debug profile is selected by a base below the package.
+            for (const profile of ['debug']) {
                 await exec(
                     process.execPath,
                     [
@@ -134,8 +134,6 @@ suite('runtime package', () => {
                 './intrinsics/waitable',
                 './intrinsics/webidl',
                 './runtime',
-                './unchecked',
-                './unchecked/*',
             ]);
             expect(manifest.sideEffects).toBe(false);
             const rust = await readFile(

@@ -98,14 +98,6 @@
         "./debug/*": {
             "types": "./dist/*.d.ts",
             "default": "./dist/debug/*.js"
-        },
-        "./unchecked": {
-            "types": "./dist/index.d.ts",
-            "default": "./dist/unchecked/index.js"
-        },
-        "./unchecked/*": {
-            "types": "./dist/*.d.ts",
-            "default": "./dist/unchecked/*.js"
         }
     },
     "scripts": {

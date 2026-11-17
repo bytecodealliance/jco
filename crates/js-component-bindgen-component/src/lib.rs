@@ -359,7 +359,6 @@ impl From<RuntimeProfile> for js_component_bindgen::RuntimeProfile {
         match value {
             RuntimeProfile::Checked => js_component_bindgen::RuntimeProfile::Checked,
             RuntimeProfile::Debug => js_component_bindgen::RuntimeProfile::Debug,
-            RuntimeProfile::Unchecked => js_component_bindgen::RuntimeProfile::Unchecked,
         }
     }
 }

@@ -608,7 +608,6 @@ mod tests {
         for (profile, diagnostics, assertions) in [
             (RuntimeProfile::Debug, true, true),
             (RuntimeProfile::Checked, false, true),
-            (RuntimeProfile::Unchecked, false, false),
         ] {
             let linked = super::link(source, false, profile).unwrap().unwrap();
             assert_eq!(linked.contains(diagnostic), diagnostics, "{profile:?}");
