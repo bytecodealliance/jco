@@ -662,6 +662,7 @@ mod tests {
         }
     "#;
 
+    #[cfg(feature = "transpile-bindgen")]
     fn generated_javascript(transpiled: &Transpiled) -> &str {
         transpiled
             .files
