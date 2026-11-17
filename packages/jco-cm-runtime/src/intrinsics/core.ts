@@ -1,5 +1,5 @@
 import { emptyFunc } from './js-helper.js';
-import { isPromiseLike } from './core/promises.js';
+import { isPromiseLike, promiseWithResolvers } from './core/promises.js';
 import type {
     CoreModule,
     ComponentErrorConstructor,
@@ -10,6 +10,7 @@ import type {
     ConditionalTrampoline,
     ConditionalSlowFn,
     ConditionalSuspendingPlatform,
+    TaskRegisters,
 } from '../runtime.js';
 import { checkMayLeave, recordTrap, getOrCreateAsyncState } from './component.js';
 import { getCurrentThread } from './async-task/thread-operations.js';
@@ -249,22 +250,64 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
             return result;
         }
         // Invocation stays inside the async function to preserve JSPI scheduling.
-        return (async () => {
-            try {
-                const result = await fn.apply(null, args);
-                getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
-                return result;
-            } catch (error) {
-                throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
-            } finally {
+        const settled = (async () => fn.apply(null, args))();
+
+        // The suspended stack resumes in a later job than the one which
+        // settles the promise returned here. The registers must still name
+        // this stack's task when it does, so stacks resume one at a time.
+        const resumption = promiseWithResolvers<ReturnType<typeof fn>>();
+
+        /** Restore this stack's task, then let the stack resume. */
+        const resume = (deliver: () => ReturnType<typeof fn>): void =>
+            resumeInTurn(currentTaskMeta, () => {
                 currentTaskMeta[componentIdx] = saved;
                 if (!switchesTask) {
                     currentTaskMeta.current = saved;
                 }
-            }
-        })();
+
+                try {
+                    resumption.resolve(deliver());
+                } catch (error) {
+                    resumption.reject(recordTrap(context.traps, componentIdx, error, convertsRangeErrors));
+                }
+                return resumption.promise;
+            });
+
+        settled.then(
+            (result) =>
+                resume(() => {
+                    getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
+                    return result as ReturnType<typeof fn>;
+                }),
+            (error) =>
+                resume(() => {
+                    throw error;
+                }),
+        );
+        return resumption.promise;
     };
 };
+
+/**
+ * Resume a suspended stack once every stack resumed before it has run.
+ *
+ * A suspended stack continues in a job after the one which settles the promise
+ * it waits for. Were two stacks of a store released in the same turn, the
+ * second would restore its task before the first had continued, and the first
+ * would run as the second's task.
+ *
+ * @param registers The task registers of the store.
+ * @param release Restores the stack's task and settles the promise the stack
+ *   waits for, returning that promise.
+ */
+function resumeInTurn(registers: TaskRegisters, release: () => Promise<unknown>): void {
+    const previous = registers.resumed ?? Promise.resolve();
+    registers.resumed = previous.then(() =>
+        // The engine reacts to the promise before this does, so the stack has
+        // run until it suspended again or returned by the time this settles.
+        release().then(emptyFunc, emptyFunc),
+    );
+}
 function instantiateTrampoline(
     platform: ConditionalSuspendingPlatform,
     module: WebAssembly.Module | undefined,
