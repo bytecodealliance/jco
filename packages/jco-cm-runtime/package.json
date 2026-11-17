@@ -93,17 +93,20 @@
         }
     },
     "scripts": {
-        "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+        "build": "node scripts/build.mjs",
         "types:check": "tsc -p tsconfig.json",
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
         "test": "vitest run -c test/vitest.ts",
-        "prepack": "pnpm run build"
+        "prepack": "pnpm run build",
+        "build:release": "node scripts/build.mjs --profile release",
+        "build:lean": "node scripts/build.mjs --profile lean"
     },
     "devDependencies": {
         "@types/node": "^24.13.3",
+        "rolldown": "1.2.13",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }
