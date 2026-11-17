@@ -272,11 +272,13 @@ export function backpressureDec(context: ComponentStateLookupContext, componentI
 export function getOrCreateAsyncState(context: ComponentStateLookupContext, componentIdx: number) {
     const { asyncState, ComponentAsyncState } = context;
     let state = asyncState.get(componentIdx);
-    if (state === undefined) {
+
+    // An entry that is present but invalid is returned as it is, for the caller to report.
+    if (state === undefined && !asyncState.has(componentIdx)) {
         state = new ComponentAsyncState({ componentIdx });
         asyncState.set(componentIdx, state);
     }
-    return state;
+    return state!;
 }
 
 export function setAllError(states: Pick<ComponentAsyncStates, 'values'>) {
