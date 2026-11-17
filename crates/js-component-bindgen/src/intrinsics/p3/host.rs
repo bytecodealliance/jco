@@ -136,6 +136,9 @@ impl HostIntrinsic {
                     render_args.require_intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 output.push_str(&format!(
                   r#"
@@ -160,6 +163,12 @@ impl HostIntrinsic {
                             stringEncoding,
                             resultCountOrAsync,
                         }});
+
+                        // Canonical ABI `canon lower`: a call cannot leave an instance which may not be left.
+                        if (!{get_or_create_async_state_fn}callerComponentIdx).mayLeave) {{
+                            throw new {runtime_error_class}('cannot leave component instance');
+                        }}
+
                         const argArray = [...arguments];
 
                         // value passed in *may* be as large as u32::MAX which may be mangled into -2

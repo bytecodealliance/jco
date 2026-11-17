@@ -1812,6 +1812,7 @@ export interface HostPromisingPlatform {
 export interface HostPrepareContext extends TaskLookupContext, TrapContext {
     readonly creation: TaskCreateContext;
     readonly mayBlock: TaskMayBlockGlobal;
+    readonly lookup: ComponentStateLookupContext;
 }
 export interface HostSyncStartContext extends TaskLookupContext {
     readonly componentIdxs: readonly number[];

@@ -22,6 +22,7 @@ export function create(options: Options = {}) {
     const prepare: HostPrepareContext = {
         ...taskLookup,
         creation,
+        lookup,
         RuntimeError: core.RuntimeError,
         get mayBlock() {
             return asyncTask.currentTaskMayBlock;

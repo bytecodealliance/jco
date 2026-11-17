@@ -51,6 +51,7 @@ impl HostContextIntrinsic {
                 Task(TaskContextIntrinsic::GetCurrentTask),
                 Task(TaskContextIntrinsic::CreateNewCurrentImplicitThread),
                 Task(TaskContextIntrinsic::InitializeCurrentTaskMayBlock),
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
             ],
             Self::AsyncStartCall => &[
@@ -75,7 +76,7 @@ impl HostContextIntrinsic {
         let lookup = "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META";
         let properties = match self {
             Self::PrepareCall => format!(
-                "{lookup}, creation: _jcoTaskCreateContext, mayBlock: CURRENT_TASK_MAY_BLOCK, RuntimeError: WebAssemblyRuntimeError"
+                "{lookup}, creation: _jcoTaskCreateContext, mayBlock: CURRENT_TASK_MAY_BLOCK, lookup: _jcoComponentStateLookupContext, RuntimeError: WebAssemblyRuntimeError"
             ),
             Self::AsyncStartCall | Self::SyncStartCall => {
                 // Keep promising optional and lazy, with the selected namespace
@@ -240,7 +241,7 @@ mod tests {
                 .count(),
             1
         );
-        assert!(prepare.contains("creation: _jcoTaskCreateContext, mayBlock: CURRENT_TASK_MAY_BLOCK, RuntimeError: WebAssemblyRuntimeError"));
+        assert!(prepare.contains("creation: _jcoTaskCreateContext, mayBlock: CURRENT_TASK_MAY_BLOCK, lookup: _jcoComponentStateLookupContext, RuntimeError: WebAssemblyRuntimeError"));
         assert!(!prepare.contains("promising"));
     }
 }
