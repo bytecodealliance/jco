@@ -409,6 +409,30 @@ mod tests {
     use super::{NAMESPACE, PACKAGE, RUNTIME_SOURCE, link};
 
     #[test]
+    fn shipped_runtime_uses_only_reserved_globals() {
+        use super::{Allocator, Parser, SemanticBuilder, SourceType};
+        use crate::intrinsics::PLATFORM_GLOBALS;
+
+        // Bindings declare local names in the scope the runtime is bundled into,
+        // so a global the runtime uses must never be available as a local name.
+        let allocator = Allocator::default();
+        let parsed = Parser::new(&allocator, RUNTIME_SOURCE, SourceType::mjs()).parse();
+        let semantics = SemanticBuilder::new().build(&parsed.program);
+        let unreserved: Vec<_> = semantics
+            .semantic
+            .scoping()
+            .root_unresolved_references()
+            .keys()
+            .map(|name| name.as_str())
+            .filter(|name| !PLATFORM_GLOBALS.contains(name))
+            .collect();
+        assert!(
+            unreserved.is_empty(),
+            "the shipped runtime uses globals that are not reserved: {unreserved:?}"
+        );
+    }
+
+    #[test]
     fn shipped_runtime_names_its_version_and_commit() {
         let mut lines = RUNTIME_SOURCE.lines();
         let version = lines
