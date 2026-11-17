@@ -90,6 +90,22 @@
         "./intrinsics/stream": {
             "types": "./dist/intrinsics/stream.d.ts",
             "default": "./dist/intrinsics/stream.js"
+        },
+        "./debug": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/debug/index.js"
+        },
+        "./debug/*": {
+            "types": "./dist/*.d.ts",
+            "default": "./dist/debug/*.js"
+        },
+        "./unchecked": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/unchecked/index.js"
+        },
+        "./unchecked/*": {
+            "types": "./dist/*.d.ts",
+            "default": "./dist/unchecked/*.js"
         }
     },
     "scripts": {
@@ -100,9 +116,7 @@
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
         "test": "vitest run -c test/vitest.ts",
-        "prepack": "pnpm run build",
-        "build:release": "node scripts/build.mjs --profile release",
-        "build:lean": "node scripts/build.mjs --profile lean"
+        "prepack": "pnpm run build"
     },
     "devDependencies": {
         "@types/node": "^24.13.3",

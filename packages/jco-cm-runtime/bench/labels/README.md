@@ -13,7 +13,7 @@ Each opportunity has its own commit on `perf/glue-labels`:
 | Opportunity               | Implementation                                                                                                      |
 | ------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | Removable diagnostics     | `DEBUG` labels and audited internal `SAFETY` labels; canonical validation stays unconditional.                      |
-| Actual label stripping    | `build:release` and `build:lean` bundle public package entries with shared chunks.                                  |
+| Actual label stripping    | The `checked` and `unchecked` profiles bundle public package entries with shared chunks.                            |
 | UTF-16 counting           | Count code points during the existing surrogate-aware write.                                                        |
 | Context slots             | Resolve and validate thread storage without allocating thread metadata. No Wasm-side slots.                         |
 | Component lookup          | One `Map.get` for an existing component state.                                                                      |
@@ -78,8 +78,7 @@ pnpm types:check
 pnpm test
 pnpm exec vitest run -c bench/labels/vitest.config.mjs
 JCO_RUNTIME_DROP_LABELS=DEBUG,SAFETY pnpm exec vitest run -c bench/labels/vitest.config.mjs
-pnpm build:release
-pnpm build:lean
+pnpm build
 ```
 
 The full suite includes release/lean package builds and standalone runtime

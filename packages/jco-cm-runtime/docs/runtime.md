@@ -74,15 +74,64 @@ registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
 
-## Removing diagnostics when bundling
+## Runtime profiles
 
-Runtime diagnostic statements carry a `DEBUG` JavaScript label. The default build
-retains them and preserves `JCO_DEBUG` behavior. A bundler can remove the entire
-statement, including object literals, string formatting, and diagnostic getters
-passed as log arguments. Diagnostic arguments must not perform required work.
+Runtime diagnostic statements carry a `DEBUG` JavaScript label,
+and assertions about internal implementation invariants carry a `SAFETY` label.
+A profile is the choice of which labeled statements to keep:
 
-For example, when bundling bindings together with this external runtime using
-Rolldown:
+| Profile     | Diagnostics (`DEBUG`) | Internal assertions (`SAFETY`) | Package entry                                |
+| ----------- | --------------------- | ------------------------------ | -------------------------------------------- |
+| `checked`   | removed               | kept                           | `@bytecodealliance/jco-cm-runtime` (default) |
+| `debug`     | kept                  | kept                           | `@bytecodealliance/jco-cm-runtime/debug`     |
+| `unchecked` | removed               | removed                        | `@bytecodealliance/jco-cm-runtime/unchecked` |
+
+Removing a labeled statement removes the whole statement,
+including object literals, string formatting, and diagnostic getters passed as log arguments.
+Diagnostic arguments must not perform required work.
+
+Canonical ABI traps, resource-handle validation, Unicode validation, ownership, cancellation,
+and lifecycle checks are never labeled, and remain in every profile.
+The initial `SAFETY` assertion verifies the representation table's internal freelist head.
+Adding a `SAFETY` label requires auditing both the checked condition
+and any work performed while evaluating it.
+
+Only the `debug` profile logs: when `JCO_DEBUG` is set,
+or for bundled runtimes when an instance is created with the `debug` option.
+The other profiles omit runtime log calls even when `JCO_DEBUG` is set.
+The explicitly exported `debugLog` utility remains callable in every profile.
+
+### Bindings that bundle the runtime
+
+The transpiler applies a profile when it bundles the runtime into generated bindings.
+Select it with `runtimeProfile` (`--runtime-profile` on the command line); the default is `checked`.
+
+### Bindings that import the runtime
+
+Every profile has the same exports, type declarations, and runtime API version,
+so the profile is chosen by the base that bindings import:
+
+```sh
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime           # checked
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/debug     # debug
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/unchecked # unchecked
+```
+
+Modules of different profiles do not share state or private brands,
+so one program should import a single profile.
+
+### Building profiles
+
+`pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
+the `checked` profile at the top of `dist`, with `dist/debug` and `dist/unchecked` beside it.
+The `checked` and `unchecked` profiles are bundled and minified, one module per entry point with shared chunks;
+the `debug` profile keeps one module per source file.
+
+To build one profile into a directory of its own,
+run `node scripts/build.mjs --profile <profile> --out-dir /path/to/runtime` from this package,
+and use that directory as `cmRuntimeEsModule`.
+
+A bundler can also remove labels from the `debug` profile itself, for example with Rolldown:
 
 ```js
 const bundle = await rolldown({
@@ -91,42 +140,10 @@ const bundle = await rolldown({
 });
 ```
 
-The runtime must be included in the bundle, rather than marked external. Apply
-label removal before optimization passes that discard unused labels. TypeScript's
-normal JavaScript emit preserves these labels. Already minified or embedded
-runtime artifacts may no longer contain them.
+The runtime must be included in the bundle, rather than marked external.
+Apply label removal before optimization passes that discard unused labels.
 
-`SAFETY` is reserved for assertions about internal implementation invariants. The
-initial labeled assertion verifies the representation table's internal freelist
-head. It can be removed with `dropLabels: ['DEBUG', 'SAFETY']`. Canonical ABI traps,
-resource-handle validation, Unicode validation, ownership, cancellation, and
-lifecycle checks remain unconditional. Adding a `SAFETY` label requires auditing
-both the checked condition and any work performed while evaluating it.
-
-See the [label experiments](../bench/labels/README.md) for correctness checks and
-reproducible Node benchmarks. This package does not change the transpiler's default
-profile or expose a new transpiler option.
-
-### Built runtime profiles
-
-The package can also apply label stripping itself, before bundling its public
-entry points with shared chunks. All profiles retain the same package exports,
-type declarations, and runtime API version:
-
-```sh
-pnpm --filter @bytecodealliance/jco-cm-runtime build          # diagnostic modules
-pnpm --filter @bytecodealliance/jco-cm-runtime build:release  # drop DEBUG, bundle/minify
-pnpm --filter @bytecodealliance/jco-cm-runtime build:lean     # also drop audited SAFETY assertions
-```
-
-Each command replaces this package's `dist`. To keep multiple builds, run
-`node scripts/build.mjs --profile release --out-dir /path/to/runtime` from this
-package and use that directory as `cmRuntimeEsModule`. Bundle chunks share their
-state and private brands across entry points. The ordinary build and `prepack`
-retain diagnostics; a release or lean build omits runtime log calls even when
-`JCO_DEBUG` is set. The explicitly exported `debugLog` utility remains callable.
-Canonical ABI traps, Unicode checks, ownership checks, and cancellation remain
-active in every profile. No inline-runtime implementation is maintained here.
+See the [label experiments](../bench/labels/README.md) for correctness checks and reproducible Node benchmarks.
 
 ### Allocation and scheduling behavior
 
