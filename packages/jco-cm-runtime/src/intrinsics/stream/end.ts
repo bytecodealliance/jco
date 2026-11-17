@@ -421,6 +421,10 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
                 copyElemMeta.getReallocFn = args.getReallocFn;
             }
 
+            if (this.isCopying()) {
+                throw new _context.RuntimeError('cannot have concurrent operations active on a future/stream');
+            }
+
             if (this.hasPendingEvent()) {
                 const event = this.getPendingEvent()!;
                 if (event.code !== eventCode || event.payload0 !== this.waitableIdx()) {

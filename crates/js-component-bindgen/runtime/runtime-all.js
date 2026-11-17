@@ -9751,6 +9751,7 @@ function initializeStreamEndClass(_context) {
 			if (copyElemMeta.stringEncoding === void 0 && stringEncoding) copyElemMeta.stringEncoding = stringEncoding;
 			if (copyElemMeta.stringEncoding && stringEncoding && copyElemMeta.stringEncoding !== stringEncoding) throw new Error(`inconsistent string encoding (previously [${copyElemMeta.stringEncoding}], now [${stringEncoding}])`);
 			if (args.getReallocFn && copyElemMeta.getReallocFn === void 0) copyElemMeta.getReallocFn = args.getReallocFn;
+			if (this.isCopying()) throw new _context.RuntimeError("cannot have concurrent operations active on a future/stream");
 			if (this.hasPendingEvent()) {
 				const event = this.getPendingEvent();
 				if (event.code !== eventCode || event.payload0 !== this.waitableIdx()) throw new Error("invalid pending event during stream operation");
