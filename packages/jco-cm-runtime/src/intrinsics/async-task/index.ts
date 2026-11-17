@@ -33,7 +33,7 @@ export {
 } from './initializers.js';
 export { initializeAsyncTaskClass } from './async-task.js';
 export { initializeAsyncSubtaskClass } from './async-subtask.js';
-export { contextSet, contextGet, guardCannotLeave } from './context.js';
+export { contextSet, contextGet, contextSlotAccessor, guardCannotLeave } from './context.js';
 export { subtaskDrop, subtaskCancel } from './subtask-operations.js';
 export { unpackCallbackResult } from './callback.js';
 export { driverLoop } from './driver.js';

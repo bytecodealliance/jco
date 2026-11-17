@@ -23,6 +23,7 @@ import { getOrCreateAsyncState, postReturnTrap, recordTrap } from '../component.
 import { debugLog } from '../core/debug.js';
 import { coinFlip as _coinFlip } from '../core.js';
 import { clearCurrentThread } from './task-operations.js';
+import { syncContextSlots } from './context.js';
 
 const TASK_INITIAL = 'initial';
 const TASK_CANCELLED = 'cancelled';
@@ -1172,6 +1173,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                 cstate.threads.remove(thread.id());
             }
             this.#threads = this.#threads.filter((t) => t !== thread);
+            syncContextSlots(_registers);
             if (this.#exited && this.#threads.length === 0) {
                 clearCurrentThread(_clearing, this.#componentIdx, this.#id);
             }
@@ -1198,6 +1200,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
             thread.setId(cstate.threads.insert(thread));
             this.#threads.push(thread);
+            syncContextSlots(_registers);
             return thread;
         }
 
