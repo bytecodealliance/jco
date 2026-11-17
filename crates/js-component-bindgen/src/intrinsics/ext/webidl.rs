@@ -1,8 +1,7 @@
 //! Web IDL proxy imports and per-instance cache ownership.
 use super::{RuntimeContextIntrinsic, RuntimeImport, RuntimeImportKind};
 use crate::intrinsics::webidl::WebIdlIntrinsic;
-#[cfg(test)]
-use crate::source::Source;
+
 pub(crate) fn import(intrinsic: WebIdlIntrinsic) -> RuntimeImport {
     match intrinsic {
         WebIdlIntrinsic::GlobalThisIdlProxy => RuntimeImport {
@@ -22,6 +21,7 @@ mod tests {
         Intrinsic, RenderIntrinsicsArgs, ext::ExternalRuntime, render_intrinsics,
         runtime::IntrinsicRuntime,
     };
+    use crate::source::Source;
     use std::collections::BTreeSet;
 
     #[test]
