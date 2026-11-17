@@ -36,7 +36,7 @@ export function prepareCall(
     resultCountOrAsync: number,
     ...params: unknown[]
 ): ReturnType<HostModule['prepareCall']> {
-    debugLog('[_prepareCall()]', {
+    DEBUG: debugLog('[_prepareCall()]', {
         memoryIdx,
         callerComponentIdx,
         calleeComponentIdx,
@@ -194,7 +194,7 @@ export function asyncStartCall(
     const taskID = globalTaskMeta.taskID;
     const threadID = globalTaskMeta.threadID;
 
-    debugLog('[_asyncStartCall()] args', { args, componentIdx });
+    DEBUG: debugLog('[_asyncStartCall()] args', { args, componentIdx });
     const { getCallbackFn, callbackIdx, getPostReturnFn } = args;
 
     const preparedTaskMeta = getCurrentTask(_context, componentIdx, taskID);
@@ -261,7 +261,7 @@ export function asyncStartCall(
     // NOTE: during fused guest->guest calls this handler is triggered, but does not actually perform
     // lowering manually, as fused modules provider helper functions that can
     subtask.registerOnResolveHandler((res) => {
-        debugLog('[_asyncStartCall()] handling subtask result', { res, subtaskID: subtask.id() });
+        DEBUG: debugLog('[_asyncStartCall()] handling subtask result', { res, subtaskID: subtask.id() });
 
         // Cancelled resolutions carry no value; there is nothing to lower
         if (!subtask.isReturned()) {
@@ -286,7 +286,7 @@ export function asyncStartCall(
         // If a helper function was provided we are likely in a fused guest->guest call,
         // and the result will be delivered (lift/lowered) via helper function
         if (subtaskCallMeta && subtaskCallMeta.returnFn) {
-            debugLog(
+            DEBUG: debugLog(
                 '[_asyncStartCall()] return function present while handling subtask result, returning early (skipping lower)',
                 {
                     calleeTaskID: calleeTask.id(),
@@ -307,7 +307,7 @@ export function asyncStartCall(
             });
             subtaskCallMeta.returnFnCalled = true;
 
-            debugLog('[_asyncStartCall()] finished calling return fn', {
+            DEBUG: debugLog('[_asyncStartCall()] finished calling return fn', {
                 calleeTaskID: calleeTask.id(),
                 calleeComponentIdx,
                 res,
@@ -318,7 +318,7 @@ export function asyncStartCall(
 
         // If there is no where to lower the results, exit early
         if (!subtaskCallMeta.resultPtr) {
-            debugLog(
+            DEBUG: debugLog(
                 '[_asyncStartCall()] no result ptr during subtask result handling, returning early (skipping lower)',
             );
             return;
@@ -340,26 +340,26 @@ export function asyncStartCall(
         }
 
         if (!callerMemory) {
-            debugLog('[_asyncStartCall()] missing memory', { subtaskID: subtask.id(), res });
+            DEBUG: debugLog('[_asyncStartCall()] missing memory', { subtaskID: subtask.id(), res });
             throw new Error(`missing memory for to guest->guest call result (subtask [${subtask.id()}])`);
         }
 
         const lowerFns = calleeTask.getReturnLowerFns();
         if (!lowerFns || lowerFns.length === 0) {
-            debugLog('[_asyncStartCall()] missing result lower metadata for guest->guest call', {
+            DEBUG: debugLog('[_asyncStartCall()] missing result lower metadata for guest->guest call', {
                 subtaskID: subtask.id(),
             });
             throw new Error(`missing result lower metadata for guest->guest call (subtask [${subtask.id()}])`);
         }
 
         if (lowerFns.length !== 1) {
-            debugLog('[_asyncStartCall()] only single result reportetd for guest->guest call', {
+            DEBUG: debugLog('[_asyncStartCall()] only single result reportetd for guest->guest call', {
                 subtaskID: subtask.id(),
             });
             throw new Error(`only single result supported for guest->guest calls (subtask [${subtask.id()}])`);
         }
 
-        debugLog('[_asyncStartCall()] lowering results', { subtaskID: subtask.id() });
+        DEBUG: debugLog('[_asyncStartCall()] lowering results', { subtaskID: subtask.id() });
         lowerFns[0]({
             realloc: undefined,
             memory: callerMemory,
@@ -399,7 +399,7 @@ export function asyncStartCall(
 
     const handleCalleeError = (err: unknown) => {
         preparedTask.endFirstSlice();
-        debugLog('[_asyncStartCall()] initial subtask callee run failed', err);
+        DEBUG: debugLog('[_asyncStartCall()] initial subtask callee run failed', err);
         _context.driver.reportTrap?.(err as Error);
         // NOTE: a good place to reject the parent task, if rejection API is enabled
         // subtask.reject(err);
@@ -418,7 +418,7 @@ export function asyncStartCall(
         // If there was no callback function, we're dealing with a sync function
         // that was lifted as async without one, there is only the callee.
         if (!callbackFn) {
-            debugLog('[_asyncStartCall()] no callback, resolving w/ callee result', {
+            DEBUG: debugLog('[_asyncStartCall()] no callback, resolving w/ callee result', {
                 taskID: preparedTask.id(),
                 componentIdx: preparedTask.componentIdx(),
                 preparedTask,
@@ -456,7 +456,7 @@ export function asyncStartCall(
             ].join('');
         }
 
-        debugLog('[_asyncStartCall()] starting driver loop', {
+        DEBUG: debugLog('[_asyncStartCall()] starting driver loop', {
             fnName,
             componentIdx: preparedTask.componentIdx(),
             subtaskID: subtask.id(),
@@ -517,7 +517,7 @@ export function asyncStartCall(
         try {
             await driveCallback(callbackResult);
         } catch (err) {
-            debugLog('[AsyncStartCall] drive loop call failure', { err });
+            DEBUG: debugLog('[AsyncStartCall] drive loop call failure', { err });
         }
     };
 
@@ -550,7 +550,7 @@ export function asyncStartCall(
         }
 
         driveCallback(callbackResult)?.catch((err) => {
-            debugLog('[AsyncStartCall] drive loop call failure', { err });
+            DEBUG: debugLog('[AsyncStartCall] drive loop call failure', { err });
         });
     };
 
@@ -599,7 +599,7 @@ export function asyncStartCall(
         };
         setTimeout(async () => {
             try {
-                debugLog('[_asyncStartCall()] continuing started subtask (in JS task)', {
+                DEBUG: debugLog('[_asyncStartCall()] continuing started subtask (in JS task)', {
                     taskID: preparedTask.id(),
                     subtaskID: subtask.id(),
                     callerComponentIdx,
@@ -613,7 +613,7 @@ export function asyncStartCall(
                     calleeComponentState.removePendingTaskStart();
                 }
                 if (!started) {
-                    debugLog('[_asyncStartCall()] task failed early', {
+                    DEBUG: debugLog('[_asyncStartCall()] task failed early', {
                         taskID: preparedTask.id(),
                         subtaskID: subtask.id(),
                     });
@@ -662,7 +662,7 @@ export function asyncStartCall(
         throw new Error('invalid subtask state, out of valid range');
     }
 
-    debugLog('[_asyncStartCall()] returning subtask rep & state', {
+    DEBUG: debugLog('[_asyncStartCall()] returning subtask rep & state', {
         subtask: {
             rep: subtask.waitableRep(),
             state: subtaskState,
@@ -709,7 +709,7 @@ export async function syncStartCall(
     const taskID = globalTaskMeta.taskID;
     const threadID = globalTaskMeta.threadID;
 
-    debugLog('[_syncStartCall()] args', { args, paramCount, componentIdx });
+    DEBUG: debugLog('[_syncStartCall()] args', { args, paramCount, componentIdx });
     const { getCallbackFn, callbackIdx } = args;
 
     const preparedTaskMeta = getCurrentTask(_context, componentIdx, taskID);
@@ -778,7 +778,7 @@ export async function syncStartCall(
         // the callee resolves (this handler is the fallback ordering guard,
         // mirroring _asyncStartCall).
         subtask.registerOnResolveHandler((res) => {
-            debugLog('[_syncStartCall()] handling subtask result', { res, subtaskID: subtask.id() });
+            DEBUG: debugLog('[_syncStartCall()] handling subtask result', { res, subtaskID: subtask.id() });
             if (!subtask.isReturned()) {
                 return;
             }
@@ -830,7 +830,7 @@ export async function syncStartCall(
         }
 
         const failCalleeLifecycle = (err: unknown) => {
-            debugLog('[_syncStartCall()] callee lifecycle failed', { err });
+            DEBUG: debugLog('[_syncStartCall()] callee lifecycle failed', { err });
 
             // The initial slice owns component entry until it either hands
             // control to the callback driver or fails. A failure has no driver
@@ -877,7 +877,7 @@ export async function syncStartCall(
                 if (!callbackFn) {
                     // A sync lift returns its value here; a stackful async lift
                     // has already supplied it through task.return.
-                    debugLog('[_syncStartCall()] no callback, resolving w/ callee result', {
+                    DEBUG: debugLog('[_syncStartCall()] no callback, resolving w/ callee result', {
                         taskID: preparedTask.id(),
                         componentIdx: preparedTask.componentIdx(),
                     });
@@ -892,7 +892,7 @@ export async function syncStartCall(
                 }
 
                 const fnName = callbackFn.fnName ?? '<sync-start subtask ' + subtask.id() + '>';
-                debugLog('[_syncStartCall()] starting driver loop', {
+                DEBUG: debugLog('[_syncStartCall()] starting driver loop', {
                     fnName,
                     componentIdx: preparedTask.componentIdx(),
                     subtaskID: subtask.id(),
@@ -923,7 +923,7 @@ export async function syncStartCall(
 
         const callMeta = subtask.getCallMetadata();
         const flatResult = callMeta?.returnFnResult;
-        debugLog('[_syncStartCall()] returning flat result', {
+        DEBUG: debugLog('[_syncStartCall()] returning flat result', {
             flatResult,
             subtaskID: subtask.id(),
             taskID: preparedTask.id(),
@@ -943,7 +943,7 @@ export async function syncStartCall(
 export function storeEventInComponentMemory(
     args: StoreEventOptions,
 ): ReturnType<HostModule['storeEventInComponentMemory']> {
-    debugLog('[_storeEventInComponentMemory()] args', args);
+    DEBUG: debugLog('[_storeEventInComponentMemory()] args', args);
     const { memory, ptr, event } = args;
 
     if (!memory) {

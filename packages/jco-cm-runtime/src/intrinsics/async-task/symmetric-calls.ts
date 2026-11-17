@@ -17,7 +17,7 @@ export function symmetricSyncGuestCallEnter(
     calleeComponentIdx: number,
     syncOnly = false,
 ): ReturnType<AsyncTaskModule['symmetricSyncGuestCallEnter']> {
-    debugLog('[_symmetricSyncGuestCallEnter()] args', {
+    DEBUG: debugLog('[_symmetricSyncGuestCallEnter()] args', {
         callerComponentIdx,
         calleeIsAsync,
         calleeComponentIdx,
@@ -87,7 +87,7 @@ export function symmetricSyncGuestCallEnter(
             previousTaskMayBlock: (_context.mayBlock as TaskMutableRegister).value,
         });
         (_context.mayBlock as TaskMutableRegister).value = newTask.mayBlock() ? 1 : 0;
-        debugLog('[_symmetricSyncGuestCallEnter()] finished preparing', {
+        DEBUG: debugLog('[_symmetricSyncGuestCallEnter()] finished preparing', {
             callerComponentIdx,
             calleeComponentIdx,
             subtaskID: subtask.id(),
@@ -130,7 +130,7 @@ export function symmetricSyncGuestCallExit(
     if (!task) {
         throw new Error('missing current caller task');
     }
-    debugLog('[_symmetricSyncGuestCallExit()] exiting', {
+    DEBUG: debugLog('[_symmetricSyncGuestCallExit()] exiting', {
         componentIdx,
         taskID: task.id(),
         subtask: task.getParentSubtask(),

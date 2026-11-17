@@ -19,7 +19,7 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
         #writeEnd: StreamWritableEnd;
 
         constructor(args: InternalStreamOptions) {
-            debugLog('[InternalStream#constructor()] args', args);
+            DEBUG: debugLog('[InternalStream#constructor()] args', args);
             if (!args.elemMeta) {
                 throw new Error('missing/invalid stream element metadata');
             }

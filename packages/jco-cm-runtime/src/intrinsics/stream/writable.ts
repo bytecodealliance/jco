@@ -1,3 +1,4 @@
+import { transferBuffer } from '../buffers.js';
 import type {
     StreamWritableEndConstructor,
     StreamEndpointClassContext,
@@ -15,7 +16,7 @@ export function initializeStreamWritableEndClass(_context: StreamEndpointClassCo
         #sourceRebufferFn: ((items: unknown[]) => void) | null = null;
 
         constructor(args: StreamEndOptions) {
-            debugLog('[StreamWritableEnd#constructor()] args', args);
+            DEBUG: debugLog('[StreamWritableEnd#constructor()] args', args);
             super(args);
             this.#elemMeta = args.elemMeta;
         }
@@ -32,7 +33,7 @@ export function initializeStreamWritableEndClass(_context: StreamEndpointClassCo
         }
 
         async write(v: unknown) {
-            debugLog('[StreamWritableEnd#write()] args', { v });
+            DEBUG: debugLog('[StreamWritableEnd#write()] args', { v });
 
             let data;
             if (this.#elemMeta.isNumeric) {
@@ -54,7 +55,7 @@ export function initializeStreamWritableEndClass(_context: StreamEndpointClassCo
          * for a guest read, so a write the reader has not taken yet stays pending and is not awaited.
          */
         async writeMany(values: unknown[], opts: { dropAfterCopy?: boolean } = {}) {
-            debugLog('[StreamWritableEnd#writeMany()] args', { values });
+            DEBUG: debugLog('[StreamWritableEnd#writeMany()] args', { values });
             if (!Array.isArray(values)) {
                 throw new TypeError('writeMany values must be an array');
             }
@@ -174,9 +175,7 @@ export function initializeStreamWritableEndClass(_context: StreamEndpointClassCo
                 }
                 const numElements = Math.min(buffer.remaining(), pending.buffer.remaining());
                 const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-                pending.buffer.write(buffer.read(numElements, { transferResources }), {
-                    transferResources,
-                });
+                transferBuffer(buffer, pending.buffer, numElements, { transferResources });
                 pending.onCopyFn!(
                     () => this.resetPendingBufferMeta(),
                     shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,

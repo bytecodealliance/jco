@@ -217,7 +217,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
         }
 
         setPendingEvent(fn: () => StreamEvent) {
-            debugLog('[StreamEnd#setPendingEvent()]', {
+            DEBUG: debugLog('[StreamEnd#setPendingEvent()]', {
                 waitable: this.#waitable,
                 waitableinSet: this.#waitable.isInSet(),
                 componentIdx: this.#waitable.componentIdx(),
@@ -248,7 +248,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
         }
 
         getPendingEvent() {
-            debugLog('[StreamEnd#getPendingEvent()]', {
+            DEBUG: debugLog('[StreamEnd#getPendingEvent()]', {
                 waitable: this.#waitable,
                 waitableinSet: this.#waitable.isInSet(),
                 componentIdx: this.#waitable.componentIdx(),
@@ -486,7 +486,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
                 const waitableIdx = this.getWaitable().idx();
                 if (code !== eventCode || index !== waitableIdx || payload === asyncBlockedCode) {
                     const errMsg = 'invalid event code/event during stream operation';
-                    debugLog(errMsg, {
+                    DEBUG: debugLog(errMsg, {
                         event,
                         payload,
                         payloadIsBlockedConst: payload === asyncBlockedCode,
@@ -513,7 +513,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
             if (!this.hasPendingEvent()) {
                 if (isAsync) {
                     this.setCopyState(StreamEnd.CopyState.ASYNC_COPYING);
-                    debugLog('[StreamEnd#copy()] blocked', { componentIdx, eventCode, self: this });
+                    DEBUG: debugLog('[StreamEnd#copy()] blocked', { componentIdx, eventCode, self: this });
                     if (injectedWritePromise) {
                         // Do not await here: the injected write may depend on sibling
                         // guest work running, so the canonical read must return BLOCKED.
@@ -615,7 +615,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
         }
 
         cancel() {
-            debugLog('[StreamEnd#cancel()]');
+            DEBUG: debugLog('[StreamEnd#cancel()]');
             const completeCancel = () => {
                 if (this.isDropped()) {
                     return;
@@ -655,7 +655,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
         }
 
         drop(opts: { allowPendingEvent?: boolean } = {}) {
-            debugLog('[StreamEnd#drop()]', {
+            DEBUG: debugLog('[StreamEnd#drop()]', {
                 waitable: this.#waitable,
                 waitableinSet: this.#waitable.isInSet(),
                 componentIdx: this.#waitable.componentIdx(),

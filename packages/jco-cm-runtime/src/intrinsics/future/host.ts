@@ -25,7 +25,7 @@ export function initializeHostFutureClass(_context: HostFutureClassContext): Hos
         #rep: number | null = null;
 
         constructor(args: HostFutureOptions) {
-            debugLog('[HostFuture#constructor()] args', args);
+            DEBUG: debugLog('[HostFuture#constructor()] args', args);
             if (args.componentIdx === undefined) {
                 throw new TypeError('missing component idx');
             }

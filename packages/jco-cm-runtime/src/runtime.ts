@@ -346,6 +346,8 @@ export interface TaskMeta {
 }
 export interface TaskRegisters {
     [componentIdx: number]: TaskMeta | null | undefined;
+    /** Register of host tasks, whose component index of -1 is not an array index. */
+    host?: TaskMeta | null;
     current?: TaskMeta | null;
     /**
      * Context slots in force in place of those of any thread. Set while a guest function wrapped
@@ -411,6 +413,7 @@ export interface RepTableConstructor {
 }
 /** Context passed to the generated element lift/lower functions. */
 export interface BufferElementContext {
+    memoryView?: DataView;
     storagePtr: number;
     memory: RuntimeMemory;
     componentIdx: number;
@@ -454,6 +457,10 @@ export interface ManagedBufferOptions {
     target?: unknown;
 }
 export interface ManagedBuffer {
+    /** Optional bulk byte capability; false falls back to resource-aware read/write. */
+    readonly copyTo?: (target: ManagedBuffer, count: number) => boolean;
+    /** An owned byte chunk, or undefined when the provider requires generic reads. */
+    readonly readBytes?: (count: number) => Uint8Array | undefined;
     capacity: number;
     processed: number;
     target: unknown;
@@ -820,6 +827,8 @@ export interface ComponentAsyncStateConstructor {
     };
 }
 export interface ComponentStoreAsyncState {
+    /** Host completions in one microtask checkpoint share a scheduler wakeup. */
+    hostWakeupScheduled?: boolean;
     readonly idleWaiters: Set<() => void>;
     // Opaque host timer handle, kept portable between Node and browsers.
     deadlockCheck: unknown | null;
@@ -1234,6 +1243,8 @@ export type TaskCallback = ((...args: number[]) => number | Promise<number>) & {
 export type TaskPostReturn = (value: unknown) => unknown;
 
 export interface TaskLiftContext {
+    /** Cached view; runtime operations refresh it when the memory buffer changes. */
+    memoryView?: DataView;
     componentIdx: number;
     params: unknown[];
     memory?: RuntimeMemory | null;
@@ -1249,6 +1260,8 @@ export interface TaskLiftContext {
 export type TaskLiftFn = (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
 
 export interface TaskLowerContext {
+    /** Cached view; runtime operations refresh it when the memory buffer changes. */
+    memoryView?: DataView;
     componentIdx: number;
     params?: unknown[];
     useDirectParams?: boolean;
@@ -2793,6 +2806,8 @@ export interface PendingValueQueue {
     readonly push: (source: StreamChunk) => number;
     readonly appendReadValue: (value: unknown) => number;
     readonly readSource: () => Promise<number>;
+    /** Optional synchronous completion capability for ready sources. */
+    readonly readSourceOrPromise?: () => number | Promise<number>;
     readonly prepend: (source: StreamChunk) => void;
     readonly drainInto: (target: unknown[], maxCount: number) => number;
 }

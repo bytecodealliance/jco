@@ -1,7 +1,9 @@
+import { createBufferContext } from './call-context.js';
 import type {
     RuntimeMemory,
     ManagedBufferOptions,
     ManagedBuffer,
+    ManagedBuffer as ManagedBufferType,
     BufferElementMetadata,
     BufferElementContext,
     CreateBufferOptions,
@@ -25,6 +27,10 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
         capacity: number;
         processed = 0;
         #hostOnlyData!: unknown[]; // initial data (only filled out for host-owned)
+        #hostBytes: Uint8Array | null = null;
+        #hostByteLength = 0;
+        #hostOffset = 0;
+        #hostDataBorrowed = true;
         target: unknown;
 
         static validateGuestBuffer(
@@ -103,8 +109,86 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
             return !this.#memory;
         }
 
+        /** Copy bytes in bulk; return false for another provider or a non-byte payload. */
+        copyTo(target: ManagedBufferType, count: number): boolean {
+            if (
+                target === this ||
+                !(target instanceof ManagedBuffer) ||
+                this.#elemMeta.payloadTypeName !== 'U8' ||
+                target.#elemMeta.payloadTypeName !== 'U8'
+            ) {
+                return false;
+            }
+            if (
+                (!this.#memory && !this.#hostBytes) ||
+                (!target.#memory && !target.#hostBytes && target.#hostOnlyData.length !== 0)
+            ) {
+                return false;
+            }
+            if (!Number.isInteger(count) || count < 0 || count > this.remaining() || count > target.remaining()) {
+                throw new RangeError('byte copy exceeds remaining buffer capacity');
+            }
+            const source = this.#memory
+                ? new Uint8Array(this.#memory.buffer, this.#ptr, count)
+                : this.#hostBytes!.subarray(this.#hostOffset, this.#hostOffset + count);
+            if (source.length !== count) {
+                throw new RangeError('byte copy exceeds available host data');
+            }
+            if (target.#memory) {
+                new Uint8Array(target.#memory.buffer, target.#ptr, count).set(source);
+                target.#ptr += count;
+            } else {
+                const length = target.#hostByteLength + count;
+                if (!target.#hostBytes || target.#hostBytes.length < length) {
+                    const bytes = new Uint8Array(
+                        Math.min(target.capacity, Math.max(length, (target.#hostBytes?.length ?? 0) * 2, 64)),
+                    );
+                    if (target.#hostBytes) {
+                        bytes.set(target.#hostBytes.subarray(0, target.#hostByteLength));
+                    }
+                    target.#hostBytes = bytes;
+                }
+                target.#hostBytes.set(source, target.#hostByteLength);
+                target.#hostByteLength = length;
+            }
+            if (this.#memory) {
+                this.#ptr += count;
+            } else {
+                this.#hostOffset += count;
+            }
+            this.processed += count;
+            target.processed += count;
+            return true;
+        }
+
+        /** Return an owned byte chunk; guest memory never escapes to the host. */
+        readBytes(count: number): Uint8Array | undefined {
+            if (this.#elemMeta.payloadTypeName !== 'U8' || (!this.#memory && !this.#hostBytes)) {
+                return undefined;
+            }
+            if (!Number.isInteger(count) || count <= 0 || count > this.capacity) {
+                throw new RangeError('invalid byte read count');
+            }
+            let bytes: Uint8Array;
+            if (this.#memory) {
+                bytes = new Uint8Array(this.#memory.buffer, this.#ptr, count).slice();
+                this.#ptr += count;
+            } else {
+                if (this.#hostOffset + count > this.#hostByteLength) {
+                    throw new RangeError('byte read exceeds available host data');
+                }
+                bytes = this.#hostBytes!.slice(this.#hostOffset, this.#hostOffset + count);
+                this.#hostOffset += count;
+            }
+            this.processed += count;
+            return bytes;
+        }
+
         read(count: number, opts: { transferResources?: boolean } = {}): unknown[] {
-            debugLog('[ManagedBuffer#read()] args', { count });
+            DEBUG: debugLog('[ManagedBuffer#read()] args', { count });
+            if (this.#hostBytes) {
+                return Array.from(this.readBytes(count)!);
+            }
             if (count === undefined || count <= 0) {
                 throw new TypeError(`missing/invalid count [${count}]`);
             }
@@ -119,8 +203,23 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                 values = [...new Array(count)].map(() => null);
             } else {
                 if (this.isHostOwned()) {
-                    values = this.#hostOnlyData.slice(0, count);
-                    this.#hostOnlyData = this.#hostOnlyData.slice(count);
+                    values = this.#hostOnlyData.slice(this.#hostOffset, this.#hostOffset + count);
+                    if (this.#hostDataBorrowed) {
+                        // Preserve snapshots held by the caller of the constructor.
+                        this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset + count);
+                        this.#hostDataBorrowed = false;
+                        this.#hostOffset = 0;
+                    } else {
+                        this.#hostOnlyData.fill(undefined, this.#hostOffset, this.#hostOffset + count);
+                        this.#hostOffset += count;
+                        if (this.#hostOffset === this.#hostOnlyData.length) {
+                            this.#hostOnlyData = [];
+                            this.#hostOffset = 0;
+                        } else if (this.#hostOffset >= 1024 && this.#hostOffset * 2 >= this.#hostOnlyData.length) {
+                            this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
+                            this.#hostOffset = 0;
+                        }
+                    }
                 } else if (this.#elemMeta.payloadTypeName === 'U8') {
                     values = Array.from(new Uint8Array(this.#memory!.buffer, this.#ptr, count));
                     this.#ptr += count;
@@ -130,7 +229,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                     if (this.#elemMeta.stringEncoding === undefined) {
                         throw new Error('string encoding unknown during read');
                     }
-                    let liftCtx: BufferElementContext = {
+                    let liftCtx: BufferElementContext = createBufferContext({
                         storagePtr: startPtr,
                         memory: this.#memory!,
                         componentIdx: this.#componentIdx,
@@ -141,7 +240,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                                   return { rep };
                               }
                             : undefined,
-                    };
+                    });
                     if (currentCount < 0) {
                         throw new Error('unexpectedly invalid count');
                     }
@@ -159,7 +258,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
         }
 
         write(values: unknown[], opts: { transferResources?: boolean } = {}): void {
-            debugLog('[ManagedBuffer#write()] args', { values });
+            DEBUG: debugLog('[ManagedBuffer#write()] args', { values });
 
             if (!Array.isArray(values)) {
                 throw new TypeError('values input to write() must be an array');
@@ -177,7 +276,23 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                 }
             } else {
                 if (this.isHostOwned()) {
-                    this.#hostOnlyData = this.#hostOnlyData.concat(values);
+                    if (this.#hostBytes) {
+                        this.#hostOnlyData = Array.from(
+                            this.#hostBytes.subarray(this.#hostOffset, this.#hostByteLength),
+                        );
+                        this.#hostBytes = null;
+                        this.#hostByteLength = 0;
+                        this.#hostOffset = 0;
+                        this.#hostDataBorrowed = false;
+                    }
+                    if (this.#hostDataBorrowed) {
+                        this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
+                        this.#hostOffset = 0;
+                        this.#hostDataBorrowed = false;
+                    }
+                    for (const value of values) {
+                        this.#hostOnlyData.push(value);
+                    }
                 } else if (this.#elemMeta.payloadTypeName === 'U8') {
                     new Uint8Array(this.#memory!.buffer, this.#ptr, values.length).set(values as number[]);
                     this.#ptr += values.length;
@@ -187,7 +302,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                         throw new Error('string encoding unknown during write');
                     }
 
-                    const lowerCtx: BufferElementContext = {
+                    const lowerCtx: BufferElementContext = createBufferContext({
                         memory: this.#memory!,
                         storagePtr: startPtr,
                         componentIdx: this.#componentIdx,
@@ -205,7 +320,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                                   return tableCreateOwn(context.indexSpaces, table, value.rep);
                               }
                             : undefined,
-                    };
+                    });
                     for (const v of values) {
                         lowerCtx.vals = [v];
                         this.#elemMeta.lowerFn!(lowerCtx);
@@ -239,12 +354,12 @@ export function initializeBufferManagerClass(ManagedBuffer: ManagedBufferConstru
         }
 
         getBuffer(componentIdx: number, bufferID: bigint) {
-            debugLog('[BufferManager#getBuffer()] args', { componentIdx, bufferID });
+            DEBUG: debugLog('[BufferManager#getBuffer()] args', { componentIdx, bufferID });
             return this.#buffers.get(componentIdx)?.get(bufferID);
         }
 
         createBuffer(args: CreateBufferOptions) {
-            debugLog('[BufferManager#createBuffer()] args', args);
+            DEBUG: debugLog('[BufferManager#createBuffer()] args', args);
             if (!args || typeof args !== 'object') {
                 throw new TypeError('missing/invalid argument object');
             }
@@ -291,10 +406,23 @@ export function initializeBufferManagerClass(ManagedBuffer: ManagedBufferConstru
         }
 
         deleteBuffer(componentIdx: number, bufferID: bigint) {
-            debugLog('[BufferManager#deleteBuffer()] args', { componentIdx, bufferID });
+            DEBUG: debugLog('[BufferManager#deleteBuffer()] args', { componentIdx, bufferID });
             return this.#buffers.get(componentIdx)?.delete(bufferID);
         }
     }
 
     return BufferManager;
+}
+
+/** Prefer a provider's bulk byte copy and retain the generic resource-aware fallback. */
+export function transferBuffer(
+    source: ManagedBuffer,
+    target: ManagedBuffer,
+    count: number,
+    options: { transferResources?: boolean } = {},
+): void {
+    if (source.copyTo?.(target, count)) {
+        return;
+    }
+    target.write(source.read(count, options), options);
 }

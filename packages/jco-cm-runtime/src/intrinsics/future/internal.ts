@@ -20,7 +20,7 @@ export function initializeInternalFutureClass(_context: InternalFutureClassConte
         #writeEnd: FutureWritableEnd;
 
         constructor(args: InternalFutureOptions) {
-            debugLog('[InternalFuture#constructor()] args', args);
+            DEBUG: debugLog('[InternalFuture#constructor()] args', args);
             if (!args.elemMeta) {
                 throw new Error('missing/invalid future element metadata');
             }

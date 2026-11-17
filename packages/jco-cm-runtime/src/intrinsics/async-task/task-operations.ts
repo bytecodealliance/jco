@@ -1,3 +1,5 @@
+import { createLiftContext } from '../call-context.js';
+import { scalarLiftValue } from '../scalar-lift.js';
 import type {
     TaskReturnRuntimeContext,
     TaskReturnOptions,
@@ -12,7 +14,7 @@ import type {
     AsyncTaskMeta,
     TaskIdentity,
 } from '../../runtime.js';
-import { getCurrentTaskMeta, withCurrentTaskMeta } from '../task-context.js';
+import { getCurrentTaskMeta, registerSlot, withCurrentTaskMeta } from '../task-context.js';
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 
@@ -39,7 +41,7 @@ export function getCurrentTask<T extends TaskIdentity = AsyncTask>(
     // stack resumes). The component's most recently created task may
     // be another one, e.g. a prepared callee that has not entered yet
     // while an earlier task of the component is suspended.
-    const current = _context.registers[componentIdx];
+    const current = _context.registers[registerSlot(componentIdx)];
     if (current && current.taskID !== undefined) {
         const currentMeta = taskMetas.find((meta) => meta.task.id() === current.taskID);
         if (currentMeta) {
@@ -58,7 +60,7 @@ export function createNewCurrentImplicitThread<T extends AsyncTask = AsyncTask>(
     _context: TaskCreateContext<T>,
     args: CreateTaskOptions,
 ): { task: T; taskID: bigint; thread: ReturnType<T['addThread']>; threadID: number } {
-    debugLog('[createNewCurrentImplicitThread()] args', args);
+    DEBUG: debugLog('[createNewCurrentImplicitThread()] args', args);
     const {
         componentIdx,
         isAsync,
@@ -116,7 +118,7 @@ export function clearCurrentThread<T extends TaskIdentity = AsyncTask>(
     taskID?: bigint,
     options: { preserveTask?: boolean } = {},
 ): T | undefined {
-    debugLog('[clearCurrentThread()] args', { componentIdx, taskID });
+    DEBUG: debugLog('[clearCurrentThread()] args', { componentIdx, taskID });
     if (componentIdx === undefined || componentIdx === null) {
         throw new Error('missing/invalid component instance index while ending current task');
     }
@@ -127,19 +129,34 @@ export function clearCurrentThread<T extends TaskIdentity = AsyncTask>(
     if (tasks.length == 0) {
         throw new Error(`no current tasks for component instance [${componentIdx}] while ending task`);
     }
-    const taskIdx = taskID === undefined ? tasks.length - 1 : tasks.findIndex((meta) => meta.id === taskID);
+    // Calls nest, so the task being cleared is nearly always the most recent one.
+    // Look there first, and pop rather than splice, which allocates on every call.
+    const lastIdx = tasks.length - 1;
+    const taskIdx =
+        taskID === undefined || tasks[lastIdx].id === taskID ? lastIdx : tasks.findIndex((meta) => meta.id === taskID);
     if (taskIdx === -1) {
         return;
     }
     const taskMeta = tasks[taskIdx];
     if (!options.preserveTask) {
-        tasks.splice(taskIdx, 1);
+        if (taskIdx === lastIdx) {
+            tasks.pop();
+        } else {
+            tasks.splice(taskIdx, 1);
+        }
         _context.checkIdle?.();
     }
-    const globalTaskIdx = _context.taskIds.lastIndexOf(taskMeta.id);
-    if (globalTaskIdx !== -1) {
-        _context.taskIds.splice(globalTaskIdx, 1);
-        _context.componentIdxs.splice(globalTaskIdx, 1);
+
+    const { taskIds, componentIdxs } = _context;
+    if (taskIds.length > 0 && taskIds[taskIds.length - 1] === taskMeta.id) {
+        taskIds.pop();
+        componentIdxs.pop();
+    } else {
+        const globalTaskIdx = taskIds.lastIndexOf(taskMeta.id);
+        if (globalTaskIdx !== -1) {
+            taskIds.splice(globalTaskIdx, 1);
+            componentIdxs.splice(globalTaskIdx, 1);
+        }
     }
     return taskMeta.task;
 }
@@ -182,7 +199,7 @@ export function taskReturn(
     if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {
         throw new _context.RuntimeError('task.return result type does not match the function type');
     }
-    debugLog('[taskReturn()] args', {
+    DEBUG: debugLog('[taskReturn()] args', {
         componentIdx,
         taskID: task.id(),
         subtaskID: task.getParentSubtask()?.id(),
@@ -198,7 +215,7 @@ export function taskReturn(
     // See also documentation on `HostIntrinsic::PrepareCall`
     const subtaskCallMetadata = task.getParentSubtask()?.getCallMetadata();
     if (subtaskCallMetadata?.returnFn && !subtaskCallMetadata.returnFnCalled) {
-        debugLog('[taskReturn()] calling return fn on subtask', {
+        DEBUG: debugLog('[taskReturn()] calling return fn on subtask', {
             componentIdx,
             taskID: task.id(),
             subtaskID: task.getParentSubtask()?.id(),
@@ -221,33 +238,38 @@ export function taskReturn(
     }
     const expectedMemoryIdx = task.getReturnMemoryIdx();
     if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {
-        debugLog('[taskReturn()] mismatched memory indices', { expectedMemoryIdx, memoryIdx });
+        DEBUG: debugLog('[taskReturn()] mismatched memory indices', { expectedMemoryIdx, memoryIdx });
         throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
     }
     task.callbackFnIdx = callbackFnIdx;
     if (!memory && liftFns.length > 4) {
-        debugLog('[taskReturn()] memory not present for max async flat lifts');
+        DEBUG: debugLog('[taskReturn()] memory not present for max async flat lifts');
         throw new Error('memory must be present if more than max async flat lifts are performed');
     }
-    let liftCtx: TaskLiftContext = { memory, useDirectParams, params, componentIdx, stringEncoding };
+    let liftCtx: TaskLiftContext = createLiftContext({ memory, useDirectParams, params, componentIdx, stringEncoding });
     if (!useDirectParams) {
         if (!memory) {
-            debugLog('missing memory despite indirect param usage', { useDirectParams, liftCtx, ctx });
+            DEBUG: debugLog('missing memory despite indirect param usage', { useDirectParams, liftCtx, ctx });
             throw new Error('missing memory despite indirect param usage');
         }
         liftCtx.storagePtr = (params[0] as number) >>> 0;
         liftCtx.storageLen = params[1] as number;
     }
     const liftedResults = [];
-    debugLog('[taskReturn()] lifting results out of memory', { liftCtx });
+    DEBUG: debugLog('[taskReturn()] lifting results out of memory', { liftCtx });
     for (const liftFn of liftFns) {
         if (liftCtx.storageLen !== undefined && liftCtx.storageLen <= 0) {
-            debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
+            DEBUG: debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
             throw new Error('ran out of storage while writing');
         }
-        const [val, newLiftCtx] = liftFn(liftCtx);
-        liftCtx = newLiftCtx;
-        liftedResults.push(val);
+        const scalar = scalarLiftValue(liftFn, liftCtx.useDirectParams);
+        if (scalar) {
+            liftedResults.push(scalar(liftCtx));
+        } else {
+            const [val, newLiftCtx] = liftFn(liftCtx);
+            liftCtx = newLiftCtx;
+            liftedResults.push(val);
+        }
     }
     task.resolve(liftedResults);
 }
@@ -257,7 +279,7 @@ export function taskCancel(
     _context: TaskCancelContext,
     componentIdx: number,
 ): ReturnType<AsyncTaskModule['taskCancel']> {
-    debugLog('[taskCancel()] args', { componentIdx });
+    DEBUG: debugLog('[taskCancel()] args', { componentIdx });
     const state = getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!state.mayLeave) {
         throw new Error('component instance is not marked as may leave, cannot be cancelled');

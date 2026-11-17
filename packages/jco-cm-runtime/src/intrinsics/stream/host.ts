@@ -22,7 +22,7 @@ export function initializeHostStreamClass(_context: HostStreamClassContext): Hos
         #rep: number | null = null;
 
         constructor(args: HostStreamOptions) {
-            debugLog('[HostStream#constructor()] args', args);
+            DEBUG: debugLog('[HostStream#constructor()] args', args);
             if (args.componentIdx === undefined) {
                 throw new TypeError('missing component idx');
             }

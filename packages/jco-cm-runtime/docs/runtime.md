@@ -73,3 +73,78 @@ intercept its calls. There is no mutable namespace receiver or implicit override
 registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
+
+## Removing diagnostics when bundling
+
+Runtime diagnostic statements carry a `DEBUG` JavaScript label. The default build
+retains them and preserves `JCO_DEBUG` behavior. A bundler can remove the entire
+statement, including object literals, string formatting, and diagnostic getters
+passed as log arguments. Diagnostic arguments must not perform required work.
+
+For example, when bundling bindings together with this external runtime using
+Rolldown:
+
+```js
+const bundle = await rolldown({
+    input: 'component.js',
+    transform: { dropLabels: ['DEBUG'] },
+});
+```
+
+The runtime must be included in the bundle, rather than marked external. Apply
+label removal before optimization passes that discard unused labels. TypeScript's
+normal JavaScript emit preserves these labels. Already minified or embedded
+runtime artifacts may no longer contain them.
+
+`SAFETY` is reserved for assertions about internal implementation invariants. The
+initial labeled assertion verifies the representation table's internal freelist
+head. It can be removed with `dropLabels: ['DEBUG', 'SAFETY']`. Canonical ABI traps,
+resource-handle validation, Unicode validation, ownership, cancellation, and
+lifecycle checks remain unconditional. Adding a `SAFETY` label requires auditing
+both the checked condition and any work performed while evaluating it.
+
+See the [label experiments](../bench/labels/README.md) for correctness checks and
+reproducible Node benchmarks. This package does not change the transpiler's default
+profile or expose a new transpiler option.
+
+### Built runtime profiles
+
+The package can also apply label stripping itself, before bundling its public
+entry points with shared chunks. All profiles retain the same package exports,
+type declarations, and runtime API version:
+
+```sh
+pnpm --filter @bytecodealliance/jco-cm-runtime build          # diagnostic modules
+pnpm --filter @bytecodealliance/jco-cm-runtime build:release  # drop DEBUG, bundle/minify
+pnpm --filter @bytecodealliance/jco-cm-runtime build:lean     # also drop audited SAFETY assertions
+```
+
+Each command replaces this package's `dist`. To keep multiple builds, run
+`node scripts/build.mjs --profile release --out-dir /path/to/runtime` from this
+package and use that directory as `cmRuntimeEsModule`. Bundle chunks share their
+state and private brands across entry points. The ordinary build and `prepack`
+retain diagnostics; a release or lean build omits runtime log calls even when
+`JCO_DEBUG` is set. The explicitly exported `debugLog` utility remains callable.
+Canonical ABI traps, Unicode checks, ownership checks, and cancellation remain
+active in every profile. No inline-runtime implementation is maintained here.
+
+### Allocation and scheduling behavior
+
+Long or explicitly reused runtime-owned flat-argument contexts expose remaining
+arguments through `params`, copying only when a caller observes or retains that
+array. Short one-shot contexts, caller-created contexts and custom property
+accessors keep ordinary array consumption. Cursor setup defaults to vectors of
+at least 64 arguments because setup outweighs slicing for short calls. Scalar memory views refresh after buffer replacement, including
+memory growth. Custom lift functions keep the pair-returning API and may replace
+their context; built-in scalar composition can avoid constructing those pairs.
+
+The default Node UTF-8 codec uses native byte primitives for ASCII strings of at least
+256 UTF-16 code units. Browser codecs and custom `encodeInto` implementations keep
+the portable path. Reallocations remain exact and occur once per string.
+
+Buffers may optionally implement bulk `copyTo` and owned `readBytes` capabilities;
+providers without them continue using resource-aware array reads and writes.
+Ready stream sources may expose `readSourceOrPromise`; `readSource` retains its
+promise API. Synchronous sources yield after 64 reads, and host completions share
+scheduler wakeups within a microtask checkpoint. The scheduler still resumes one
+thread per tick to preserve thread-register restoration.

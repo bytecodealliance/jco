@@ -10,7 +10,7 @@ export function subtaskDrop(
     componentIdx: number,
     subtaskWaitableRep: number,
 ): ReturnType<AsyncTaskModule['subtaskDrop']> {
-    debugLog('[subtaskDrop()] args', { componentIdx, subtaskWaitableRep });
+    DEBUG: debugLog('[subtaskDrop()] args', { componentIdx, subtaskWaitableRep });
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!cstate.mayLeave) {
         throw new _context.RuntimeError('component is not marked as may leave, cannot drop subtask');
@@ -31,7 +31,7 @@ export function subtaskCancel(
     subtaskRep: number,
     slowOnly: boolean = false,
 ): ReturnType<AsyncTaskModule['subtaskCancel']> {
-    debugLog('[subtaskCancel()] args', { componentIdx, isAsync, subtaskRep });
+    DEBUG: debugLog('[subtaskCancel()] args', { componentIdx, isAsync, subtaskRep });
     const state = getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!state.mayLeave) {
         throw new _context.RuntimeError('component instance is not marked as may leave, cannot cancel subtask');

@@ -70,7 +70,7 @@ function finish(task: AsyncTask) {
     }
 }
 
-test.concurrent('task constructors retain store-local brands, methods, statics and state', () => {
+test.concurrent('task constructors retain store-local brands, statics and state', () => {
     const a = setup();
     const b = setup();
     const [first] = a.asyncTask.createNewCurrentTask({ componentIdx: 0 });
@@ -81,10 +81,12 @@ test.concurrent('task constructors retain store-local brands, methods, statics a
         expect(first).not.toBeInstanceOf(b.asyncTask.AsyncTask);
         expect(first.id()).toBe(1n);
         expect(second.id()).toBe(1n);
-        expect(first.id).not.toBe(second.id);
+        expect(second).toBeInstanceOf(b.asyncTask.AsyncTask);
+        expect(second).not.toBeInstanceOf(a.asyncTask.AsyncTask);
+        // Stores share one class body, so that engines can cache its private field
+        // accesses however many stores exist. A store owns the brand of its
+        // instances and its static state, not copies of the methods.
         expect(Object.hasOwn(Object.getPrototypeOf(first), 'id')).toBe(true);
-        expect(() => first.id.call(second)).toThrow(TypeError);
-        expect(() => second.id.call(first)).toThrow(TypeError);
         expect(a.asyncTask.AsyncTask.State).not.toBe(b.asyncTask.AsyncTask.State);
         expect(a.asyncTask.AsyncTask.BlockResult).not.toBe(b.asyncTask.AsyncTask.BlockResult);
         first.storage[0] = 23;

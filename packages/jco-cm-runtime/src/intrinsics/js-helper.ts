@@ -1,5 +1,6 @@
 import type { JsHelperModule } from '../runtime.js';
 import { getCurrentThread } from './async-task/thread-operations.js';
+import { registerSlot } from './task-context.js';
 
 export const emptyFunc: JsHelperModule['emptyFunc'] = () => {};
 
@@ -55,7 +56,7 @@ export const conditionalSuspendingHostImport: JsHelperModule['conditionalSuspend
     new context.WebAssembly.Instance(module, {
         '': {
             mayBlock: () => {
-                const saved = context.threads.registers[componentIdx];
+                const saved = context.threads.registers[registerSlot(componentIdx)];
                 const thread = saved ? getCurrentThread(context.threads, saved.componentIdx, saved.threadID) : null;
                 return thread?.task.mayBlock() ?? false;
             },

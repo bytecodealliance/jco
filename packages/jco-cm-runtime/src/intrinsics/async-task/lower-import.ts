@@ -11,7 +11,7 @@ export function lowerImport(
     args: TaskLowerImportOptions,
     ...params: unknown[]
 ): ReturnType<AsyncTaskModule['lowerImport']> {
-    debugLog('[_lowerImport()] args', { args, params });
+    DEBUG: debugLog('[_lowerImport()] args', { args, params });
     const {
         componentIdx,
         isAsync,
@@ -175,7 +175,7 @@ export function lowerImport(
         } else {
             res = (Number(subtask.ensureHandle()) << 4) | subtaskState;
         }
-        debugLog('[_lowerImport()] async-lowered import return', {
+        DEBUG: debugLog('[_lowerImport()] async-lowered import return', {
             fnName: importFn.fnName,
             componentIdx,
             subtaskID: subtask.id(),
@@ -223,7 +223,7 @@ export function lowerImport(
             if (subtask.cancellationRequested() || task.taskState() === _context.AsyncTask.State.CANCEL_PENDING) {
                 return;
             }
-            debugLog('[_lowerImport()] calling lowered import', { importFn, params });
+            DEBUG: debugLog('[_lowerImport()] calling lowered import', { importFn, params });
             await withCurrentTaskMetaAsync(_context.registers, {
                 taskID: task.id(),
                 threadID,
@@ -234,7 +234,7 @@ export function lowerImport(
                 manualAsyncResult!.resolve(subtask.getResult());
             }
         } catch (err) {
-            debugLog('[_lowerImport()] import fn error:', err);
+            DEBUG: debugLog('[_lowerImport()] import fn error:', err);
             if (requiresManualAsyncResult) {
                 manualAsyncResult!.reject(err);
                 return;

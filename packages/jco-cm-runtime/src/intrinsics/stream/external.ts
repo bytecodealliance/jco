@@ -15,7 +15,7 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
         #dropFn: ExternalStreamOptions['dropFn'];
 
         constructor(args: ExternalStreamOptions) {
-            debugLog('[Stream#constructor()] args', args);
+            DEBUG: debugLog('[Stream#constructor()] args', args);
 
             if (args.globalRep === undefined) {
                 throw new TypeError('missing host stream rep');
@@ -55,12 +55,12 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
         }
 
         async next() {
-            debugLog('[Stream#next()]');
+            DEBUG: debugLog('[Stream#next()]');
             return this.read();
         }
 
         async read(opts?: number | StreamReadOptions) {
-            debugLog('[Stream#read()]', { opts });
+            DEBUG: debugLog('[Stream#read()]', { opts });
             if (!this.#isReadable) {
                 throw new Error('stream is not marked as readable and cannot be read from');
             }
@@ -69,7 +69,7 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
         }
 
         async write(...objects: unknown[]) {
-            debugLog('[Stream#write()]');
+            DEBUG: debugLog('[Stream#write()]');
             if (!this.#isWritable) {
                 throw new Error('stream is not marked as writable and cannot be written to');
             }

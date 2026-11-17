@@ -1,3 +1,4 @@
+import { isPromiseLike } from '../core/promises.js';
 import type {
     PendingValueQueueConstructor,
     ComponentHostOperationContext,
@@ -15,8 +16,9 @@ export function initializePendingValueQueueClass(
         #elemMeta: StreamElementMetadata;
         #done = false;
         #sourceReadPromise: Promise<number> | null = null;
-        #chunks: StreamChunk[] = [];
-        #offset = 0;
+        #chunks: ({ data: StreamChunk; offset: number } | undefined)[] = [];
+        #head = 0;
+        #prepended: { data: StreamChunk; offset: number }[] = [];
         #length = 0;
 
         constructor(readFn: StreamReadFn, elemMeta: StreamElementMetadata) {
@@ -38,7 +40,7 @@ export function initializePendingValueQueueClass(
             if (source.length === 0) {
                 return 0;
             }
-            this.#chunks.push(source);
+            this.#chunks.push({ data: source, offset: 0 });
             this.#length += source.length;
             return source.length;
         }
@@ -61,50 +63,87 @@ export function initializePendingValueQueueClass(
             return this.push([value]);
         }
 
-        async readSource() {
-            if (!this.#sourceReadPromise) {
-                this.#sourceReadPromise = (async () => {
-                    let hostRead: ReturnType<StreamReadFn> | undefined;
-                    let res: IteratorResult<unknown>;
-                    try {
-                        res = await trackHostOperation(tracking, () => (hostRead = this.#readFn()));
-                    } catch (err) {
-                        if (!tracking.storeTrap.stopped) {
-                            throw err;
-                        }
-                        // Stopping settled this wait, but not the host's read.
-                        Promise.resolve(hostRead).then(
-                            (late) => disposeHostValue(tracking.symbolDispose, late?.value),
-                            () => {},
-                        );
-                        this.#done = true;
-                        return 0;
-                    }
-                    // Nothing will take what arrives after the stream was dropped.
-                    if (this.#readFn.dropped) {
-                        disposeHostValue(tracking.symbolDispose, res.value);
-                        this.#done = true;
-                        return 0;
-                    }
-                    const appended = this.appendReadValue(res.value);
-                    this.#done = !!res.done;
-                    return appended;
-                })().finally(() => {
-                    this.#sourceReadPromise = null;
-                });
+        /** Preserve the promise-returning API and coalesce concurrent public reads. */
+        readSource(): Promise<number> {
+            if (this.#sourceReadPromise) {
+                return this.#sourceReadPromise;
             }
-            return this.#sourceReadPromise;
+            try {
+                const result = this.readSourceOrPromise();
+                if (typeof result !== 'number') {
+                    return result;
+                }
+                return (this.#sourceReadPromise = Promise.resolve(result).finally(() => {
+                    this.#sourceReadPromise = null;
+                }));
+            } catch (error) {
+                return (this.#sourceReadPromise = Promise.reject(error).finally(() => {
+                    this.#sourceReadPromise = null;
+                }));
+            }
+        }
+
+        /** Avoid a promise and a microtask when the source actually completes synchronously. */
+        readSourceOrPromise(): number | Promise<number> {
+            if (this.#sourceReadPromise) {
+                return this.#sourceReadPromise;
+            }
+            let hostRead: ReturnType<StreamReadFn> | undefined;
+            try {
+                const result = trackHostOperation(tracking, () => (hostRead = this.#readFn()));
+                if (!isPromiseLike(result)) {
+                    return this.#acceptRead(result);
+                }
+                return (this.#sourceReadPromise = Promise.resolve(result)
+                    .then(
+                        (value) => this.#acceptRead(value),
+                        (error) => this.#failedRead(error, hostRead),
+                    )
+                    .finally(() => {
+                        this.#sourceReadPromise = null;
+                    }));
+            } catch (error) {
+                return this.#failedRead(error, hostRead);
+            }
+        }
+
+        #acceptRead(result: IteratorResult<unknown>): number {
+            if (this.#readFn.dropped) {
+                disposeHostValue(tracking.symbolDispose, result.value);
+                this.#done = true;
+                return 0;
+            }
+            const appended = this.appendReadValue(result.value);
+            this.#done = !!result.done;
+            return appended;
+        }
+
+        #failedRead(error: unknown, hostRead: ReturnType<StreamReadFn> | undefined): number {
+            if (!tracking.storeTrap.stopped) {
+                throw error;
+            }
+            // Stop settles the wait before the host read; dispose its eventual value.
+            Promise.resolve(hostRead).then(
+                (late) => disposeHostValue(tracking.symbolDispose, late?.value),
+                () => {},
+            );
+            this.#done = true;
+            return 0;
         }
 
         prepend(source: StreamChunk) {
             if (source.length === 0) {
                 return;
             }
-            if (this.#offset !== 0 && this.#chunks.length > 0) {
-                this.#chunks[0] = this.#chunks[0].slice(this.#offset);
-                this.#offset = 0;
+            const current =
+                this.#prepended.length > 0 ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+            if (current && current.offset !== 0) {
+                // As before, prepend snapshots the unread part of an active chunk.
+                // Ordinary partial reads keep their cursor without copying it.
+                current.data = current.data.slice(current.offset);
+                current.offset = 0;
             }
-            this.#chunks.unshift(source);
+            this.#prepended.push({ data: source, offset: 0 });
             this.#length += source.length;
         }
 
@@ -112,18 +151,30 @@ export function initializePendingValueQueueClass(
             let transferred = 0;
             let remaining = Math.min(maxCount, this.#length);
             while (remaining > 0) {
-                const chunk = this.#chunks[0];
-                const transfer = Math.min(remaining, chunk.length - this.#offset);
+                const front = this.#prepended.length > 0;
+                const cursor = front ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head]!;
+                const chunk = cursor.data;
+                const transfer = Math.min(remaining, chunk.length - cursor.offset);
                 for (let i = 0; i < transfer; i++) {
-                    target.push(chunk[this.#offset + i]);
+                    target.push(chunk[cursor.offset + i]);
                 }
-                this.#offset += transfer;
+                cursor.offset += transfer;
                 this.#length -= transfer;
                 transferred += transfer;
                 remaining -= transfer;
-                if (this.#offset === chunk.length) {
-                    this.#chunks.shift();
-                    this.#offset = 0;
+                if (cursor.offset === chunk.length) {
+                    if (front) {
+                        this.#prepended.pop();
+                    } else {
+                        this.#chunks[this.#head++] = undefined;
+                        if (this.#head === this.#chunks.length) {
+                            this.#chunks = [];
+                            this.#head = 0;
+                        } else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
+                            this.#chunks = this.#chunks.slice(this.#head);
+                            this.#head = 0;
+                        }
+                    }
                 }
             }
             return transferred;
