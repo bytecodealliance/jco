@@ -95,7 +95,49 @@
       (call $drop-thing (local.get 0))
       (i32.const 1))
     ;; Drops a handle that does not exist
-    (func (export "drop-missing") (call $drop-thing (i32.const 1000))))
+    (func (export "drop-missing") (call $drop-thing (i32.const 1000)))
+
+    (data (i32.const 200) "division by zero")
+    ;; A `result<u32, string>` at offset 128: the quotient, or why there is none
+    (func (export "checked-divide") (param i32 i32) (result i32)
+      (if (i32.eqz (local.get 1))
+        (then
+          (i32.store8 (i32.const 128) (i32.const 1))
+          (i32.store (i32.const 132) (i32.const 200))
+          (i32.store (i32.const 136) (i32.const 16)))
+        (else
+          (i32.store8 (i32.const 128) (i32.const 0))
+          (i32.store (i32.const 132) (i32.div_u (local.get 0) (local.get 1)))))
+      (i32.const 128))
+    (func (export "sum") (param $ptr i32) (param $len i32) (result i32)
+      (local $sum i32)
+      (block $done
+        (loop $next
+          (br_if $done (i32.eqz (local.get $len)))
+          (local.set $sum (i32.add (local.get $sum) (i32.load (local.get $ptr))))
+          (local.set $ptr (i32.add (local.get $ptr) (i32.const 4)))
+          (local.set $len (i32.sub (local.get $len) (i32.const 1)))
+          (br $next)))
+      (local.get $sum))
+    ;; The list 0, 1, .. n - 1, as (ptr, len) at offset 144
+    (func (export "iota") (param $n i32) (result i32)
+      (local $i i32)
+      (block $done
+        (loop $next
+          (br_if $done (i32.eq (local.get $i) (local.get $n)))
+          (i32.store
+            (i32.add (i32.const 4096) (i32.mul (local.get $i) (i32.const 4)))
+            (local.get $i))
+          (local.set $i (i32.add (local.get $i) (i32.const 1)))
+          (br $next)))
+      (i32.store (i32.const 144) (i32.const 4096))
+      (i32.store (i32.const 148) (local.get $n))
+      (i32.const 144))
+    ;; A `tuple<u64, u32>` at offset 160, which has more than one flat value
+    (func (export "swap") (param i32 i64) (result i32)
+      (i64.store (i32.const 160) (local.get 1))
+      (i32.store (i32.const 168) (local.get 0))
+      (i32.const 160)))
 
   (core func $notify-for-libc (canon lower (func $host "notify")))
   (core instance $libc (instantiate $libc
@@ -151,4 +193,13 @@
     (canon lift (core func $i "leak-thing")))
   (func (export "consume-thing") (param "thing" (own $thing)) (result u32)
     (canon lift (core func $i "consume-thing")))
-  (func (export "drop-missing") (canon lift (core func $i "drop-missing"))))
+  (func (export "drop-missing") (canon lift (core func $i "drop-missing")))
+  (func (export "checked-divide") (param "a" u32) (param "b" u32) (result (result u32 (error string)))
+    (canon lift (core func $i "checked-divide") (memory $memory)
+      (post-return (core func $i "post-echo"))))
+  (func (export "sum") (param "values" (list u32)) (result u32)
+    (canon lift (core func $i "sum") (memory $memory) (realloc $realloc)))
+  (func (export "iota") (param "count" u32) (result (list u32))
+    (canon lift (core func $i "iota") (memory $memory)))
+  (func (export "swap") (param "pair" (tuple u32 u64)) (result (tuple u64 u32))
+    (canon lift (core func $i "swap") (memory $memory))))
