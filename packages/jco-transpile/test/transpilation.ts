@@ -26,6 +26,12 @@ export const runtimeBase = selected.base;
 export const externalRuntime = runtimeBase !== undefined;
 
 /**
+ * Whether `JCO_TEST_PERF_SYNC_FAST_PATH` asks suites to transpile with
+ * `perfSyncFastPath`, which must not change what any test observes.
+ */
+export const forceSyncFastPath = Boolean(env.JCO_TEST_PERF_SYNC_FAST_PATH);
+
+/**
  * Apply the suite's runtime mode without changing production defaults.
  * An explicit cmRuntimeEsModule (including undefined for bundled-runtime codegen
  * assertions) takes precedence. The selected base also resolves from isolated
@@ -34,6 +40,7 @@ export const externalRuntime = runtimeBase !== undefined;
 export function runtimeOptions(options: TranspilationOptions = {}): TranspilationOptions {
     return {
         ...(runtimeBase === undefined ? {} : { cmRuntimeEsModule: runtimeBase }),
+        ...(forceSyncFastPath ? { perfSyncFastPath: true } : {}),
         ...options,
     };
 }
