@@ -3,33 +3,13 @@ import { types as TypesNamespace, preopens as PreopensNamespace } from "../../ty
 import type {
     Descriptor as IDescriptor,
     DescriptorFlags,
-    DescriptorType,
     DirectoryEntryStream as IDirectoryEntryStream,
 } from "../../types/interfaces/wasi-filesystem-types.js";
-import {
-    earlyDispose,
-    inputStreamCreate,
-    ioCall,
-    outputStreamCreate,
-    registerDispose,
-} from "../io/worker-io.js";
-import {
-    FILE,
-    FILESYSTEM_DESCRIPTOR_ADVISE,
-    FILESYSTEM_DESCRIPTOR_CLOSE,
-    FILESYSTEM_DESCRIPTOR_GET_TYPE,
-    FILESYSTEM_DESCRIPTOR_METADATA_HASH,
-    FILESYSTEM_DESCRIPTOR_OPEN,
-    FILESYSTEM_DESCRIPTOR_READ,
-    FILESYSTEM_DESCRIPTOR_SET_SIZE,
-    FILESYSTEM_DESCRIPTOR_SET_TIMES,
-    FILESYSTEM_DESCRIPTOR_STAT,
-    FILESYSTEM_DESCRIPTOR_SYNC,
-    FILESYSTEM_DESCRIPTOR_SYNC_DATA,
-    FILESYSTEM_DESCRIPTOR_WRITE,
-    INPUT_STREAM_CREATE,
-    OUTPUT_STREAM_CREATE,
-} from "../io/calls.js";
+import { earlyDispose, registerDispose } from "../io/worker-io.js";
+import type { PerformanceConfig } from "../../types/instantiation.js";
+import { lookupType } from "../io/file-common.js";
+import { openWorkerFile, type FileHandle } from "../io/file-handle.js";
+import { openMainThreadFile } from "../io/main-thread-file.js";
 import {
     constants,
     linkSync,
@@ -63,7 +43,15 @@ export interface NodeFilesystemOptions {
      * Preview 1 components, that omit the flag on writable directories.
      */
     enableMutateDirectory?: boolean;
+    /**
+     * Opt-in trade-offs of behavior for speed. A preopen created with this
+     * member uses it instead of the defaults set with `_setPerformance`.
+     */
+    performance?: PerformanceConfig;
 }
+
+/** Performance options of preopens created without their own. */
+let defaultPerformance: PerformanceConfig = {};
 
 function normalizeHostPath(path: string) {
     return isWindows ? path.replace(/\\/g, "/") : path;
@@ -101,29 +89,6 @@ function nsToDateTime(ns) {
     return { seconds, nanoseconds };
 }
 
-function lookupType(obj): DescriptorType {
-    if (obj.isFile()) {
-        return "regular-file";
-    } else if (obj.isSocket()) {
-        return "socket";
-    } else if (obj.isSymbolicLink()) {
-        return "symbolic-link";
-    } else if (obj.isFIFO()) {
-        return "fifo";
-    } else if (obj.isDirectory()) {
-        return "directory";
-    } else if (obj.isCharacterDevice()) {
-        return "character-device";
-    } else if (obj.isBlockDevice()) {
-        return "block-device";
-    }
-    return "unknown";
-}
-
-function closeFileResource(id: number) {
-    ioCall(FILESYSTEM_DESCRIPTOR_CLOSE, id);
-}
-
 // Note: This should implement per-segment semantics of openAt, but we cannot
 //       currently due to the lack of support for openat() in Node.js.
 //       Tracking issue: https://github.com/libuv/libuv/issues/4167
@@ -133,10 +98,13 @@ function closeFileResource(id: number) {
  */
 class Descriptor extends WasiResource implements IDescriptor {
     #hostPreopen;
-    #fileResourceId;
+    // The open host file. Preopens and virtual directories have none.
+    #file!: FileHandle;
     #finalizer;
     #mode!: DescriptorFlags;
     #enableMutateDirectory = false;
+    // Options given to the preopen this descriptor descends from, if any.
+    #performance: PerformanceConfig | undefined;
     #fullPath;
     /**
      * Whether `#fullPath` contained no symlinks when this descriptor was opened.
@@ -148,9 +116,10 @@ class Descriptor extends WasiResource implements IDescriptor {
 
     static _createPreopen(
         hostPreopen,
-        { enableMutateDirectory = false }: NodeFilesystemOptions = {},
+        { enableMutateDirectory = false, performance }: NodeFilesystemOptions = {},
     ) {
         const descriptor = new Descriptor();
+        descriptor.#performance = performance;
         descriptor.#enableMutateDirectory = enableMutateDirectory;
         if (enableMutateDirectory) {
             descriptor.#mode = { read: true, mutateDirectory: true };
@@ -168,30 +137,36 @@ class Descriptor extends WasiResource implements IDescriptor {
         return descriptor;
     }
 
-    static _create(fileResourceId, mode, fullPath, fullPathResolved, enableMutateDirectory) {
+    static _create(file: FileHandle, mode, fullPath, fullPathResolved, parent: Descriptor) {
         const descriptor = new Descriptor();
-        descriptor.#fileResourceId = fileResourceId;
-        descriptor.#finalizer = registerDispose(
-            descriptor,
-            null,
-            fileResourceId,
-            closeFileResource,
-        );
-        descriptor.#enableMutateDirectory = enableMutateDirectory;
-        descriptor.#mode = enableMutateDirectory ? { ...mode } : mode;
+        descriptor.#file = file;
+        // The finalizer must not keep the descriptor alive, so it holds the file alone.
+        descriptor.#finalizer = registerDispose(descriptor, null, 0, () => file.close());
+        descriptor.#enableMutateDirectory = parent.#enableMutateDirectory;
+        descriptor.#performance = parent.#performance;
+        descriptor.#mode = parent.#enableMutateDirectory ? { ...mode } : mode;
         descriptor.#fullPath = fullPath;
         descriptor.#fullPathResolved = fullPathResolved;
         return descriptor;
     }
 
-    static _createVirtualDirectory(mode, fullPath, fullPathResolved, enableMutateDirectory) {
+    static _createVirtualDirectory(mode, fullPath, fullPathResolved, parent: Descriptor) {
         const descriptor = new Descriptor();
-        descriptor.#enableMutateDirectory = enableMutateDirectory;
-        descriptor.#mode = enableMutateDirectory ? { ...mode } : mode;
+        descriptor.#enableMutateDirectory = parent.#enableMutateDirectory;
+        descriptor.#performance = parent.#performance;
+        descriptor.#mode = parent.#enableMutateDirectory ? { ...mode } : mode;
         descriptor.#fullPath = fullPath;
         descriptor.#fullPathResolved = fullPathResolved;
         descriptor.#virtualDirectory = true;
         return descriptor;
+    }
+
+    /**
+     * The performance options in effect for this descriptor: those of its
+     * preopen, or else the current defaults.
+     */
+    get #performanceOptions(): PerformanceConfig {
+        return this.#performance ?? defaultPerformance;
     }
 
     [symbolDispose]() {
@@ -205,26 +180,14 @@ class Descriptor extends WasiResource implements IDescriptor {
         if (this.#hostPreopen || this.#virtualDirectory) {
             throw "is-directory";
         }
-        return inputStreamCreate(
-            FILE,
-            ioCall(INPUT_STREAM_CREATE | FILE, null, {
-                descriptorId: this.#fileResourceId,
-                offset,
-            }),
-        );
+        return this.#file.readViaStream(offset);
     }
 
     writeViaStream(offset): any {
         if (this.#hostPreopen || this.#virtualDirectory) {
             throw "is-directory";
         }
-        return outputStreamCreate(
-            FILE,
-            ioCall(OUTPUT_STREAM_CREATE | FILE, null, {
-                descriptorId: this.#fileResourceId,
-                offset,
-            }),
-        );
+        return this.#file.writeViaStream(offset);
     }
 
     appendViaStream(): any {
@@ -236,11 +199,7 @@ class Descriptor extends WasiResource implements IDescriptor {
             throw "bad-descriptor";
         }
         try {
-            ioCall(FILESYSTEM_DESCRIPTOR_ADVISE, this.#fileResourceId, {
-                offset,
-                length,
-                advice,
-            });
+            this.#file.advise(offset, length, advice);
         } catch (e) {
             throw convertFsError(e);
         }
@@ -250,8 +209,11 @@ class Descriptor extends WasiResource implements IDescriptor {
         if (this.#hostPreopen) {
             throw "invalid";
         }
+        if (this.#virtualDirectory) {
+            throw "bad-descriptor";
+        }
         try {
-            ioCall(FILESYSTEM_DESCRIPTOR_SYNC_DATA, this.#fileResourceId);
+            this.#file.syncData();
         } catch (e: any) {
             if (e.code === "EPERM") {
                 return;
@@ -282,7 +244,7 @@ class Descriptor extends WasiResource implements IDescriptor {
         if (this.#hostPreopen || this.#virtualDirectory) {
             return "directory";
         }
-        return ioCall(FILESYSTEM_DESCRIPTOR_GET_TYPE, this.#fileResourceId);
+        return this.#file.type;
     }
 
     setSize(size) {
@@ -290,7 +252,7 @@ class Descriptor extends WasiResource implements IDescriptor {
             throw "is-directory";
         }
         try {
-            ioCall(FILESYSTEM_DESCRIPTOR_SET_SIZE, this.#fileResourceId, Number(size));
+            this.#file.setSize(Number(size));
         } catch (e: any) {
             if (isWindows && e.code === "EPERM") {
                 throw "access";
@@ -329,7 +291,7 @@ class Descriptor extends WasiResource implements IDescriptor {
             if (this.#virtualDirectory) {
                 utimesSync(this.#getFullPath(".", true), atime, mtime);
             } else {
-                ioCall(FILESYSTEM_DESCRIPTOR_SET_TIMES, this.#fileResourceId, { atime, mtime });
+                this.#file.setTimes(atime, mtime);
             }
         } catch (e) {
             throw convertFsError(e);
@@ -354,10 +316,7 @@ class Descriptor extends WasiResource implements IDescriptor {
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
-        const { bytes, eof } = ioCall(FILESYSTEM_DESCRIPTOR_READ, this.#fileResourceId, {
-            length: Number(length),
-            offset: Number(offset),
-        });
+        const { bytes, eof } = this.#file.read(Number(length), Number(offset));
         return [bytes, eof];
     }
 
@@ -368,12 +327,7 @@ class Descriptor extends WasiResource implements IDescriptor {
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
-        return BigInt(
-            ioCall(FILESYSTEM_DESCRIPTOR_WRITE, this.#fileResourceId, {
-                buffer,
-                offset: Number(offset),
-            }),
-        );
+        return BigInt(this.#file.write(buffer, Number(offset)));
     }
 
     readDirectory(): IDirectoryEntryStream {
@@ -394,7 +348,7 @@ class Descriptor extends WasiResource implements IDescriptor {
             throw "invalid";
         }
         try {
-            ioCall(FILESYSTEM_DESCRIPTOR_SYNC, this.#fileResourceId);
+            this.#file.sync();
         } catch (e: any) {
             if (e.code === "EPERM") {
                 return;
@@ -421,7 +375,7 @@ class Descriptor extends WasiResource implements IDescriptor {
         try {
             stats = this.#virtualDirectory
                 ? statSync(this.#getFullPath(".", true), { bigint: true })
-                : ioCall(FILESYSTEM_DESCRIPTOR_STAT, this.#fileResourceId);
+                : this.#file.stat();
         } catch (e) {
             throw convertFsError(e);
         }
@@ -591,7 +545,7 @@ class Descriptor extends WasiResource implements IDescriptor {
                         descriptorFlags,
                         fullPath,
                         fullPathResolved,
-                        this.#enableMutateDirectory,
+                        this,
                     );
                 }
             } catch (e: any) {
@@ -604,17 +558,20 @@ class Descriptor extends WasiResource implements IDescriptor {
             }
         }
         try {
-            const { id, type } = ioCall(FILESYSTEM_DESCRIPTOR_OPEN, null, {
-                path: fullPath.endsWith("/") ? fullPath.slice(0, -1) : fullPath,
-                flags: fsOpenFlags,
-            });
+            const openPath = fullPath.endsWith("/") ? fullPath.slice(0, -1) : fullPath;
+            // The main thread declines what could make a call wait, such as a FIFO.
+            const file =
+                (this.#performanceOptions.mainThreadFilesystem
+                    ? openMainThreadFile(openPath, fsOpenFlags)
+                    : undefined) ?? openWorkerFile(openPath, fsOpenFlags);
+            const type = file.type;
             // Wasmtime's updated path_open_preopen test requires ISDIR for a
             // writable directory on every platform.
             //
             // Windows may still open it, so check the returned descriptor type.
             if (type === "directory" && descriptorFlags.write) {
                 // Release the opened handle before reporting the error.
-                closeFileResource(id);
+                file.close();
                 throw "is-directory";
             }
             // Rust's WASI runtime requests mutate-directory on writable files
@@ -626,7 +583,7 @@ class Descriptor extends WasiResource implements IDescriptor {
             // - File writes still require write.
             // - Directories retain mutate-directory for mutations and writable child opens.
             const descriptor = descriptorCreate(
-                id,
+                file,
                 this.#enableMutateDirectory
                     ? {
                           ...descriptorFlags,
@@ -636,7 +593,7 @@ class Descriptor extends WasiResource implements IDescriptor {
                     : descriptorFlags,
                 fullPath,
                 fullPathResolved,
-                this.#enableMutateDirectory,
+                this,
             );
             if (fullPath.endsWith("/") && type !== "directory") {
                 descriptor[symbolDispose]();
@@ -759,7 +716,7 @@ class Descriptor extends WasiResource implements IDescriptor {
             return { upper: stats.mtimeNs, lower: stats.ino };
         }
         try {
-            return ioCall(FILESYSTEM_DESCRIPTOR_METADATA_HASH, this.#fileResourceId);
+            return this.#file.metadataHash();
         } catch (e) {
             throw convertFsError(e);
         }
@@ -963,10 +920,11 @@ export const types: typeof TypesNamespace = {
 export function createFilesystem({
     preopens,
     enableMutateDirectory = false,
+    performance,
 }: { preopens: Record<string, string> } & NodeFilesystemOptions) {
     const entries: Array<[Descriptor, string]> = Object.entries(preopens).map(
         ([virtualPath, hostPath]) => [
-            descriptorCreatePreopen(hostPath, { enableMutateDirectory }),
+            descriptorCreatePreopen(hostPath, { enableMutateDirectory, performance }),
             virtualPath,
         ],
     );
@@ -976,6 +934,23 @@ export function createFilesystem({
             getDirectories: () => [...entries],
         } as typeof PreopensNamespace,
     };
+}
+
+/**
+ * Set the performance options of every preopen that was not created with its own.
+ *
+ * The options take effect for files opened and paths resolved from then on,
+ * including through preopens that already exist. Files that are already open
+ * stay where they were opened.
+ *
+ * @example
+ * import { _setPerformance } from '@bytecodealliance/preview2-shim/filesystem';
+ * _setPerformance({ mainThreadFilesystem: true });
+ *
+ * @param options - the options to use; members left out are off
+ */
+export function _setPerformance(options: PerformanceConfig = {}) {
+    defaultPerformance = { ...options };
 }
 
 /**

@@ -21,10 +21,16 @@ export type FutureResult<T, E> =
 export function callExtension(module: URL, operation: string, args: unknown[]): unknown {
     return io.ioCall(WORKER_EXTENSION_CALL, null, { module: module.href, operation, args });
 }
-export function inputStreamId(stream: InputStream): number {
+/**
+ * The worker's id of a stream, or undefined for a stream the worker does not
+ * serve, such as one of a file opened with the `mainThreadFilesystem`
+ * performance option.
+ */
+export function inputStreamId(stream: InputStream): number | undefined {
     return io.inputStreamId(stream);
 }
-export function outputStreamId(stream: OutputStream): number {
+/** The worker's id of a stream, or undefined as for `inputStreamId`. */
+export function outputStreamId(stream: OutputStream): number | undefined {
     return io.outputStreamId(stream);
 }
 export function inputStreamCreate(id: number): InputStream {

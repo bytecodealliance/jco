@@ -21,6 +21,7 @@ vi.mock("../src/io/worker-io.js", () => ({
     ioCall: vi.fn(),
     outputStreamCreate: vi.fn(),
     registerDispose: vi.fn(),
+    streams: { InputStream: class {}, OutputStream: class {} },
 }));
 
 import { ioCall, registerDispose } from "../src/io/worker-io.js";

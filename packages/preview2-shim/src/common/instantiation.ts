@@ -8,6 +8,7 @@ import type {
 export type {
     WASIShimConfig,
     SandboxConfig,
+    PerformanceConfig,
     GetImportObjectArgs,
     WASIImportObject,
     VersionedWASIImportObject,
@@ -172,6 +173,7 @@ export class WASIShim {
             }
             this.#filesystem = defaultFilesystem.createFilesystem({
                 preopens: sandbox.preopens,
+                performance: shims?.performance,
             });
         }
         this.#io = shims?.io ?? wasi.io;
