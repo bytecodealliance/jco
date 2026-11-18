@@ -4,7 +4,7 @@ Measure calls through generated bindings for numbers, strings, lists, records,
 async imports, streams, and futures. Each variant uses the same Wasm fixtures.
 A variant can bundle the runtime or import a runtime built in another checkout.
 
-With the workspace dependencies installed, build the prerequisites from the repository root.
+With the workspace dependencies and `wasm-tools` installed, build the prerequisites from the repository root.
 
 ```sh
 cargo build -p js-component-bindgen --example transpile --features embedded-cm-runtime,external-runtime

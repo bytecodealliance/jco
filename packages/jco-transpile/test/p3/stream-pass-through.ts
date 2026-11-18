@@ -1,0 +1,145 @@
+import { join } from 'node:path';
+import { ReadableStream } from 'node:stream/web';
+
+import { assert, suite, test as base } from 'vitest';
+
+import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
+import { setupAsyncTest } from '../helpers.js';
+
+const test = base.extend<{ instance: Awaited<ReturnType<typeof setupAsyncTest>>['instance'] }>({
+    instance: async ({}, use) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'stream-pass-through',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'streams', 'stream-pass-through.wat'),
+            },
+        });
+        try {
+            await use(instance);
+        } finally {
+            await cleanup();
+        }
+    },
+});
+
+// The guest returns the readable end it was given, leaving both ends with the host.
+suite.skipIf(typeof WebAssembly.Suspending !== 'function')('host streams returned unread by a guest', () => {
+    test.concurrent('bytes are read back as the source gave them: byte arrays as copies, numbers as values', async ({
+        instance,
+    }) => {
+        const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array(70_000).fill(7), [8, 9]];
+        const output = await instance.passBytes(
+            (async function* () {
+                yield* chunks;
+            })(),
+        );
+
+        const head = await output.read(2);
+        assert.deepEqual(head, { value: new Uint8Array([1, 2]), done: false });
+        head.value[0] = 99;
+        assert.deepEqual(chunks[0], new Uint8Array([1, 2, 3]));
+        assert.deepEqual(await output.read(65_536), { value: new Uint8Array([3]), done: false });
+
+        const large = await output.read(100_000);
+        assert.instanceOf(large.value, Uint8Array);
+        assert.deepEqual(large.value, chunks[1]);
+        assert.notStrictEqual(large.value.buffer, (chunks[1] as Uint8Array).buffer);
+
+        assert.deepEqual(await output.read(), { value: 8, done: false });
+        assert.deepEqual(await output.read(8), { value: [9], done: false });
+        assert.deepEqual(await output.read(8), { value: undefined, done: true });
+    });
+
+    test.concurrent('a stream of plain numbers is read back as plain numbers', async ({ instance }) => {
+        const received: unknown[] = [];
+        for await (const value of await instance.passBytes([1, 2, 3])) {
+            received.push(value);
+        }
+        assert.deepEqual(received, [1, 2, 3]);
+
+        const output = await instance.passBytes(
+            (async function* () {
+                yield [4, 5, 6];
+            })(),
+        );
+        assert.deepEqual(await output.read(8), { value: [4, 5, 6], done: false });
+    });
+
+    test.concurrent('a web stream of bytes is read back', async ({ instance }) => {
+        const output = await instance.passBytes(
+            new ReadableStream({
+                start(controller) {
+                    controller.enqueue(new Uint8Array([1, 2]));
+                    controller.enqueue(new Uint8Array([3]));
+                    controller.close();
+                },
+            }),
+        );
+        const received: number[] = [];
+        for await (const chunk of output) {
+            assert.instanceOf(chunk, Uint8Array);
+            received.push(...chunk);
+        }
+        assert.deepEqual(received, [1, 2, 3]);
+    });
+
+    test.concurrent('values are iterated in order, from synchronous and asynchronous sources', async ({ instance }) => {
+        const received: string[] = [];
+        for await (const value of await instance.passStrings(['a', 'b', 'c'])) {
+            received.push(value);
+        }
+        assert.deepEqual(received, ['a', 'b', 'c']);
+
+        const output = await instance.passStrings(
+            (async function* () {
+                yield 'd';
+                yield 'e';
+            })(),
+        );
+        assert.deepEqual(await output.read(4), { value: ['d'], done: false });
+        assert.deepEqual(await output.read(), { value: 'e', done: false });
+        assert.deepEqual(await output.read(), { value: undefined, done: true });
+    });
+
+    test.concurrent('a final chunk longer than a read is delivered in full', async ({ instance }) => {
+        let produced = false;
+        const output = await instance.passBytes({
+            [Symbol.asyncIterator]() {
+                return this;
+            },
+            async next() {
+                if (produced) {
+                    return { value: undefined, done: true };
+                }
+                produced = true;
+                return { value: new Uint8Array([1, 2, 3]), done: true };
+            },
+        });
+        assert.deepEqual(await output.read(2), { value: new Uint8Array([1, 2]), done: false });
+        assert.deepEqual(await output.read(2), { value: new Uint8Array([3]), done: false });
+        assert.deepEqual(await output.read(2), { value: undefined, done: true });
+    });
+
+    test.concurrent('disposing of the returned stream ends a pending read and the source', async ({ instance }) => {
+        const calls: string[] = [];
+        const output = await instance.passStrings({
+            [Symbol.asyncIterator]() {
+                return this;
+            },
+            next() {
+                calls.push('next');
+                return new Promise(() => {});
+            },
+            async return() {
+                calls.push('return');
+                return { value: undefined, done: true };
+            },
+        });
+        const pending = output.read();
+        await Promise.resolve();
+        assert.deepEqual(await output.return(), { done: true });
+        assert.deepEqual(await pending, { value: undefined, done: true });
+        assert.deepEqual(calls, ['next', 'return']);
+    });
+});
