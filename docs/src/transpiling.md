@@ -59,10 +59,34 @@ Options include:
 * `--call-tracking`: Emit optional invocation handles to observe selected guest execution. See [Tracking individual calls](./advanced/call-tracking.md).
 * `--no-component-error-wrapping`: Throw the lifted error payload directly for a top-level `result::err` instead of wrapping it in a generated `ComponentError`. Jco preserves wrapping by default for compatibility.
 * `--no-namespaced-exports`: Removes exports of the type `test as "test:flavorful/test"` which are not compatible with typescript
+* `--multi-memory`: Keep the core Wasm that copies values between the components of a composed component as it is, which needs WebAssembly multi-memory in the engine. Calls between components are several times faster with it. See [Calls between components](#calls-between-components).
 
 * `--async-mode [mode]`: EXPERIMENTAL: For the component imports and exports, functions and methods on resources can be specified as `async`. The only option is `jspi` (JavaScript Promise Integration).
 * `--async-imports <imports...>`: EXPERIMENTAL: Specify the component imports as `async`. Used with `--async-mode`.
 * `--async-exports <exports...>`: EXPERIMENTAL: Specify the component exports as `async`. Used with `--async-mode`.
+
+### Calls between components
+
+A component built from several components keeps one memory per component.
+A value passed from one to another is copied between their memories by an adapter,
+a core Wasm module that uses both memories at once.
+That takes the WebAssembly [multi-memory](https://github.com/WebAssembly/multi-memory) feature.
+
+By default Jco rewrites each adapter to use a single memory, so that the output runs on engines without multi-memory.
+Every load or store on the other memory becomes a call to a JavaScript function,
+one per number copied.
+Lists of numbers and of records pay the most; strings are copied as a whole and are hardly affected.
+
+`--multi-memory` emits the adapters unchanged.
+In the benchmark of this repository (`packages/jco-transpile/bench/perf-experiments/composed.mjs`, under Node.js 26),
+passing a `list<u32>` of 4096 elements to another component and back was about seven times faster with the flag,
+and a list of 256 elements about three times faster.
+
+Use the flag when every engine that runs the output supports multi-memory.
+The [WebAssembly feature table](https://webassembly.org/features/) lists it for Chrome 120, Firefox 125, Node.js 22 and Deno 1.38,
+and, at the time of writing, not for Safari.
+Output transpiled with the flag fails to compile on an engine without the feature.
+Components that are not composed of others have no adapter, and the flag changes nothing for them.
 
 ## Browser Support
 

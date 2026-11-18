@@ -202,7 +202,10 @@ program
     )
     .option("-q, --quiet", "disable output summary")
     .option("--no-namespaced-exports", "disable namespaced exports for typescript compatibility")
-    .option("--multi-memory", "optimized output for Wasm multi-memory")
+    .option(
+        "--multi-memory",
+        "use Wasm multi-memory for calls between composed components (faster, needs engine support)",
+    )
     .option(
         "--perf-strings-skip-copy-utf8-validation",
         "skip validating utf8 strings copied between components that both use utf8 (validated by default)",
