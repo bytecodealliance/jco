@@ -73,3 +73,111 @@ intercept its calls. There is no mutable namespace receiver or implicit override
 registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
+
+## Runtime profiles
+
+Runtime diagnostic statements carry a `DEBUG` JavaScript label.
+A profile is the choice of whether to keep them:
+
+| Profile   | Diagnostics (`DEBUG`) | Package entry                                |
+| --------- | --------------------- | -------------------------------------------- |
+| `checked` | removed               | `@bytecodealliance/jco-cm-runtime` (default) |
+| `debug`   | kept                  | `@bytecodealliance/jco-cm-runtime/debug`     |
+
+Removing a labeled statement removes the whole statement,
+including object literals, string formatting, and diagnostic getters passed as log arguments.
+Diagnostic arguments must not perform required work.
+
+Canonical ABI traps, resource-handle validation, Unicode validation, ownership, cancellation,
+and lifecycle checks are never labeled, and remain in both profiles.
+
+Assertions about internal implementation invariants carry a `SAFETY` label, and also remain in both profiles.
+The label marks statements that guard against defects of the runtime itself rather than against its callers,
+such as the check of the representation table's internal freelist head.
+Adding a `SAFETY` label requires auditing both the checked condition
+and any work performed while evaluating it.
+
+Only the `debug` profile logs: when `JCO_DEBUG` is set,
+or for bundled runtimes when an instance is created with the `debug` option.
+The `checked` profile omits runtime log calls even when `JCO_DEBUG` is set.
+The explicitly exported `debugLog` utility remains callable in both profiles.
+
+### Bindings that bundle the runtime
+
+The transpiler applies a profile when it bundles the runtime into generated bindings.
+Select it with `runtimeProfile` (`--runtime-profile` on the command line); the default is `checked`.
+
+### Bindings that import the runtime
+
+Both profiles have the same exports, type declarations, and runtime API version,
+so the profile is chosen by the base that bindings import:
+
+```sh
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime       # checked
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/debug # debug
+```
+
+Modules of different profiles do not share state or private brands,
+so one program should import a single profile.
+
+### Building profiles
+
+`pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
+the `checked` profile at the top of `dist`, with `dist/debug` beside it.
+The `checked` profile is bundled and minified, one module per entry point with shared chunks;
+the `debug` profile keeps one module per source file.
+
+To build one profile into a directory of its own,
+run `node scripts/build.mjs --profile <profile> --out-dir /path/to/runtime` from this package,
+and use that directory as `cmRuntimeEsModule`.
+
+A bundler can also remove labels from the `debug` profile itself, for example with Rolldown:
+
+```js
+const bundle = await rolldown({
+    input: 'component.js',
+    transform: { dropLabels: ['DEBUG'] },
+});
+```
+
+The runtime must be included in the bundle, rather than marked external.
+Apply label removal before optimization passes that discard unused labels.
+
+See the [label experiments](../bench/labels/README.md) for correctness checks and reproducible Node benchmarks.
+
+### Allocation and scheduling behavior
+
+Long or explicitly reused runtime-owned flat-argument contexts expose remaining
+arguments through `params`, copying only when a caller observes or retains that
+array. Short one-shot contexts, caller-created contexts and custom property
+accessors keep ordinary array consumption. Cursor setup defaults to vectors of
+at least 64 arguments because setup outweighs slicing for short calls. Scalar memory views refresh after buffer replacement, including
+memory growth. Custom lift functions keep the pair-returning API and may replace
+their context; built-in scalar composition can avoid constructing those pairs.
+
+The default Node UTF-8 codec uses native byte primitives for ASCII strings of at least
+256 UTF-16 code units. Browser codecs and custom `encodeInto` implementations keep
+the portable path. Reallocations remain exact and occur once per string.
+
+Buffers may optionally implement bulk `copyTo` and owned `readBytes` capabilities;
+providers without them continue using resource-aware array reads and writes.
+Ready stream sources may expose `readSourceOrPromise`; `readSource` retains its
+promise API. Synchronous sources yield after 64 reads, and host completions share
+scheduler wakeups within a microtask checkpoint. The scheduler still resumes one
+thread per tick to preserve thread-register restoration.
+
+A stream lowered from a host source keeps that source on its readable end. When
+a guest hands the end back to the host, for example by returning the stream it
+was given, both ends belong to the host: a host read then takes its values from
+the source's queue, where a write injected for a guest read takes them, without
+the buffers and events of a copy. Values a guest read left queued come first,
+and a queue that exposes `takeBytes` has byte chunks copied whole. The read
+still marks the end as copying, ends with a drop or an instance stop, and honors
+`rejectLength` and `dropAfterCopy`. An end that is not idle, such as one with an
+event the guest has yet to take, is read through a copy as before.
+
+Such a read of a `u8` stream whose metadata names no typed array returns bytes
+as the source gave them. A chunk the source produced as a `Uint8Array` or an
+`ArrayBuffer` is read as `Uint8Array` copies of its bytes, and the read ends
+with the chunk. Numbers and arrays of numbers are read as values, as they are
+through a copy.

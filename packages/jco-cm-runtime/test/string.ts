@@ -75,15 +75,14 @@ function strings() {
 }
 
 const CASES = [
-    { value: '', utf8: [], utf16: [], codepoints: 0 },
-    { value: 'aé中', utf8: [0x61, 0xc3, 0xa9, 0xe4, 0xb8, 0xad], utf16: [0x61, 0, 0xe9, 0, 0x2d, 0x4e], codepoints: 3 },
-    { value: '🚀', utf8: [0xf0, 0x9f, 0x9a, 0x80], utf16: [0x3d, 0xd8, 0x80, 0xde], codepoints: 1 },
-    { value: '\ufeff', utf8: [0xef, 0xbb, 0xbf], utf16: [0xff, 0xfe], codepoints: 1 },
+    { value: '', utf8: [], utf16: [] },
+    { value: 'aé中', utf8: [0x61, 0xc3, 0xa9, 0xe4, 0xb8, 0xad], utf16: [0x61, 0, 0xe9, 0, 0x2d, 0x4e] },
+    { value: '🚀', utf8: [0xf0, 0x9f, 0x9a, 0x80], utf16: [0x3d, 0xd8, 0x80, 0xde] },
+    { value: '\ufeff', utf8: [0xef, 0xbb, 0xbf], utf16: [0xff, 0xfe] },
     {
         value: '\ud800x\udc00',
         utf8: [0xef, 0xbf, 0xbd, 0x78, 0xef, 0xbf, 0xbd],
         utf16: [0xfd, 0xff, 0x78, 0, 0xfd, 0xff],
-        codepoints: 3,
     },
 ];
 
@@ -117,7 +116,6 @@ for (const encoding of ['utf8', 'utf16'] as const) {
                 expect(result).toEqual({
                     ptr: 65536,
                     len: encoding === 'utf8' ? bytes.length : bytes.length / 2,
-                    codepoints: entry.codepoints,
                 });
                 expect([...new Uint8Array(memory.buffer, result.ptr, bytes.length)]).toEqual(bytes);
             }
@@ -273,5 +271,262 @@ test.concurrent('UTF8 allocation calls the supplied encoder with its own receive
         },
     };
     const memory = { buffer: new ArrayBuffer(8) };
-    expect(string.utf8Encode(encoder, 'é', () => 0, memory)).toEqual({ ptr: 0, len: 2, codepoints: 1 });
+    expect(string.utf8Encode(encoder, 'é', () => 0, memory)).toEqual({ ptr: 0, len: 2 });
+});
+
+test.concurrent.each(['', 'ascii', '😀𝄞', '\ud800x\udc00', 'a😀\ud800é'.repeat(256)])(
+    'UTF-16 encoding repairs surrogates and returns only where it wrote: %j',
+    async (value) => {
+        const memory = new WebAssembly.Memory({ initial: 1, maximum: 3 });
+        const context = string.initializeUtf16Encoding();
+        const realloc = () => {
+            memory.grow(1);
+            return 65536;
+        };
+        const encoded = string.utf16Encode(context, value, realloc, memory);
+        expect(encoded).toEqual({ ptr: 65536, len: value.length });
+        expect(new TextDecoder('utf-16le').decode(new Uint8Array(memory.buffer, encoded.ptr, encoded.len * 2))).toBe(
+            value.toWellFormed(),
+        );
+        const asynchronous = await string.utf16EncodeAsync(context, value, async () => realloc(), memory);
+        expect(asynchronous).toEqual(encoded);
+    },
+);
+
+test.concurrent.each(['ascii', 'é', '😀', '\ud800x\udc00', '\ufeff'])(
+    'optimized UTF-8 agrees with the portable codec: %j',
+    async (unit) => {
+        const value = unit.repeat(1024);
+        const encoder = string.initializeUtf8Encoder();
+        const expected = new TextEncoder().encode(value);
+        const memory = new WebAssembly.Memory({ initial: 1, maximum: 3 });
+        const realloc = (_ptr: number, _old: number, align: number, size: number) => {
+            expect(align).toBe(1);
+            expect(size).toBe(expected.length);
+            memory.grow(1);
+            return 65536;
+        };
+        const encoded = string.utf8Encode(encoder, value, realloc, memory);
+        expect(encoded).toEqual({ ptr: 65536, len: expected.length });
+        expect(new Uint8Array(memory.buffer, encoded.ptr, encoded.len)).toEqual(expected);
+        let calls = 0;
+        const original = encoder.encodeInto.bind(encoder);
+        const changed = await string.utf8EncodeAsync(
+            encoder,
+            value,
+            async (...args) => {
+                Object.defineProperty(encoder, 'encodeInto', {
+                    value: (input: string, output: Uint8Array) => {
+                        calls++;
+                        return original(input, output);
+                    },
+                });
+                return realloc(...args);
+            },
+            memory,
+        );
+        expect(calls).toBe(1);
+        expect(changed).toEqual(encoded);
+        expect(new Uint8Array(memory.buffer, changed.ptr, changed.len)).toEqual(expected);
+    },
+);
+
+// Lengths on both sides of where sizing and writing switch to Node's primitives.
+const UTF8_LENGTHS = [1, 2, 31, 32, 33, 255, 256, 257, 1024];
+
+test.concurrent.each(UTF8_LENGTHS)('UTF-8 sizes ASCII of %i code units as it is', (length) => {
+    const value = 'abcdefghij'.repeat(Math.ceil(length / 10)).slice(0, length);
+    const memory = { buffer: new ArrayBuffer(2048) };
+    const calls: number[][] = [];
+    const encoded = string.utf8Encode(
+        string.initializeUtf8Encoder(),
+        value,
+        (...args) => {
+            calls.push(args);
+            return 16;
+        },
+        memory,
+    );
+    expect(calls).toEqual([[0, 0, 1, length]]);
+    expect(encoded).toEqual({ ptr: 16, len: length });
+    expect(new TextDecoder().decode(new Uint8Array(memory.buffer, 16, length))).toBe(value);
+});
+
+test.concurrent.each(['é', '中', '😀', '\ud800', '\udc00', '\udc00\ud800', '\ud83d'])(
+    'UTF-8 sizes %j anywhere in ASCII as the portable codec encodes it',
+    (unit) => {
+        const encoder = string.initializeUtf8Encoder();
+        for (const length of UTF8_LENGTHS) {
+            // At the start, in the middle, and at the end, where a high surrogate has
+            // nothing to pair with.
+            const indices = [0, 1, 31, length >> 1, length - unit.length].filter(
+                (index) => index >= 0 && index + unit.length <= length,
+            );
+            for (const index of new Set(indices)) {
+                const value = 'a'.repeat(index) + unit + 'a'.repeat(length - index - unit.length);
+                const expected = new TextEncoder().encode(value);
+                const memory = { buffer: new ArrayBuffer(expected.length + 16) };
+                const calls: number[][] = [];
+                const encoded = string.utf8Encode(
+                    encoder,
+                    value,
+                    (...args) => {
+                        calls.push(args);
+                        return 16;
+                    },
+                    memory,
+                );
+                expect(calls).toEqual([[0, 0, 1, expected.length]]);
+                expect(encoded).toEqual({ ptr: 16, len: expected.length });
+                expect(new Uint8Array(memory.buffer, 16, expected.length)).toEqual(expected);
+            }
+        }
+    },
+);
+
+/**
+ * Run a function while counting the calls to `Buffer.byteLength`, which may be replaced.
+ *
+ * @param run - Receives a function that returns the number of calls so far.
+ * @param replacement - What `Buffer.byteLength` returns instead of its own result.
+ */
+function withCountedByteLength(run: (calls: () => number) => void, replacement?: (size: number) => number): void {
+    const original = Buffer.byteLength;
+    let calls = 0;
+    Buffer.byteLength = ((...args: Parameters<typeof original>) => {
+        calls++;
+        const size = original(...args);
+        return replacement ? replacement(size) : size;
+    }) as typeof original;
+    try {
+        run(() => calls);
+    } finally {
+        Buffer.byteLength = original;
+    }
+}
+
+test('UTF-8 sizing asks Node only for the unmodified default encoder', () => {
+    const value = 'a'.repeat(64);
+    const memory = { buffer: new ArrayBuffer(80) };
+    withCountedByteLength((calls) => {
+        const encoder = string.initializeUtf8Encoder();
+        const initial = calls();
+        expect(string.utf8Encode(encoder, value, () => 0, memory).len).toBe(64);
+        expect(calls()).toBe(initial + 1);
+
+        // Any long string is sized by the native call, and no short one.
+        expect(string.utf8Encode(encoder, '中é'.repeat(16), () => 0, memory).len).toBe(80);
+        expect(calls()).toBe(initial + 2);
+        expect(string.utf8Encode(encoder, 'a'.repeat(31), () => 0, memory).len).toBe(31);
+        expect(calls()).toBe(initial + 2);
+
+        const encodeInto = encoder.encodeInto.bind(encoder);
+        Object.defineProperty(encoder, 'encodeInto', {
+            value: (input: string, output: Uint8Array) => encodeInto(input.toUpperCase(), output),
+        });
+        expect(string.utf8Encode(encoder, value, () => 0, memory).len).toBe(64);
+        expect(calls()).toBe(initial + 2);
+        expect(new TextDecoder().decode(new Uint8Array(memory.buffer, 0, 64))).toBe(value.toUpperCase());
+
+        string.utf8Encode(new TextEncoder(), value, () => 0, memory);
+        expect(calls()).toBe(initial + 2);
+    });
+});
+
+test('UTF-8 sizing does not ask a host that sizes unpaired surrogates differently', () => {
+    const value = 'a\ud800'.repeat(32);
+    const expected = new TextEncoder().encode(value);
+    const memory = { buffer: new ArrayBuffer(expected.length) };
+    withCountedByteLength(
+        (calls) => {
+            const encoder = string.initializeUtf8Encoder();
+            const initial = calls();
+            expect(string.utf8Encode(encoder, value, () => 0, memory)).toEqual({ ptr: 0, len: expected.length });
+            expect(calls()).toBe(initial);
+            expect(new Uint8Array(memory.buffer)).toEqual(expected);
+        },
+        (size) => size - 1,
+    );
+});
+
+/**
+ * A generator of pseudorandom numbers in [0, 1) that is the same on every run.
+ *
+ * @param seed - Nonzero 32-bit state to start from.
+ */
+function xorshift(seed: number): () => number {
+    return () => {
+        seed ^= seed << 13;
+        seed ^= seed >>> 17;
+        seed ^= seed << 5;
+        seed >>>= 0;
+        return seed / 0x100000000;
+    };
+}
+
+test('UTF-8 encoding of random strings is what TextEncoder produces', () => {
+    const random = xorshift(0x9e3779b9);
+    const int = (bound: number) => Math.floor(random() * bound);
+    // ASCII, two and three byte characters, pairs, and either half of a pair alone.
+    const units = [
+        () => String.fromCharCode(0x20 + int(0x5f)),
+        () => String.fromCharCode(0x80 + int(0x780)),
+        () => String.fromCharCode(0x800 + int(0xd000)),
+        () => String.fromCodePoint(0x10000 + int(0x100000)),
+        () => String.fromCharCode(0xd800 + int(0x400)),
+        () => String.fromCharCode(0xdc00 + int(0x400)),
+    ];
+    const mixes = [[0], [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5], [0, 3, 4, 5]];
+    const reference = new TextEncoder();
+    const encoder = string.initializeUtf8Encoder();
+    const memory = { buffer: new ArrayBuffer(4096) };
+    const bytes = new Uint8Array(memory.buffer);
+    const wrong: string[] = [];
+    let unpaired = 0;
+
+    for (let round = 0; round < 20000; round++) {
+        // Lengths lie around where sizing and writing change, or anywhere below 600.
+        const length = [int(80), 28 + int(9), 252 + int(9), int(600)][int(4)];
+        const mix = mixes[int(mixes.length)];
+        let value = '';
+        while (value.length < length) {
+            value += units[mix[int(mix.length)]]();
+        }
+        // A cut may split a pair, which leaves half of it at the end.
+        value = value.slice(0, length);
+        if (value.length === 0) {
+            continue;
+        }
+        unpaired += Number(!value.isWellFormed());
+
+        const expected = reference.encode(value);
+        const sizes: number[] = [];
+        const realloc = (_ptr: number, _oldSize: number, _align: number, size: number) => {
+            sizes.push(size);
+            return 16;
+        };
+        bytes.fill(0xaa, 0, expected.length + 32);
+
+        // `encodeInto` itself stops short of some strings that hold an unpaired surrogate
+        // when its destination has exactly their size, and only those fail to encode.
+        const whole = reference.encodeInto(value, new Uint8Array(expected.length)).read === value.length;
+        let correct: boolean;
+        try {
+            const encoded = string.utf8Encode(encoder, value, realloc, memory);
+            correct =
+                whole &&
+                encoded.ptr === 16 &&
+                encoded.len === expected.length &&
+                bytes.subarray(16, 16 + expected.length).every((byte, index) => byte === expected[index]) &&
+                bytes[15] === 0xaa &&
+                bytes[16 + expected.length] === 0xaa;
+        } catch (error) {
+            correct = !whole && !value.isWellFormed() && (error as Error).message === 'failed to encode whole string';
+        }
+        if (!correct || sizes.length !== 1 || sizes[0] !== expected.length) {
+            wrong.push(JSON.stringify(value));
+        }
+    }
+    expect(wrong).toEqual([]);
+    expect(unpaired).toBeGreaterThan(5000);
 });

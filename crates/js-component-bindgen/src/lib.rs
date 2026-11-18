@@ -115,6 +115,35 @@ impl TypeGenerationConfig {
 
 // TODO(breaking): merge TranspileOpts into this non-exhaustive configuration at
 // the next major release, so new options no longer need a separate type.
+/// Which removable statements of the Component Model runtime generated bindings keep.
+///
+/// The runtime labels its diagnostic statements `DEBUG`. Assertions, canonical ABI
+/// traps and validation of what a guest or host passes are kept by every profile.
+///
+/// A profile applies where the runtime is bundled into the bindings. Bindings that
+/// import a runtime take what that runtime was built with.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RuntimeProfile {
+    /// Remove diagnostics.
+    #[default]
+    Checked,
+    /// Keep diagnostics. They are logged when `JCO_DEBUG` is
+    /// set, or when an instance is created with the `debug` option.
+    Debug,
+}
+
+impl RuntimeProfile {
+    /// The statement labels that this profile removes.
+    #[cfg(feature = "embedded-cm-runtime")]
+    pub(crate) fn dropped_labels(self) -> &'static [&'static str] {
+        match self {
+            Self::Checked => &["DEBUG"],
+            Self::Debug => &[],
+        }
+    }
+}
+
 /// Extensible configuration for `transpile_with_config`.
 ///
 /// `TranspileOpts` keeps its published fields so existing struct literals remain
@@ -136,6 +165,9 @@ pub struct TranspileConfig {
     /// Controls declaration contracts independently of the embedding tool defaults.
     #[builder(default)]
     pub type_generation: TypeGenerationConfig,
+    /// Which diagnostics and assertions the bundled runtime keeps.
+    #[builder(default)]
+    pub runtime_profile: RuntimeProfile,
     /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     /// Intrinsics are generated inline when this is `None` (the default),
@@ -245,9 +277,13 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         call_tracking,
         optional_result_payloads,
         type_generation,
+        runtime_profile,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
     } = config;
+    // Only the bundled runtime is reduced to a profile.
+    #[cfg(not(feature = "embedded-cm-runtime"))]
+    let _ = runtime_profile;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
     let external_runtime = cm_runtime_es_module.is_some();
@@ -389,8 +425,9 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         if bundle_runtime && name.ends_with(".js") {
             let source = std::str::from_utf8(source)
                 .with_context(|| format!("generated module {name} is not UTF-8"))?;
-            if let Some(linked) = embedded_runtime::link(source, opts.instantiation_mode.is_some())
-                .with_context(|| format!("failed to bundle the runtime into {name}"))?
+            if let Some(linked) =
+                embedded_runtime::link(source, opts.instantiation_mode.is_some(), runtime_profile)
+                    .with_context(|| format!("failed to bundle the runtime into {name}"))?
             {
                 files_out.push((name.to_string(), linked.into_bytes()));
                 continue;
@@ -731,18 +768,19 @@ mod tests {
         // once as it is instantiated.
         let (per_instance, inside_instantiate) = logger(Some(InstantiationMode::Sync));
         assert!(per_instance.contains("?? ") && per_instance.contains("JCO_DEBUG"));
-        assert!(per_instance.contains("console.debug(message, ...args) : () => {}"));
         #[cfg(not(feature = "embedded-cm-runtime"))]
         {
             // Inline intrinsics are defined in `instantiate`, where `options` is.
+            assert!(per_instance.contains("console.debug(message, ...args) : () => {}"));
             assert!(
                 per_instance
                     .contains("(options?.debug ?? !!globalThis?.process?.env?.JCO_DEBUG) ?")
             );
             assert_eq!(inside_instantiate, Some(true));
         }
-        // The bundled runtime of an instance is created outside `instantiate`,
-        // which passes its choice in.
+        // The bundled runtime of an instance is found outside `instantiate`, which
+        // passes its choice in. Instances that choose alike share a runtime, whose
+        // logger follows the choice already resolved against the environment.
         #[cfg(feature = "embedded-cm-runtime")]
         {
             assert_eq!(inside_instantiate, Some(false));
@@ -754,7 +792,11 @@ mod tests {
                     .build(),
             )
             .unwrap();
-            assert!(generated_javascript(&source).contains("$instance(options?.debug);"));
+            let source = generated_javascript(&source);
+            assert!(source.contains("$runtime(options?.debug);"));
+            assert!(source.contains(
+                "$debug ? (message, ...args) => console.debug(message, ...args) : () => {}"
+            ));
         }
 
         // Neither calls a global that a local name of the bindings could capture.
@@ -981,5 +1023,107 @@ mod tests {
         assert!(!source.contains("_jcoRuntimeProvider"));
         assert!(!source.contains("unused-runtime"));
         assert!(!source.contains("_jcoResourceTableGetContext"));
+    }
+
+    /// A caller that passes a `list<u32>` to a callee with a memory of its own,
+    /// and returns the list that comes back.
+    #[cfg(feature = "transpile-bindgen")]
+    const TWO_MEMORIES: &str = r#"
+        (component
+            (component $callee
+                (core module $m
+                    (memory (export "memory") 1)
+                    (func (export "realloc") (param i32 i32 i32 i32) (result i32)
+                        i32.const 1024)
+                    (func (export "echo") (param i32 i32) (result i32)
+                        (i32.store (i32.const 8) (local.get 0))
+                        (i32.store (i32.const 12) (local.get 1))
+                        (i32.const 8)))
+                (core instance $i (instantiate $m))
+                (func (export "echo") (param "values" (list u32)) (result (list u32))
+                    (canon lift (core func $i "echo")
+                        (memory (core memory $i "memory"))
+                        (realloc (core func $i "realloc")))))
+            (component $caller
+                (import "echo" (func $echo (param "values" (list u32)) (result (list u32))))
+                (core module $libc
+                    (memory (export "memory") 1)
+                    (func (export "realloc") (param i32 i32 i32 i32) (result i32)
+                        i32.const 1024))
+                (core instance $libc (instantiate $libc))
+                (core func $echo_lowered
+                    (canon lower (func $echo)
+                        (memory (core memory $libc "memory"))
+                        (realloc (core func $libc "realloc"))))
+                (core module $m
+                    (import "host" "echo" (func $echo (param i32 i32 i32)))
+                    (func (export "run") (param i32 i32) (result i32)
+                        (call $echo (local.get 0) (local.get 1) (i32.const 16))
+                        (i32.const 16)))
+                (core instance $i (instantiate $m
+                    (with "host" (instance (export "echo" (func $echo_lowered))))))
+                (func (export "run") (param "values" (list u32)) (result (list u32))
+                    (canon lift (core func $i "run")
+                        (memory (core memory $libc "memory"))
+                        (realloc (core func $libc "realloc")))))
+            (instance $callee_instance (instantiate $callee))
+            (instance $caller_instance (instantiate $caller
+                (with "echo" (func $callee_instance "echo"))))
+            (export "run" (func $caller_instance "run")))
+    "#;
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn typed_list_is_lifted_by_slicing_a_view_of_memory() {
+        let component = wat::parse_str(TWO_MEMORIES).unwrap();
+        let transpiled = transpile(
+            &component,
+            TranspileOpts::builder().name("lists".into()).build(),
+        )
+        .unwrap();
+        let source = generated_javascript(&transpiled);
+
+        // The view spans the list alone, and its copy does not alias guest memory.
+        let lift = source.find("new Uint32Array(memory0.buffer, ptr").unwrap();
+        let statement = source[lift..].lines().next().unwrap();
+        assert!(statement.trim_end().ends_with(").slice();"), "{statement}");
+        assert!(!source.contains("new Uint32Array(memory0.buffer.slice("));
+    }
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn memory_accesses_of_an_adapter_reuse_a_view_unless_memories_are_native() {
+        let component = wat::parse_str(TWO_MEMORIES).unwrap();
+        let source = |multi_memory: bool| {
+            let transpiled = transpile(
+                &component,
+                TranspileOpts::builder()
+                    .name("lists".into())
+                    .multi_memory(multi_memory)
+                    .build(),
+            )
+            .unwrap();
+            generated_javascript(&transpiled).to_string()
+        };
+
+        // Without multi-memory, the adapter imports each access to the second memory.
+        // The accesses share one view, which is replaced once the memory has another buffer.
+        let polyfilled = source(false);
+        let view = polyfilled.find("memoryView").unwrap();
+        let view = &polyfilled[view..];
+        let view = &view[..view.find("})();").unwrap()];
+        assert!(view.contains("view.buffer === memory.buffer ? view : "));
+        assert_eq!(view.matches("new DataView(memory.buffer)").count(), 2);
+        let name = view.split(' ').next().unwrap();
+        assert_eq!(polyfilled.matches(&format!("{name} = ")).count(), 1);
+        for op in ["I32Load", "I32Store"] {
+            let import = polyfilled.find(&format!("\"mem1 {op}\"")).unwrap();
+            let body = polyfilled[import..].lines().next().unwrap();
+            assert!(body.contains(&format!("=> {name}().")), "{body}");
+            assert!(!body.contains("new DataView("), "{body}");
+        }
+
+        // With multi-memory, the adapter reaches both memories itself.
+        assert!(!source(true).contains("\"mem1 "));
     }
 }

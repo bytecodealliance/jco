@@ -6,6 +6,42 @@ import type {
     StringEncodeInto,
 } from '../runtime.js';
 
+interface NativeBuffer {
+    byteLength(value: string, encoding: 'utf8'): number;
+    from(
+        buffer: ArrayBufferLike,
+        offset: number,
+        length: number,
+    ): {
+        write(value: string, offset: number, length: number, encoding: 'utf8'): number;
+    };
+}
+const nativeEncoders = /* @__PURE__ */ new WeakMap<
+    StringEncodeInto,
+    {
+        buffer: NativeBuffer;
+        encodeInto: StringEncodeInto['encodeInto'];
+    }
+>();
+
+/** Shortest string that a native call sizes faster than the loop over its code units does. */
+const NATIVE_SIZE_MIN_LENGTH = 32;
+/** Shortest ASCII string that Node's `Buffer` writes faster than `encodeInto` does. */
+const NATIVE_WRITE_MIN_LENGTH = 256;
+/**
+ * A string whose size differs between hosts that count an unpaired surrogate as the three
+ * bytes of the replacement character, as `TextEncoder` encodes it, and hosts that do not.
+ * It is long enough to reach the code that sizes long strings a block at a time.
+ */
+const SURROGATE_PROBE = /* @__PURE__ */ '\ud800a\udc00é中😀\udbff'.repeat(16);
+const SURROGATE_PROBE_SIZE = 16 * 19;
+
+/** Use Node's byte primitives only for the selected, unmodified default encoder. */
+function nativeBuffer(encoder: StringEncodeInto): NativeBuffer | undefined {
+    const native = nativeEncoders.get(encoder);
+    return native && native.encodeInto === encoder.encodeInto ? native.buffer : undefined;
+}
+
 function requireString(value: unknown): string {
     if (typeof value !== 'string') {
         throw new TypeError('expected a string, received [' + typeof value + ']');
@@ -13,12 +49,21 @@ function requireString(value: unknown): string {
     return value;
 }
 
-function utf8Size(s: string): { len: number; codepoints: number } {
+/**
+ * The exact UTF-8 size of a string, where an unpaired surrogate counts as the three bytes
+ * of the replacement character that encodes it.
+ */
+function utf8Size(s: string, encoder: StringEncodeInto): number {
+    if (s.length >= NATIVE_SIZE_MIN_LENGTH) {
+        const native = nativeBuffer(encoder);
+        if (native) {
+            return native.byteLength(s, 'utf8');
+        }
+    }
+
     let len = 0;
-    let codepoints = 0;
     for (let i = 0; i < s.length; i++) {
         const ch = s.charCodeAt(i);
-        codepoints++;
         if (ch < 0x80) {
             len += 1;
         } else if (ch < 0x800) {
@@ -30,14 +75,29 @@ function utf8Size(s: string): { len: number; codepoints: number } {
             len += 3;
         }
     }
-    return { len, codepoints };
+    return len;
 }
 
 export const initializeUtf8Decoder: StringModule['initializeUtf8Decoder'] = () =>
     new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
 export const initializeUtf16Decoder: StringModule['initializeUtf16Decoder'] = () =>
     new TextDecoder('utf-16', { fatal: true, ignoreBOM: true });
-export const initializeUtf8Encoder: StringModule['initializeUtf8Encoder'] = () => new TextEncoder();
+export const initializeUtf8Encoder: StringModule['initializeUtf8Encoder'] = () => {
+    const encoder = new TextEncoder();
+    const host = globalThis as typeof globalThis & {
+        process?: { versions?: { node?: string } };
+        Buffer?: NativeBuffer;
+    };
+    if (
+        host.process?.versions?.node &&
+        typeof host.Buffer?.from === 'function' &&
+        typeof host.Buffer.byteLength === 'function' &&
+        host.Buffer.byteLength(SURROGATE_PROBE, 'utf8') === SURROGATE_PROBE_SIZE
+    ) {
+        nativeEncoders.set(encoder, { buffer: host.Buffer, encodeInto: encoder.encodeInto });
+    }
+    return encoder;
+};
 export const initializeUtf16Encoding: StringModule['initializeUtf16Encoding'] = () => ({
     littleEndian: new Uint8Array(new Uint16Array([1]).buffer)[0] === 1,
 });
@@ -45,26 +105,29 @@ export const initializeUtf16Encoding: StringModule['initializeUtf16Encoding'] = 
 function writeUtf16(context: Utf16EncodingContext, str: string, ptr: number, memory: StringMemory): StringAllocation {
     const len = str.length;
     const out = new Uint16Array(memory.buffer, ptr, len);
-    const put = context.littleEndian
-        ? (i: number, ch: number) => {
-              out[i] = ch;
-          }
-        : (i: number, ch: number) => {
-              out[i] = ((ch & 0xff) << 8) | (ch >>> 8);
-          };
+
+    // Write the code units in the byte order of this platform, replacing each
+    // lone surrogate.
     for (let i = 0; i < len; i++) {
         let ch = str.charCodeAt(i);
         if ((ch & 0xf800) === 0xd800) {
             if (ch < 0xdc00 && i + 1 < len && (str.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
-                put(i++, ch);
+                out[i++] = ch;
                 ch = str.charCodeAt(i);
             } else {
                 ch = 0xfffd;
             }
         }
-        put(i, ch);
+        out[i] = ch;
     }
-    return { ptr, len, codepoints: [...str].length };
+
+    // Guest memory is little endian.
+    if (!context.littleEndian) {
+        for (let i = 0; i < len; i++) {
+            out[i] = ((out[i] & 0xff) << 8) | (out[i] >>> 8);
+        }
+    }
+    return { ptr, len };
 }
 
 function writeUtf8(
@@ -72,14 +135,22 @@ function writeUtf8(
     s: string,
     ptr: number,
     len: number,
-    codepoints: number,
     memory: StringMemory,
 ): StringAllocation {
+    // `len` is the UTF-8 size of `s`, so `s` is ASCII exactly when the two lengths agree.
+    const native = len === s.length && len >= NATIVE_WRITE_MIN_LENGTH ? nativeBuffer(encoder) : undefined;
+    if (native) {
+        const written = native.from(memory.buffer, ptr, len).write(s, 0, len, 'utf8');
+        if (written !== len) {
+            throw new Error('failed to encode whole string');
+        }
+        return { ptr, len };
+    }
     const { read, written } = encoder.encodeInto(s, new Uint8Array(memory.buffer, ptr, len));
     if (read !== s.length || written !== len) {
         throw new Error('failed to encode whole string');
     }
-    return { ptr, len, codepoints };
+    return { ptr, len };
 }
 
 export const utf16Encode: StringModule['utf16Encode'] = (context, value, realloc, memory) => {
@@ -120,9 +191,9 @@ export const utf8Encode: StringModule['utf8Encode'] = (encoder, value, realloc, 
         return { ptr: 1, len: 0 };
     }
     // Some preview1 allocators cannot shrink, so allocate exactly once.
-    const { len, codepoints } = utf8Size(s);
+    const len = utf8Size(s, encoder);
     const ptr = realloc(0, 0, 1, len);
-    return writeUtf8(encoder, s, ptr, len, codepoints, memory);
+    return writeUtf8(encoder, s, ptr, len, memory);
 };
 
 export const utf8EncodeAsync: StringModule['utf8EncodeAsync'] = async (encoder, value, realloc, memory) => {
@@ -130,9 +201,9 @@ export const utf8EncodeAsync: StringModule['utf8EncodeAsync'] = async (encoder, 
     if (s.length === 0) {
         return { ptr: 1, len: 0 };
     }
-    const { len, codepoints } = utf8Size(s);
+    const len = utf8Size(s, encoder);
     const ptr = await realloc(0, 0, 1, len);
-    return writeUtf8(encoder, s, ptr, len, codepoints, memory);
+    return writeUtf8(encoder, s, ptr, len, memory);
 };
 
 export const validateGuestChar: StringModule['validateGuestChar'] = (value) => {

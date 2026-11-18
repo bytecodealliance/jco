@@ -79,6 +79,14 @@ world js-component-bindgen {
     print-error(error-message),
   }
 
+  /// Which removable statements a runtime bundled into the bindings keeps.
+  enum runtime-profile {
+    /// Remove diagnostics.
+    checked,
+    /// Keep diagnostics.
+    debug,
+  }
+
   variant instantiation-mode {
     %async,
     sync,
@@ -169,6 +177,10 @@ world js-component-bindgen {
     /// Experimental Component Model runtime package or directory base.
     /// Imports named runtime and intrinsics/* subpaths; directory/URL bases use .js files.
     cm-runtime-es-module: option<string>,
+
+    /// Which diagnostics and assertions the bundled Component Model runtime keeps
+    /// (defaults to `checked`).
+    runtime-profile: option<runtime-profile>,
 
     /// Represent WIT flags as bigint values instead of objects of booleans.
     flags-as-bigint: option<bool>,

@@ -120,6 +120,24 @@ async function run() {
 
     test(wasm.result.listFloat64, new Float64Array([]));
     test(wasm.result.listFloat64, new Float64Array([1, 1.2, 0.3]));
+
+    // Lists that take several pages each, so that every copy between the two instances
+    // grows the memory it writes to and continues in the buffer that replaces the old one.
+    const length = 100_000;
+    const number = (_: unknown, index: number) => index * 40503 + 0.5;
+    const bigint = (_: unknown, index: number) => BigInt(index) * 0x9e3779b97f4a7c15n;
+    for (let round = 0; round < 3; round++) {
+        test(wasm.result.listU8, new Uint8Array(length).map(number));
+        test(wasm.result.listS8, new Int8Array(length).map(number));
+        test(wasm.result.listU16, new Uint16Array(length).map(number));
+        test(wasm.result.listS16, new Int16Array(length).map(number));
+        test(wasm.result.listU32, new Uint32Array(length).map(number));
+        test(wasm.result.listS32, new Int32Array(length).map(number));
+        test(wasm.result.listU64, new BigUint64Array(length).map(bigint));
+        test(wasm.result.listS64, new BigInt64Array(length).map(bigint));
+        test(wasm.result.listFloat32, new Float32Array(length).map(number));
+        test(wasm.result.listFloat64, new Float64Array(length).map(number));
+    }
 }
 
 // Async cycle handling

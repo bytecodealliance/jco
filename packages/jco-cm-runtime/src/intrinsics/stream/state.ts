@@ -24,7 +24,7 @@ export function createStream(
     cstate: ComponentAsyncState,
     args: StreamCreateOptions,
 ): StreamCreated {
-    debugLog('[createStream()] args', args);
+    DEBUG: debugLog('[createStream()] args', args);
     const { tableIdx, elemMeta } = args;
     if (tableIdx === undefined) {
         throw new Error('missing table idx while adding stream');
@@ -87,7 +87,7 @@ export function createStream(
 }
 
 export function getStreamEnd(_context: StreamEndLookupContext, args: StreamEndLocation): StreamPayloadEnd {
-    debugLog('[getStreamEnd()] args', args);
+    DEBUG: debugLog('[getStreamEnd()] args', args);
     const { tableIdx, streamEndHandle, streamEndWaitableIdx } = args;
     if (tableIdx === undefined) {
         throw new Error('missing table idx while getting stream end');
@@ -126,7 +126,7 @@ export function addStreamEndToTable(
     _context: StreamTableContext,
     args: StreamEndInsertion,
 ): { handle: number; waitableIdx: number } {
-    debugLog('[addStreamEndToTable()] args', args);
+    DEBUG: debugLog('[addStreamEndToTable()] args', args);
     const { tableIdx, streamEnd } = args;
     if (typeof streamEnd === 'number') {
         throw new Error('INSERTING BAD STREAMEND');
@@ -145,7 +145,7 @@ export function addStreamEndToTable(
     const waitableIdx = cstate.handles.insert(streamEnd);
     streamEnd.setWaitableIdx(waitableIdx);
 
-    debugLog('[addStreamEndToTable()] added stream end', {
+    DEBUG: debugLog('[addStreamEndToTable()] added stream end', {
         tableIdx,
         table,
         handle,
@@ -157,7 +157,7 @@ export function addStreamEndToTable(
 }
 
 export function removeStreamEndFromTable(_context: StreamTableContext, args: StreamEndRemoval): StreamPayloadEnd {
-    debugLog('[removeStreamEndFromTable()] args', args);
+    DEBUG: debugLog('[removeStreamEndFromTable()] args', args);
 
     const { tableIdx, streamWaitableIdx } = args;
     if (tableIdx === undefined) {

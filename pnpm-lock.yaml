@@ -559,6 +559,9 @@ importers:
       '@types/node':
         specifier: ^24.13.3
         version: 24.19.2
+      rolldown:
+        specifier: 1.2.13
+        version: 1.2.13
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

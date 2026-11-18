@@ -1,3 +1,4 @@
+import { yieldToHost } from '../core/scheduling.js';
 import type {
     StreamHostInjectContext,
     StreamHostInjectOptions,
@@ -26,6 +27,15 @@ export function genStreamHostInjectFn(
 
     const pendingValues = new _context.PendingValueQueue(readFn, elemMeta);
     hostWriteEnd.setSourceRebufferFn((items) => pendingValues.prepend(items));
+    // A host read of the stream takes from the same queue as the writes injected for the guest,
+    // so values the guest left behind still come first.
+    readEnd.setHostSource?.({
+        values: pendingValues,
+        close: () => {
+            hostWriteEnd.getPendingEvent();
+            hostWriteEnd.drop();
+        },
+    });
 
     return async function generatedStreamHostInject(args: { count: number }) {
         let { count } = args;
@@ -70,8 +80,12 @@ export function genStreamHostInjectFn(
 
         readEnd.setHostCancelFn?.(() => {
             const buffer = readEnd.getPendingBufferMeta?.().buffer;
-            if (!buffer || pendingValues.length === 0) {
+            if (!buffer || (pendingValues.length === 0 && values.length === 0)) {
                 return false;
+            }
+            // Earlier values drained during this batch must precede its queued tail.
+            if (values.length > 0) {
+                pendingValues.prepend(values.splice(0));
             }
             const cancelValues: unknown[] = [];
             pendingValues.drainInto(cancelValues, buffer.remaining());
@@ -79,8 +93,11 @@ export function genStreamHostInjectFn(
                 return false;
             }
             resetWriteEndToIdleFn();
+            const remaining = buffer.remaining();
             const writePromise = hostWriteEnd.writeMany(cancelValues);
-            if (!hostWriteEnd.hasPendingEvent()) {
+            // Host reads can consume the completion event immediately. A copy
+            // still completed if it advanced the captured destination buffer.
+            if (!hostWriteEnd.hasPendingEvent() && buffer.remaining() === remaining) {
                 pendingValues.prepend(cancelValues);
                 return false;
             }
@@ -94,7 +111,10 @@ export function genStreamHostInjectFn(
         }
         if (count === 0) {
             if (pendingValues.length === 0 && !pendingValues.done) {
-                await pendingValues.readSource();
+                const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+                if (typeof result !== 'number') {
+                    await result;
+                }
                 if (readEnd.hasPendingEvent() || !hasPendingReadBuffer()) {
                     return doNothingFn;
                 }
@@ -118,8 +138,16 @@ export function genStreamHostInjectFn(
         // Values already buffered from an asynchronous source complete the read at
         // once: waiting on the source for more would hold them until it produces
         // again, and a read cancelled meanwhile would strand them
+        let synchronousReads = 0;
         while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {
-            const appended = await pendingValues.readSource();
+            const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+            const appended = typeof result === 'number' ? result : await result;
+            if (typeof result === 'number' && ++synchronousReads >= 64) {
+                synchronousReads = 0;
+                await yieldToHost();
+            } else if (typeof result !== 'number') {
+                synchronousReads = 0;
+            }
             if (readEnd.hasPendingEvent()) {
                 return bail();
             }

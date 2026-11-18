@@ -22,7 +22,7 @@ export function driverLoop(
         callbackResult: unknown;
     },
 ): ReturnType<AsyncTaskModule['driverLoop']> {
-    debugLog('[_driverLoop()] args', args);
+    DEBUG: debugLog('[_driverLoop()] args', args);
     const { componentState, task, fnName } = args;
     let callbackResult = args.callbackResult;
     const callbackFnName = task.getCallbackFnName();
@@ -48,7 +48,7 @@ export function driverLoop(
     let asyncRes: WaitableEvent | null;
     let wset;
     const handleError = (err: unknown) => {
-        debugLog('[_driverLoop()] error during async driver loop', {
+        DEBUG: debugLog('[_driverLoop()] error during async driver loop', {
             fnName,
             callbackFnName,
             componentIdx,
@@ -78,7 +78,7 @@ export function driverLoop(
             }
             switch (callbackCode) {
                 case 0: // EXIT
-                    debugLog('[_driverLoop()] async exit indicated', {
+                    DEBUG: debugLog('[_driverLoop()] async exit indicated', {
                         fnName,
                         componentIdx,
                         callbackFnName,
@@ -87,7 +87,7 @@ export function driverLoop(
                     task.exit({ skipExclusiveLockCheck: true });
                     return;
                 case 1: // YIELD
-                    debugLog('[_driverLoop()] yield', {
+                    DEBUG: debugLog('[_driverLoop()] yield', {
                         fnName,
                         componentIdx,
                         callbackFnName,
@@ -114,7 +114,7 @@ export function driverLoop(
                     if (!(wset instanceof _context.WaitableSet)) {
                         throw new _context.RuntimeError(`unknown handle index ${waitableSetRep}`);
                     }
-                    debugLog('[_driverLoop()] waiting for event', {
+                    DEBUG: debugLog('[_driverLoop()] waiting for event', {
                         fnName,
                         componentIdx,
                         callbackFnName,
@@ -142,7 +142,7 @@ export function driverLoop(
     const continueWithCallbackResult = (callbackRes: number) => {
         try {
             unpackCallback(callbackRes);
-            debugLog('[_driverLoop()] callback result unpacked', {
+            DEBUG: debugLog('[_driverLoop()] callback result unpacked', {
                 fnName,
                 componentIdx,
                 callbackFnName,
@@ -167,7 +167,7 @@ export function driverLoop(
                 }
             }
             if (task.isRejected()) {
-                debugLog('[_driverLoop()] detected task rejection, leaving early');
+                DEBUG: debugLog('[_driverLoop()] detected task rejection, leaving early');
                 componentState.exclusiveRelease(task.id());
                 if (!task.isExited()) {
                     task.exit({ skipExclusiveLockCheck: true });
@@ -187,7 +187,7 @@ export function driverLoop(
                 throw new Error('missing payload1 from event');
             }
             asyncRes = null;
-            debugLog('[_driverLoop()] performing callback', {
+            DEBUG: debugLog('[_driverLoop()] performing callback', {
                 fnName,
                 componentIdx,
                 taskID: task.id(),
