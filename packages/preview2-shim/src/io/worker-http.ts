@@ -1,20 +1,39 @@
 import { createReadableStream, getStreamOrThrow } from "./worker-thread.js";
-import {
-    createServer,
-    request as httpRequest,
-    Agent as HttpAgent,
-    ClientRequest,
-    IncomingMessage,
-} from "node:http";
-import { request as httpsRequest, Agent as HttpsAgent } from "node:https";
+import type { Agent as HttpAgent, ClientRequest, IncomingMessage } from "node:http";
+import type { Agent as HttpsAgent } from "node:https";
+import { createRequire } from "node:module";
 import { parentPort } from "node:worker_threads";
 import { HTTP_SERVER_INCOMING_HANDLER } from "./calls.js";
+
+const require = createRequire(import.meta.url);
 
 const agentOptions = {
     keepAlive: true,
 };
-const httpAgent = new HttpAgent(agentOptions);
-const httpsAgent = new HttpsAgent(agentOptions);
+
+// `node:http` and `node:https` are loaded when a component first uses HTTP,
+// not while the worker starts: the main thread waits on the worker for its
+// first answer, whatever that call is. They are loaded with `require` because
+// importing `node:http` as an ES module reads every export, including lazy
+// ones that load the WebSocket client bundled with Node.js.
+let httpModule: typeof import("node:http") | undefined;
+let httpsModule: typeof import("node:https") | undefined;
+let httpAgent: HttpAgent | undefined;
+let httpsAgent: HttpsAgent | undefined;
+
+/**
+ * @returns `node:http`
+ */
+function getHttp(): typeof import("node:http") {
+    return (httpModule ??= require("node:http"));
+}
+
+/**
+ * @returns `node:https`
+ */
+function getHttps(): typeof import("node:https") {
+    return (httpsModule ??= require("node:https"));
+}
 
 const servers = new Map();
 
@@ -47,7 +66,7 @@ export async function setOutgoingResponse(id, { statusCode, headers, streamId })
 }
 
 export async function startHttpServer(id: number, { port, host }) {
-    const server = createServer((req, res) => {
+    const server = getHttp().createServer((req, res) => {
         // MessagePort is only available when running in worker thread.
         if (!parentPort) {
             throw {
@@ -122,8 +141,8 @@ export async function createHttpRequest(
         let req: ClientRequest;
         switch (scheme) {
             case "http:":
-                req = httpRequest({
-                    agent: httpAgent,
+                req = getHttp().request({
+                    agent: (httpAgent ??= new (getHttp().Agent)(agentOptions)),
                     method,
                     host: authority.split(":")[0],
                     port: authority.split(":")[1],
@@ -132,8 +151,8 @@ export async function createHttpRequest(
                 });
                 break;
             case "https:":
-                req = httpsRequest({
-                    agent: httpsAgent,
+                req = getHttps().request({
+                    agent: (httpsAgent ??= new (getHttps().Agent)(agentOptions)),
                     method,
                     host: authority.split(":")[0],
                     port: authority.split(":")[1],
