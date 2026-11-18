@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { create } from '../../test/async-task-helpers.ts';
-import { createLiftContext } from '../../src/intrinsics/call-context.ts';
 import { create as createStream } from '../../test/stream-helpers.ts';
 import { contextGet, contextSet, guardCannotLeave } from '../../src/intrinsics/async-task/context.ts';
 import { initializeRepTableClass } from '../../src/intrinsics/rep-table.ts';
@@ -40,8 +39,11 @@ function wasmLoop(get) {
     return new WebAssembly.Instance(new WebAssembly.Module(new Uint8Array(bytes)), { env: { get } }).exports.run;
 }
 
-/** Construct real runtime owners outside timing and return repeatable hot workloads. */
-export function workloads() {
+/**
+ * Construct the runtime owners outside the timed loops.
+ * @param {Function} createLiftContext Runtime factory, or plain options for runtimes that consume them directly.
+ */
+export function workloads(createLiftContext = (options) => options) {
     const store = create();
     const first = store.asyncTask.createNewCurrentImplicitThread({ componentIdx: 0 });
     const second = first.task.addThread(new store.asyncTask.AsyncThread({ componentIdx: 0, task: first.task }));
@@ -88,7 +90,7 @@ export function workloads() {
     const memory = new WebAssembly.Memory({ initial: 4 });
     const view = new DataView(memory.buffer);
     params.forEach((value, index) => view.setInt32(index * 4, value, true));
-    const flat = { componentIdx: 0, params, useDirectParams: true, paramIndex: 0 };
+    const flat = { componentIdx: 0, params, useDirectParams: true };
     const cursorContext = createLiftContext({ componentIdx: 0, params, useDirectParams: true }, true);
     const indirect = {
         params: [],
@@ -96,7 +98,7 @@ export function workloads() {
         memory,
         storagePtr: 0,
         storageLen: 64,
-        cachedView: undefined,
+        memoryView: undefined,
     };
     const encoding = initializeUtf16Encoding();
     const text = 'a😀\ud800é'.repeat(256);
@@ -270,7 +272,6 @@ export function workloads() {
                 let sum = 0;
                 for (let i = 0; i < n; i++) {
                     flat.params = params;
-                    flat.paramIndex = 0;
                     for (let j = 0; j < 16; j++) {
                         sum += liftFlatS32(flat)[0];
                     }

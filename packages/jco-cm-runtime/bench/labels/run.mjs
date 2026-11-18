@@ -1,23 +1,70 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
-import { cpus } from 'node:os';
+import { existsSync } from 'node:fs';
+import { copyFile, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { cpus, tmpdir } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
 import { gzipSync } from 'node:zlib';
+
+import { median } from './statistics.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
-const requireTranspile = createRequire(resolve(root, '../jco-transpile/package.json'));
-const variants = ['baseline', 'optimized', 'retained', 'lean'];
-const baseline = 'd7e296bed';
 
-/** Median of numeric observations. */
-function median(values) {
-    const sorted = [...values].sort((left, right) => left - right);
-    return sorted[Math.floor(sorted.length / 2)];
+/** Resolve a ref once and extract its runtime and matching test helpers. */
+async function snapshot(ref, directory) {
+    const revision = execFileSync('git', ['rev-parse', '--verify', '--end-of-options', ref + '^{commit}'], {
+        cwd: root,
+        encoding: 'utf8',
+    }).trim();
+    const archive = execFileSync('git', ['archive', '--format=tar', revision, 'src', 'test'], {
+        cwd: root,
+        maxBuffer: 32 * 1024 * 1024,
+    });
+    await mkdir(resolve(directory, 'bench/labels'), { recursive: true });
+    execFileSync('tar', ['-xf', '-', '-C', directory], { input: archive });
+    await copyFile(resolve(here, 'workload.mjs'), resolve(directory, 'bench/labels/workload.mjs'));
+    return { directory, revision, ref };
+}
+
+/** Bundle the same workload driver with the selected tree's modules and helpers. */
+async function buildVariant(rolldown, output, temporary, variant, source, dropLabels) {
+    const workload = resolve(source.directory, 'bench/labels/workload.mjs');
+    const factory = resolve(source.directory, 'src/intrinsics/call-context.ts');
+    const hasFactory = existsSync(factory);
+    const specifier = (path) => JSON.stringify(path.replaceAll('\\', '/'));
+    const entry = resolve(temporary, variant + '.mjs');
+    await writeFile(
+        entry,
+        [
+            `import { workloads as createWorkloads } from ${specifier(workload)};`,
+            hasFactory ? `import { createLiftContext } from ${specifier(factory)};` : '',
+            `export const workloads = () => createWorkloads(${hasFactory ? 'createLiftContext' : ''});`,
+        ].join('\n'),
+    );
+    const bundle = await rolldown({ input: entry, platform: 'node', transform: { dropLabels } });
+    try {
+        const file = variant + '.mjs';
+        const {
+            output: [chunk],
+        } = await bundle.write({ file: resolve(output, file), format: 'esm', minify: true });
+        return {
+            variant,
+            file,
+            ref: source.ref,
+            revision: source.revision,
+            dropLabels,
+            contextFactory: hasFactory ? 'createLiftContext' : 'plain object',
+            bytes: Buffer.byteLength(chunk.code),
+            gzip: gzipSync(chunk.code).length,
+            sha256: createHash('sha256').update(chunk.code).digest('hex'),
+        };
+    } finally {
+        await bundle.close();
+    }
 }
 
 /** Run a single process's samples; launch overhead and all setup are excluded. */
@@ -25,6 +72,12 @@ async function worker(bundle) {
     const { workloads } = await import(pathToFileURL(bundle).href);
     const selected = process.env.JCO_LABEL_BENCH_CASES?.split(',');
     const cases = workloads().filter((item) => !selected || selected.includes(item.name));
+    for (const name of selected ?? []) {
+        assert.ok(
+            cases.some((item) => item.name === name),
+            'unknown workload: ' + name,
+        );
+    }
     assert.ok(cases.length > 0, 'select at least one known workload');
     const observations = [];
     for (const item of cases) {
@@ -62,55 +115,40 @@ async function main() {
         await worker(process.argv[3]);
         return;
     }
-    const { rolldown } = await import(pathToFileURL(requireTranspile.resolve('rolldown')).href);
+    const { values } = parseArgs({ options: { baseline: { type: 'string' }, candidate: { type: 'string' } } });
+    const processes = Number(process.env.JCO_LABEL_BENCH_PROCESSES ?? 5);
+    assert.ok(Number.isSafeInteger(processes) && processes > 0, 'expected a positive process count');
+
+    const { rolldown } = await import('rolldown');
     const output = resolve(root, process.env.JCO_LABEL_BENCH_OUTPUT ?? 'bench/output/labels');
     await mkdir(output, { recursive: true });
+    const temporary = await mkdtemp(resolve(tmpdir(), 'jco-runtime-bench-'));
     const builds = [];
-    for (const variant of variants) {
-        const bundle = await rolldown({
-            input: resolve(here, 'workload.mjs'),
-            platform: 'node',
-            transform: {
-                dropLabels: variant === 'retained' ? [] : variant === 'lean' ? ['DEBUG', 'SAFETY'] : ['DEBUG'],
-            },
-            plugins: [
-                {
-                    name: 'runtime-at-baseline',
-                    load(id) {
-                        if (variant !== 'baseline' || !id.startsWith(resolve(root, 'src') + '/')) {
-                            return;
-                        }
-                        if (id.endsWith('/intrinsics/call-context.ts')) {
-                            return 'export const createLiftContext = (options) => options;';
-                        }
-                        const path = 'packages/jco-cm-runtime/' + id.slice(root.length + 1);
-                        return execFileSync('git', ['show', `${baseline}:${path}`], {
-                            cwd: root,
-                            encoding: 'utf8',
-                            maxBuffer: 8 * 1024 * 1024,
-                        });
-                    },
-                },
-            ],
-        });
-        const path = resolve(output, `${variant}.mjs`);
-        const { output: chunks } = await bundle.write({ file: path, format: 'esm', minify: true });
-        await bundle.close();
-        const code = chunks.find((chunk) => chunk.type === 'chunk').code;
-        if (variant !== 'retained') {
-            assert.ok(!code.includes('[contextGet()] args'), 'diagnostic arguments must be eliminated');
+    try {
+        if (values.baseline !== undefined) {
+            const base = await snapshot(values.baseline, resolve(temporary, 'base'));
+            builds.push(await buildVariant(rolldown, output, temporary, 'baseline', base, ['DEBUG']));
         }
-        builds.push({
-            variant,
-            path,
-            bytes: Buffer.byteLength(code),
-            gzip: gzipSync(code).length,
-            sha256: createHash('sha256').update(code).digest('hex'),
-        });
+        const candidate =
+            values.candidate === undefined
+                ? {
+                      directory: root,
+                      ref: 'working tree',
+                      revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+                  }
+                : await snapshot(values.candidate, resolve(temporary, 'candidate'));
+        for (const [variant, labels] of [
+            ['checked', ['DEBUG']],
+            ['debug', []],
+            ['lean', ['DEBUG', 'SAFETY']],
+        ]) {
+            builds.push(await buildVariant(rolldown, output, temporary, variant, candidate, labels));
+        }
+    } finally {
+        await rm(temporary, { recursive: true, force: true });
     }
+
     const measurements = [];
-    const processes = Number(process.env.JCO_LABEL_BENCH_PROCESSES ?? 5);
-    assert.ok(Number.isInteger(processes) && processes > 0);
     const env = { ...process.env };
     delete env.JCO_DEBUG;
     for (let round = 0; round < processes; round++) {
@@ -119,11 +157,15 @@ async function main() {
             order.reverse();
         }
         for (const build of order) {
-            const stdout = execFileSync(process.execPath, [fileURLToPath(import.meta.url), '--worker', build.path], {
-                env,
-                encoding: 'utf8',
-                maxBuffer: 8 * 1024 * 1024,
-            });
+            const stdout = execFileSync(
+                process.execPath,
+                [fileURLToPath(import.meta.url), '--worker', resolve(output, build.file)],
+                {
+                    env,
+                    encoding: 'utf8',
+                    maxBuffer: 8 * 1024 * 1024,
+                },
+            );
             measurements.push({ variant: build.variant, round, observations: JSON.parse(stdout) });
         }
         console.log(`Completed process round ${round + 1}/${processes}`);
@@ -131,7 +173,7 @@ async function main() {
     const summary = [];
     for (const name of measurements[0].observations.map((item) => item.name)) {
         const row = { workload: name };
-        for (const variant of variants) {
+        for (const { variant } of builds) {
             const times = measurements
                 .filter((item) => item.variant === variant)
                 .map((item) => item.observations.find((entry) => entry.name === name).nsPerUnit);
@@ -140,9 +182,10 @@ async function main() {
         summary.push(row);
     }
     const report = {
-        baseline,
-        revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
-        diff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }),
+        workingTreeStatus:
+            values.candidate === undefined
+                ? execFileSync('git', ['status', '--short', '--', 'src', 'test'], { cwd: root, encoding: 'utf8' })
+                : null,
         node: process.version,
         v8: process.versions.v8,
         cpu: cpus()[0].model,
@@ -157,10 +200,6 @@ async function main() {
         summary,
     };
     await writeFile(resolve(output, 'results.json'), JSON.stringify(report, null, 2) + '\n');
-    // Preserve all experimental source alongside the raw measurements.
-    for (const file of ['run.mjs', 'workload.mjs', 'confirm.mjs']) {
-        await writeFile(resolve(output, file + '.txt'), await readFile(resolve(here, file)));
-    }
     console.table(
         summary.map((row) =>
             Object.fromEntries(
