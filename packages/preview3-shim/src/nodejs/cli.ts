@@ -1,5 +1,5 @@
 import process from "node:process";
-import { Readable, type Writable } from "node:stream";
+import { Readable, Writable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import { StreamReader, readableByteStreamFromReader } from "./stream.js";
@@ -84,6 +84,62 @@ export async function _shutdown() {
   await Promise.all([stdout._shutdown(), stderr._shutdown()]);
 }
 
+/** The error Node.js reports for a stream that closed before it finished. */
+function prematureClose() {
+  return Object.assign(new Error("Premature close"), { code: "ERR_STREAM_PREMATURE_CLOSE" });
+}
+
+/** Destinations that carry `ignoreError`. */
+const guarded = new WeakSet<Writable>();
+
+/** Keep an error that write results already report from being raised as unhandled. */
+function ignoreError() {}
+
+/**
+ * Forward writes to a destination that outlives the transfer.
+ *
+ * A pipeline that ends in the destination itself, told not to end it, leaves its
+ * listeners on the destination for good. Ending in a sink of the transfer's own
+ * keeps the pipeline's listeners off the destination; the two added here are
+ * removed when the sink is done.
+ *
+ * A destination emits the error of a failed write after the transfer has
+ * settled with it, so each destination also keeps one listener of its own.
+ */
+function forwardTo(writable: Writable) {
+  if (!guarded.has(writable)) {
+    guarded.add(writable);
+    writable.on("error", ignoreError);
+  }
+  const sink = new Writable({
+    /** Pass a chunk on and report the destination's acknowledgement or error. */
+    write(chunk, _encoding, callback) {
+      if (writable.destroyed) {
+        callback(writable.errored ?? prematureClose());
+        return;
+      }
+      writable.write(chunk, callback);
+    },
+    /** Stop listening to the destination. */
+    destroy(err, callback) {
+      writable.off("error", onError);
+      writable.off("close", onClose);
+      callback(err);
+    },
+  });
+  /** Fail the transfer with the destination's error. */
+  function onError(err: Error) {
+    sink.destroy(err);
+  }
+  /** Fail the transfer when the destination closes under it. */
+  function onClose() {
+    sink.destroy(prematureClose());
+  }
+  writable.on("error", onError);
+  writable.on("close", onClose);
+  return sink;
+}
+
 /** Pipe an accepted stream to its destination while tracking host-owned reader shutdown. */
 function writeViaStream(streamReader, writable: Writable, name: string, writes: Set<OutputWrite>) {
   let ended = false;
@@ -106,9 +162,7 @@ function writeViaStream(streamReader, writable: Writable, name: string, writes: 
     finished: null as Promise<unknown>,
   };
   writes.add(write);
-  write.finished = pipeline(Readable.from(chunks(), { objectMode: false }), writable, {
-    end: false,
-  })
+  write.finished = pipeline(Readable.from(chunks(), { objectMode: false }), forwardTo(writable))
     .then(() => ({ tag: "ok", val: undefined }))
     .catch((err) => ({ tag: "err", val: errorCode(err) }))
     .finally(() => writes.delete(write));
