@@ -262,6 +262,80 @@ test.concurrent.each([false, true])(
     },
 );
 
+test.concurrent.each([
+    ['u8', Uint8Array, 1],
+    ['u16', Uint16Array, 2],
+    ['u32', Uint32Array, 4],
+    ['f64', Float64Array, 8],
+] as const)('numeric list of %s is copied out of memory within its bounds and alignment', (_name, typedArray, size) => {
+    const buffer = new ArrayBuffer(64);
+    new Uint8Array(buffer).forEach((_, index, bytes) => (bytes[index] = index + 1));
+    const fn = lift.liftFlatList(
+        { RuntimeError: WebAssembly.RuntimeError, littleEndian: true },
+        {
+            elemLiftFn: () => {
+                throw new Error('numeric elements must be copied together');
+            },
+            elemSize32: size,
+            elemAlign32: size,
+            typedArray,
+        },
+    );
+    const liftAt = (ptr: number, len: number) => fn({ ...direct([ptr, len]), memory: { buffer } })[0];
+
+    // The result holds the list's bytes and nothing else of the memory.
+    const expected = new typedArray(buffer.slice(16, 16 + 3 * size));
+    const result = liftAt(16, 3) as InstanceType<typeof typedArray>;
+    expect(result).toBeInstanceOf(typedArray);
+    expect(result).toEqual(expected);
+    expect(result.byteOffset).toBe(0);
+    expect(result.buffer.byteLength).toBe(3 * size);
+
+    // It is a copy: later writes to memory do not reach it.
+    new Uint8Array(buffer).fill(0xff);
+    expect(result).toEqual(expected);
+
+    // An empty list may sit at the very end of memory, and the last element may end there.
+    expect(liftAt(64, 0)).toEqual(new typedArray(0));
+    expect((liftAt(64 - size, 1) as ArrayLike<unknown>).length).toBe(1);
+
+    // Past the end it traps, whatever the length.
+    for (const [ptr, len] of [
+        [64 - size, 2],
+        [64, 1],
+        [64 + size, 0],
+        [0, 64 / size + 1],
+        [0, -1],
+    ]) {
+        expect(() => liftAt(ptr, len)).toThrow(WebAssembly.RuntimeError);
+        expect(() => liftAt(ptr, len)).toThrow('out of bounds memory access');
+    }
+
+    // A pointer off the element alignment is a TypeError, also for an empty list.
+    if (size > 1) {
+        for (const len of [0, 1]) {
+            expect(() => liftAt(17, len)).toThrow(TypeError);
+            expect(() => liftAt(17, len)).toThrow('list pointer [17] is not aligned to ' + size);
+        }
+    }
+});
+
+test.concurrent('numeric list lifted from a shared memory is an unshared copy', () => {
+    const memory = new WebAssembly.Memory({ initial: 1, maximum: 1, shared: true });
+    new Uint32Array(memory.buffer, 8, 2).set([17, 23]);
+    const fn = lift.liftFlatList(
+        { RuntimeError: WebAssembly.RuntimeError, littleEndian: true },
+        { elemLiftFn: lift.liftFlatU32, elemSize32: 4, elemAlign32: 4, typedArray: Uint32Array },
+    );
+    const [result] = fn({ ...direct([8, 2]), memory });
+
+    // The copy has an ordinary buffer of its own, where a slice of the memory's buffer was shared.
+    expect(result).toEqual(new Uint32Array([17, 23]));
+    expect((result as Uint32Array).buffer).toBeInstanceOf(ArrayBuffer);
+    new Uint32Array(memory.buffer, 8, 2).fill(0);
+    expect(result).toEqual(new Uint32Array([17, 23]));
+});
+
 test.concurrent.each([1, 4])(
     'big-endian numeric list lifting uses element conversion only for multi-byte values (%s)',
     (size) => {
