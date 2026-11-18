@@ -40,6 +40,7 @@ function connect() {
     const clientPoll = own(clientSocket.subscribe());
     clientSocket.startConnect(network, listener.localAddress());
     clientPoll.block();
+    assert(clientPoll.ready());
     const [clientInput, clientOutput] = clientSocket.finishConnect().map(own);
     listenerPoll.block();
     const [acceptedSocket, acceptedInput, acceptedOutput] = listener.accept().map(own);
@@ -94,7 +95,23 @@ function checkClosedOutput(output) {
 try {
     const [client, accepted] = connect();
     const scenario = process.argv[2];
-    if (scenario === "client-send" || scenario === "accepted-send") {
+    if (scenario === "round-trip") {
+        assert.equal(client.socket.addressFamily(), "ipv4");
+        const replyPoll = own(client.input.subscribe());
+        poll.poll([replyPoll, own(monotonicClock.subscribeDuration(0n))]);
+        assert.equal(replyPoll.ready(), false);
+
+        const request = encoder.encode("ping");
+        client.output.blockingWriteAndFlush(request);
+        assert.equal(decoder.decode(readBytes(accepted.input, request.length)), "ping");
+
+        const reply = encoder.encode("pong");
+        accepted.output.blockingWriteAndFlush(reply);
+        replyPoll.block();
+        assert(replyPoll.ready());
+        assert.equal(decoder.decode(readBytes(client.input, reply.length)), "pong");
+        client.socket.shutdown("both");
+    } else if (scenario === "client-send" || scenario === "accepted-send") {
         const [sender, peer] = scenario === "client-send" ? [client, accepted] : [accepted, client];
         const data = encoder.encode("hello");
         assert(sender.output.checkWrite() >= BigInt(data.length));
