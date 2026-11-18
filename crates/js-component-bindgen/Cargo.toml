@@ -30,6 +30,7 @@ external-runtime = []
 # and remove this feature along with the inline intrinsics.
 embedded-cm-runtime = [
     "transpile-bindgen",
+    "external-runtime",
     "dep:oxc_allocator",
     "dep:oxc_ast",
     "dep:oxc_codegen",
