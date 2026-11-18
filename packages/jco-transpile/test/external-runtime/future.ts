@@ -25,17 +25,15 @@ for (const instantiation of ['sync', 'async'] as const) {
                 const instances: { _util: { stop(): void } }[] = [];
                 try {
                     const provider = await writeCustomRuntime(join(dir, 'provider'));
+                    await rename(
+                        new URL('intrinsics/future.js', provider),
+                        new URL('intrinsics/future-default.js', provider),
+                    );
                     await writeFile(
                         new URL('intrinsics/future.js', provider),
                         `
-import * as defaults from './future/value.js';
-export * from './future/state.js';
-export * from './future/operations.js';
-export * from './future/end.js';
-export * from './future/readable.js';
-export * from './future/writable.js';
-export * from './future/internal.js';
-export * from './future/host.js';
+import * as defaults from './future-default.js';
+export * from './future-default.js';
 export const constructors = [];
 /** Observe the selected constructor without changing its private brand. */
 export function initializeFutureValueClass(disposeSymbol) {

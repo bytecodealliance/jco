@@ -166,6 +166,18 @@ export interface TranspilationOptions {
     /** Optional experimental runtime package or directory base. Imports runtime and intrinsics/* subpaths; directory/URL bases use .js files. */
     cmRuntimeEsModule?: string;
 
+    /**
+     * Which removable statements the Component Model runtime bundled into the bindings keeps.
+     *
+     * - `checked` (default): diagnostics are removed.
+     * - `debug`: diagnostics are kept, and logged when `JCO_DEBUG` is set or an instance is
+     *   created with the `debug` option.
+     *
+     * Assertions, canonical ABI traps and validation of guest and host values are kept by both.
+     * Bindings that import a runtime (`cmRuntimeEsModule`) take what that runtime was built with.
+     */
+    runtimeProfile?: 'checked' | 'debug';
+
     /** Represent WIT flags as bigint values instead of objects of booleans */
     flagsAsBigInt?: boolean;
 
@@ -369,6 +381,7 @@ export async function transpileBytes(
         perfStringsSkipCopyUtf8Validation: opts.perfStringsSkipCopyUtf8Validation === true,
         perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
         cmRuntimeEsModule: opts.cmRuntimeEsModule,
+        runtimeProfile: opts.runtimeProfile,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
         useNamespaceObjects: opts.useNamespaceObjects === true,
