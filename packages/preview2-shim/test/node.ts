@@ -4,11 +4,7 @@ import { createServer } from "node:net";
 import { basename, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { suite, test, assert, beforeEach, afterEach } from "vitest";
-import {
-    IpAddress,
-    IpSocketAddress,
-    Ipv4Address,
-} from "../types/interfaces/wasi-sockets-network.js";
+import { IpAddress, IpSocketAddress } from "../types/interfaces/wasi-sockets-network.js";
 
 const ADVICE_VALUES = [
     "normal",
@@ -543,67 +539,6 @@ suite("Node.js Preview2", () => {
                 });
             }
         });
-
-        test(
-            "tcp.connect(): should connect to a valid ipv4 address and port=0",
-            { retry: env.CI ? 3 : 0 },
-            testWithGCWrap(async () => {
-                const { lookup } = await import("node:dns");
-                const { sockets } = await import("@bytecodealliance/preview2-shim");
-                const network = sockets.instanceNetwork.instanceNetwork();
-                const tcpSocket = sockets.tcpCreateSocket.createTcpSocket("ipv4");
-
-                const pollable = tcpSocket.subscribe();
-
-                const googleIp = await new Promise<string>((resolve, reject) =>
-                    lookup("google.com", (err, result) => (err ? reject(err) : resolve(result))),
-                );
-
-                const ipParts = googleIp.split(".").map(Number) as Ipv4Address;
-                tcpSocket.startConnect(network, {
-                    tag: "ipv4",
-                    val: {
-                        address: ipParts,
-                        port: 80,
-                    },
-                });
-
-                assert(!pollable.ready());
-                pollable.block();
-                assert(pollable.ready());
-
-                const [input, output] = tcpSocket.finishConnect();
-
-                assert.strictEqual(tcpSocket.addressFamily(), "ipv4");
-
-                assert.ok(pollable.ready());
-
-                output.blockingWriteAndFlush(
-                    new TextEncoder().encode("GET http://www.google.com/ HTTP/1.1\n\n"),
-                );
-
-                {
-                    input.subscribe().block();
-                    let buf = input.read(5000n);
-                    while (buf.byteLength === 0) {
-                        try {
-                            buf = input.read(5000n);
-                        } catch (e: any) {
-                            if (e?.tag === "closed") {
-                                break;
-                            }
-                            throw e?.val || e;
-                        }
-                    }
-                    const responseBody = new TextDecoder().decode(buf);
-                    assert.ok(responseBody.includes("<title>Google"));
-                    assert.ok(responseBody.includes("<!doctype"));
-                    assert.ok(responseBody.includes("<script"));
-                }
-
-                tcpSocket.shutdown("both");
-            }),
-        );
     });
 
     suite("WASI Sockets (UDP)", async () => {

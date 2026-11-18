@@ -9,6 +9,10 @@ const fixture = fileURLToPath(new URL("./fixtures/sockets/stream-lifecycle.mjs",
 
 // A child process bounds failures in synchronous WASI polling, which would otherwise
 // block the test runner's event loop and prevent its timeout from firing.
+test("TCP connects and exchanges data over IPv4 loopback", async () => {
+    await run(process.execPath, [fixture, "round-trip"], { timeout: 10_000 });
+});
+
 test.each(["client-send", "accepted-send", "receive", "both", "disposed-streams"])(
     "TCP shutdown preserves stream lifecycle: %s",
     async (scenario) => {
