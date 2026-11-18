@@ -1,3 +1,5 @@
+import { withConstructorStatics } from './core/shared-class.js';
+import { onNextMacrotask } from './core/scheduling.js';
 import { isPromiseLike } from './core/promises.js';
 import type {
     ComponentModule,
@@ -39,6 +41,7 @@ export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTr
 export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncState'] = () => ({
     deadlockCheck: null,
     pendingHostOperations: 0,
+    hostWakeupScheduled: false,
     idleWaiters: new Set(),
 });
 export const initializeComponentAsyncStates: ComponentModule['initializeComponentAsyncStates'] = () => new Map();
@@ -164,10 +167,19 @@ export function trackHostOperation<T>(
         if (storeAsyncState.pendingHostOperations < 0) {
             throw new Error('negative pending host operation count');
         }
-        for (const state of asyncState.values()) {
-            state.runTickLoop();
+        if (!storeAsyncState.hostWakeupScheduled) {
+            storeAsyncState.hostWakeupScheduled = true;
+            queueMicrotask(() => {
+                storeAsyncState.hostWakeupScheduled = false;
+                if (storeTrap.stopped) {
+                    return;
+                }
+                for (const state of asyncState.values()) {
+                    state.runTickLoop();
+                }
+                checkForDeadlock(context);
+            });
         }
-        checkForDeadlock(context);
     });
 
     // Forward disposal to the host's value, so it is notified if a guest
@@ -240,34 +252,37 @@ export function guardTrap<A extends unknown[], T, R>(
 
 /** Implements `canon backpressure.inc`. */
 export function backpressureInc(context: ComponentStateLookupContext, componentIdx: number) {
-    debugLog('[backpressureInc()] args', { componentIdx });
+    DEBUG: debugLog('[backpressureInc()] args', { componentIdx });
     const state = getOrCreateAsyncState(context, componentIdx);
     if (!state) {
         throw new Error(`missing component state for component [${componentIdx}]`);
     }
     const newValue = state.incrementBackpressure();
-    debugLog('[backpressureInc()] incremented', { componentIdx, newValue });
+    DEBUG: debugLog('[backpressureInc()] incremented', { componentIdx, newValue });
 }
 
 /** Implements `canon backpressure.dec`. */
 export function backpressureDec(context: ComponentStateLookupContext, componentIdx: number) {
-    debugLog('[backpressureDec()] args', { componentIdx });
+    DEBUG: debugLog('[backpressureDec()] args', { componentIdx });
     const state = getOrCreateAsyncState(context, componentIdx);
     const newValue = state.decrementBackpressure();
-    debugLog('[backpressureDec()] decremented', { componentIdx, newValue });
+    DEBUG: debugLog('[backpressureDec()] decremented', { componentIdx, newValue });
 }
 
 export function getOrCreateAsyncState(context: ComponentStateLookupContext, componentIdx: number) {
     const { asyncState, ComponentAsyncState } = context;
-    if (!asyncState.has(componentIdx)) {
-        const newState = new ComponentAsyncState({ componentIdx });
-        asyncState.set(componentIdx, newState);
+    let state = asyncState.get(componentIdx);
+
+    // An entry that is present but invalid is returned as it is, for the caller to report.
+    if (state === undefined && !asyncState.has(componentIdx)) {
+        state = new ComponentAsyncState({ componentIdx });
+        asyncState.set(componentIdx, state);
     }
-    return asyncState.get(componentIdx)!;
+    return state!;
 }
 
 export function setAllError(states: Pick<ComponentAsyncStates, 'values'>) {
-    debugLog('[_ComponentStateSetAllError()]');
+    DEBUG: debugLog('[_ComponentStateSetAllError()]');
     for (const state of states.values()) {
         state.setErrored();
     }
@@ -279,56 +294,15 @@ const TICK_IDLE = 'idle';
 
 const IDLE_POLL_MS = 10;
 
-/**
- * Run `callback` on the next macrotask, after the current microtasks have drained, as
- * `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
- * browsers to 4 ms once timers nest, which a guest that yields often pays on every yield.
- * Returns a function that cancels the callback.
- */
-function onNextMacrotask(callback: () => void): () => void {
-    if (typeof setImmediate === 'function') {
-        const handle = setImmediate(callback);
-        return () => clearImmediate(handle);
-    }
-    if (typeof MessageChannel === 'function') {
-        const channel = new MessageChannel();
-        let cancelled = false;
-        channel.port1.onmessage = () => {
-            channel.port1.close();
-            if (!cancelled) {
-                callback();
-            }
-        };
-        channel.port2.postMessage(null);
-        return () => {
-            cancelled = true;
-            channel.port1.close();
-        };
-    }
-    const handle = setTimeout(callback, 0);
-    return () => clearTimeout(handle);
-}
-
 function afterDelay(callback: () => void, ms: number): () => void {
     const handle = setTimeout(callback, ms);
     return () => clearTimeout(handle);
 }
 
-export function initializeComponentAsyncStateClass(
-    context: ComponentAsyncStateContext,
-): ComponentAsyncStateConstructor {
-    const {
-        RuntimeError,
-        RepTable,
-        indexSpaces,
-        instanceFlags,
-        storeTrap,
-        normalization,
-        cannotEnter,
-        deadlock,
-        Waitable,
-    } = context;
-    class ComponentAsyncState {
+function defineComponentAsyncState() {
+    return class ComponentAsyncState {
+        #context: ComponentAsyncStateContext;
+
         static EVENT_HANDLER_EVENTS = ['backpressure-change'];
 
         static TickResult = {
@@ -370,14 +344,17 @@ export function initializeComponentAsyncStateClass(
         subtasks: RepTableType;
         threads: RepTableType<ComponentThread>;
 
-        constructor(args: { componentIdx: number }) {
+        constructor(context: ComponentAsyncStateContext, args: { componentIdx: number }) {
+            this.#context = context;
             this.#componentIdx = args.componentIdx;
-            this.handles = new RepTable({
+            this.handles = new this.#context.RepTable({
                 target: `component [${this.#componentIdx}] handles (waitable objects)`,
-                space: getHandleIndexSpace(indexSpaces, this.#componentIdx),
+                space: getHandleIndexSpace(this.#context.indexSpaces, this.#componentIdx),
             });
-            this.subtasks = new RepTable({ target: `component [${this.#componentIdx}] subtasks` });
-            this.threads = new RepTable<ComponentThread>({ target: `component [${this.#componentIdx}] threads` });
+            this.subtasks = new this.#context.RepTable({ target: `component [${this.#componentIdx}] subtasks` });
+            this.threads = new this.#context.RepTable<ComponentThread>({
+                target: `component [${this.#componentIdx}] threads`,
+            });
         }
 
         componentIdx() {
@@ -385,7 +362,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         get mayLeave() {
-            const flags = instanceFlags.get(this.#componentIdx);
+            const flags = this.#context.instanceFlags.get(this.#componentIdx);
             return flags === undefined ? this.#mayLeave : flags.value === 1;
         }
         set mayLeave(value: boolean) {
@@ -393,7 +370,7 @@ export function initializeComponentAsyncStateClass(
                 throw new TypeError('mayLeave must be a boolean');
             }
             this.#mayLeave = value;
-            const flags = instanceFlags.get(this.#componentIdx);
+            const flags = this.#context.instanceFlags.get(this.#componentIdx);
             if (flags !== undefined) {
                 flags.value = value ? 1 : 0;
             }
@@ -403,7 +380,10 @@ export function initializeComponentAsyncStateClass(
             return this.#errored !== null;
         }
         setErrored(err?: unknown) {
-            debugLog('[ComponentAsyncState#setErrored()] component errored', { err, componentIdx: this.#componentIdx });
+            DEBUG: debugLog('[ComponentAsyncState#setErrored()] component errored', {
+                err,
+                componentIdx: this.#componentIdx,
+            });
             if (this.#errored) {
                 return;
             }
@@ -416,23 +396,23 @@ export function initializeComponentAsyncStateClass(
         }
 
         markTrapped(err: unknown) {
-            if (!(err instanceof RuntimeError)) {
+            if (!(err instanceof this.#context.RuntimeError)) {
                 return false;
             }
-            const trap = normalizeCoreTrap(normalization, err);
+            const trap = normalizeCoreTrap(this.#context.normalization, err);
             this.#trapped = true;
             if (this.#trapError === null) {
                 this.#trapError = trap;
             }
-            debugLog('[ComponentAsyncState#markTrapped()] component trapped', {
+            DEBUG: debugLog('[ComponentAsyncState#markTrapped()] component trapped', {
                 err,
                 componentIdx: this.#componentIdx,
             });
-            if (storeTrap.error === null) {
-                storeTrap.error = trap;
+            if (this.#context.storeTrap.error === null) {
+                this.#context.storeTrap.error = trap;
             }
-            context.reportTrap?.(trap);
-            context.checkIdle?.();
+            this.#context.reportTrap?.(trap);
+            this.#context.checkIdle?.();
             return true;
         }
 
@@ -442,19 +422,19 @@ export function initializeComponentAsyncStateClass(
         // For work that was already under way or queued when the instance
         // trapped: it fails with that trap (nothing runs after a trap).
         throwIfInterrupted() {
-            if (storeTrap.stopped) {
-                throw storeTrap.error;
+            if (this.#context.storeTrap.stopped) {
+                throw this.#context.storeTrap.error;
             }
             if (this.#trapped) {
-                throw this.#trapError ?? new RuntimeError(cannotEnter);
+                throw this.#trapError ?? new this.#context.RuntimeError(this.#context.cannotEnter);
             }
         }
         throwIfTrapped() {
-            if (storeTrap.stopped) {
-                throw storeTrap.error;
+            if (this.#context.storeTrap.stopped) {
+                throw this.#context.storeTrap.error;
             }
             if (this.#trapped) {
-                throw new RuntimeError(cannotEnter);
+                throw new this.#context.RuntimeError(this.#context.cannotEnter);
             }
         }
 
@@ -516,7 +496,7 @@ export function initializeComponentAsyncStateClass(
             // below zero.
             const newValue = current - 1;
             if (newValue < 0) {
-                throw new RuntimeError('backpressure counter underflow');
+                throw new this.#context.RuntimeError('backpressure counter underflow');
             }
             return this.setBackpressure(newValue);
         }
@@ -603,7 +583,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         exclusiveLock(taskID: bigint) {
-            debugLog('[ComponentAsyncState#exclusiveLock()]', {
+            DEBUG: debugLog('[ComponentAsyncState#exclusiveLock()]', {
                 holder: this.#lockHolderTaskID,
                 requester: taskID,
                 componentIdx: this.#componentIdx,
@@ -628,7 +608,7 @@ export function initializeComponentAsyncStateClass(
             }
             if (this.#lockHolderTaskID === null) {
                 this.#lockHolderTaskID = taskID;
-                debugLog('[ComponentAsyncState#acquireExclusiveLock()] acquired', {
+                DEBUG: debugLog('[ComponentAsyncState#acquireExclusiveLock()] acquired', {
                     holder: taskID,
                     componentIdx: this.#componentIdx,
                 });
@@ -637,7 +617,7 @@ export function initializeComponentAsyncStateClass(
             if (this.#lockHolderTaskID === taskID) {
                 throw new Error(`task [${taskID}] already holds the lock for component [${this.#componentIdx}]`);
             }
-            debugLog('[ComponentAsyncState#acquireExclusiveLock()] waiting', {
+            DEBUG: debugLog('[ComponentAsyncState#acquireExclusiveLock()] waiting', {
                 holder: this.#lockHolderTaskID,
                 requester: taskID,
                 componentIdx: this.#componentIdx,
@@ -708,7 +688,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         exclusiveRelease(taskID: bigint) {
-            debugLog('[ComponentAsyncState#exclusiveRelease()] args', {
+            DEBUG: debugLog('[ComponentAsyncState#exclusiveRelease()] args', {
                 holder: this.#lockHolderTaskID,
                 releaser: taskID,
                 componentIdx: this.#componentIdx,
@@ -716,7 +696,7 @@ export function initializeComponentAsyncStateClass(
             if (this.#lockHolderTaskID !== taskID) {
                 // Ownerless releases were the historical behavior; a foreign
                 // release now leaves the hold intact
-                debugLog('[ComponentAsyncState#exclusiveRelease()] ignoring foreign release', {
+                DEBUG: debugLog('[ComponentAsyncState#exclusiveRelease()] ignoring foreign release', {
                     holder: this.#lockHolderTaskID,
                     releaser: taskID,
                     componentIdx: this.#componentIdx,
@@ -739,7 +719,7 @@ export function initializeComponentAsyncStateClass(
                     this.#onExclusiveReleaseHandlers[idx] = null;
                     f!();
                 } catch (err) {
-                    debugLog('error while executing handler for next exclusive release', err);
+                    DEBUG: debugLog('error while executing handler for next exclusive release', err);
                     throw err;
                 }
             }
@@ -773,7 +753,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         onNextExclusiveRelease(fn: () => void) {
-            debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
+            DEBUG: debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
             this.#onExclusiveReleaseHandlers.push(fn);
         }
 
@@ -826,7 +806,7 @@ export function initializeComponentAsyncStateClass(
 
         suspendThread(args: SuspendThreadOptions) {
             const { thread, readyFn, cancellable, onResume, suspended = false } = args;
-            debugLog('[ComponentAsyncState#suspendThread()]', {
+            DEBUG: debugLog('[ComponentAsyncState#suspendThread()]', {
                 threadID: thread.id(),
                 taskID: thread.taskID(),
                 componentIdx: this.#componentIdx,
@@ -848,8 +828,8 @@ export function initializeComponentAsyncStateClass(
                 promise = resolvers.promise;
                 resume = () => resolvers.resolve(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());
             }
-            if (storeTrap.stopped) {
-                this.markTrapped(storeTrap.error);
+            if (this.#context.storeTrap.stopped) {
+                this.markTrapped(this.#context.storeTrap.error);
                 resume();
                 return promise;
             }
@@ -858,7 +838,7 @@ export function initializeComponentAsyncStateClass(
             thread.notifyProgress();
 
             this.runTickLoop();
-            checkForDeadlock(deadlock);
+            checkForDeadlock(this.#context.deadlock);
 
             return promise;
         }
@@ -943,21 +923,21 @@ export function initializeComponentAsyncStateClass(
         }
 
         runTickLoop() {
-            if (storeTrap.stopped || this.#tickLoop !== null) {
+            if (this.#context.storeTrap.stopped || this.#tickLoop !== null) {
                 return;
             }
             const run = () => {
-                if (storeTrap.stopped) {
+                if (this.#context.storeTrap.stopped) {
                     this.#tickLoop = null;
                     return;
                 }
                 const result = this.tick();
-                if (storeTrap.stopped || result === TICK_DONE) {
+                if (this.#context.storeTrap.stopped || result === TICK_DONE) {
                     this.#tickLoop = null;
                     return;
                 }
                 if (result === TICK_IDLE) {
-                    checkForDeadlock(deadlock);
+                    checkForDeadlock(this.#context.deadlock);
                 }
                 // Let resumed microtasks drain before the next slice; otherwise poll at the idle cadence.
                 this.#tickLoop = result === TICK_RESUMED ? onNextMacrotask(run) : afterDelay(run, IDLE_POLL_MS);
@@ -974,7 +954,7 @@ export function initializeComponentAsyncStateClass(
                 }
 
                 if (this.isTrapped() || meta.thread.isRejected()) {
-                    debugLog('[ComponentAsyncState#tick()] detected thread rejection, leaving early', { meta });
+                    DEBUG: debugLog('[ComponentAsyncState#tick()] detected thread rejection, leaving early', { meta });
                     this.resumeThread(thread);
                     return TICK_RESUMED;
                 }
@@ -983,7 +963,7 @@ export function initializeComponentAsyncStateClass(
                     continue;
                 }
 
-                debugLog('[ComponentAsyncState#tick()] resuming thread via tick', {
+                DEBUG: debugLog('[ComponentAsyncState#tick()] resuming thread via tick', {
                     threadID: thread.id(),
                     componentIdx: this.#componentIdx,
                 });
@@ -999,10 +979,31 @@ export function initializeComponentAsyncStateClass(
         }
 
         createWaitable(args?: { target?: unknown }) {
-            return new Waitable({ target: args?.target });
+            return new this.#context.Waitable({ target: args?.target });
+        }
+    };
+}
+let sharedComponentAsyncState: ReturnType<typeof defineComponentAsyncState>;
+
+export function initializeComponentAsyncStateClass(
+    context: ComponentAsyncStateContext,
+): ComponentAsyncStateConstructor {
+    const ComponentAsyncState = (sharedComponentAsyncState ??= defineComponentAsyncState());
+    /**
+     * Construct a state of a component instance that uses the context.
+     *
+     * @param options - options of the state of a component instance
+     * @returns the state of a component instance
+     */
+    class ContextComponentAsyncState extends ComponentAsyncState {
+        constructor(options: ConstructorParameters<typeof ComponentAsyncState>[1]) {
+            super(context, options);
         }
     }
-    return ComponentAsyncState;
+    return withConstructorStatics(ContextComponentAsyncState, {
+        EVENT_HANDLER_EVENTS: { value: [...ComponentAsyncState.EVENT_HANDLER_EVENTS], enumerable: true },
+        TickResult: { value: { ...ComponentAsyncState.TickResult }, enumerable: true },
+    });
 }
 
 export const postReturnTrap: ComponentModule['postReturnTrap'] = (context, componentIdx, error) => {

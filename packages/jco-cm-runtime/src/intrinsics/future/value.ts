@@ -7,9 +7,19 @@ import type {
 } from '../../runtime.js';
 import { disposeHostValue } from '../core.js';
 
-/** Keep each store's constructor and private brand together. */
-export function initializeFutureValueClass(disposeSymbol: symbol): FutureValueConstructor {
-    class FutureValue {
+// Drops a future value. Assigned in the class body, which alone reaches the private state.
+let dropFutureValue: (value: InstanceType<ReturnType<typeof defineBaseFutureValue>>) => void;
+
+/** Everything of a future value but the method named by the dispose symbol of a store. */
+function defineBaseFutureValue() {
+    return class BaseFutureValue {
+        static {
+            dropFutureValue = (value) => value.#drop();
+        }
+
+        #disposeSymbol: symbol;
+        // What one `initializeFutureValueClass` call shares between the instances it constructs.
+        #store: object;
         #start: FutureValueStart;
         #dropFn?: () => void;
         #dropped = false;
@@ -18,7 +28,9 @@ export function initializeFutureValueClass(disposeSymbol: symbol): FutureValueCo
         #hideThen = 0;
         #thenFn: (resolve: FutureValueResolve, reject?: FutureValueReject) => Promise<unknown>;
 
-        constructor(start: FutureValueStart, dropFn?: () => void) {
+        constructor(disposeSymbol: symbol, store: object, start: FutureValueStart, dropFn?: () => void) {
+            this.#disposeSymbol = disposeSymbol;
+            this.#store = store;
             if (typeof start !== 'function') {
                 throw new TypeError('future start operation must be a function');
             }
@@ -51,7 +63,7 @@ export function initializeFutureValueClass(disposeSymbol: symbol): FutureValueCo
         }
 
         #deliver(resolve: FutureValueResolve, value: unknown) {
-            if (value instanceof FutureValue) {
+            if (typeof value === 'object' && value !== null && #store in value && value.#store === this.#store) {
                 // Promise resolution reads `then` synchronously. Hide only that lookup.
                 value.resolveAsValue(resolve);
                 return;
@@ -76,7 +88,7 @@ export function initializeFutureValueClass(disposeSymbol: symbol): FutureValueCo
             }, reject);
         }
         /** Drop the readable end and dispose copied values that never reached a recipient. */
-        [disposeSymbol]() {
+        #drop() {
             if (this.#dropped) {
                 return;
             }
@@ -85,12 +97,28 @@ export function initializeFutureValueClass(disposeSymbol: symbol): FutureValueCo
             this.#settled?.then(
                 (box) => {
                     if (!this.#delivered) {
-                        disposeHostValue(disposeSymbol, box.value);
+                        disposeHostValue(this.#disposeSymbol, box.value);
                     }
                 },
                 () => {},
             );
         }
-    }
-    return FutureValue;
+    };
+}
+let sharedBaseFutureValue: ReturnType<typeof defineBaseFutureValue>;
+
+/** Create the future value class of a store, whose instances dispose under the given symbol. */
+export function initializeFutureValueClass(disposeSymbol: symbol): FutureValueConstructor {
+    const BaseFutureValue = (sharedBaseFutureValue ??= defineBaseFutureValue());
+    const store: object = {};
+
+    return class FutureValue extends BaseFutureValue {
+        constructor(start: FutureValueStart, dropFn?: () => void) {
+            super(disposeSymbol, store, start, dropFn);
+        }
+
+        [disposeSymbol]() {
+            dropFutureValue(this);
+        }
+    };
 }

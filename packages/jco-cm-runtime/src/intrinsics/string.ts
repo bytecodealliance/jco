@@ -6,6 +6,8 @@ import type {
     StringEncodeInto,
 } from '../runtime.js';
 
+const nonAscii = /[^\x00-\x7f]/;
+
 function requireString(value: unknown): string {
     if (typeof value !== 'string') {
         throw new TypeError('expected a string, received [' + typeof value + ']');
@@ -13,7 +15,12 @@ function requireString(value: unknown): string {
     return value;
 }
 
+/** Count UTF-8 bytes and Unicode scalars before allocating guest memory. */
 function utf8Size(s: string): { len: number; codepoints: number } {
+    // Every ASCII code unit occupies one byte. Scan long strings in bulk.
+    if (s.length >= 256 && !nonAscii.test(s)) {
+        return { len: s.length, codepoints: s.length };
+    }
     let len = 0;
     let codepoints = 0;
     for (let i = 0; i < s.length; i++) {
@@ -45,26 +52,31 @@ export const initializeUtf16Encoding: StringModule['initializeUtf16Encoding'] = 
 function writeUtf16(context: Utf16EncodingContext, str: string, ptr: number, memory: StringMemory): StringAllocation {
     const len = str.length;
     const out = new Uint16Array(memory.buffer, ptr, len);
-    const put = context.littleEndian
-        ? (i: number, ch: number) => {
-              out[i] = ch;
-          }
-        : (i: number, ch: number) => {
-              out[i] = ((ch & 0xff) << 8) | (ch >>> 8);
-          };
+
+    // Write the code units in the byte order of this platform, replacing each
+    // lone surrogate. A surrogate pair is one code point in two code units.
+    let codepoints = len;
     for (let i = 0; i < len; i++) {
         let ch = str.charCodeAt(i);
         if ((ch & 0xf800) === 0xd800) {
             if (ch < 0xdc00 && i + 1 < len && (str.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
-                put(i++, ch);
+                out[i++] = ch;
                 ch = str.charCodeAt(i);
+                codepoints--;
             } else {
                 ch = 0xfffd;
             }
         }
-        put(i, ch);
+        out[i] = ch;
     }
-    return { ptr, len, codepoints: [...str].length };
+
+    // Guest memory is little endian.
+    if (!context.littleEndian) {
+        for (let i = 0; i < len; i++) {
+            out[i] = ((out[i] & 0xff) << 8) | (out[i] >>> 8);
+        }
+    }
+    return { ptr, len, codepoints };
 }
 
 function writeUtf8(

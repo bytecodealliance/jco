@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 78b818b6ea80a85966fa8b07e56bca6fe4af60c0
+// generated from commit 811474cd0c6458c2404c1860280d87df31bdc8e1
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -26,6 +26,8 @@ function isPromiseLike(value) {
 
 //#endregion
 //#region runtime/intrinsics/core/debug.js
+let diagnostics = false;
+DEBUG: diagnostics = true;
 /**
 * Log runtime diagnostics when enabled at module load. Snapshot the environment
 * so hot runtime operations never read process.env.
@@ -33,83 +35,112 @@ function isPromiseLike(value) {
 * A logger which logs declares the message it takes and one which does nothing
 * declares no parameter, so that operations can tell them apart by `length` and
 * skip work which only serves logging.
+* Call sites use a DEBUG label so a bundler can remove argument evaluation too.
 * @param args Values to log.
 */
-const debugLog = globalThis?.process?.env?.JCO_DEBUG ? (message, ...args) => console.debug(message, ...args) : () => {};
+const debugLog = diagnostics && globalThis.process?.env?.JCO_DEBUG ? (message, ...args) => console.debug(message, ...args) : () => {};
 
 //#endregion
 //#region runtime/intrinsics/task-context.js
 const initializeTaskRegisters = () => ({});
+/**
+* Key of the register of a component instance.
+*
+* Host tasks use the component index -1. A negative number is not an array index,
+* so engines look it up as a string-keyed property; a named slot keeps the access
+* that every host call makes on the fast path.
+*
+* @param componentIdx - index of a component instance, or -1 for the host
+* @returns the key of that register in the registers object
+*/
+function registerSlot(componentIdx) {
+	return componentIdx === -1 ? "host" : componentIdx;
+}
 function validate(args) {
 	if (!args) throw new TypeError("args missing");
 	if (args.taskID === void 0) throw new TypeError("missing task ID");
 	if (args.threadID === void 0) throw new TypeError("missing thread ID");
 	if (args.componentIdx === void 0) throw new TypeError("missing component idx");
 }
+/**
+* Read a task register without copying what it holds.
+*
+* A register is only ever replaced, never changed in place, so the runtime reads it
+* directly. The value must not be modified; `getCurrentTaskMeta` hands out a copy
+* to callers outside the runtime.
+*
+* @param registers - the task registers of the store
+* @param componentIdx - index of a component instance, or nothing for the executing task
+* @returns the identity the register holds, if any
+*/
+function readTaskRegister(registers, componentIdx) {
+	const value = componentIdx === void 0 || componentIdx === null ? registers.current : registers[registerSlot(componentIdx)];
+	return value === void 0 || value === null ? void 0 : value;
+}
 const getCurrentTaskMeta = (registers, componentIdx) => {
-	const value = componentIdx === void 0 || componentIdx === null ? registers.current : registers[componentIdx];
-	return value === void 0 || value === null ? void 0 : { ...value };
+	const value = readTaskRegister(registers, componentIdx);
+	return value === void 0 ? void 0 : { ...value };
 };
 const setCurrentTaskMeta = (registers, args) => {
 	validate(args);
 	const { taskID, threadID, componentIdx } = args;
-	return registers.current = registers[componentIdx] = {
+	return registers.current = registers[registerSlot(componentIdx)] = {
 		taskID,
 		threadID,
 		componentIdx
 	};
 };
 function withCurrentTaskMeta(registers, args) {
-	debugLog("[_withGlobalCurrentThreadMeta()] args", args);
+	DEBUG: debugLog("[_withGlobalCurrentThreadMeta()] args", args);
 	validate(args);
 	if (!args.fn) throw new TypeError("missing fn");
 	const { taskID, threadID, componentIdx, fn } = args;
-	const previous = registers[componentIdx] ?? null;
+	const previous = registers[registerSlot(componentIdx)] ?? null;
 	const previousCurrent = registers.current ?? null;
 	try {
-		registers.current = registers[componentIdx] = {
+		registers.current = registers[registerSlot(componentIdx)] = {
 			taskID,
 			threadID,
 			componentIdx
 		};
 		return fn();
 	} catch (error) {
-		debugLog("error while executing sync callee/callback", {
+		DEBUG: debugLog("error while executing sync callee/callback", {
 			...args,
 			err: error
 		});
 		throw error;
 	} finally {
-		registers[componentIdx] = previous;
+		registers[registerSlot(componentIdx)] = previous;
 		registers.current = previousCurrent;
 	}
 }
 function withCurrentTaskMetaAsync(registers, args) {
-	debugLog("[_withGlobalCurrentThreadMetaAsync()] args", args);
+	DEBUG: debugLog("[_withGlobalCurrentThreadMetaAsync()] args", args);
 	validate(args);
 	if (!args.fn) throw new TypeError("missing fn");
 	const { taskID, threadID, componentIdx, fn } = args;
-	const previous = registers[componentIdx] ?? null;
+	const previous = registers[registerSlot(componentIdx)] ?? null;
 	const previousCurrent = registers.current ?? null;
 	let result;
 	try {
-		registers.current = registers[componentIdx] = {
+		registers.current = registers[registerSlot(componentIdx)] = {
 			taskID,
 			threadID,
 			componentIdx
 		};
 		result = fn();
 	} catch (error) {
-		debugLog("error while executing sync callee/callback", {
+		DEBUG: debugLog("error while executing sync callee/callback", {
 			...args,
 			err: error
 		});
-		registers[componentIdx] = previous;
+		registers[registerSlot(componentIdx)] = previous;
 		registers.current = previousCurrent;
 		throw error;
 	}
 	if (!isPromiseLike(result)) {
-		registers[componentIdx] = previous;
+		registers[registerSlot(componentIdx)] = previous;
 		registers.current = previousCurrent;
 		return result;
 	}
@@ -117,29 +148,238 @@ function withCurrentTaskMetaAsync(registers, args) {
 		try {
 			return await result;
 		} catch (error) {
-			debugLog("error while executing async callee/callback", {
+			DEBUG: debugLog("error while executing async callee/callback", {
 				...args,
 				err: error
 			});
 			throw error;
 		} finally {
-			if (registers[componentIdx]?.threadID === threadID && registers[componentIdx]?.taskID === taskID) registers[componentIdx] = null;
+			if (registers[registerSlot(componentIdx)]?.threadID === threadID && registers[registerSlot(componentIdx)]?.taskID === taskID) registers[registerSlot(componentIdx)] = null;
 			if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
 		}
 	})();
 }
 const clearCurrentTaskMeta = async (registers, args) => {
-	debugLog("[_clearCurrentTask()] args", args);
+	DEBUG: debugLog("[_clearCurrentTask()] args", args);
 	validate(args);
 	const { taskID, threadID, componentIdx } = args;
-	const meta = registers[componentIdx];
+	const meta = registers[registerSlot(componentIdx)];
 	if (!meta) throw new Error(`missing current thread meta for component idx [${componentIdx}]`);
 	if (meta.threadID !== threadID) throw new Error(`thread ID [${meta.threadID}] != requested ID [${threadID}]`);
 	if (meta.taskID !== taskID) throw new Error(`task ID [${meta.taskID}] != requested ID [${taskID}]`);
 	if (meta.componentIdx !== componentIdx) throw new Error(`component idx [${meta.componentIdx}] != requested idx [${componentIdx}]`);
-	registers[componentIdx] = null;
+	registers[registerSlot(componentIdx)] = null;
 	if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
 };
+
+//#endregion
+//#region runtime/intrinsics/flat-params.js
+let cursorKey;
+/** Materialize only when a consumer observes the public array. */
+function getParams() {
+	const cursor = cursorFor(this);
+	if (cursor.offset !== 0) {
+		cursor.values = cursor.values.slice(cursor.offset);
+		cursor.offset = 0;
+	}
+	cursor.exposed = true;
+	return cursor.values;
+}
+/** Replacing params starts a new argument sequence. */
+function setParams(values) {
+	const cursor = cursorFor(this);
+	cursor.values = values;
+	cursor.offset = 0;
+	cursor.exposed = true;
+}
+/** Register a runtime-owned context whose params accessor was created with it. */
+function initializeParams(context, values) {
+	cursorKey ??= Symbol("jco flat parameter cursor");
+	Object.defineProperty(context, cursorKey, { value: {
+		values,
+		offset: 0,
+		exposed: true
+	} });
+	Object.defineProperty(context, "params", {
+		get: getParams,
+		set: setParams,
+		enumerable: true,
+		configurable: true
+	});
+}
+/** Caller-created contexts retain ordinary array properties and accessors. */
+function cursorFor(context) {
+	return cursorKey ? context[cursorKey] : void 0;
+}
+/** Count remaining flat arguments without allocating their suffix. */
+function remainingParams(context) {
+	const cursor = cursorFor(context);
+	return cursor ? cursor.values.length - cursor.offset : context.params.length;
+}
+/** Read one argument relative to the current position. */
+function readParam(context, index) {
+	const cursor = cursorFor(context);
+	return cursor ? cursor.values[cursor.offset + index] : context.params[index];
+}
+/** Copy a fixed-size list without materializing the rest of the arguments. */
+function copyParams(context, count) {
+	const cursor = cursorFor(context);
+	return cursor ? cursor.values.slice(cursor.offset, cursor.offset + count) : context.params.slice(0, count);
+}
+/** Advance, detaching from any array previously exposed to a caller. */
+function consumeParams(context, count) {
+	const cursor = cursorFor(context);
+	if (!cursor) context.params = context.params.slice(count);
+	else if (cursor.exposed) {
+		cursor.values = cursor.values.slice(cursor.offset + count);
+		cursor.offset = 0;
+		cursor.exposed = false;
+	} else cursor.offset = Math.min(cursor.values.length, cursor.offset + count);
+}
+/** Read and consume an unconverted scalar with one cursor lookup. */
+function takeParam(context, error) {
+	const cursor = cursorFor(context);
+	if (!cursor) {
+		if (context.params.length === 0) throw new Error(error);
+		const value = context.params[0];
+		context.params = context.params.slice(1);
+		return value;
+	}
+	if (cursor.offset === cursor.values.length) throw new Error(error);
+	const value = cursor.values[cursor.offset];
+	if (cursor.exposed) {
+		cursor.values = cursor.values.slice(cursor.offset + 1);
+		cursor.offset = 0;
+		cursor.exposed = false;
+	} else cursor.offset++;
+	return value;
+}
+/** Whether a context was prepared for repeated flat-argument consumption. */
+function hasParamCursor(context) {
+	return cursorFor(context) !== void 0;
+}
+
+//#endregion
+//#region runtime/intrinsics/call-context.js
+/** Initialize optional fields consistently for direct and memory-based calls. */
+function createLiftContext(options, useCursor = (options.params?.length ?? 0) >= 64) {
+	if (options.useDirectParams && !useCursor) return options;
+	const context = {
+		componentIdx: options.componentIdx,
+		memory: options.memory,
+		memoryView: void 0,
+		useDirectParams: options.useDirectParams,
+		stringEncoding: options.stringEncoding,
+		storagePtr: options.storagePtr,
+		storageLen: options.storageLen,
+		isBorrowed: options.isBorrowed,
+		liftResource: options.liftResource
+	};
+	if (useCursor) initializeParams(context, options.params);
+	else context.params = options.params;
+	return context;
+}
+/** Keep list and scalar lowering contexts on the same field layout. */
+function createLowerContext(options, useCursor = (options.params?.length ?? 0) >= 64) {
+	const context = {
+		componentIdx: options.componentIdx,
+		vals: options.vals,
+		memory: options.memory,
+		memoryView: void 0,
+		useDirectParams: options.useDirectParams,
+		stringEncoding: options.stringEncoding,
+		storagePtr: options.storagePtr,
+		storageLen: options.storageLen,
+		realloc: options.realloc,
+		lowerResource: options.lowerResource
+	};
+	if (useCursor) initializeParams(context, options.params);
+	else context.params = options.params;
+	return context;
+}
+/** Give element callbacks the same layout for both read and write buffers. */
+function createBufferContext(options) {
+	return {
+		componentIdx: options.componentIdx,
+		memory: options.memory,
+		memoryView: void 0,
+		storagePtr: options.storagePtr,
+		stringEncoding: options.stringEncoding,
+		realloc: options.realloc,
+		getReallocFn: options.getReallocFn,
+		vals: options.vals,
+		liftResource: options.liftResource,
+		lowerResource: options.lowerResource
+	};
+}
+
+//#endregion
+//#region runtime/intrinsics/scalar-lift.js
+let scalarLifts;
+/**
+* Register the scalar leaves when the public lift is first used. On a cache
+* miss a composite calls that public lift, which also consumes the first field.
+*/
+function registerScalarLift(lift, direct, memory) {
+	scalarLifts ??= /* @__PURE__ */ new WeakMap();
+	scalarLifts.set(lift, {
+		direct,
+		memory
+	});
+	return true;
+}
+/** Custom lifts still use the public ABI, including replacement contexts. */
+function scalarLiftValue(lift, direct) {
+	const scalar = scalarLifts?.get(lift);
+	return direct ? scalar?.direct : scalar?.memory;
+}
+
+//#endregion
+//#region runtime/intrinsics/core/shared-class.js
+/**
+* Give a store's subclass its own static state while sharing implementation methods.
+* Real subclasses preserve prototype overrides, new.target and ordinary instanceof.
+*
+* @param constructor - the store's subclass of a shared implementation
+* @param statics - static members owned by this store
+* @returns the constructor with the public runtime constructor type
+*/
+function withConstructorStatics(constructor, statics) {
+	Object.defineProperties(constructor, statics);
+	return constructor;
+}
+
+//#endregion
+//#region runtime/intrinsics/core/scheduling.js
+/**
+* Run `callback` on the next macrotask, after the current microtasks have drained, as
+* `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
+* browsers to 4 ms once timers nest, which a guest that yields often pays on every yield.
+* Returns a function that cancels the callback.
+*/
+function onNextMacrotask(callback) {
+	if (typeof MessageChannel === "function") {
+		const channel = new MessageChannel();
+		let cancelled = false;
+		channel.port1.onmessage = () => {
+			channel.port1.close();
+			if (!cancelled) callback();
+		};
+		channel.port2.postMessage(null);
+		return () => {
+			cancelled = true;
+			channel.port1.close();
+		};
+	}
+	const handle = setTimeout(callback, 0);
+	return () => clearTimeout(handle);
+}
+/** Yield a bounded batch of ready work to other host tasks. */
+function yieldToHost() {
+	return new Promise((resolve) => {
+		onNextMacrotask(resolve);
+	});
+}
 
 //#endregion
 //#region runtime/intrinsics/component/call-tracking.js
@@ -361,6 +601,7 @@ const initializeStoreTrap = (onTrap = null) => ({
 const initializeStoreAsyncState = () => ({
 	deadlockCheck: null,
 	pendingHostOperations: 0,
+	hostWakeupScheduled: false,
 	idleWaiters: /* @__PURE__ */ new Set()
 });
 const initializeComponentAsyncStates = () => /* @__PURE__ */ new Map();
@@ -437,8 +678,15 @@ function trackHostOperation(context, operation) {
 		storeTrap.stopWaiters.delete(rejectStopped);
 		storeAsyncState.pendingHostOperations--;
 		if (storeAsyncState.pendingHostOperations < 0) throw new Error("negative pending host operation count");
-		for (const state of asyncState.values()) state.runTickLoop();
-		checkForDeadlock(context);
+		if (!storeAsyncState.hostWakeupScheduled) {
+			storeAsyncState.hostWakeupScheduled = true;
+			queueMicrotask(() => {
+				storeAsyncState.hostWakeupScheduled = false;
+				if (storeTrap.stopped) return;
+				for (const state of asyncState.values()) state.runTickLoop();
+				checkForDeadlock(context);
+			});
+		}
 	});
 	for (const sym of [Symbol.asyncDispose, symbolDispose]) if (typeof sym === "symbol" && typeof result[sym] === "function") tracked[sym] = () => result[sym]();
 	return tracked;
@@ -473,74 +721,48 @@ function guardTrap(context, componentIdx, fn, convertsRangeErrors = false) {
 }
 /** Implements `canon backpressure.inc`. */
 function backpressureInc(context, componentIdx) {
-	debugLog("[backpressureInc()] args", { componentIdx });
+	DEBUG: debugLog("[backpressureInc()] args", { componentIdx });
 	const state = getOrCreateAsyncState(context, componentIdx);
 	if (!state) throw new Error(`missing component state for component [${componentIdx}]`);
 	const newValue = state.incrementBackpressure();
-	debugLog("[backpressureInc()] incremented", {
+	DEBUG: debugLog("[backpressureInc()] incremented", {
 		componentIdx,
 		newValue
 	});
 }
 /** Implements `canon backpressure.dec`. */
 function backpressureDec(context, componentIdx) {
-	debugLog("[backpressureDec()] args", { componentIdx });
+	DEBUG: debugLog("[backpressureDec()] args", { componentIdx });
 	const newValue = getOrCreateAsyncState(context, componentIdx).decrementBackpressure();
-	debugLog("[backpressureDec()] decremented", {
+	DEBUG: debugLog("[backpressureDec()] decremented", {
 		componentIdx,
 		newValue
 	});
 }
 function getOrCreateAsyncState(context, componentIdx) {
 	const { asyncState, ComponentAsyncState } = context;
-	if (!asyncState.has(componentIdx)) {
-		const newState = new ComponentAsyncState({ componentIdx });
-		asyncState.set(componentIdx, newState);
+	let state = asyncState.get(componentIdx);
+	if (state === void 0 && !asyncState.has(componentIdx)) {
+		state = new ComponentAsyncState({ componentIdx });
+		asyncState.set(componentIdx, state);
 	}
-	return asyncState.get(componentIdx);
+	return state;
 }
 function setAllError(states) {
-	debugLog("[_ComponentStateSetAllError()]");
+	DEBUG: debugLog("[_ComponentStateSetAllError()]");
 	for (const state of states.values()) state.setErrored();
 }
 const TICK_DONE = "done";
 const TICK_RESUMED = "resumed";
 const TICK_IDLE = "idle";
 const IDLE_POLL_MS = 10;
-/**
-* Run `callback` on the next macrotask, after the current microtasks have drained, as
-* `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
-* browsers to 4 ms once timers nest, which a guest that yields often pays on every yield.
-* Returns a function that cancels the callback.
-*/
-function onNextMacrotask(callback) {
-	if (typeof setImmediate === "function") {
-		const handle = setImmediate(callback);
-		return () => clearImmediate(handle);
-	}
-	if (typeof MessageChannel === "function") {
-		const channel = new MessageChannel();
-		let cancelled = false;
-		channel.port1.onmessage = () => {
-			channel.port1.close();
-			if (!cancelled) callback();
-		};
-		channel.port2.postMessage(null);
-		return () => {
-			cancelled = true;
-			channel.port1.close();
-		};
-	}
-	const handle = setTimeout(callback, 0);
-	return () => clearTimeout(handle);
-}
 function afterDelay(callback, ms) {
 	const handle = setTimeout(callback, ms);
 	return () => clearTimeout(handle);
 }
-function initializeComponentAsyncStateClass(context) {
-	const { RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, cannotEnter, deadlock, Waitable } = context;
-	class ComponentAsyncState {
+function defineComponentAsyncState() {
+	return class ComponentAsyncState {
+		#context;
 		static EVENT_HANDLER_EVENTS = ["backpressure-change"];
 		static TickResult = {
 			DONE: TICK_DONE,
@@ -570,33 +792,34 @@ function initializeComponentAsyncStateClass(context) {
 		handles;
 		subtasks;
 		threads;
-		constructor(args) {
+		constructor(context, args) {
+			this.#context = context;
 			this.#componentIdx = args.componentIdx;
-			this.handles = new RepTable({
+			this.handles = new this.#context.RepTable({
 				target: `component [${this.#componentIdx}] handles (waitable objects)`,
-				space: getHandleIndexSpace(indexSpaces, this.#componentIdx)
+				space: getHandleIndexSpace(this.#context.indexSpaces, this.#componentIdx)
 			});
-			this.subtasks = new RepTable({ target: `component [${this.#componentIdx}] subtasks` });
-			this.threads = new RepTable({ target: `component [${this.#componentIdx}] threads` });
+			this.subtasks = new this.#context.RepTable({ target: `component [${this.#componentIdx}] subtasks` });
+			this.threads = new this.#context.RepTable({ target: `component [${this.#componentIdx}] threads` });
 		}
 		componentIdx() {
 			return this.#componentIdx;
 		}
 		get mayLeave() {
-			const flags = instanceFlags.get(this.#componentIdx);
+			const flags = this.#context.instanceFlags.get(this.#componentIdx);
 			return flags === void 0 ? this.#mayLeave : flags.value === 1;
 		}
 		set mayLeave(value) {
 			if (typeof value !== "boolean") throw new TypeError("mayLeave must be a boolean");
 			this.#mayLeave = value;
-			const flags = instanceFlags.get(this.#componentIdx);
+			const flags = this.#context.instanceFlags.get(this.#componentIdx);
 			if (flags !== void 0) flags.value = value ? 1 : 0;
 		}
 		errored() {
 			return this.#errored !== null;
 		}
 		setErrored(err) {
-			debugLog("[ComponentAsyncState#setErrored()] component errored", {
+			DEBUG: debugLog("[ComponentAsyncState#setErrored()] component errored", {
 				err,
 				componentIdx: this.#componentIdx
 			});
@@ -605,29 +828,29 @@ function initializeComponentAsyncStateClass(context) {
 			this.#errored = err;
 		}
 		markTrapped(err) {
-			if (!(err instanceof RuntimeError)) return false;
-			const trap = normalizeCoreTrap(normalization, err);
+			if (!(err instanceof this.#context.RuntimeError)) return false;
+			const trap = normalizeCoreTrap(this.#context.normalization, err);
 			this.#trapped = true;
 			if (this.#trapError === null) this.#trapError = trap;
-			debugLog("[ComponentAsyncState#markTrapped()] component trapped", {
+			DEBUG: debugLog("[ComponentAsyncState#markTrapped()] component trapped", {
 				err,
 				componentIdx: this.#componentIdx
 			});
-			if (storeTrap.error === null) storeTrap.error = trap;
-			context.reportTrap?.(trap);
-			context.checkIdle?.();
+			if (this.#context.storeTrap.error === null) this.#context.storeTrap.error = trap;
+			this.#context.reportTrap?.(trap);
+			this.#context.checkIdle?.();
 			return true;
 		}
 		isTrapped() {
 			return this.#trapped;
 		}
 		throwIfInterrupted() {
-			if (storeTrap.stopped) throw storeTrap.error;
-			if (this.#trapped) throw this.#trapError ?? new RuntimeError(cannotEnter);
+			if (this.#context.storeTrap.stopped) throw this.#context.storeTrap.error;
+			if (this.#trapped) throw this.#trapError ?? new this.#context.RuntimeError(this.#context.cannotEnter);
 		}
 		throwIfTrapped() {
-			if (storeTrap.stopped) throw storeTrap.error;
-			if (this.#trapped) throw new RuntimeError(cannotEnter);
+			if (this.#context.storeTrap.stopped) throw this.#context.storeTrap.error;
+			if (this.#trapped) throw new this.#context.RuntimeError(this.#context.cannotEnter);
 		}
 		callingSyncImport(val) {
 			if (val === void 0) return this.#callingAsyncImport;
@@ -663,7 +886,7 @@ function initializeComponentAsyncStateClass(context) {
 			const current = this.#backpressure;
 			if (current < 0 || current > 2 ** 16) throw new Error(`invalid current backpressure value [${current}]`);
 			const newValue = current - 1;
-			if (newValue < 0) throw new RuntimeError("backpressure counter underflow");
+			if (newValue < 0) throw new this.#context.RuntimeError("backpressure counter underflow");
 			return this.setBackpressure(newValue);
 		}
 		hasBackpressure() {
@@ -723,7 +946,7 @@ function initializeComponentAsyncStateClass(context) {
 			return this.#lockHolderTaskID === taskID;
 		}
 		exclusiveLock(taskID) {
-			debugLog("[ComponentAsyncState#exclusiveLock()]", {
+			DEBUG: debugLog("[ComponentAsyncState#exclusiveLock()]", {
 				holder: this.#lockHolderTaskID,
 				requester: taskID,
 				componentIdx: this.#componentIdx
@@ -736,14 +959,14 @@ function initializeComponentAsyncStateClass(context) {
 			if (taskID === void 0 || taskID === null) throw new Error("exclusive lock requires the acquiring task id");
 			if (this.#lockHolderTaskID === null) {
 				this.#lockHolderTaskID = taskID;
-				debugLog("[ComponentAsyncState#acquireExclusiveLock()] acquired", {
+				DEBUG: debugLog("[ComponentAsyncState#acquireExclusiveLock()] acquired", {
 					holder: taskID,
 					componentIdx: this.#componentIdx
 				});
 				return;
 			}
 			if (this.#lockHolderTaskID === taskID) throw new Error(`task [${taskID}] already holds the lock for component [${this.#componentIdx}]`);
-			debugLog("[ComponentAsyncState#acquireExclusiveLock()] waiting", {
+			DEBUG: debugLog("[ComponentAsyncState#acquireExclusiveLock()] waiting", {
 				holder: this.#lockHolderTaskID,
 				requester: taskID,
 				componentIdx: this.#componentIdx,
@@ -793,13 +1016,13 @@ function initializeComponentAsyncStateClass(context) {
 			return true;
 		}
 		exclusiveRelease(taskID) {
-			debugLog("[ComponentAsyncState#exclusiveRelease()] args", {
+			DEBUG: debugLog("[ComponentAsyncState#exclusiveRelease()] args", {
 				holder: this.#lockHolderTaskID,
 				releaser: taskID,
 				componentIdx: this.#componentIdx
 			});
 			if (this.#lockHolderTaskID !== taskID) {
-				debugLog("[ComponentAsyncState#exclusiveRelease()] ignoring foreign release", {
+				DEBUG: debugLog("[ComponentAsyncState#exclusiveRelease()] ignoring foreign release", {
 					holder: this.#lockHolderTaskID,
 					releaser: taskID,
 					componentIdx: this.#componentIdx
@@ -812,7 +1035,7 @@ function initializeComponentAsyncStateClass(context) {
 				this.#onExclusiveReleaseHandlers[idx] = null;
 				f();
 			} catch (err) {
-				debugLog("error while executing handler for next exclusive release", err);
+				DEBUG: debugLog("error while executing handler for next exclusive release", err);
 				throw err;
 			}
 			this.#scheduleLockHandoff();
@@ -831,7 +1054,7 @@ function initializeComponentAsyncStateClass(context) {
 			});
 		}
 		onNextExclusiveRelease(fn) {
-			debugLog("[ComponentAsyncState#()onNextExclusiveRelease] registering");
+			DEBUG: debugLog("[ComponentAsyncState#()onNextExclusiveRelease] registering");
 			this.#onExclusiveReleaseHandlers.push(fn);
 		}
 		async waitForExclusiveRelease() {
@@ -876,7 +1099,7 @@ function initializeComponentAsyncStateClass(context) {
 		}
 		suspendThread(args) {
 			const { thread, readyFn, cancellable, onResume, suspended = false } = args;
-			debugLog("[ComponentAsyncState#suspendThread()]", {
+			DEBUG: debugLog("[ComponentAsyncState#suspendThread()]", {
 				threadID: thread.id(),
 				taskID: thread.taskID(),
 				componentIdx: this.#componentIdx
@@ -891,8 +1114,8 @@ function initializeComponentAsyncStateClass(context) {
 				promise = resolvers.promise;
 				resume = () => resolvers.resolve(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());
 			}
-			if (storeTrap.stopped) {
-				this.markTrapped(storeTrap.error);
+			if (this.#context.storeTrap.stopped) {
+				this.markTrapped(this.#context.storeTrap.error);
 				resume();
 				return promise;
 			}
@@ -905,7 +1128,7 @@ function initializeComponentAsyncStateClass(context) {
 			});
 			thread.notifyProgress();
 			this.runTickLoop();
-			checkForDeadlock(deadlock);
+			checkForDeadlock(this.#context.deadlock);
 			return promise;
 		}
 		resumeThread(thread) {
@@ -958,18 +1181,18 @@ function initializeComponentAsyncStateClass(context) {
 			for (const thread of [...this.#suspendedThreadsByRef.keys()]) this.resumeThread(thread);
 		}
 		runTickLoop() {
-			if (storeTrap.stopped || this.#tickLoop !== null) return;
+			if (this.#context.storeTrap.stopped || this.#tickLoop !== null) return;
 			const run = () => {
-				if (storeTrap.stopped) {
+				if (this.#context.storeTrap.stopped) {
 					this.#tickLoop = null;
 					return;
 				}
 				const result = this.tick();
-				if (storeTrap.stopped || result === TICK_DONE) {
+				if (this.#context.storeTrap.stopped || result === TICK_DONE) {
 					this.#tickLoop = null;
 					return;
 				}
-				if (result === TICK_IDLE) checkForDeadlock(deadlock);
+				if (result === TICK_IDLE) checkForDeadlock(this.#context.deadlock);
 				this.#tickLoop = result === TICK_RESUMED ? onNextMacrotask(run) : afterDelay(run, IDLE_POLL_MS);
 			};
 			this.#tickLoop = onNextMacrotask(run);
@@ -978,12 +1201,12 @@ function initializeComponentAsyncStateClass(context) {
 			for (const [thread, meta] of this.#suspendedThreadsByRef) {
 				if (!meta || !meta.readyFn) throw new Error(`missing/invalid thread meta despite thread [${thread.id()}] being present`);
 				if (this.isTrapped() || meta.thread.isRejected()) {
-					debugLog("[ComponentAsyncState#tick()] detected thread rejection, leaving early", { meta });
+					DEBUG: debugLog("[ComponentAsyncState#tick()] detected thread rejection, leaving early", { meta });
 					this.resumeThread(thread);
 					return TICK_RESUMED;
 				}
 				if (!this.suspendedThreadReady(thread)) continue;
-				debugLog("[ComponentAsyncState#tick()] resuming thread via tick", {
+				DEBUG: debugLog("[ComponentAsyncState#tick()] resuming thread via tick", {
 					threadID: thread.id(),
 					componentIdx: this.#componentIdx
 				});
@@ -993,10 +1216,34 @@ function initializeComponentAsyncStateClass(context) {
 			return this.#suspendedThreadsByRef.size > 0 ? TICK_IDLE : TICK_DONE;
 		}
 		createWaitable(args) {
-			return new Waitable({ target: args?.target });
+			return new this.#context.Waitable({ target: args?.target });
+		}
+	};
+}
+let sharedComponentAsyncState;
+function initializeComponentAsyncStateClass(context) {
+	const ComponentAsyncState = sharedComponentAsyncState ??= defineComponentAsyncState();
+	/**
+	* Construct a state of a component instance that uses the context.
+	*
+	* @param options - options of the state of a component instance
+	* @returns the state of a component instance
+	*/
+	class ContextComponentAsyncState extends ComponentAsyncState {
+		constructor(options) {
+			super(context, options);
 		}
 	}
-	return ComponentAsyncState;
+	return withConstructorStatics(ContextComponentAsyncState, {
+		EVENT_HANDLER_EVENTS: {
+			value: [...ComponentAsyncState.EVENT_HANDLER_EVENTS],
+			enumerable: true
+		},
+		TickResult: {
+			value: { ...ComponentAsyncState.TickResult },
+			enumerable: true
+		}
+	});
 }
 const postReturnTrap = (context, componentIdx, error) => {
 	let trap;
@@ -1022,10 +1269,11 @@ function getCurrentTask(_context, componentIdx, taskID) {
 	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing component idx");
 	const taskMetas = _context.tasks.get(componentIdx);
 	if (taskMetas === void 0 || taskMetas.length === 0) return;
-	if (taskID) return taskMetas.find((meta) => meta.task.id() === taskID);
-	const current = _context.registers[componentIdx];
+	const last = taskMetas[taskMetas.length - 1];
+	if (taskID) return last.task.id() === taskID ? last : taskMetas.find((meta) => meta.task.id() === taskID);
+	const current = _context.registers[registerSlot(componentIdx)];
 	if (current && current.taskID !== void 0) {
-		const currentMeta = taskMetas.find((meta) => meta.task.id() === current.taskID);
+		const currentMeta = last.task.id() === current.taskID ? last : taskMetas.find((meta) => meta.task.id() === current.taskID);
 		if (currentMeta) return currentMeta;
 	}
 	const taskMeta = taskMetas[taskMetas.length - 1];
@@ -1033,7 +1281,7 @@ function getCurrentTask(_context, componentIdx, taskID) {
 	return taskMeta;
 }
 function createNewCurrentImplicitThread(_context, args) {
-	debugLog("[createNewCurrentImplicitThread()] args", args);
+	DEBUG: debugLog("[createNewCurrentImplicitThread()] args", args);
 	const { componentIdx, isAsync, isManualAsync, preserveFutureResult, entryFnName, callbackFnName, getCallbackFn, stringEncoding, errHandling, getCalleeParamsFn, resultPtr, callingWasmExport } = args;
 	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing/invalid component instance index while starting task");
 	let taskMetas = _context.tasks.get(componentIdx);
@@ -1076,7 +1324,7 @@ function createNewCurrentImplicitThread(_context, args) {
 	};
 }
 function clearCurrentThread(_context, componentIdx, taskID, options = {}) {
-	debugLog("[clearCurrentThread()] args", {
+	DEBUG: debugLog("[clearCurrentThread()] args", {
 		componentIdx,
 		taskID
 	});
@@ -1084,17 +1332,25 @@ function clearCurrentThread(_context, componentIdx, taskID, options = {}) {
 	const tasks = _context.tasks.get(componentIdx);
 	if (!tasks || !Array.isArray(tasks)) throw new Error("missing/invalid tasks for component instance while ending task");
 	if (tasks.length == 0) throw new Error(`no current tasks for component instance [${componentIdx}] while ending task`);
-	const taskIdx = taskID === void 0 ? tasks.length - 1 : tasks.findIndex((meta) => meta.id === taskID);
+	const lastIdx = tasks.length - 1;
+	const taskIdx = taskID === void 0 || tasks[lastIdx].id === taskID ? lastIdx : tasks.findIndex((meta) => meta.id === taskID);
 	if (taskIdx === -1) return;
 	const taskMeta = tasks[taskIdx];
 	if (!options.preserveTask) {
-		tasks.splice(taskIdx, 1);
+		if (taskIdx === lastIdx) tasks.pop();
+		else tasks.splice(taskIdx, 1);
 		_context.checkIdle?.();
 	}
-	const globalTaskIdx = _context.taskIds.lastIndexOf(taskMeta.id);
-	if (globalTaskIdx !== -1) {
-		_context.taskIds.splice(globalTaskIdx, 1);
-		_context.componentIdxs.splice(globalTaskIdx, 1);
+	const { taskIds, componentIdxs } = _context;
+	if (taskIds.length > 0 && taskIds[taskIds.length - 1] === taskMeta.id) {
+		taskIds.pop();
+		componentIdxs.pop();
+	} else {
+		const globalTaskIdx = taskIds.lastIndexOf(taskMeta.id);
+		if (globalTaskIdx !== -1) {
+			taskIds.splice(globalTaskIdx, 1);
+			componentIdxs.splice(globalTaskIdx, 1);
+		}
 	}
 	return taskMeta.task;
 }
@@ -1109,7 +1365,7 @@ function taskReturn(_context, ctx, ...params) {
 	const { componentIdx, getMemoryFn, memoryIdx, callbackFnIdx, liftFns, lowerFns, stringEncoding } = ctx;
 	const memory = getMemoryFn();
 	let useDirectParams = ctx.useDirectParams;
-	const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
+	const { taskID } = readTaskRegister(_context.registers, componentIdx);
 	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 	if (!taskMeta) throw new Error("failed to retrieve current task metadata");
 	const task = taskMeta.task;
@@ -1118,7 +1374,7 @@ function taskReturn(_context, ctx, ...params) {
 	task.validateResourceBorrowScope();
 	const expectedResultType = task.returnResultTypeIdx();
 	if (expectedResultType !== null && ctx.resultTypeIdx !== void 0 && ctx.resultTypeIdx !== expectedResultType) throw new _context.RuntimeError("task.return result type does not match the function type");
-	debugLog("[taskReturn()] args", {
+	DEBUG: debugLog("[taskReturn()] args", {
 		componentIdx,
 		taskID: task.id(),
 		subtaskID: task.getParentSubtask()?.id(),
@@ -1130,7 +1386,7 @@ function taskReturn(_context, ctx, ...params) {
 	});
 	const subtaskCallMetadata = task.getParentSubtask()?.getCallMetadata();
 	if (subtaskCallMetadata?.returnFn && !subtaskCallMetadata.returnFnCalled) {
-		debugLog("[taskReturn()] calling return fn on subtask", {
+		DEBUG: debugLog("[taskReturn()] calling return fn on subtask", {
 			componentIdx,
 			taskID: task.id(),
 			subtaskID: task.getParentSubtask()?.id(),
@@ -1149,7 +1405,7 @@ function taskReturn(_context, ctx, ...params) {
 	}
 	const expectedMemoryIdx = task.getReturnMemoryIdx();
 	if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {
-		debugLog("[taskReturn()] mismatched memory indices", {
+		DEBUG: debugLog("[taskReturn()] mismatched memory indices", {
 			expectedMemoryIdx,
 			memoryIdx
 		});
@@ -1157,19 +1413,19 @@ function taskReturn(_context, ctx, ...params) {
 	}
 	task.callbackFnIdx = callbackFnIdx;
 	if (!memory && liftFns.length > 4) {
-		debugLog("[taskReturn()] memory not present for max async flat lifts");
+		DEBUG: debugLog("[taskReturn()] memory not present for max async flat lifts");
 		throw new Error("memory must be present if more than max async flat lifts are performed");
 	}
-	let liftCtx = {
+	let liftCtx = createLiftContext({
 		memory,
 		useDirectParams,
 		params,
 		componentIdx,
 		stringEncoding
-	};
+	});
 	if (!useDirectParams) {
 		if (!memory) {
-			debugLog("missing memory despite indirect param usage", {
+			DEBUG: debugLog("missing memory despite indirect param usage", {
 				useDirectParams,
 				liftCtx,
 				ctx
@@ -1180,23 +1436,27 @@ function taskReturn(_context, ctx, ...params) {
 		liftCtx.storageLen = params[1];
 	}
 	const liftedResults = [];
-	debugLog("[taskReturn()] lifting results out of memory", { liftCtx });
+	DEBUG: debugLog("[taskReturn()] lifting results out of memory", { liftCtx });
 	for (const liftFn of liftFns) {
 		if (liftCtx.storageLen !== void 0 && liftCtx.storageLen <= 0) {
-			debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
+			DEBUG: debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
 			throw new Error("ran out of storage while writing");
 		}
-		const [val, newLiftCtx] = liftFn(liftCtx);
-		liftCtx = newLiftCtx;
-		liftedResults.push(val);
+		const scalar = scalarLiftValue(liftFn, liftCtx.useDirectParams);
+		if (scalar) liftedResults.push(scalar(liftCtx));
+		else {
+			const [val, newLiftCtx] = liftFn(liftCtx);
+			liftCtx = newLiftCtx;
+			liftedResults.push(val);
+		}
 	}
 	task.resolve(liftedResults);
 }
 /** Implements `canon task.cancel`. */
 function taskCancel(_context, componentIdx) {
-	debugLog("[taskCancel()] args", { componentIdx });
+	DEBUG: debugLog("[taskCancel()] args", { componentIdx });
 	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave, cannot be cancelled");
-	const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
+	const { taskID } = readTaskRegister(_context.registers, componentIdx);
 	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 	if (!taskMeta) throw new Error("invalid/missing async task meta");
 	const task = taskMeta.task;
@@ -1296,7 +1556,7 @@ const transferBorrow = (context, handle, fromTid, toTid) => {
 	const { rep, own } = tableGet(context, fromTable, handle);
 	const toTable = getOrCreateTable(context.tables, toTid);
 	const componentIdx = toTable._componentIdx;
-	const meta = componentIdx === void 0 ? void 0 : getCurrentTaskMeta(context.taskLookup.registers, componentIdx);
+	const meta = componentIdx === void 0 ? void 0 : readTaskRegister(context.taskLookup.registers, componentIdx);
 	const borrowTask = meta ? getCurrentTask(context.taskLookup, componentIdx, meta.taskID)?.task : void 0;
 	if (borrowTask && own) {
 		fromTable[handle << 1]++;
@@ -1489,7 +1749,7 @@ function getCurrentThread(context, componentIdx, threadID, taskID) {
 	};
 }
 function currentThreadOrThrow(context, componentIdx) {
-	const meta = getCurrentTaskMeta(context.registers, componentIdx);
+	const meta = readTaskRegister(context.registers, componentIdx);
 	if (!meta) throw new Error(`missing/incomplete global current thread meta for component idx [${componentIdx}]`);
 	const thread = getCurrentThread(context, meta.componentIdx, meta.threadID, meta.taskID);
 	if (!thread) throw new Error(`invalid/missing async thread [${meta.threadID}] for component idx [${componentIdx}]`);
@@ -1497,7 +1757,7 @@ function currentThreadOrThrow(context, componentIdx) {
 }
 /** Implements `canon thread.yield`. */
 function asyncYield(_context, ctx) {
-	debugLog("[asyncYield()] args", { ctx });
+	DEBUG: debugLog("[asyncYield()] args", { ctx });
 	const { componentIdx, isCancellable } = ctx;
 	const { thread, task } = currentThreadOrThrow(_context, componentIdx);
 	if (!task.mayBlock()) {
@@ -1511,13 +1771,13 @@ function asyncYield(_context, ctx) {
 }
 /** Implements `canon thread.index`. */
 function threadIndex(_context, componentIdx) {
-	const meta = getCurrentTaskMeta(_context.registers, componentIdx);
+	const meta = readTaskRegister(_context.registers, componentIdx);
 	if (!meta) throw new Error("missing/incomplete global current thread meta for component idx [" + componentIdx + "]");
 	return meta.threadID;
 }
 /** Implements `canon thread.suspend`. */
 async function threadSuspend(_context, ctx) {
-	debugLog("[threadSuspend()] args", { ctx });
+	DEBUG: debugLog("[threadSuspend()] args", { ctx });
 	const { componentIdx, isCancellable } = ctx;
 	const { thread } = currentThreadOrThrow(_context, componentIdx);
 	return await thread.suspend({
@@ -1529,7 +1789,7 @@ async function threadSuspend(_context, ctx) {
 /** Implements `canon thread.new-indirect`. */
 function threadNewIndirect(_context, ctx, startFuncIdx, context) {
 	const { componentIdx, getStartFuncTableFn } = ctx;
-	debugLog("[threadNewIndirect()] args", {
+	DEBUG: debugLog("[threadNewIndirect()] args", {
 		componentIdx,
 		startFuncIdx,
 		context
@@ -1568,7 +1828,7 @@ function threadNewIndirect(_context, ctx, startFuncIdx, context) {
 /** Implements `canon thread.resume-later`. */
 function threadResumeLater(_context, ctx, threadHandle) {
 	const { componentIdx } = ctx;
-	debugLog("[threadResumeLater()] args", {
+	DEBUG: debugLog("[threadResumeLater()] args", {
 		componentIdx,
 		threadHandle
 	});
@@ -1581,7 +1841,7 @@ function threadResumeLater(_context, ctx, threadHandle) {
 /** Implements `canon thread.suspend-then-resume`. */
 function threadSuspendThenResume(_context, ctx, threadIdx) {
 	const { componentIdx, isCancellable } = ctx;
-	debugLog("[threadSuspendThenResume()] args", {
+	DEBUG: debugLog("[threadSuspendThenResume()] args", {
 		componentIdx,
 		isCancellable,
 		threadIdx
@@ -1601,7 +1861,7 @@ function threadSuspendThenResume(_context, ctx, threadIdx) {
 /** Implements `canon thread.yield-then-resume`. */
 function threadYieldThenResume(_context, ctx, threadIdx) {
 	const { componentIdx, isCancellable } = ctx;
-	debugLog("[threadYieldThenResume()] args", {
+	DEBUG: debugLog("[threadYieldThenResume()] args", {
 		componentIdx,
 		isCancellable,
 		threadIdx
@@ -1621,7 +1881,7 @@ function threadYieldThenResume(_context, ctx, threadIdx) {
 /** Implements `canon thread.suspend-then-promote`. */
 function threadSuspendThenPromote(_context, ctx, threadIdx) {
 	const { componentIdx, isCancellable } = ctx;
-	debugLog("[threadSuspendThenPromote()] args", {
+	DEBUG: debugLog("[threadSuspendThenPromote()] args", {
 		componentIdx,
 		isCancellable,
 		threadIdx
@@ -1645,7 +1905,7 @@ function threadSuspendThenPromote(_context, ctx, threadIdx) {
 /** Implements `canon thread.yield-then-promote`. */
 function threadYieldThenPromote(_context, ctx, threadIdx) {
 	const { componentIdx, isCancellable } = ctx;
-	debugLog("[threadYieldThenPromote()] args", {
+	DEBUG: debugLog("[threadYieldThenPromote()] args", {
 		componentIdx,
 		isCancellable,
 		threadIdx
@@ -1698,7 +1958,7 @@ const maybeSyncGenerator = (genFn) => function(...args) {
 /** Instantiates the module that calls a host import directly, or through JSPI when the current task may block. */
 const conditionalSuspendingHostImport = (context, module, componentIdx, fn) => new context.WebAssembly.Instance(module, { "": {
 	mayBlock: () => {
-		const saved = context.threads.registers[componentIdx];
+		const saved = context.threads.registers[registerSlot(componentIdx)];
 		return (saved ? getCurrentThread(context.threads, saved.componentIdx, saved.threadID) : null)?.task.mayBlock() ?? false;
 	},
 	fast: fn,
@@ -1707,11 +1967,17 @@ const conditionalSuspendingHostImport = (context, module, componentIdx, fn) => n
 
 //#endregion
 //#region runtime/intrinsics/string.js
+const nonAscii = /[^\x00-\x7f]/;
 function requireString(value) {
 	if (typeof value !== "string") throw new TypeError("expected a string, received [" + typeof value + "]");
 	return value;
 }
+/** Count UTF-8 bytes and Unicode scalars before allocating guest memory. */
 function utf8Size(s) {
+	if (s.length >= 256 && !nonAscii.test(s)) return {
+		len: s.length,
+		codepoints: s.length
+	};
 	let len = 0;
 	let codepoints = 0;
 	for (let i = 0; i < s.length; i++) {
@@ -1742,25 +2008,23 @@ const initializeUtf16Encoding = () => ({ littleEndian: new Uint8Array(new Uint16
 function writeUtf16(context, str, ptr, memory) {
 	const len = str.length;
 	const out = new Uint16Array(memory.buffer, ptr, len);
-	const put = context.littleEndian ? (i, ch) => {
-		out[i] = ch;
-	} : (i, ch) => {
-		out[i] = (ch & 255) << 8 | ch >>> 8;
-	};
+	let codepoints = len;
 	for (let i = 0; i < len; i++) {
 		let ch = str.charCodeAt(i);
 		if ((ch & 63488) === 55296) {
 			if (ch < 56320 && i + 1 < len && (str.charCodeAt(i + 1) & 64512) === 56320) {
-				put(i++, ch);
+				out[i++] = ch;
 				ch = str.charCodeAt(i);
+				codepoints--;
 			} else ch = 65533;
 		}
-		put(i, ch);
+		out[i] = ch;
 	}
+	if (!context.littleEndian) for (let i = 0; i < len; i++) out[i] = (out[i] & 255) << 8 | out[i] >>> 8;
 	return {
 		ptr,
 		len,
-		codepoints: [...str].length
+		codepoints
 	};
 }
 function writeUtf8(encoder, s, ptr, len, codepoints, memory) {
@@ -1913,16 +2177,17 @@ const globalThisIdlProxy = (context) => {
 
 //#endregion
 //#region runtime/intrinsics/rep-table.js
-function initializeRepTableClass(context) {
-	const { RuntimeError } = context;
-	const free = Symbol("RepTable.free");
-	class RepTable {
-		static FREE = free;
+function defineRepTable() {
+	return class RepTable {
+		#context;
+		#store;
 		#data = [0, null];
 		#size = 0;
 		target;
 		#space = null;
-		constructor(args) {
+		constructor(context, store, args) {
+			this.#context = context;
+			this.#store = store;
 			this.target = args?.target;
 			this.#space = args?.space ?? null;
 		}
@@ -1937,7 +2202,7 @@ function initializeRepTableClass(context) {
 				this.#size += 1;
 				return rep;
 			}
-			debugLog("[RepTable#insert()] args", {
+			DEBUG: debugLog("[RepTable#insert()] args", {
 				val,
 				target: this.target
 			});
@@ -1946,7 +2211,7 @@ function initializeRepTableClass(context) {
 				this.#data.push(val);
 				this.#data.push(null);
 				const rep = (this.#data.length >> 1) - 1;
-				debugLog("[RepTable#insert()] inserted", {
+				DEBUG: debugLog("[RepTable#insert()] inserted", {
 					val,
 					target: this.target,
 					rep
@@ -1955,11 +2220,11 @@ function initializeRepTableClass(context) {
 				return rep;
 			}
 			const placementIdx = freeIdx << 1;
-			if (this.#data[placementIdx] !== free) throw new Error("corrupt rep table freelist: head does not point at a freed slot");
+			SAFETY: if (this.#data[placementIdx] !== this.#store.free) throw new Error("corrupt rep table freelist: head does not point at a freed slot");
 			this.#data[0] = this.#data[placementIdx + 1];
 			this.#data[placementIdx] = val;
 			this.#data[placementIdx + 1] = null;
-			debugLog("[RepTable#insert()] inserted", {
+			DEBUG: debugLog("[RepTable#insert()] inserted", {
 				val,
 				target: this.target,
 				rep: freeIdx
@@ -1968,28 +2233,28 @@ function initializeRepTableClass(context) {
 			return freeIdx;
 		}
 		get(rep) {
-			debugLog("[RepTable#get()] args", {
+			DEBUG: debugLog("[RepTable#get()] args", {
 				rep,
 				target: this.target
 			});
-			if (rep === 0) throw new RuntimeError("invalid resource rep during get, (cannot be 0)");
+			if (rep === 0) throw new this.#context.RuntimeError("invalid resource rep during get, (cannot be 0)");
 			const baseIdx = rep << 1;
 			const val = this.#data[baseIdx];
-			if (val === free) return;
+			if (val === this.#store.free) return;
 			return val;
 		}
 		contains(rep) {
-			debugLog("[RepTable#contains()] args", {
+			DEBUG: debugLog("[RepTable#contains()] args", {
 				rep,
 				target: this.target
 			});
 			if (rep === 0) throw new Error("invalid resource rep during contains, (cannot be 0)");
 			const baseIdx = rep << 1;
 			const val = this.#data[baseIdx];
-			return val !== free && !!val;
+			return val !== this.#store.free && !!val;
 		}
 		remove(rep) {
-			debugLog("[RepTable#remove()] args", {
+			DEBUG: debugLog("[RepTable#remove()] args", {
 				rep,
 				target: this.target
 			});
@@ -1997,8 +2262,8 @@ function initializeRepTableClass(context) {
 			if (this.#space !== null) {
 				const baseIdx = rep << 1;
 				const val = this.#data[baseIdx];
-				if (val === void 0 || val === free) throw new RuntimeError(`unknown handle index ${rep}`);
-				this.#data[baseIdx] = free;
+				if (val === void 0 || val === this.#store.free) throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
+				this.#data[baseIdx] = this.#store.free;
 				this.#data[baseIdx + 1] = null;
 				this.#size -= 1;
 				this.#space.release(rep);
@@ -2008,8 +2273,8 @@ function initializeRepTableClass(context) {
 			const baseIdx = rep << 1;
 			if (baseIdx >= this.#data.length) throw new Error(`invalid rep [${rep}] during remove, out of range`);
 			const val = this.#data[baseIdx];
-			if (val === free) throw new RuntimeError(`double removal of rep [${rep}] (already freed)`);
-			this.#data[baseIdx] = free;
+			if (val === this.#store.free) throw new this.#context.RuntimeError(`double removal of rep [${rep}] (already freed)`);
+			this.#data[baseIdx] = this.#store.free;
 			this.#data[baseIdx + 1] = this.#data[0];
 			this.#data[0] = rep;
 			this.#size -= 1;
@@ -2019,22 +2284,57 @@ function initializeRepTableClass(context) {
 			return this.#size;
 		}
 		clear() {
-			debugLog("[RepTable#clear()] args", { target: this.target });
+			DEBUG: debugLog("[RepTable#clear()] args", { target: this.target });
 			if (this.#space) {
-				for (let rep = 1; rep < this.#data.length / 2; rep++) if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== free) this.#space.release(rep);
+				for (let rep = 1; rep < this.#data.length / 2; rep++) if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== this.#store.free) this.#space.release(rep);
 			}
 			this.#size = 0;
 			this.#data = [0, null];
 		}
+	};
+}
+let sharedRepTable;
+function initializeRepTableClass(context) {
+	const RepTable = sharedRepTable ??= defineRepTable();
+	const store = { free: Symbol("RepTable.free") };
+	/**
+	* Construct a table that uses the context.
+	*
+	* @param options - options of the table
+	* @returns the table
+	*/
+	class ContextRepTable extends RepTable {
+		constructor(options) {
+			super(context, store, options);
+		}
 	}
-	return RepTable;
+	return withConstructorStatics(ContextRepTable, { FREE: {
+		value: store.free,
+		enumerable: true
+	} });
 }
 
 //#endregion
 //#region runtime/intrinsics/buffers.js
-function initializeManagedBufferClass(context) {
-	class ManagedBuffer {
+/**
+* Check that a guest buffer is aligned and lies within its memory.
+*
+* @param context - supplies the error to trap with
+* @param memory - memory holding the buffer, absent for a host-owned buffer
+* @param start - pointer to the first element
+* @param count - number of elements
+* @param elemMeta - metadata of the element type
+*/
+function validateGuestBuffer(context, memory, start, count, elemMeta) {
+	if (!memory || elemMeta.isNone) return;
+	if (start % elemMeta.align32 !== 0) throw new context.RuntimeError("buffer pointer not aligned");
+	if (start + count * elemMeta.size32 > memory.buffer.byteLength) throw new context.RuntimeError("buffer pointer out of bounds of memory");
+}
+function defineManagedBuffer() {
+	return class ManagedBuffer {
 		static MAX_LENGTH = 2 ** 28 - 1;
+		#context;
+		#store;
 		#componentIdx;
 		#memory;
 		#elemMeta;
@@ -2043,20 +2343,31 @@ function initializeManagedBufferClass(context) {
 		capacity;
 		processed = 0;
 		#hostOnlyData;
+		#hostBytes = null;
+		#hostByteLength = 0;
+		#hostOffset = 0;
+		#hostDataBorrowed = true;
 		target;
-		static validateGuestBuffer(memory, start, count, elemMeta) {
-			if (!memory || elemMeta.isNone) return;
-			if (start % elemMeta.align32 !== 0) throw new context.RuntimeError("buffer pointer not aligned");
-			if (start + count * elemMeta.size32 > memory.buffer.byteLength) throw new context.RuntimeError("buffer pointer out of bounds of memory");
+		/**
+		* Whether a value was constructed through one `initializeManagedBufferClass` call.
+		*
+		* @param value - any value
+		* @param store - the store of that call
+		* @returns whether the value is an instance belonging to that store
+		*/
+		static constructedIn(value, store) {
+			return typeof value === "object" && value !== null && #store in value && value.#store === store;
 		}
-		constructor(args) {
+		constructor(context, store, args) {
+			this.#context = context;
+			this.#store = store;
 			if (args.capacity > ManagedBuffer.MAX_LENGTH) throw new Error(`buffer size [${args.capacity}] greater than max length`);
 			if (args.componentIdx === void 0) throw new TypeError("missing/invalid component idx");
 			if (args.capacity === void 0) throw new TypeError("missing/invalid capacity");
 			if (!args.elemMeta || typeof args.elemMeta.align32 !== "number") throw new TypeError("missing/invalid element metadata");
 			if (!args.memory && args.start === void 0 && args.data === void 0) throw new TypeError("either memory and start ptr or data must be provided for managed buffers");
 			if (args.memory && args.start == void 0) throw new TypeError("missing/invalid start ptr, depsite memory being present");
-			ManagedBuffer.validateGuestBuffer(args.memory, args.start, args.capacity, args.elemMeta);
+			validateGuestBuffer(context, args.memory, args.start, args.capacity, args.elemMeta);
 			this.#componentIdx = args.componentIdx;
 			this.#memory = args.memory;
 			this.#start = args.start;
@@ -2082,16 +2393,73 @@ function initializeManagedBufferClass(context) {
 		isHostOwned() {
 			return !this.#memory;
 		}
+		/** Copy bytes in bulk; return false for another provider or a non-byte payload. */
+		copyTo(target, count) {
+			if (target === this || !ManagedBuffer.constructedIn(target, this.#store) || this.#elemMeta.payloadTypeName !== "U8" || target.#elemMeta.payloadTypeName !== "U8") return false;
+			if (!this.#memory && !this.#hostBytes || !target.#memory && !target.#hostBytes && target.#hostOnlyData.length !== 0) return false;
+			if (!Number.isInteger(count) || count < 0 || count > this.remaining() || count > target.remaining()) throw new RangeError("byte copy exceeds remaining buffer capacity");
+			const source = this.#memory ? new Uint8Array(this.#memory.buffer, this.#ptr, count) : this.#hostBytes.subarray(this.#hostOffset, this.#hostOffset + count);
+			if (source.length !== count) throw new RangeError("byte copy exceeds available host data");
+			if (target.#memory) {
+				new Uint8Array(target.#memory.buffer, target.#ptr, count).set(source);
+				target.#ptr += count;
+			} else {
+				const length = target.#hostByteLength + count;
+				if (!target.#hostBytes || target.#hostBytes.length < length) {
+					const bytes = new Uint8Array(Math.min(target.capacity, Math.max(length, (target.#hostBytes?.length ?? 0) * 2, 64)));
+					if (target.#hostBytes) bytes.set(target.#hostBytes.subarray(0, target.#hostByteLength));
+					target.#hostBytes = bytes;
+				}
+				target.#hostBytes.set(source, target.#hostByteLength);
+				target.#hostByteLength = length;
+			}
+			if (this.#memory) this.#ptr += count;
+			else this.#hostOffset += count;
+			this.processed += count;
+			target.processed += count;
+			return true;
+		}
+		/** Return an owned byte chunk; guest memory never escapes to the host. */
+		readBytes(count) {
+			if (this.#elemMeta.payloadTypeName !== "U8" || !this.#memory && !this.#hostBytes) return;
+			if (!Number.isInteger(count) || count <= 0 || count > this.capacity) throw new RangeError("invalid byte read count");
+			let bytes;
+			if (this.#memory) {
+				bytes = new Uint8Array(this.#memory.buffer, this.#ptr, count).slice();
+				this.#ptr += count;
+			} else {
+				if (this.#hostOffset + count > this.#hostByteLength) throw new RangeError("byte read exceeds available host data");
+				bytes = this.#hostBytes.slice(this.#hostOffset, this.#hostOffset + count);
+				this.#hostOffset += count;
+			}
+			this.processed += count;
+			return bytes;
+		}
 		read(count, opts = {}) {
-			debugLog("[ManagedBuffer#read()] args", { count });
+			DEBUG: debugLog("[ManagedBuffer#read()] args", { count });
+			if (this.#hostBytes) return Array.from(this.readBytes(count));
 			if (count === void 0 || count <= 0) throw new TypeError(`missing/invalid count [${count}]`);
 			const cap = this.capacity;
 			if (count > cap) throw new Error(`cannot read [${count}] elements from buffer with capacity [${cap}]`);
 			let values = [];
 			if (this.#elemMeta.isNone) values = [...new Array(count)].map(() => null);
 			else if (this.isHostOwned()) {
-				values = this.#hostOnlyData.slice(0, count);
-				this.#hostOnlyData = this.#hostOnlyData.slice(count);
+				values = this.#hostOnlyData.slice(this.#hostOffset, this.#hostOffset + count);
+				if (this.#hostDataBorrowed) {
+					this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset + count);
+					this.#hostDataBorrowed = false;
+					this.#hostOffset = 0;
+				} else {
+					this.#hostOnlyData.fill(void 0, this.#hostOffset, this.#hostOffset + count);
+					this.#hostOffset += count;
+					if (this.#hostOffset === this.#hostOnlyData.length) {
+						this.#hostOnlyData = [];
+						this.#hostOffset = 0;
+					} else if (this.#hostOffset >= 1024 && this.#hostOffset * 2 >= this.#hostOnlyData.length) {
+						this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
+						this.#hostOffset = 0;
+					}
+				}
 			} else if (this.#elemMeta.payloadTypeName === "U8") {
 				values = Array.from(new Uint8Array(this.#memory.buffer, this.#ptr, count));
 				this.#ptr += count;
@@ -2099,16 +2467,16 @@ function initializeManagedBufferClass(context) {
 				let currentCount = count;
 				let startPtr = this.#ptr;
 				if (this.#elemMeta.stringEncoding === void 0) throw new Error("string encoding unknown during read");
-				let liftCtx = {
+				let liftCtx = createBufferContext({
 					storagePtr: startPtr,
 					memory: this.#memory,
 					componentIdx: this.#componentIdx,
 					stringEncoding: this.#elemMeta.stringEncoding,
 					liftResource: opts.transferResources ? (handle, tableIdx) => {
-						const { rep } = tableRemove(context, context.tables[tableIdx], handle);
+						const { rep } = tableRemove(this.#context, this.#context.tables[tableIdx], handle);
 						return { rep };
 					} : void 0
-				};
+				});
 				if (currentCount < 0) throw new Error("unexpectedly invalid count");
 				while (currentCount > 0) {
 					const [value] = this.#elemMeta.liftFn(liftCtx);
@@ -2121,20 +2489,33 @@ function initializeManagedBufferClass(context) {
 			return values;
 		}
 		write(values, opts = {}) {
-			debugLog("[ManagedBuffer#write()] args", { values });
+			DEBUG: debugLog("[ManagedBuffer#write()] args", { values });
 			if (!Array.isArray(values)) throw new TypeError("values input to write() must be an array");
 			let rc = this.remaining();
 			if (values.length > rc) throw new Error(`cannot write [${values.length}] elements to managed buffer with remaining capacity [${rc}]`);
 			if (this.#elemMeta.isNone) {
 				if (!values.every((v) => v === null)) throw new Error("non-null values in write() to unit managed buffer");
-			} else if (this.isHostOwned()) this.#hostOnlyData = this.#hostOnlyData.concat(values);
-			else if (this.#elemMeta.payloadTypeName === "U8") {
+			} else if (this.isHostOwned()) {
+				if (this.#hostBytes) {
+					this.#hostOnlyData = Array.from(this.#hostBytes.subarray(this.#hostOffset, this.#hostByteLength));
+					this.#hostBytes = null;
+					this.#hostByteLength = 0;
+					this.#hostOffset = 0;
+					this.#hostDataBorrowed = false;
+				}
+				if (this.#hostDataBorrowed) {
+					this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
+					this.#hostOffset = 0;
+					this.#hostDataBorrowed = false;
+				}
+				for (const value of values) this.#hostOnlyData.push(value);
+			} else if (this.#elemMeta.payloadTypeName === "U8") {
 				new Uint8Array(this.#memory.buffer, this.#ptr, values.length).set(values);
 				this.#ptr += values.length;
 			} else {
 				let startPtr = this.#ptr;
 				if (this.#elemMeta.stringEncoding === void 0) throw new Error("string encoding unknown during write");
-				const lowerCtx = {
+				const lowerCtx = createBufferContext({
 					memory: this.#memory,
 					storagePtr: startPtr,
 					componentIdx: this.#componentIdx,
@@ -2142,15 +2523,15 @@ function initializeManagedBufferClass(context) {
 					realloc: this.#elemMeta.getReallocFn?.(),
 					getReallocFn: this.#elemMeta.getReallocFn,
 					lowerResource: opts.transferResources ? (value, tableIdx) => {
-						let table = context.tables[tableIdx];
+						let table = this.#context.tables[tableIdx];
 						if (!table) {
 							table = [tableFlag, 0];
 							table._createdReps = /* @__PURE__ */ new Set();
-							context.tables[tableIdx] = table;
+							this.#context.tables[tableIdx] = table;
 						}
-						return tableCreateOwn(context.indexSpaces, table, value.rep);
+						return tableCreateOwn(this.#context.indexSpaces, table, value.rep);
 					} : void 0
-				};
+				});
 				for (const v of values) {
 					lowerCtx.vals = [v];
 					this.#elemMeta.lowerFn(lowerCtx);
@@ -2159,13 +2540,39 @@ function initializeManagedBufferClass(context) {
 			}
 			this.processed += values.length;
 		}
-	}
-	return ManagedBuffer;
+	};
 }
-function initializeBufferManagerClass(ManagedBuffer) {
-	class BufferManager {
+let sharedManagedBuffer;
+function initializeManagedBufferClass(context) {
+	const ManagedBuffer = sharedManagedBuffer ??= defineManagedBuffer();
+	const store = {};
+	/**
+	* Construct a buffer that uses the context.
+	*
+	* @param args - options of the buffer
+	* @returns the buffer
+	*/
+	class StoreManagedBuffer extends ManagedBuffer {
+		constructor(args) {
+			super(context, store, args);
+		}
+	}
+	return withConstructorStatics(StoreManagedBuffer, {
+		MAX_LENGTH: {
+			value: ManagedBuffer.MAX_LENGTH,
+			enumerable: true
+		},
+		validateGuestBuffer: { value: (memory, start, count, elemMeta) => validateGuestBuffer(context, memory, start, count, elemMeta) }
+	});
+}
+function defineBufferManager() {
+	return class BufferManager {
+		#ManagedBuffer;
 		#buffers = /* @__PURE__ */ new Map();
 		#bufferIDs = /* @__PURE__ */ new Map();
+		constructor(ManagedBuffer) {
+			this.#ManagedBuffer = ManagedBuffer;
+		}
 		getNextBufferID(componentIdx) {
 			const current = this.#bufferIDs.get(componentIdx);
 			if (current === void 0) {
@@ -2177,14 +2584,14 @@ function initializeBufferManagerClass(ManagedBuffer) {
 			return next;
 		}
 		getBuffer(componentIdx, bufferID) {
-			debugLog("[BufferManager#getBuffer()] args", {
+			DEBUG: debugLog("[BufferManager#getBuffer()] args", {
 				componentIdx,
 				bufferID
 			});
 			return this.#buffers.get(componentIdx)?.get(bufferID);
 		}
 		createBuffer(args) {
-			debugLog("[BufferManager#createBuffer()] args", args);
+			DEBUG: debugLog("[BufferManager#createBuffer()] args", args);
 			if (!args || typeof args !== "object") throw new TypeError("missing/invalid argument object");
 			if (args.start === void 0 && args.data === void 0) throw new TypeError("either a starting pointer or initial values must be provided");
 			if (args.start !== void 0 && args.componentIdx === void 0) throw new TypeError("missing/invalid component idx");
@@ -2194,7 +2601,7 @@ function initializeBufferManagerClass(ManagedBuffer) {
 			if (!this.#buffers.has(componentIdx)) this.#buffers.set(componentIdx, /* @__PURE__ */ new Map());
 			const instanceBuffers = this.#buffers.get(componentIdx);
 			const nextBufID = this.getNextBufferID(componentIdx);
-			const buffer = new ManagedBuffer({
+			const buffer = new this.#ManagedBuffer({
 				componentIdx,
 				memory: args.memory,
 				start: args.start,
@@ -2211,14 +2618,33 @@ function initializeBufferManagerClass(ManagedBuffer) {
 			};
 		}
 		deleteBuffer(componentIdx, bufferID) {
-			debugLog("[BufferManager#deleteBuffer()] args", {
+			DEBUG: debugLog("[BufferManager#deleteBuffer()] args", {
 				componentIdx,
 				bufferID
 			});
 			return this.#buffers.get(componentIdx)?.delete(bufferID);
 		}
+	};
+}
+let sharedBufferManager;
+function initializeBufferManagerClass(ManagedBuffer) {
+	const BufferManager = sharedBufferManager ??= defineBufferManager();
+	/**
+	* Construct a manager of buffers of the given class.
+	*
+	* @returns the manager
+	*/
+	class StoreBufferManager extends BufferManager {
+		constructor() {
+			super(ManagedBuffer);
+		}
 	}
-	return BufferManager;
+	return StoreBufferManager;
+}
+/** Prefer a provider's bulk byte copy and retain the generic resource-aware fallback. */
+function transferBuffer(source, target, count, options = {}) {
+	if (source.copyTo?.(target, count)) return;
+	target.write(source.read(count, options), options);
 }
 
 //#endregion
@@ -2277,17 +2703,20 @@ const coinFlip = () => Math.random() > .5;
 const typeCheckValidI32 = (value) => typeof value === "number" && value >= -2147483648 && value <= 2147483647;
 const typeCheckAsyncFn = (constructor, value) => value instanceof constructor;
 const base64Compile = (context, encoded) => {
-	const host = globalThis;
-	return context.WebAssembly.compile(context.nodejsCompat && typeof host.Buffer !== "undefined" ? host.Buffer.from(encoded, "base64") : Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0)));
+	const bytes = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(encoded) : Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0));
+	return context.WebAssembly.compile(bytes);
 };
-async function fetchWithNode(context, url) {
-	if (context.fileCache.node) {
-		context.fileCache.fs = context.fileCache.fs || await import("node:fs/promises");
+const fetchCompile = async (context, url) => {
+	if (url.protocol === "file:" && context.nodejsCompat && context.fileCache.node) {
+		const moduleUrl = new URL("node:fs/promises");
+		context.fileCache.fs ??= await import(
+			/* @vite-ignore */
+			moduleUrl.href
+);
 		return context.WebAssembly.compile(await context.fileCache.fs.readFile(url));
 	}
 	return fetch(url).then(context.WebAssembly.compileStreaming);
-}
-const fetchCompile = (context, url) => context.nodejsCompat ? fetchWithNode(context, url) : fetch(url).then(context.WebAssembly.compileStreaming);
+};
 const instantiateCore = (platform, module, imports) => platform.instantiate(module, imports);
 const clampGuest = (value, min, max) => {
 	if (value < min || value > max) throw new TypeError(`must be between ${min} and ${max}`);
@@ -2448,7 +2877,7 @@ function unpackValidatedCallbackResult(context, result) {
 //#endregion
 //#region runtime/intrinsics/async-task/driver.js
 function driverLoop(_context, args) {
-	debugLog("[_driverLoop()] args", args);
+	DEBUG: debugLog("[_driverLoop()] args", args);
 	const { componentState, task, fnName } = args;
 	let callbackResult = args.callbackResult;
 	const callbackFnName = task.getCallbackFnName();
@@ -2468,7 +2897,7 @@ function driverLoop(_context, args) {
 	let asyncRes;
 	let wset;
 	const handleError = (err) => {
-		debugLog("[_driverLoop()] error during async driver loop", {
+		DEBUG: debugLog("[_driverLoop()] error during async driver loop", {
 			fnName,
 			callbackFnName,
 			componentIdx,
@@ -2492,7 +2921,7 @@ function driverLoop(_context, args) {
 			if (callbackCode !== 0) componentState.exclusiveRelease(task.id());
 			switch (callbackCode) {
 				case 0:
-					debugLog("[_driverLoop()] async exit indicated", {
+					DEBUG: debugLog("[_driverLoop()] async exit indicated", {
 						fnName,
 						componentIdx,
 						callbackFnName,
@@ -2501,7 +2930,7 @@ function driverLoop(_context, args) {
 					task.exit({ skipExclusiveLockCheck: true });
 					return;
 				case 1:
-					debugLog("[_driverLoop()] yield", {
+					DEBUG: debugLog("[_driverLoop()] yield", {
 						fnName,
 						componentIdx,
 						callbackFnName,
@@ -2522,7 +2951,7 @@ function driverLoop(_context, args) {
 				case 2:
 					wset = waitableSetRep === 0 ? void 0 : cstate.handles.get(waitableSetRep);
 					if (!(wset instanceof _context.WaitableSet)) throw new _context.RuntimeError(`unknown handle index ${waitableSetRep}`);
-					debugLog("[_driverLoop()] waiting for event", {
+					DEBUG: debugLog("[_driverLoop()] waiting for event", {
 						fnName,
 						componentIdx,
 						callbackFnName,
@@ -2546,7 +2975,7 @@ function driverLoop(_context, args) {
 	const continueWithCallbackResult = (callbackRes) => {
 		try {
 			unpackCallback(callbackRes);
-			debugLog("[_driverLoop()] callback result unpacked", {
+			DEBUG: debugLog("[_driverLoop()] callback result unpacked", {
 				fnName,
 				componentIdx,
 				callbackFnName,
@@ -2568,7 +2997,7 @@ function driverLoop(_context, args) {
 				task.reject(err);
 			}
 			if (task.isRejected()) {
-				debugLog("[_driverLoop()] detected task rejection, leaving early");
+				DEBUG: debugLog("[_driverLoop()] detected task rejection, leaving early");
 				componentState.exclusiveRelease(task.id());
 				if (!task.isExited()) task.exit({ skipExclusiveLockCheck: true });
 				return;
@@ -2580,7 +3009,7 @@ function driverLoop(_context, args) {
 			result = asyncRes.payload1;
 			if (result === void 0) throw new Error("missing payload1 from event");
 			asyncRes = null;
-			debugLog("[_driverLoop()] performing callback", {
+			DEBUG: debugLog("[_driverLoop()] performing callback", {
 				fnName,
 				componentIdx,
 				taskID: task.id(),
@@ -2613,7 +3042,7 @@ function driverLoop(_context, args) {
 //#endregion
 //#region runtime/intrinsics/host.js
 function prepareCall(_context, memoryIdx, getMemoryFn, startFn, returnFn, callerComponentIdx, calleeComponentIdx, taskReturnTypeIdx, calleeIsAsyncInt, stringEncoding, resultCountOrAsync, ...params) {
-	debugLog("[_prepareCall()]", {
+	DEBUG: debugLog("[_prepareCall()]", {
 		memoryIdx,
 		callerComponentIdx,
 		calleeComponentIdx,
@@ -2634,7 +3063,7 @@ function prepareCall(_context, memoryIdx, getMemoryFn, startFn, returnFn, caller
 		isAsync = true;
 		hasResultPointer = true;
 	} else if (resultCountOrAsync > 1) hasResultPointer = true;
-	const currentCallerThreadMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+	const currentCallerThreadMeta = readTaskRegister(_context.registers, callerComponentIdx);
 	const currentCallerTaskMeta = currentCallerThreadMeta && getCurrentTask(_context, callerComponentIdx, currentCallerThreadMeta.taskID);
 	if (!currentCallerTaskMeta) {
 		if (!isAsync && (_context.mayBlock === false ? void 0 : _context.mayBlock.value) === 0) throw new _context.RuntimeError("cannot block a synchronous task before returning");
@@ -2717,11 +3146,11 @@ function prepareCall(_context, memoryIdx, getMemoryFn, startFn, returnFn, caller
 }
 function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) {
 	const componentIdx = _context.componentIdxs.at(-1);
-	const globalTaskMeta = getCurrentTaskMeta(_context.registers, componentIdx);
+	const globalTaskMeta = readTaskRegister(_context.registers, componentIdx);
 	if (!globalTaskMeta) throw new Error("missing global current task globalTaskMeta");
 	const taskID = globalTaskMeta.taskID;
 	const threadID = globalTaskMeta.threadID;
-	debugLog("[_asyncStartCall()] args", {
+	DEBUG: debugLog("[_asyncStartCall()] args", {
 		args,
 		componentIdx
 	});
@@ -2748,7 +3177,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 	const calleeComponentState = getOrCreateAsyncState(_context.lookup, preparedTask.componentIdx());
 	calleeComponentState.hasBackpressure();
 	subtask.registerOnResolveHandler((res) => {
-		debugLog("[_asyncStartCall()] handling subtask result", {
+		DEBUG: debugLog("[_asyncStartCall()] handling subtask result", {
 			res,
 			subtaskID: subtask.id()
 		});
@@ -2760,7 +3189,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 		const callerMemoryIdx = callerTask.getReturnMemoryIdx();
 		const callerComponentIdx = callerTask.componentIdx();
 		if (subtaskCallMeta && subtaskCallMeta.returnFn) {
-			debugLog("[_asyncStartCall()] return function present while handling subtask result, returning early (skipping lower)", {
+			DEBUG: debugLog("[_asyncStartCall()] return function present while handling subtask result, returning early (skipping lower)", {
 				calleeTaskID: calleeTask.id(),
 				calleeComponentIdx
 			});
@@ -2772,7 +3201,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 				fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr])
 			});
 			subtaskCallMeta.returnFnCalled = true;
-			debugLog("[_asyncStartCall()] finished calling return fn", {
+			DEBUG: debugLog("[_asyncStartCall()] finished calling return fn", {
 				calleeTaskID: calleeTask.id(),
 				calleeComponentIdx,
 				res
@@ -2780,7 +3209,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 			return;
 		}
 		if (!subtaskCallMeta.resultPtr) {
-			debugLog("[_asyncStartCall()] no result ptr during subtask result handling, returning early (skipping lower)");
+			DEBUG: debugLog("[_asyncStartCall()] no result ptr during subtask result handling, returning early (skipping lower)");
 			return;
 		}
 		let callerMemory;
@@ -2796,7 +3225,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 			callerMemory = callerMemories[0]?.memory;
 		}
 		if (!callerMemory) {
-			debugLog("[_asyncStartCall()] missing memory", {
+			DEBUG: debugLog("[_asyncStartCall()] missing memory", {
 				subtaskID: subtask.id(),
 				res
 			});
@@ -2804,14 +3233,14 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 		}
 		const lowerFns = calleeTask.getReturnLowerFns();
 		if (!lowerFns || lowerFns.length === 0) {
-			debugLog("[_asyncStartCall()] missing result lower metadata for guest->guest call", { subtaskID: subtask.id() });
+			DEBUG: debugLog("[_asyncStartCall()] missing result lower metadata for guest->guest call", { subtaskID: subtask.id() });
 			throw new Error(`missing result lower metadata for guest->guest call (subtask [${subtask.id()}])`);
 		}
 		if (lowerFns.length !== 1) {
-			debugLog("[_asyncStartCall()] only single result reportetd for guest->guest call", { subtaskID: subtask.id() });
+			DEBUG: debugLog("[_asyncStartCall()] only single result reportetd for guest->guest call", { subtaskID: subtask.id() });
 			throw new Error(`only single result supported for guest->guest calls (subtask [${subtask.id()}])`);
 		}
-		debugLog("[_asyncStartCall()] lowering results", { subtaskID: subtask.id() });
+		DEBUG: debugLog("[_asyncStartCall()] lowering results", { subtaskID: subtask.id() });
 		lowerFns[0]({
 			realloc: void 0,
 			memory: callerMemory,
@@ -2841,14 +3270,14 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 	};
 	const handleCalleeError = (err) => {
 		preparedTask.endFirstSlice();
-		debugLog("[_asyncStartCall()] initial subtask callee run failed", err);
+		DEBUG: debugLog("[_asyncStartCall()] initial subtask callee run failed", err);
 		_context.driver.reportTrap?.(err);
 		subtask.getParentTask().setErrored(err);
 		if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
 	};
 	const driveCallback = (callbackResult) => {
 		if (!callbackFn) {
-			debugLog("[_asyncStartCall()] no callback, resolving w/ callee result", {
+			DEBUG: debugLog("[_asyncStartCall()] no callback, resolving w/ callee result", {
 				taskID: preparedTask.id(),
 				componentIdx: preparedTask.componentIdx(),
 				preparedTask,
@@ -2871,7 +3300,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 			preparedTask.id(),
 			">"
 		].join("");
-		debugLog("[_asyncStartCall()] starting driver loop", {
+		DEBUG: debugLog("[_asyncStartCall()] starting driver loop", {
 			fnName,
 			componentIdx: preparedTask.componentIdx(),
 			subtaskID: subtask.id(),
@@ -2918,7 +3347,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 		try {
 			await driveCallback(callbackResult);
 		} catch (err) {
-			debugLog("[AsyncStartCall] drive loop call failure", { err });
+			DEBUG: debugLog("[AsyncStartCall] drive loop call failure", { err });
 		}
 	};
 	const driveDirectCallee = () => {
@@ -2945,7 +3374,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 			if (!calleeIsAsync) _context.blockingDepth.value--;
 		}
 		driveCallback(callbackResult)?.catch((err) => {
-			debugLog("[AsyncStartCall] drive loop call failure", { err });
+			DEBUG: debugLog("[AsyncStartCall] drive loop call failure", { err });
 		});
 	};
 	const enteredSynchronously = preparedTask.tryEnter();
@@ -2966,7 +3395,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 		};
 		setTimeout(async () => {
 			try {
-				debugLog("[_asyncStartCall()] continuing started subtask (in JS task)", {
+				DEBUG: debugLog("[_asyncStartCall()] continuing started subtask (in JS task)", {
 					taskID: preparedTask.id(),
 					subtaskID: subtask.id(),
 					callerComponentIdx,
@@ -2975,7 +3404,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 				const started = await enterPromise;
 				if (started) calleeComponentState.removePendingTaskStart();
 				if (!started) {
-					debugLog("[_asyncStartCall()] task failed early", {
+					DEBUG: debugLog("[_asyncStartCall()] task failed early", {
 						taskID: preparedTask.id(),
 						subtaskID: subtask.id()
 					});
@@ -2999,7 +3428,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 	if (calleeTrap) throw calleeTrap;
 	const subtaskState = subtask.getStateNumber();
 	if (subtaskState < 0 || subtaskState > 32) throw new Error("invalid subtask state, out of valid range");
-	debugLog("[_asyncStartCall()] returning subtask rep & state", { subtask: {
+	DEBUG: debugLog("[_asyncStartCall()] returning subtask rep & state", { subtask: {
 		rep: subtask.waitableRep(),
 		state: subtaskState
 	} });
@@ -3016,11 +3445,11 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 }
 async function syncStartCall(_context, args, callee, paramCount, resultCount = 0, flags = 1) {
 	const componentIdx = _context.componentIdxs.at(-1);
-	const globalTaskMeta = getCurrentTaskMeta(_context.registers, componentIdx);
+	const globalTaskMeta = readTaskRegister(_context.registers, componentIdx);
 	if (!globalTaskMeta) throw new Error("missing global current task meta during sync start call");
 	const taskID = globalTaskMeta.taskID;
 	const threadID = globalTaskMeta.threadID;
-	debugLog("[_syncStartCall()] args", {
+	DEBUG: debugLog("[_syncStartCall()] args", {
 		args,
 		paramCount,
 		componentIdx
@@ -3038,7 +3467,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 	const { subtask, calleeComponentIdx, callerComponentIdx } = preparedTask.subtaskMeta;
 	if (!subtask) throw new Error("missing subtask from prepare during sync start call");
 	if (calleeComponentIdx !== preparedTask.componentIdx()) throw new Error(`meta callee idx [${calleeComponentIdx}] != current task idx [${preparedTask.componentIdx()}] during sync start call`);
-	const savedCallerTaskMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+	const savedCallerTaskMeta = readTaskRegister(_context.registers, callerComponentIdx);
 	try {
 		const callbackFn = getCallbackFn();
 		preparedTask.setCallbackFn(callbackFn, "callback_" + callbackIdx);
@@ -3051,7 +3480,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 			else resolveTaskReturn();
 		});
 		subtask.registerOnResolveHandler((res) => {
-			debugLog("[_syncStartCall()] handling subtask result", {
+			DEBUG: debugLog("[_syncStartCall()] handling subtask result", {
 				res,
 				subtaskID: subtask.id()
 			});
@@ -3083,7 +3512,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 			jspiCallee = callee._cachedPromising;
 		}
 		const failCalleeLifecycle = (err) => {
-			debugLog("[_syncStartCall()] callee lifecycle failed", { err });
+			DEBUG: debugLog("[_syncStartCall()] callee lifecycle failed", { err });
 			if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
 			preparedTask.setErrored(err);
 			if (!preparedTask.isResolvedState()) preparedTask.reject(err);
@@ -3110,7 +3539,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 				});
 				preparedTask.endFirstSlice();
 				if (!callbackFn) {
-					debugLog("[_syncStartCall()] no callback, resolving w/ callee result", {
+					DEBUG: debugLog("[_syncStartCall()] no callback, resolving w/ callee result", {
 						taskID: preparedTask.id(),
 						componentIdx: preparedTask.componentIdx()
 					});
@@ -3120,7 +3549,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 					return;
 				}
 				const fnName = callbackFn.fnName ?? "<sync-start subtask " + subtask.id() + ">";
-				debugLog("[_syncStartCall()] starting driver loop", {
+				DEBUG: debugLog("[_syncStartCall()] starting driver loop", {
 					fnName,
 					componentIdx: preparedTask.componentIdx(),
 					subtaskID: subtask.id()
@@ -3141,7 +3570,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 		calleeLifecyclePromise.catch(emptyFunc);
 		await Promise.race([taskReturnPromise, calleeLifecyclePromise.then(() => taskReturnPromise)]);
 		const flatResult = subtask.getCallMetadata()?.returnFnResult;
-		debugLog("[_syncStartCall()] returning flat result", {
+		DEBUG: debugLog("[_syncStartCall()] returning flat result", {
 			flatResult,
 			subtaskID: subtask.id(),
 			taskID: preparedTask.id()
@@ -3156,7 +3585,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 	}
 }
 function storeEventInComponentMemory(args) {
-	debugLog("[_storeEventInComponentMemory()] args", args);
+	DEBUG: debugLog("[_storeEventInComponentMemory()] args", args);
 	const { memory, ptr, event } = args;
 	if (!memory) throw new Error("unexpectedly missing memory");
 	if (ptr === void 0 || ptr === null) throw new Error("unexpectedly missing pointer");
@@ -3172,9 +3601,8 @@ function storeEventInComponentMemory(args) {
 
 //#endregion
 //#region runtime/intrinsics/waitable.js
-/** Fresh class identity per store, with no state or platform capability required. */
-function initializeWaitableClass() {
-	class Waitable {
+function defineWaitable() {
+	return class Waitable {
 		#componentIdx;
 		#pendingEventFn = null;
 		#promise;
@@ -3225,14 +3653,14 @@ function initializeWaitableClass() {
 			return this.#pendingEventFn !== null;
 		}
 		setPendingEvent(fn) {
-			debugLog("[Waitable#setPendingEvent()] args", {
+			DEBUG: debugLog("[Waitable#setPendingEvent()] args", {
 				waitable: this,
 				inSet: this.#waitableSet
 			});
 			this.#pendingEventFn = fn;
 		}
 		getPendingEvent() {
-			debugLog("[Waitable#getPendingEvent()] args", {
+			DEBUG: debugLog("[Waitable#getPendingEvent()] args", {
 				waitable: this,
 				inSet: this.#waitableSet,
 				hasPendingEvent: this.#pendingEventFn !== null
@@ -3245,7 +3673,7 @@ function initializeWaitableClass() {
 			return e;
 		}
 		join(waitableSet) {
-			debugLog("[Waitable#join()] args", {
+			DEBUG: debugLog("[Waitable#join()] args", {
 				waitable: this,
 				waitableSet,
 				isRemoval: waitableSet === null
@@ -3256,7 +3684,7 @@ function initializeWaitableClass() {
 			if (waitableSet) waitableSet.addWaitable(this);
 		}
 		drop() {
-			debugLog("[Waitable#drop()] args", {
+			DEBUG: debugLog("[Waitable#drop()] args", {
 				componentIdx: this.#componentIdx,
 				waitable: this
 			});
@@ -3276,17 +3704,30 @@ function initializeWaitableClass() {
 				this.#hasSyncWaiter = false;
 			}
 		}
-	}
-	return Waitable;
+	};
 }
-/** Only the selected, live cancellation code is captured by this constructor. */
-function initializeWaitableSetClass(asyncEventCode) {
-	class WaitableSet {
+let sharedWaitable;
+/**
+* Fresh class identity per store, with no state or platform capability required.
+*
+* Each store gets an empty subclass, so that `instanceof` tells its waitables from
+* those of other stores while every store shares the fields and methods of one
+* class body. Engines share inline caches between copies of a class body, and
+* copies with private names of their own would defeat those caches.
+*/
+function initializeWaitableClass() {
+	const Waitable = sharedWaitable ??= defineWaitable();
+	return class StoreWaitable extends Waitable {};
+}
+function defineWaitableSet() {
+	return class WaitableSet {
+		#asyncEventCode;
 		#componentIdx;
 		#waitables = [];
 		#waiting = 0;
 		target;
-		constructor(componentIdx) {
+		constructor(asyncEventCode, componentIdx) {
+			this.#asyncEventCode = asyncEventCode;
 			if (componentIdx === void 0) throw new TypeError("missing/invalid component idx");
 			this.#componentIdx = componentIdx;
 			this.target = `component [${this.#componentIdx}] waitable set`;
@@ -3328,7 +3769,7 @@ function initializeWaitableSetClass(asyncEventCode) {
 			this.#waitables.push(waitable);
 		}
 		hasPendingEvent() {
-			debugLog("[WaitableSet#hasPendingEvent()] args", {
+			DEBUG: debugLog("[WaitableSet#hasPendingEvent()] args", {
 				componentIdx: this.#componentIdx,
 				waitableSet: this,
 				waitableSetTargets: this.targets()
@@ -3336,14 +3777,14 @@ function initializeWaitableSetClass(asyncEventCode) {
 			return this.#waitables.some((waitable) => waitable.hasPendingEvent());
 		}
 		getPendingEvent() {
-			debugLog("[WaitableSet#getPendingEvent()] args", {
+			DEBUG: debugLog("[WaitableSet#getPendingEvent()] args", {
 				componentIdx: this.#componentIdx,
 				waitableSet: this
 			});
 			for (const waitable of this.#waitables) {
 				if (!waitable.hasPendingEvent()) continue;
 				const event = waitable.getPendingEvent();
-				debugLog("[WaitableSet#getPendingEvent()] found pending event", {
+				DEBUG: debugLog("[WaitableSet#getPendingEvent()] found pending event", {
 					waitable,
 					event
 				});
@@ -3354,13 +3795,13 @@ function initializeWaitableSetClass(asyncEventCode) {
 		/** Read the pending event or construct a fresh cancellation event after a wait. */
 		#eventAfterWait(keepGoing) {
 			return keepGoing ? this.getPendingEvent() : {
-				code: asyncEventCode.TASK_CANCELLED,
+				code: this.#asyncEventCode.TASK_CANCELLED,
 				payload0: 0,
 				payload1: 0
 			};
 		}
 		tryWait(opts) {
-			debugLog("[WaitableSet#tryWait()] args", { opts });
+			DEBUG: debugLog("[WaitableSet#tryWait()] args", { opts });
 			const { readyFn, task, cancellable } = opts;
 			if (task.deliverPendingCancel({ cancellable })) return this.#eventAfterWait(false);
 			const hasPendingEvent = this.hasPendingEvent();
@@ -3368,7 +3809,7 @@ function initializeWaitableSetClass(asyncEventCode) {
 			return null;
 		}
 		waitUntil(opts) {
-			debugLog("[WaitableSet#waitUntil()] args", { opts });
+			DEBUG: debugLog("[WaitableSet#waitUntil()] args", { opts });
 			const event = this.tryWait(opts);
 			if (event !== null) return event;
 			const { readyFn, task, cancellable } = opts;
@@ -3391,7 +3832,7 @@ function initializeWaitableSetClass(asyncEventCode) {
 			});
 		}
 		waitUntilCallback(opts, onEvent) {
-			debugLog("[WaitableSet#waitUntilCallback()] args", { opts });
+			DEBUG: debugLog("[WaitableSet#waitUntilCallback()] args", { opts });
 			const event = this.tryWait(opts);
 			if (event !== null) {
 				onEvent(event);
@@ -3408,19 +3849,31 @@ function initializeWaitableSetClass(asyncEventCode) {
 				onEvent(resumedEvent);
 			});
 		}
-	}
-	return WaitableSet;
+	};
+}
+let sharedWaitableSet;
+/**
+* Fresh class identity per store, as for `initializeWaitableClass`.
+* Only the selected, live cancellation code is captured by this constructor.
+*/
+function initializeWaitableSetClass(asyncEventCode) {
+	const WaitableSet = sharedWaitableSet ??= defineWaitableSet();
+	return class StoreWaitableSet extends WaitableSet {
+		constructor(componentIdx) {
+			super(asyncEventCode, componentIdx);
+		}
+	};
 }
 /** Implements `canon waitable-set.new`. */
 function waitableSetNew(context, componentIdx) {
 	const { WaitableSet } = context;
-	debugLog("[waitableSetNew()] args", { componentIdx });
+	DEBUG: debugLog("[waitableSetNew()] args", { componentIdx });
 	const state = getOrCreateAsyncState(context.lookup, componentIdx);
 	if (!state) throw new Error(`missing async state for component idx [${componentIdx}]`);
 	const wset = new WaitableSet(componentIdx);
 	const rep = state.handles.insert(wset);
 	if (typeof rep !== "number") throw new Error(`invalid/missing waitable set rep [${rep}]`);
-	debugLog("[waitableSetNew()] created waitable set", {
+	DEBUG: debugLog("[waitableSetNew()] created waitable set", {
 		componentIdx,
 		rep
 	});
@@ -3429,7 +3882,7 @@ function waitableSetNew(context, componentIdx) {
 /** Implements `canon waitable-set.wait`. */
 function waitableSetWait(context, ctx, waitableSetRep, resultPtr, syncOnly = false) {
 	const { RuntimeError, WaitableSet } = context;
-	debugLog("[waitableSetWait()] args", {
+	DEBUG: debugLog("[waitableSetWait()] args", {
 		ctx,
 		waitableSetRep,
 		resultPtr
@@ -3467,7 +3920,7 @@ function waitableSetWait(context, ctx, waitableSetRep, resultPtr, syncOnly = fal
 function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
 	const { RuntimeError, WaitableSet, events: asyncEventCode } = context;
 	const { componentIdx, memoryIdx, getMemoryFn } = ctx;
-	debugLog("[waitableSetPoll()] args", {
+	DEBUG: debugLog("[waitableSetPoll()] args", {
 		componentIdx,
 		memoryIdx,
 		waitableSetRep,
@@ -3484,7 +3937,7 @@ function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
 	if (!(wset instanceof WaitableSet)) throw new RuntimeError(`unknown handle index ${waitableSetRep}`);
 	let event;
 	if (!wset.hasPendingEvent()) {
-		debugLog("[waitableSetPoll()] no pending event", {
+		DEBUG: debugLog("[waitableSetPoll()] no pending event", {
 			componentIdx,
 			waitableSetRep
 		});
@@ -3494,7 +3947,7 @@ function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
 			payload1: 0
 		};
 	} else {
-		debugLog("[waitableSetPoll()] retrieving waiting pending event", {
+		DEBUG: debugLog("[waitableSetPoll()] retrieving waiting pending event", {
 			componentIdx,
 			waitableSetRep
 		});
@@ -3512,7 +3965,7 @@ function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
 }
 /** Implements `canon waitable-set.drop`. */
 function waitableSetDrop(context, componentIdx, waitableSetRep) {
-	debugLog("[waitableSetDrop()] args", {
+	DEBUG: debugLog("[waitableSetDrop()] args", {
 		componentIdx,
 		waitableSetRep
 	});
@@ -3528,7 +3981,7 @@ function waitableSetDrop(context, componentIdx, waitableSetRep) {
 }
 function removeWaitableSet(context, args) {
 	const { RuntimeError, WaitableSet } = context;
-	debugLog("[_removeWaitableSet()] args", args);
+	DEBUG: debugLog("[_removeWaitableSet()] args", args);
 	const { state, waitableSetRep } = args;
 	if (!state) throw new TypeError("missing component state");
 	const ws = state.handles.get(waitableSetRep);
@@ -3541,7 +3994,7 @@ function removeWaitableSet(context, args) {
 /** Implements `canon waitable.join`. */
 function waitableJoin(context, componentIdx, waitableRep, waitableSetRep) {
 	const { RuntimeError, Waitable, WaitableSet } = context;
-	debugLog("[waitableJoin()] args", {
+	DEBUG: debugLog("[waitableJoin()] args", {
 		componentIdx,
 		waitableSetRep,
 		isRemoval: waitableSetRep === 0,
@@ -3561,22 +4014,48 @@ function waitableJoin(context, componentIdx, waitableRep, waitableSetRep) {
 
 //#endregion
 //#region runtime/intrinsics/error-context.js
+var GlobalErrorContextTable = class {};
 function initializeGlobalErrorContextTableClass(RepTable) {
-	class GlobalErrorContextTable {
-		static data = null;
-		static get() {
-			if (GlobalErrorContextTable.data === null) GlobalErrorContextTable.data = new RepTable({ target: "global error context table" });
-			return GlobalErrorContextTable.data;
+	/**
+	* Construct an instance, which has no members: the table is a static member.
+	*
+	* @returns the instance
+	*/
+	class StoreGlobalErrorContextTable extends GlobalErrorContextTable {
+		constructor() {
+			super();
 		}
 	}
-	return GlobalErrorContextTable;
+	/**
+	* The table of the store, created on first use.
+	*
+	* @returns the table
+	*/
+	function get() {
+		if (StoreTable.data === null) StoreTable.data = new RepTable({ target: "global error context table" });
+		return StoreTable.data;
+	}
+	const StoreTable = withConstructorStatics(StoreGlobalErrorContextTable, {
+		data: {
+			value: null,
+			writable: true,
+			enumerable: true,
+			configurable: true
+		},
+		get: {
+			value: get,
+			writable: true,
+			configurable: true
+		}
+	});
+	return StoreTable;
 }
 const initializeErrorContextTableRegistrations = () => ({});
 const initializeLocalErrorContextTables = () => /* @__PURE__ */ new Map();
 /** Implements `canon error-context.new`. */
 function errCtxNew(context, args, msgPtr, msgLen) {
 	const { globalTable: GlobalErrorContextTable } = context;
-	debugLog("[errCtxNew()] args", {
+	DEBUG: debugLog("[errCtxNew()] args", {
 		args,
 		msgPtr,
 		msgLen
@@ -3594,7 +4073,7 @@ function errCtxNew(context, args, msgPtr, msgLen) {
 /** Implements `canon error-context.debug-message`. */
 function errCtxDebugMessage(context, ctx, handle, outputStrPtr) {
 	const { globalTable: GlobalErrorContextTable, RuntimeError } = context;
-	debugLog("[errCtxDebugMessage()] ctx", {
+	DEBUG: debugLog("[errCtxDebugMessage()] ctx", {
 		ctx,
 		handle,
 		outputStrPtr
@@ -3609,7 +4088,7 @@ function errCtxDebugMessage(context, ctx, handle, outputStrPtr) {
 /** Implements `canon error-context.drop`. */
 function errCtxDrop(context, ctx, handle) {
 	const { globalTable: GlobalErrorContextTable, RuntimeError } = context;
-	debugLog("[errCtxDrop()] ctx", {
+	DEBUG: debugLog("[errCtxDrop()] ctx", {
 		ctx,
 		handle
 	});
@@ -3632,7 +4111,7 @@ function errCtxDrop(context, ctx, handle) {
 }
 function errCtxTransfer(context, waitableIdx, srcTableIdx, destTableIdx) {
 	const { tables } = context;
-	debugLog("[errCtxTransfer()] args", {
+	DEBUG: debugLog("[errCtxTransfer()] args", {
 		waitableIdx,
 		srcTableIdx,
 		destTableIdx
@@ -3647,7 +4126,7 @@ function errCtxTransfer(context, waitableIdx, srcTableIdx, destTableIdx) {
 	if (!errCtx.globalRep) throw new Error("unexpectedly missing globalRep from error context object");
 	errCtx.refCount -= 1;
 	const { waitableIdx: newWaitableIdx, localIdx } = errCtxCreateLocalHandle(context, destComponentIdx, toTbl, errCtx.globalRep);
-	debugLog("[errCtxTransfer()] successfully transferred", {
+	DEBUG: debugLog("[errCtxTransfer()] successfully transferred", {
 		dest: {
 			errCtxHandle: localIdx,
 			errCtxWaitableIdx: newWaitableIdx,
@@ -4070,7 +4549,7 @@ function resolveThread(context, meta) {
 */
 function activeSlots(context, componentIdx, operation) {
 	const { registers } = context;
-	const own = componentIdx === void 0 || componentIdx === null ? void 0 : resolveThread(context, registers[componentIdx]);
+	const own = componentIdx === void 0 || componentIdx === null ? void 0 : resolveThread(context, registers[registerSlot(componentIdx)]);
 	const slots = registers.freshContextSlots ?? (own ?? resolveThread(context, registers.current))?.storage;
 	if (!slots) throw new Error(`missing/incomplete global current thread meta for component idx [${componentIdx}] during context ${operation}`);
 	return slots;
@@ -4237,7 +4716,8 @@ function contextSlotGlobals(context, componentIdx) {
 const contextSlotAccessor = (_context, ctx, operation) => {
 	const { componentIdx, slot } = ctx;
 	if (slot === void 0 || slot < 0 || slot >= SLOT_COUNT) throw new TypeError("invalid slot");
-	const logs = debugLog.length > 0;
+	let logs = false;
+	DEBUG: logs = debugLog.length > 0;
 	const globals = componentIdx === void 0 || logs ? void 0 : contextSlotGlobals(_context, componentIdx);
 	if (globals === void 0) return operation === "get" ? contextGet.bind(null, _context, ctx) : contextSet.bind(null, _context, ctx);
 	return operation === "get" ? globals.getters[slot] : globals.setters[slot];
@@ -4248,7 +4728,7 @@ function contextSet(_context, ctx, value) {
 	if (slot === void 0) throw new TypeError("missing slot");
 	if (!typeCheckValidI32(value)) throw new Error("invalid value for context set (not valid i32)");
 	const storage = activeSlots(_context, ctx.componentIdx, "set");
-	debugLog("[contextSet()] args", {
+	DEBUG: debugLog("[contextSet()] args", {
 		slot,
 		value,
 		storage,
@@ -4264,7 +4744,7 @@ function contextGet(_context, ctx) {
 	const { slot } = ctx;
 	if (slot === void 0) throw new TypeError("missing slot");
 	const storage = activeSlots(_context, ctx.componentIdx, "get");
-	debugLog("[contextGet()] args", {
+	DEBUG: debugLog("[contextGet()] args", {
 		slot,
 		storage,
 		componentIdx: ctx.componentIdx
@@ -4317,16 +4797,17 @@ function guardCannotLeave(context, componentIdx, fn, freshContextSlots = false) 
 
 //#endregion
 //#region runtime/intrinsics/async-task/async-task.js
+/** Stands in for a list that was never allocated. */
+const NONE$1 = [];
 const TASK_INITIAL = "initial";
 const TASK_CANCELLED = "cancelled";
 const TASK_CANCEL_PENDING = "cancel-pending";
 const TASK_CANCEL_DELIVERED = "cancel-delivered";
 const TASK_RESOLVED = "resolved";
-function initializeAsyncTaskClass(context) {
-	const { lookup: _lookup, registers: _registers, clearing: _clearing, RuntimeError: _RuntimeError, AsyncSubtask: _Subtask, Waitable: _Waitable, events: _events, determinism: _determinism, FutureValue, scopeCounter: _scopeCounter, scopeTasks: _scopeTasks, storeTrap: _storeTrap } = context;
-	class AsyncTask {
-		static _ID = 0n;
-		static #hostThreadID = 0;
+function defineAsyncTask() {
+	return class AsyncTask {
+		#context;
+		#store;
 		static State = {
 			INITIAL: TASK_INITIAL,
 			CANCELLED: TASK_CANCELLED,
@@ -4347,12 +4828,14 @@ function initializeAsyncTaskClass(context) {
 		#lockFreeEntry = false;
 		#preserveFutureResult;
 		#entryFnName;
-		#onResolveHandlers = [];
-		#progressWaiters = [];
+		#onResolveHandlers = null;
+		#progressWaiters = null;
 		#completionPromise;
+		#resolveCompletionPromise;
+		#rejectCompletionPromise;
+		#completionSettled = false;
 		#completionValue;
 		#completionReady = false;
-		#settleCompletionPromise;
 		#rejected = false;
 		#exitPromise;
 		#resolveExitPromise;
@@ -4371,9 +4854,9 @@ function initializeAsyncTaskClass(context) {
 		#returnLowerFns = null;
 		#resourceScopeId;
 		#resourceBorrowCount = 0;
-		#resourceLenders = [];
+		#resourceLenders = null;
 		#resourceScopeExited = false;
-		#subtasks = [];
+		#subtasks = null;
 		#threads = [];
 		#entered = false;
 		#exited = false;
@@ -4386,10 +4869,12 @@ function initializeAsyncTaskClass(context) {
 		alwaysTaskReturn = false;
 		returnCalls = 0;
 		tmpRetI64HighBits = 0;
-		constructor(opts) {
-			this.#id = ++AsyncTask._ID;
-			this.#resourceScopeId = ++_scopeCounter.value;
-			_scopeTasks.set(this.#resourceScopeId, this);
+		constructor(context, store, opts) {
+			this.#context = context;
+			this.#store = store;
+			this.#id = ++store.id;
+			this.#resourceScopeId = ++this.#context.scopeCounter.value;
+			this.#context.scopeTasks.set(this.#resourceScopeId, this);
 			if (opts?.componentIdx === void 0) throw new TypeError("missing component id during task creation");
 			this.#componentIdx = opts.componentIdx;
 			this.#state = TASK_INITIAL;
@@ -4398,28 +4883,14 @@ function initializeAsyncTaskClass(context) {
 			this.#preserveFutureResult = opts.preserveFutureResult ?? false;
 			this.#entryFnName = opts.entryFnName;
 			this.#callingWasmExport = opts.callingWasmExport !== false;
-			const { promise: completionPromise, resolve: resolveCompletionPromise, reject: rejectCompletionPromise } = promiseWithResolvers();
-			this.#completionPromise = completionPromise;
-			completionPromise.then(emptyFunc, emptyFunc);
-			let completionSettled = false;
-			const settleCompletionPromise = () => {
-				if (completionSettled || !this.#completionReady) return;
-				completionSettled = true;
-				if (this.#errored !== null) rejectCompletionPromise(this.#errored);
-				else if (this.#rejected) rejectCompletionPromise(this.#completionValue);
-				else if (this.#preserveFutureResult && this.#completionValue instanceof FutureValue) this.#completionValue.resolveAsValue(resolveCompletionPromise);
-				else resolveCompletionPromise(this.#completionValue);
-			};
-			this.#settleCompletionPromise = settleCompletionPromise;
-			this.#onResolveHandlers.push((results) => {
-				if (this.#parentSubtask !== null) return;
-				if (!this.#isAsync && !this.#isManualAsync) return;
-				this.#completionValue = results;
-				this.#completionReady = true;
-			});
-			const { promise: exitPromise, resolve: resolveExitPromise } = promiseWithResolvers();
-			this.#exitPromise = exitPromise;
-			this.#resolveExitPromise = resolveExitPromise;
+			if (this.#isAsync || this.#isManualAsync) {
+				this.#ensureCompletionPromise();
+				(this.#onResolveHandlers ??= []).push((results) => {
+					if (this.#parentSubtask !== null) return;
+					this.#completionValue = results;
+					this.#completionReady = true;
+				});
+			}
 			if (opts.callbackFn) this.#callbackFn = opts.callbackFn;
 			if (opts.callbackFnName) this.#callbackFnName = opts.callbackFnName;
 			if (opts.getCalleeParamsFn) this.#getCalleeParamsFn = opts.getCalleeParamsFn;
@@ -4451,47 +4922,83 @@ function initializeAsyncTaskClass(context) {
 		}
 		addResourceLender(table, handle) {
 			if (this.#resourceScopeExited) throw new Error("cannot add a lender to an exited resource scope");
-			this.#resourceLenders.push({
+			(this.#resourceLenders ??= []).push({
 				table,
 				handle
 			});
 		}
 		validateResourceBorrowScope() {
 			if (this.#resourceScopeExited) return;
-			if (_storeTrap.stopped) {
-				this.#resourceLenders = [];
+			if (this.#context.storeTrap.stopped) {
+				this.#resourceLenders = null;
 				this.#resourceScopeExited = true;
-				_scopeTasks.delete(this.#resourceScopeId);
+				this.#context.scopeTasks.delete(this.#resourceScopeId);
 				return;
 			}
-			if (this.#resourceBorrowCount !== 0) throw new _RuntimeError("borrow handles still remain at the end of the call");
-			for (const { table, handle } of this.#resourceLenders) {
+			if (this.#resourceBorrowCount !== 0) throw new this.#context.RuntimeError("borrow handles still remain at the end of the call");
+			for (const { table, handle } of this.#resourceLenders ?? NONE$1) {
 				const idx = handle << 1;
 				const lendCount = table[idx];
 				if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2 ** 30) throw new Error("invalid resource lender state at scope exit");
 				table[idx] = lendCount - 1;
 			}
-			this.#resourceLenders = [];
+			this.#resourceLenders = null;
 			this.#resourceScopeExited = true;
-			_scopeTasks.delete(this.#resourceScopeId);
+			this.#context.scopeTasks.delete(this.#resourceScopeId);
+		}
+		/**
+		* Create the completion promise if it does not exist yet.
+		*
+		* @returns the promise that settles with the outcome of the task
+		*/
+		#ensureCompletionPromise() {
+			if (this.#completionPromise === void 0) {
+				const { promise, resolve, reject } = promiseWithResolvers();
+				this.#completionPromise = promise;
+				this.#resolveCompletionPromise = resolve;
+				this.#rejectCompletionPromise = reject;
+				promise.then(emptyFunc, emptyFunc);
+			}
+			return this.#completionPromise;
+		}
+		/** Settle the completion promise, once, when the outcome of the task is known. */
+		#settleCompletionPromise() {
+			if (this.#completionSettled || !this.#completionReady) return;
+			this.#completionSettled = true;
+			this.#ensureCompletionPromise();
+			const resolve = this.#resolveCompletionPromise;
+			const reject = this.#rejectCompletionPromise;
+			if (this.#errored !== null) reject(this.#errored);
+			else if (this.#rejected) reject(this.#completionValue);
+			else if (this.#preserveFutureResult && this.#completionValue instanceof this.#context.FutureValue) this.#completionValue.resolveAsValue(resolve);
+			else resolve(this.#completionValue);
 		}
 		completionPromise() {
-			return this.#completionPromise;
+			return this.#ensureCompletionPromise();
 		}
 		settleCompletion() {
 			this.#settleCompletionPromise();
 		}
 		exitPromise() {
+			if (this.#exitPromise === void 0) {
+				if (this.#exited) this.#exitPromise = Promise.resolve();
+				else {
+					const { promise, resolve } = promiseWithResolvers();
+					this.#exitPromise = promise;
+					this.#resolveExitPromise = resolve;
+				}
+			}
 			return this.#exitPromise;
 		}
 		waitForProgress() {
 			const { promise, resolve } = promiseWithResolvers();
-			this.#progressWaiters.push(resolve);
+			(this.#progressWaiters ??= []).push(resolve);
 			return promise;
 		}
 		notifyProgress() {
 			const waiters = this.#progressWaiters;
-			this.#progressWaiters = [];
+			if (waiters === null) return;
+			this.#progressWaiters = null;
 			for (const resolve of waiters) resolve();
 		}
 		isAsync() {
@@ -4534,7 +5041,7 @@ function initializeAsyncTaskClass(context) {
 			this.#calleeIsAsync = value;
 		}
 		setParentSubtask(subtask) {
-			if (!subtask || !(subtask instanceof _Subtask)) return;
+			if (!subtask || !(subtask instanceof this.#context.AsyncSubtask)) return;
 			if (this.#parentSubtask) throw new Error("parent subtask can only be set once");
 			this.#parentSubtask = subtask;
 		}
@@ -4567,13 +5074,13 @@ function initializeAsyncTaskClass(context) {
 		}
 		runCallbackFn(...args) {
 			if (!this.#callbackFn) throw new Error("no callback function has been set for task");
-			if (this.#callbackFn._jcoMaySuspend === false) return withCurrentTaskMeta(_registers, {
+			if (this.#callbackFn._jcoMaySuspend === false) return withCurrentTaskMeta(this.#context.registers, {
 				taskID: this.#id,
 				threadID: this.defaultThread().id(),
 				componentIdx: this.#componentIdx,
 				fn: () => this.#callbackFn.apply(null, args)
 			});
-			return withCurrentTaskMetaAsync(_registers, {
+			return withCurrentTaskMetaAsync(this.#context.registers, {
 				taskID: this.#id,
 				threadID: this.defaultThread().id(),
 				componentIdx: this.#componentIdx,
@@ -4599,28 +5106,28 @@ function initializeAsyncTaskClass(context) {
 			return this.#returnResultTypeIdx;
 		}
 		mayEnter(task) {
-			const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (cstate.hasBackpressure()) {
-				debugLog("[AsyncTask#mayEnter()] disallowed due to backpressure", { taskID: this.#id });
+				DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to backpressure", { taskID: this.#id });
 				return false;
 			}
 			if (!cstate.callingSyncImport()) {
-				debugLog("[AsyncTask#mayEnter()] disallowed due to sync import call", { taskID: this.#id });
+				DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to sync import call", { taskID: this.#id });
 				return false;
 			}
 			if (!(Reflect.get(cstate, "callingSyncExport") && !task.isAsync)) {
-				debugLog("[AsyncTask#mayEnter()] disallowed due to sync export w/ sync pending", { taskID: this.#id });
+				DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to sync export w/ sync pending", { taskID: this.#id });
 				return false;
 			}
 			return true;
 		}
 		enterSync() {
 			if (this.needsExclusiveLock()) {
-				const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+				const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 				if (!cstate.isExclusivelyLocked()) cstate.exclusiveLock(this.#id);
 				else {
 					this.#lockFreeEntry = true;
-					debugLog("[AsyncTask#enterSync()] entering without exclusive lock", {
+					DEBUG: debugLog("[AsyncTask#enterSync()] entering without exclusive lock", {
 						taskID: this.#id,
 						componentIdx: this.#componentIdx
 					});
@@ -4634,7 +5141,7 @@ function initializeAsyncTaskClass(context) {
 				this.cancel();
 				return false;
 			}
-			const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (this.isSync()) {
 				this.#entered = true;
 				return true;
@@ -4654,7 +5161,7 @@ function initializeAsyncTaskClass(context) {
 			return true;
 		}
 		async enter(opts) {
-			debugLog("[AsyncTask#enter()] args", {
+			DEBUG: debugLog("[AsyncTask#enter()] args", {
 				taskID: this.#id,
 				componentIdx: this.#componentIdx,
 				subtaskID: this.getParentSubtask()?.id(),
@@ -4667,7 +5174,7 @@ function initializeAsyncTaskClass(context) {
 				this.cancel();
 				return false;
 			}
-			const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (this.isSync()) {
 				this.#entered = true;
 				if (this.#isManualAsync) {
@@ -4689,7 +5196,7 @@ function initializeAsyncTaskClass(context) {
 			const ticket = this.#admissionTicket;
 			if (ticket === null) return;
 			this.#admissionTicket = null;
-			getOrCreateAsyncState(_lookup, this.#componentIdx).releaseAdmissionTicket(ticket);
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).releaseAdmissionTicket(ticket);
 		}
 		async #enterQueued(cstate, ticket) {
 			await cstate.waitForAdmissionTurn(ticket);
@@ -4751,7 +5258,7 @@ function initializeAsyncTaskClass(context) {
 		}
 		async waitUntil(opts) {
 			const { readyFn, cancellable } = opts;
-			debugLog("[AsyncTask#waitUntil()] args", {
+			DEBUG: debugLog("[AsyncTask#waitUntil()] args", {
 				taskID: this.#id,
 				args: { cancellable }
 			});
@@ -4762,7 +5269,7 @@ function initializeAsyncTaskClass(context) {
 		}
 		async yieldUntil(opts) {
 			const { readyFn, cancellable } = opts;
-			debugLog("[AsyncTask#yieldUntil()]", {
+			DEBUG: debugLog("[AsyncTask#yieldUntil()]", {
 				taskID: this.#id,
 				args: { cancellable },
 				componentIdx: this.#componentIdx
@@ -4771,14 +5278,14 @@ function initializeAsyncTaskClass(context) {
 				code: await this.immediateSuspend({
 					readyFn,
 					cancellable
-				}) ? _events.NONE : _events.TASK_CANCELLED,
+				}) ? this.#context.events.NONE : this.#context.events.TASK_CANCELLED,
 				payload0: 0,
 				payload1: 0
 			};
 		}
 		async suspendUntil(opts) {
 			const { cancellable, readyFn } = opts;
-			debugLog("[AsyncTask#suspendUntil()] args", {
+			DEBUG: debugLog("[AsyncTask#suspendUntil()] args", {
 				taskID: this.#id,
 				args: { cancellable },
 				componentIdx: this.#componentIdx
@@ -4795,7 +5302,7 @@ function initializeAsyncTaskClass(context) {
 				onResume(false);
 				return;
 			}
-			getOrCreateAsyncState(_lookup, this.#componentIdx).suspendTask({
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).suspendTask({
 				task: this,
 				cancellable: !!cancellable,
 				readyFn: () => {
@@ -4810,7 +5317,7 @@ function initializeAsyncTaskClass(context) {
 		}
 		async immediateSuspendUntil(opts) {
 			const { cancellable, readyFn } = opts;
-			debugLog("[AsyncTask#immediateSuspendUntil()] args", {
+			DEBUG: debugLog("[AsyncTask#immediateSuspendUntil()] args", {
 				args: {
 					cancellable,
 					readyFn
@@ -4818,7 +5325,7 @@ function initializeAsyncTaskClass(context) {
 				taskID: this.#id,
 				componentIdx: this.#componentIdx
 			});
-			if (readyFn() && _determinism === "random") {
+			if (readyFn() && this.#context.determinism === "random") {
 				if (coinFlip()) return true;
 			}
 			return await this.immediateSuspend({
@@ -4827,8 +5334,8 @@ function initializeAsyncTaskClass(context) {
 			});
 		}
 		async immediateSuspend(opts) {
-			const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
-			const thread = this.#entered ? cstate.threads.get(getCurrentTaskMeta(_registers, this.#componentIdx).threadID) : this.defaultThread();
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			const thread = this.#entered ? cstate.threads.get(readTaskRegister(this.#context.registers, this.#componentIdx).threadID) : this.defaultThread();
 			if (!thread || thread.task() !== this) throw new Error("invalid current thread for wait");
 			return thread.suspend({
 				...opts,
@@ -4837,7 +5344,7 @@ function initializeAsyncTaskClass(context) {
 		}
 		deliverPendingCancel(opts) {
 			const { cancellable } = opts;
-			debugLog("[AsyncTask#deliverPendingCancel()]", {
+			DEBUG: debugLog("[AsyncTask#deliverPendingCancel()]", {
 				args: { cancellable },
 				taskID: this.#id,
 				componentIdx: this.#componentIdx
@@ -4855,7 +5362,7 @@ function initializeAsyncTaskClass(context) {
 			return this.cancelRequested;
 		}
 		requestCancellation() {
-			debugLog("[AsyncTask#requestCancellation()] args", {
+			DEBUG: debugLog("[AsyncTask#requestCancellation()] args", {
 				taskID: this.#id,
 				componentIdx: this.#componentIdx,
 				state: this.#state
@@ -4867,17 +5374,17 @@ function initializeAsyncTaskClass(context) {
 				if (!this.#entered) {
 					this.deliverPendingCancel({ cancellable: true });
 					this.cancel();
-					const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+					const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 					cstate.resumeTaskByID(this.#id);
 					cstate.cancelExclusiveLockWaiter(this.#id);
 					this.exit({ skipExclusiveLockCheck: true });
 					return;
 				}
 			}
-			getOrCreateAsyncState(_lookup, this.#componentIdx).runTickLoop();
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).runTickLoop();
 		}
 		cancel(args) {
-			debugLog("[AsyncTask#cancel()] args", {});
+			DEBUG: debugLog("[AsyncTask#cancel()] args", {});
 			if (this.taskState() !== TASK_CANCEL_DELIVERED) throw new Error("`task.cancel` called by task which has not been cancelled");
 			this.validateResourceBorrowScope();
 			this.cancelled = true;
@@ -4886,12 +5393,12 @@ function initializeAsyncTaskClass(context) {
 			if (!this.#entered) this.notifyProgress();
 		}
 		onResolve(taskValue) {
-			const handlers = this.#onResolveHandlers;
-			this.#onResolveHandlers = [];
+			const handlers = this.#onResolveHandlers ?? NONE$1;
+			this.#onResolveHandlers = null;
 			for (const f of handlers) try {
 				f(taskValue);
 			} catch (err) {
-				debugLog("[AsyncTask#onResolve] error during task resolve handler", err);
+				DEBUG: debugLog("[AsyncTask#onResolve] error during task resolve handler", err);
 				throw err;
 			}
 			if (this.#rejected) {
@@ -4903,13 +5410,13 @@ function initializeAsyncTaskClass(context) {
 			if (parentSubtaskPending && taskReturned) {
 				const meta = this.#parentSubtask.getCallMetadata();
 				if (meta.returnFn && !meta.returnFnCalled) {
-					debugLog("[AsyncTask#onResolve()] running returnFn", {
+					DEBUG: debugLog("[AsyncTask#onResolve()] running returnFn", {
 						componentIdx: this.#componentIdx,
 						taskID: this.#id,
 						subtaskID: this.#parentSubtask.id()
 					});
 					const callerTask = this.#parentSubtask.getParentTask();
-					meta.returnFnResult = withCurrentTaskMeta(_registers, {
+					meta.returnFnResult = withCurrentTaskMeta(this.#context.registers, {
 						taskID: callerTask.id(),
 						threadID: meta.callerThreadID,
 						componentIdx: callerTask.componentIdx(),
@@ -4919,19 +5426,19 @@ function initializeAsyncTaskClass(context) {
 				}
 			}
 			if (this.#postReturnFn && taskReturned) {
-				debugLog("[AsyncTask#onResolve()] running post return ", {
+				DEBUG: debugLog("[AsyncTask#onResolve()] running post return ", {
 					componentIdx: this.#componentIdx,
 					taskID: this.#id
 				});
 				try {
-					withCurrentTaskMeta(_registers, {
+					withCurrentTaskMeta(this.#context.registers, {
 						taskID: this.#id,
 						threadID: this.defaultThread().id(),
 						componentIdx: this.#componentIdx,
 						fn: () => this.#postReturnFn(taskValue)
 					});
 				} catch (err) {
-					err = postReturnTrap(context.postReturn, this.#componentIdx, err);
+					err = postReturnTrap(this.#context.postReturn, this.#componentIdx, err);
 					this.reject(err);
 					throw err;
 				}
@@ -4939,7 +5446,7 @@ function initializeAsyncTaskClass(context) {
 			if (parentSubtaskPending) this.#parentSubtask.onResolve(taskValue);
 		}
 		registerOnResolveHandler(f) {
-			this.#onResolveHandlers.push(f);
+			(this.#onResolveHandlers ??= []).push(f);
 		}
 		isRejected() {
 			return this.#rejected;
@@ -4956,7 +5463,7 @@ function initializeAsyncTaskClass(context) {
 			this.#settleCompletionPromise();
 		}
 		reject(taskErr) {
-			debugLog("[AsyncTask#reject()] args", {
+			DEBUG: debugLog("[AsyncTask#reject()] args", {
 				componentIdx: this.#componentIdx,
 				taskID: this.#id,
 				parentSubtask: this.#parentSubtask,
@@ -4981,7 +5488,7 @@ function initializeAsyncTaskClass(context) {
 			this.cancel({ error: taskErr });
 		}
 		resolve(results) {
-			debugLog("[AsyncTask#resolve()] args", {
+			DEBUG: debugLog("[AsyncTask#resolve()] args", {
 				componentIdx: this.#componentIdx,
 				taskID: this.#id,
 				entryFnName: this.entryFnName(),
@@ -5001,7 +5508,7 @@ function initializeAsyncTaskClass(context) {
 					this.onResolve(results[0]);
 					break;
 				default:
-					debugLog("[AsyncTask#resolve()] unexpected number of results", {
+					DEBUG: debugLog("[AsyncTask#resolve()] unexpected number of results", {
 						componentIdx: this.#componentIdx,
 						results,
 						taskID: this.#id,
@@ -5013,7 +5520,7 @@ function initializeAsyncTaskClass(context) {
 			}
 		}
 		exit(args) {
-			debugLog("[AsyncTask#exit()]", {
+			DEBUG: debugLog("[AsyncTask#exit()]", {
 				componentIdx: this.#componentIdx,
 				taskID: this.#id
 			});
@@ -5021,7 +5528,7 @@ function initializeAsyncTaskClass(context) {
 			if (this.#exited) throw new Error("task has already exited");
 			this.#checkThreadExit();
 			this.validateResourceBorrowScope();
-			const state = this.#componentIdx === -1 ? null : getOrCreateAsyncState(_lookup, this.#componentIdx);
+			const state = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (!state && this.#componentIdx !== -1) throw new Error("missing async state for component [" + this.#componentIdx + "]");
 			if (state && !args?.skipExclusiveLockCheck && !this.#lockFreeEntry) {
 				if (this.needsExclusiveLock() && !state.exclusivelyLockedBy(this.#id)) throw new Error(`task [${this.#id}] exit: component [${this.#componentIdx}] should have been exclusively locked by it`);
@@ -5030,14 +5537,14 @@ function initializeAsyncTaskClass(context) {
 			this.notifyProgress();
 			try {
 				if (this.#parentSubtask === null && (this.#isAsync || this.#isManualAsync)) this.#settleCompletionPromise();
-				this.#resolveExitPromise();
+				this.#resolveExitPromise?.();
 			} catch (err) {
 				console.error("error during task exit handler", err);
 				throw err;
 			}
 			this.#exited = true;
 			this.removeThread(this.defaultThread());
-			if (this.#threads.length > 0) clearCurrentThread(_clearing, this.#componentIdx, this.#id, { preserveTask: true });
+			if (this.#threads.length > 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id, { preserveTask: true });
 		}
 		needsExclusiveLock() {
 			if (this.#componentIdx === -1) return false;
@@ -5046,14 +5553,14 @@ function initializeAsyncTaskClass(context) {
 			return !this.#isAsync || this.hasCallback() || this.#calleeIsAsync === false;
 		}
 		createSubtask(args) {
-			debugLog("[AsyncTask#createSubtask()] args", args);
+			DEBUG: debugLog("[AsyncTask#createSubtask()] args", args);
 			const { componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync } = args;
-			if (!getOrCreateAsyncState(_lookup, this.#componentIdx)) throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
-			const waitable = new _Waitable({
+			if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
+			const waitable = new this.#context.Waitable({
 				componentIdx: this.#componentIdx,
 				target: `subtask (internal ID [${this.#id}])`
 			});
-			const newSubtask = new _Subtask({
+			const newSubtask = new this.#context.AsyncSubtask({
 				componentIdx,
 				childTask,
 				parentTask: this,
@@ -5063,25 +5570,27 @@ function initializeAsyncTaskClass(context) {
 				fnName,
 				waitable
 			});
-			this.#subtasks.push(newSubtask);
+			(this.#subtasks ??= []).push(newSubtask);
 			newSubtask.setTarget(`subtask (internal ID [${newSubtask.id()}], waitable [${waitable.idx()}], component [${componentIdx}])`);
 			return newSubtask;
 		}
 		getLatestSubtask() {
-			return this.#subtasks.at(-1);
+			return this.#subtasks?.at(-1);
 		}
 		getSubtaskByWaitableRep(rep) {
 			if (rep === void 0) throw new TypeError("missing rep");
-			return this.#subtasks.find((s) => s.waitableRep() === rep);
+			return this.#subtasks?.find((s) => s.waitableRep() === rep);
 		}
 		currentSubtask() {
-			debugLog("[AsyncTask#currentSubtask()]");
-			if (this.#subtasks.length === 0) return;
-			return this.#subtasks.at(-1);
+			DEBUG: debugLog("[AsyncTask#currentSubtask()]");
+			if (this.#subtasks === null || this.#subtasks.length === 0) return;
+			return this.#subtasks?.at(-1);
 		}
 		removeSubtask(subtask) {
-			if (this.#subtasks.length === 0) throw new Error("cannot end current subtask: no current subtask");
-			this.#subtasks = this.#subtasks.filter((t) => t !== subtask);
+			const subtasks = this.#subtasks;
+			if (subtasks === null || subtasks.length === 0) throw new Error("cannot end current subtask: no current subtask");
+			if (subtasks[subtasks.length - 1] === subtask) subtasks.pop();
+			else this.#subtasks = subtasks.filter((t) => t !== subtask);
 			return subtask;
 		}
 		cancellationPending() {
@@ -5093,7 +5602,7 @@ function initializeAsyncTaskClass(context) {
 				this.cancel();
 				return false;
 			}
-			getOrCreateAsyncState(_lookup, this.#componentIdx);
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			this.#entered = true;
 			const parentTask = this.#parentSubtask?.getParentTask();
 			if (parentTask?.taskState() === TASK_CANCEL_DELIVERED || parentTask && !parentTask.hasCallback()) parentTask.notifyProgress();
@@ -5105,34 +5614,70 @@ function initializeAsyncTaskClass(context) {
 		removeThread(thread) {
 			this.#checkThreadExit();
 			this.settleCompletion();
-			if (this.#componentIdx !== -1) getOrCreateAsyncState(_lookup, this.#componentIdx).threads.remove(thread.id());
-			this.#threads = this.#threads.filter((t) => t !== thread);
-			syncContextSlots(_registers);
-			if (this.#exited && this.#threads.length === 0) clearCurrentThread(_clearing, this.#componentIdx, this.#id);
+			if (this.#componentIdx !== -1) getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).threads.remove(thread.id());
+			if (this.#threads[this.#threads.length - 1] === thread) this.#threads.pop();
+			else this.#threads = this.#threads.filter((t) => t !== thread);
+			syncContextSlots(this.#context.registers);
+			if (this.#exited && this.#threads.length === 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
 		}
 		#checkThreadExit() {
 			if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {
-				const err = new _RuntimeError(`(component [${this.#componentIdx}]) task [${this.#id}] exited without resolution`);
-				throw this.#componentIdx === -1 ? err : recordTrap(context.traps, this.#componentIdx, err);
+				const err = new this.#context.RuntimeError(`(component [${this.#componentIdx}]) task [${this.#id}] exited without resolution`);
+				throw this.#componentIdx === -1 ? err : recordTrap(this.#context.traps, this.#componentIdx, err);
 			}
 		}
 		addThread(thread) {
 			if (this.#componentIdx === -1) {
-				thread.setId(++AsyncTask.#hostThreadID);
+				thread.setId(++this.#store.hostThreadID);
 				this.#threads.push(thread);
 				return thread;
 			}
-			const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			thread.setId(cstate.threads.insert(thread));
 			this.#threads.push(thread);
-			syncContextSlots(_registers);
+			syncContextSlots(this.#context.registers);
 			return thread;
 		}
 		calleeIsAsync() {
 			return this.#calleeIsAsync === true;
 		}
+	};
+}
+let sharedAsyncTask;
+function initializeAsyncTaskClass(context) {
+	const AsyncTask = sharedAsyncTask ??= defineAsyncTask();
+	const store = {
+		id: 0n,
+		hostThreadID: 0
+	};
+	/**
+	* Construct a task that uses the context.
+	*
+	* @param options - options of the task
+	* @returns the task
+	*/
+	class ContextAsyncTask extends AsyncTask {
+		constructor(options) {
+			super(context, store, options);
+		}
 	}
-	return AsyncTask;
+	return withConstructorStatics(ContextAsyncTask, {
+		_ID: {
+			get: () => store.id,
+			set: (id) => {
+				store.id = id;
+			},
+			enumerable: true
+		},
+		State: {
+			value: { ...AsyncTask.State },
+			enumerable: true
+		},
+		BlockResult: {
+			value: { ...AsyncTask.BlockResult },
+			enumerable: true
+		}
+	});
 }
 
 //#endregion
@@ -5142,10 +5687,11 @@ const STARTED = 1;
 const RETURNED = 2;
 const CANCELLED_BEFORE_STARTED = 3;
 const CANCELLED_BEFORE_RETURNED = 4;
-function initializeAsyncSubtaskClass(context) {
-	const { lookup: _lookup, memories: _memories, disposeSymbol: _disposeSymbol, RuntimeError } = context;
-	class AsyncSubtask {
-		static _ID = 0n;
+/** Stands in for a list that was never allocated. */
+const NONE = [];
+function defineAsyncSubtask() {
+	return class AsyncSubtask {
+		#context;
 		static State = {
 			STARTING,
 			STARTED,
@@ -5166,8 +5712,8 @@ function initializeAsyncSubtaskClass(context) {
 		#onProgressFn = null;
 		#callMetadata = {};
 		#resolved = false;
-		#onResolveHandlers = [];
-		#onStartHandlers = [];
+		#onResolveHandlers = null;
+		#onStartHandlers = null;
 		#result = null;
 		#resultSet = false;
 		#hostPendingResult = null;
@@ -5176,10 +5722,11 @@ function initializeAsyncSubtaskClass(context) {
 		isAsync;
 		isManualAsync;
 		cancelProgress = null;
-		constructor(args) {
+		constructor(context, store, args) {
+			this.#context = context;
 			if (typeof args.componentIdx !== "number") throw new Error("invalid componentIdx for subtask creation");
 			this.#componentIdx = args.componentIdx;
-			this.#id = ++AsyncSubtask._ID;
+			this.#id = ++store.id;
 			this.fnName = args.fnName;
 			if (!args.parentTask) throw new Error("missing parent task during subtask creation");
 			this.#parentTask = args.parentTask;
@@ -5284,7 +5831,7 @@ function initializeAsyncSubtaskClass(context) {
 			return this.#cancelRequested;
 		}
 		requestCancellation() {
-			debugLog("[AsyncSubtask#requestCancellation()] args", {
+			DEBUG: debugLog("[AsyncSubtask#requestCancellation()] args", {
 				componentIdx: this.#componentIdx,
 				subtaskID: this.#id,
 				state: this.#state,
@@ -5310,13 +5857,13 @@ function initializeAsyncSubtaskClass(context) {
 			const pending = this.#hostPendingResult;
 			if (!pending) return;
 			this.#hostPendingResult = null;
-			disposeHostValue(_disposeSymbol, pending);
+			disposeHostValue(this.#context.disposeSymbol, pending);
 		}
 		registerOnStartHandler(f) {
-			this.#onStartHandlers.push(f);
+			(this.#onStartHandlers ??= []).push(f);
 		}
 		onStart(args) {
-			debugLog("[AsyncSubtask#onStart()] args", {
+			DEBUG: debugLog("[AsyncSubtask#onStart()] args", {
 				componentIdx: this.#componentIdx,
 				subtaskID: this.#id,
 				parentTaskID: this.parentTaskID(),
@@ -5331,7 +5878,7 @@ function initializeAsyncSubtaskClass(context) {
 			return result;
 		}
 		registerOnResolveHandler(f) {
-			this.#onResolveHandlers.push(f);
+			(this.#onResolveHandlers ??= []).push(f);
 		}
 		reject(subtaskErr) {
 			if (this.#resolved) return;
@@ -5344,7 +5891,7 @@ function initializeAsyncSubtaskClass(context) {
 			this.#parentTask.reject(subtaskErr);
 		}
 		onResolve(subtaskValue) {
-			debugLog("[AsyncSubtask#onResolve()] args", {
+			DEBUG: debugLog("[AsyncSubtask#onResolve()] args", {
 				componentIdx: this.#componentIdx,
 				subtaskID: this.#id,
 				isAsync: this.isAsync,
@@ -5364,14 +5911,14 @@ function initializeAsyncSubtaskClass(context) {
 				this.#hostPendingResult = null;
 			}
 			this.setResult(subtaskValue);
-			for (const f of this.#onResolveHandlers) try {
+			for (const f of this.#onResolveHandlers ?? NONE) try {
 				f(subtaskValue);
 			} catch (err) {
 				console.error("error during subtask resolve handler", err);
 				throw err;
 			}
 			const callMetadata = this.getCallMetadata();
-			const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? lookupMemories(_memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
+			const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? lookupMemories(this.#context.memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
 			if (this.#state === RETURNED && callMetadata && !callMetadata.returnFn && (this.isAsync || callMetadata.funcTypeIsAsync) && callMetadata.resultPtr && memory) {
 				const { resultPtr, realloc } = callMetadata;
 				const lowers = callMetadata.lowers;
@@ -5393,7 +5940,7 @@ function initializeAsyncSubtaskClass(context) {
 					if (this.#getComponentState().handles.remove(rep) !== this) throw new Error("unexpectedly received non-self Subtask from handle removal");
 					this.drop();
 				} catch (err) {
-					debugLog("[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion", err);
+					DEBUG: debugLog("[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion", err);
 				}
 			}
 		}
@@ -5410,14 +5957,14 @@ function initializeAsyncSubtaskClass(context) {
 			return this.#state >= RETURNED;
 		}
 		addLender(handle) {
-			debugLog("[AsyncSubtask#addLender()] args", { handle });
+			DEBUG: debugLog("[AsyncSubtask#addLender()] args", { handle });
 			if (!handle || typeof handle.lends !== "number") throw new Error("missing/invalid lender handle [" + handle + "]");
 			if (this.#lenders === null || this.isResolved()) throw new Error("subtask has no lendors or has already been resolved");
 			handle.lends++;
 			this.#lenders.push(handle);
 		}
 		deliverResolve() {
-			debugLog("[AsyncSubtask#deliverResolve()] args", {
+			DEBUG: debugLog("[AsyncSubtask#deliverResolve()] args", {
 				lenders: this.#lenders,
 				parentTaskID: this.parentTaskID(),
 				subtaskID: this.#id,
@@ -5430,12 +5977,12 @@ function initializeAsyncSubtaskClass(context) {
 			this.#lenders = null;
 		}
 		resolveDelivered() {
-			debugLog("[AsyncSubtask#resolveDelivered()] args", {});
+			DEBUG: debugLog("[AsyncSubtask#resolveDelivered()] args", {});
 			if (this.#lenders === null && !this.isResolved()) throw new Error("invalid subtask state, lenders missing and subtask has not been resolved");
 			return this.#lenders === null;
 		}
 		drop() {
-			debugLog("[AsyncSubtask#drop()] args", {
+			DEBUG: debugLog("[AsyncSubtask#drop()] args", {
 				componentIdx: this.#componentIdx,
 				parentTaskID: this.#parentTask?.id(),
 				parentTaskFnName: this.#parentTask?.entryFnName(),
@@ -5444,28 +5991,56 @@ function initializeAsyncSubtaskClass(context) {
 				subtaskFnName: this.fnName
 			});
 			if (!this.#waitable) throw new Error("missing/invalid inner waitable");
-			if (!this.resolveDelivered()) throw new RuntimeError("cannot drop a subtask which has not yet resolved");
+			if (!this.resolveDelivered()) throw new this.#context.RuntimeError("cannot drop a subtask which has not yet resolved");
 			if (this.#waitable) this.#waitable.drop();
 		}
 		#getComponentState() {
-			const state = getOrCreateAsyncState(_lookup, this.#componentIdx);
+			const state = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (!state) throw new Error("invalid/missing async state for component [" + this.#componentIdx + "]");
 			return state;
 		}
 		getWaitableHandleIdx() {
-			debugLog("[AsyncSubtask#getWaitableHandleIdx()] args", {});
+			DEBUG: debugLog("[AsyncSubtask#getWaitableHandleIdx()] args", {});
 			if (!this.#waitable) throw new Error("missing/invalid waitable");
 			return this.waitableRep();
 		}
+	};
+}
+let sharedAsyncSubtask;
+function initializeAsyncSubtaskClass(context) {
+	const AsyncSubtask = sharedAsyncSubtask ??= defineAsyncSubtask();
+	const store = { id: 0n };
+	/**
+	* Construct a subtask that uses the context.
+	*
+	* @param options - options of the subtask
+	* @returns the subtask
+	*/
+	class ContextAsyncSubtask extends AsyncSubtask {
+		constructor(options) {
+			super(context, store, options);
+		}
 	}
-	return AsyncSubtask;
+	return withConstructorStatics(ContextAsyncSubtask, {
+		_ID: {
+			get: () => store.id,
+			set: (id) => {
+				store.id = id;
+			},
+			enumerable: true
+		},
+		State: {
+			value: { ...AsyncSubtask.State },
+			enumerable: true
+		}
+	});
 }
 
 //#endregion
 //#region runtime/intrinsics/async-task/subtask-operations.js
 /** Implements `canon subtask.drop`. */
 function subtaskDrop(_context, componentIdx, subtaskWaitableRep) {
-	debugLog("[subtaskDrop()] args", {
+	DEBUG: debugLog("[subtaskDrop()] args", {
 		componentIdx,
 		subtaskWaitableRep
 	});
@@ -5478,7 +6053,7 @@ function subtaskDrop(_context, componentIdx, subtaskWaitableRep) {
 }
 /** Implements `canon subtask.cancel`. */
 function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = false) {
-	debugLog("[subtaskCancel()] args", {
+	DEBUG: debugLog("[subtaskCancel()] args", {
 		componentIdx,
 		isAsync,
 		subtaskRep
@@ -5503,7 +6078,7 @@ function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = f
 			return progress.then(() => {
 				if (subtask.isResolved()) return finishCancel();
 				if (isAsync) return 4294967295;
-				const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
+				const { taskID } = readTaskRegister(_context.registers, componentIdx);
 				const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 				if (!taskMeta || !taskMeta.task) throw new Error("invalid/missing async task");
 				return taskMeta.task.waitUntil({
@@ -5512,7 +6087,7 @@ function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = f
 				}).then(finishCancel);
 			});
 		}
-		const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
+		const { taskID } = readTaskRegister(_context.registers, componentIdx);
 		const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 		if (!taskMeta || !taskMeta.task) throw new Error("invalid/missing async task");
 		return taskMeta.task.waitUntil({
@@ -5538,7 +6113,7 @@ function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = f
 		if (!subtask.isResolved()) {
 			if (isAsync) return cancellationWillCompleteAsync ? 4294967294 : 4294967295;
 			if (!slowOnly) return 4294967294;
-			const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
+			const { taskID } = readTaskRegister(_context.registers, componentIdx);
 			const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 			if (!taskMeta || !taskMeta.task) throw new Error("invalid/missing async task");
 			return taskMeta.task.waitUntil({
@@ -5553,13 +6128,13 @@ function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = f
 //#endregion
 //#region runtime/intrinsics/async-task/lower-import.js
 function lowerImport(_context, args, ...params) {
-	debugLog("[_lowerImport()] args", {
+	DEBUG: debugLog("[_lowerImport()] args", {
 		args,
 		params
 	});
 	const { componentIdx, isAsync, isManualAsync, resultLowerFns, hasResultPointer, funcTypeIsAsync, memoryIdx, getMemoryFn, getReallocFn, stringEncoding, importFn } = args;
 	checkMayLeave(_context.mayLeave, componentIdx);
-	const { taskID, threadID } = getCurrentTaskMeta(_context.registers, componentIdx);
+	const { taskID, threadID } = readTaskRegister(_context.registers, componentIdx);
 	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 	if (!taskMeta) throw new Error("invalid/missing async task meta");
 	const task = taskMeta.task;
@@ -5637,7 +6212,7 @@ function lowerImport(_context, args, ...params) {
 			subtask.drop();
 			res = subtaskState;
 		} else res = Number(subtask.ensureHandle()) << 4 | subtaskState;
-		debugLog("[_lowerImport()] async-lowered import return", {
+		DEBUG: debugLog("[_lowerImport()] async-lowered import return", {
 			fnName: importFn.fnName,
 			componentIdx,
 			subtaskID: subtask.id(),
@@ -5670,7 +6245,7 @@ function lowerImport(_context, args, ...params) {
 	queueMicrotask(async () => {
 		try {
 			if (subtask.cancellationRequested() || task.taskState() === _context.AsyncTask.State.CANCEL_PENDING) return;
-			debugLog("[_lowerImport()] calling lowered import", {
+			DEBUG: debugLog("[_lowerImport()] calling lowered import", {
 				importFn,
 				params
 			});
@@ -5682,7 +6257,7 @@ function lowerImport(_context, args, ...params) {
 			});
 			if (requiresManualAsyncResult) manualAsyncResult.resolve(subtask.getResult());
 		} catch (err) {
-			debugLog("[_lowerImport()] import fn error:", err);
+			DEBUG: debugLog("[_lowerImport()] import fn error:", err);
 			if (requiresManualAsyncResult) {
 				manualAsyncResult.reject(err);
 				return;
@@ -5706,13 +6281,13 @@ function lowerImport(_context, args, ...params) {
 //#endregion
 //#region runtime/intrinsics/async-task/lower-import-backwards-compat.js
 function lowerImportBackwardsCompat(_context, args, ...params) {
-	debugLog("[_lowerImportBackwardsCompat()] args", {
+	DEBUG: debugLog("[_lowerImportBackwardsCompat()] args", {
 		args,
 		params
 	});
 	const { componentIdx, isAsync, isManualAsync, resultLowerFns, hasResultPointer, funcTypeIsAsync, memoryIdx, getMemoryFn, getReallocFn, importFn, stringEncoding } = args;
 	checkMayLeave(_context.mayLeave, componentIdx);
-	const meta = getCurrentTaskMeta(_context.registers, componentIdx);
+	const meta = readTaskRegister(_context.registers, componentIdx);
 	let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
 	let createdTask;
 	if (!taskMeta) {
@@ -5802,7 +6377,7 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 		});
 	});
 	if (!isAsync && !funcTypeIsAsync && isManualAsync) {
-		debugLog("[_lowerImportBackwardsCompat()] calling lowered import", {
+		DEBUG: debugLog("[_lowerImportBackwardsCompat()] calling lowered import", {
 			importFn,
 			params
 		});
@@ -5822,7 +6397,7 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 	}
 	queueMicrotask(async () => {
 		try {
-			debugLog("[_lowerImportBackwardsCompat()] calling lowered import", {
+			DEBUG: debugLog("[_lowerImportBackwardsCompat()] calling lowered import", {
 				importFn,
 				params
 			});
@@ -5830,12 +6405,12 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 			const asyncRes = await importFn(...params);
 			if (createdTask) createdTask.resolve([asyncRes]);
 		} catch (err) {
-			debugLog("[_lowerImportBackwardsCompat()] import fn error:", err);
+			DEBUG: debugLog("[_lowerImportBackwardsCompat()] import fn error:", err);
 			task.setErrored(err);
 			task.reject(err);
 		}
 	});
-	debugLog("[_lowerImportBackwardsCompat()] async-lowered import return", {
+	DEBUG: debugLog("[_lowerImportBackwardsCompat()] async-lowered import return", {
 		fnName: importFn.fnName,
 		componentIdx,
 		subtaskID: subtask.id(),
@@ -5849,14 +6424,14 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 //#endregion
 //#region runtime/intrinsics/async-task/symmetric-calls.js
 function symmetricSyncGuestCallEnter(_context, callerComponentIdx, calleeIsAsync, calleeComponentIdx, syncOnly = false) {
-	debugLog("[_symmetricSyncGuestCallEnter()] args", {
+	DEBUG: debugLog("[_symmetricSyncGuestCallEnter()] args", {
 		callerComponentIdx,
 		calleeIsAsync,
 		calleeComponentIdx
 	});
 	const cstate = getOrCreateAsyncState(_context.lookup, calleeComponentIdx);
 	if (syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()) return 0;
-	const callerThreadMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+	const callerThreadMeta = readTaskRegister(_context.registers, callerComponentIdx);
 	if (!callerThreadMeta) throw new Error("missing current caller thread metadata");
 	const callerTaskMeta = getCurrentTask(_context, callerComponentIdx, callerThreadMeta.taskID);
 	if (!callerTaskMeta) throw new Error("missing current caller task metadata");
@@ -5901,7 +6476,7 @@ function symmetricSyncGuestCallEnter(_context, callerComponentIdx, calleeIsAsync
 			previousTaskMayBlock: _context.mayBlock.value
 		});
 		_context.mayBlock.value = newTask.mayBlock() ? 1 : 0;
-		debugLog("[_symmetricSyncGuestCallEnter()] finished preparing", {
+		DEBUG: debugLog("[_symmetricSyncGuestCallEnter()] finished preparing", {
 			callerComponentIdx,
 			calleeComponentIdx,
 			subtaskID: subtask.id(),
@@ -5929,7 +6504,7 @@ function symmetricSyncGuestCallExit(_context) {
 	if (!taskMeta) throw new Error("missing current caller task metadata");
 	const task = taskMeta.task;
 	if (!task) throw new Error("missing current caller task");
-	debugLog("[_symmetricSyncGuestCallExit()] exiting", {
+	DEBUG: debugLog("[_symmetricSyncGuestCallExit()] exiting", {
 		componentIdx,
 		taskID: task.id(),
 		subtask: task.getParentSubtask(),
@@ -5952,9 +6527,9 @@ function symmetricSyncGuestCallExit(_context) {
 const THREAD_NOT_STARTED = "not-started";
 const THREAD_RUNNING = "running";
 const THREAD_COMPLETED = "completed";
-function initializeAsyncThreadClass(context) {
-	const { lookup: _lookup, registers: _registers } = context;
-	class AsyncThread {
+function defineAsyncThread() {
+	return class AsyncThread {
+		#context;
 		static State = {
 			NOT_STARTED: THREAD_NOT_STARTED,
 			RUNNING: THREAD_RUNNING,
@@ -5966,7 +6541,8 @@ function initializeAsyncThreadClass(context) {
 		#state;
 		#startFn = null;
 		storage = [0, 0];
-		constructor(opts) {
+		constructor(context, opts) {
+			this.#context = context;
 			if (opts?.componentIdx === void 0) throw new TypeError("missing component id during thread creation");
 			this.#componentIdx = opts.componentIdx;
 			if (!opts?.task) throw new TypeError("missing task during thread creation");
@@ -6011,7 +6587,7 @@ function initializeAsyncThreadClass(context) {
 			return this.#task.getParentSubtask();
 		}
 		async suspend(opts) {
-			const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			const task = this.#task;
 			task.endFirstSlice();
 			task.settleCompletion();
@@ -6038,21 +6614,21 @@ function initializeAsyncThreadClass(context) {
 			this.#state = THREAD_RUNNING;
 			const startFn = this.#startFn;
 			this.#startFn = null;
-			withCurrentTaskMetaAsync(_registers, {
+			withCurrentTaskMetaAsync(this.#context.registers, {
 				threadID: this.#id,
 				taskID: this.#task.id(),
 				componentIdx: this.#componentIdx,
 				fn: async () => {
-					getOrCreateAsyncState(_lookup, this.#componentIdx).throwIfInterrupted();
+					getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).throwIfInterrupted();
 					return startFn();
 				}
 			}).then(() => {
 				this.#state = THREAD_COMPLETED;
 				this.#task.removeThread(this);
 			}).catch((err) => {
-				err = recordTrap(context.traps, this.#componentIdx, err);
+				err = recordTrap(this.#context.traps, this.#componentIdx, err);
 				this.#state = THREAD_COMPLETED;
-				debugLog("[AsyncThread#start()] spawned thread errored", {
+				DEBUG: debugLog("[AsyncThread#start()] spawned thread errored", {
 					threadID: this.#id,
 					taskID: this.#task.id(),
 					componentIdx: this.#componentIdx,
@@ -6063,8 +6639,36 @@ function initializeAsyncThreadClass(context) {
 				this.#task.removeThread(this);
 			});
 		}
+	};
+}
+let sharedAsyncThread;
+function initializeAsyncThreadClass(context) {
+	const AsyncThread = sharedAsyncThread ??= defineAsyncThread();
+	/**
+	* Construct a thread that uses the context.
+	*
+	* @param options - options of the thread
+	* @returns the thread
+	*/
+	class ContextAsyncThread extends AsyncThread {
+		constructor(options) {
+			super(context, options);
+		}
 	}
-	return AsyncThread;
+	return withConstructorStatics(ContextAsyncThread, { State: {
+		value: { ...AsyncThread.State },
+		enumerable: true
+	} });
+}
+
+//#endregion
+//#region runtime/intrinsics/memory-view.js
+/** Reuse a full-memory view, refreshing after growth or a change of memory. */
+function memoryView(context) {
+	const buffer = context.memory.buffer;
+	let view = context.memoryView;
+	if (view === void 0 || view.buffer !== buffer) context.memoryView = view = new DataView(buffer);
+	return view;
 }
 
 //#endregion
@@ -6072,7 +6676,7 @@ function initializeAsyncThreadClass(context) {
 const initializeStreams = (RepTable) => new RepTable({ target: "global stream map" });
 const initializeStreamTables = () => ({});
 function createStream(_context, cstate, args) {
-	debugLog("[createStream()] args", args);
+	DEBUG: debugLog("[createStream()] args", args);
 	const { tableIdx, elemMeta } = args;
 	if (tableIdx === void 0) throw new Error("missing table idx while adding stream");
 	if (elemMeta === void 0) throw new Error("missing element metadata while adding stream");
@@ -6114,7 +6718,7 @@ function createStream(_context, cstate, args) {
 	};
 }
 function getStreamEnd(_context, args) {
-	debugLog("[getStreamEnd()] args", args);
+	DEBUG: debugLog("[getStreamEnd()] args", args);
 	const { tableIdx, streamEndHandle, streamEndWaitableIdx } = args;
 	if (tableIdx === void 0) throw new Error("missing table idx while getting stream end");
 	const { table, componentIdx } = _context.tables[tableIdx];
@@ -6130,7 +6734,7 @@ function getStreamEnd(_context, args) {
 	return streamEnd;
 }
 function addStreamEndToTable(_context, args) {
-	debugLog("[addStreamEndToTable()] args", args);
+	DEBUG: debugLog("[addStreamEndToTable()] args", args);
 	const { tableIdx, streamEnd } = args;
 	if (typeof streamEnd === "number") throw new Error("INSERTING BAD STREAMEND");
 	let { table, componentIdx } = _context.tables[tableIdx];
@@ -6140,7 +6744,7 @@ function addStreamEndToTable(_context, args) {
 	streamEnd.setStreamTableIdx(tableIdx);
 	const waitableIdx = getOrCreateAsyncState(_context.lookup, componentIdx).handles.insert(streamEnd);
 	streamEnd.setWaitableIdx(waitableIdx);
-	debugLog("[addStreamEndToTable()] added stream end", {
+	DEBUG: debugLog("[addStreamEndToTable()] added stream end", {
 		tableIdx,
 		table,
 		handle,
@@ -6153,7 +6757,7 @@ function addStreamEndToTable(_context, args) {
 	};
 }
 function removeStreamEndFromTable(_context, args) {
-	debugLog("[removeStreamEndFromTable()] args", args);
+	DEBUG: debugLog("[removeStreamEndFromTable()] args", args);
 	const { tableIdx, streamWaitableIdx } = args;
 	if (tableIdx === void 0) throw new Error("missing table idx while removing stream end");
 	if (streamWaitableIdx === void 0) throw new Error("missing stream end waitable idx while removing stream end");
@@ -6177,7 +6781,7 @@ const initializeFutureTables = () => ({});
 const initializeNestedFutureSymbol = () => Symbol.for("nested-future");
 /** Create connected endpoints in the selected component and future tables. */
 function createFuture(_context, cstate, args) {
-	debugLog("[createFuture()] args", args);
+	DEBUG: debugLog("[createFuture()] args", args);
 	const { tableIdx, elemMeta, hostInjectFn } = args;
 	if (tableIdx === void 0) throw new Error("missing table idx while adding future");
 	if (elemMeta === void 0) throw new Error("missing element metadata while adding future");
@@ -6222,7 +6826,7 @@ function createFuture(_context, cstate, args) {
 }
 /** Look up an endpoint by handle or waitable index using the selected constructor. */
 function getFutureEnd(_context, args) {
-	debugLog("[getFutureEnd()] args", args);
+	DEBUG: debugLog("[getFutureEnd()] args", args);
 	const { tableIdx, futureEndHandle, futureEndWaitableIdx } = args;
 	if (tableIdx === void 0) throw new Error("missing table idx while getting future end");
 	const { table, componentIdx } = _context.tables[tableIdx];
@@ -6239,7 +6843,7 @@ function getFutureEnd(_context, args) {
 }
 /** Move an endpoint into the destination component and future tables. */
 function addFutureEndToTable(_context, args) {
-	debugLog("[addFutureEndToTable()] args", args);
+	DEBUG: debugLog("[addFutureEndToTable()] args", args);
 	const { tableIdx, futureEnd } = args;
 	if (typeof futureEnd === "number") throw new Error("INSERTING BAD FUTUREEND");
 	let { table, componentIdx } = _context.tables[tableIdx];
@@ -6249,7 +6853,7 @@ function addFutureEndToTable(_context, args) {
 	futureEnd.setFutureTableIdx(tableIdx);
 	const waitableIdx = getOrCreateAsyncState(_context.lookup, componentIdx).handles.insert(futureEnd);
 	futureEnd.setWaitableIdx(waitableIdx);
-	debugLog("[addFutureEndToTable()] added future end", {
+	DEBUG: debugLog("[addFutureEndToTable()] added future end", {
 		tableIdx,
 		table,
 		handle,
@@ -6263,7 +6867,7 @@ function addFutureEndToTable(_context, args) {
 }
 /** Remove an endpoint from both its component and future tables. */
 function removeFutureEndFromTable(_context, args) {
-	debugLog("[removeFutureEndFromTable()] args", args);
+	DEBUG: debugLog("[removeFutureEndFromTable()] args", args);
 	const { tableIdx, futureWaitableIdx } = args;
 	if (tableIdx === void 0) throw new Error("missing table idx while removing future end");
 	if (futureWaitableIdx === void 0) throw new Error("missing future end waitable idx while removing future end");
@@ -6310,189 +6914,297 @@ const decodeUtf8 = (RuntimeError, decoder, input) => {
 	}
 };
 const initializeLiftVariant = () => ({ scratch: /* @__PURE__ */ new DataView(/* @__PURE__ */ new ArrayBuffer(8)) });
+let registeredBool;
 function liftFlatBool(ctx) {
-	debugLog("[_liftFlatBool()] args", { ctx });
+	if (!registeredBool) registeredBool = registerScalarLift(liftFlatBool, liftFlatBoolDirect, liftFlatBoolMemory);
+	return [ctx.useDirectParams ? liftFlatBoolDirect(ctx) : liftFlatBoolMemory(ctx), ctx];
+}
+function liftFlatBoolDirect(ctx) {
+	DEBUG: debugLog("[_liftFlatBool()] args", { ctx });
 	let val;
-	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
-		val = ctx.params[0] === 1;
-		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
-	}
+	if (remainingParams(ctx) === 0) throw new Error("expected at least a single i32 argument");
+	val = readParam(ctx, 0) === 1;
+	consumeParams(ctx, 1);
+	return val;
+}
+function liftFlatBoolMemory(ctx) {
+	DEBUG: debugLog("[_liftFlatBool()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 1) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (bool requires 1 byte)`);
-	val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr) === 1;
+	val = memoryView(ctx).getUint8(ctx.storagePtr) === 1;
 	ctx.storagePtr += 1;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 1;
-	return [val, ctx];
+	return val;
 }
+let registeredS8;
 function liftFlatS8(ctx) {
-	debugLog("[_liftFlatS8()] args", { ctx });
-	let val;
+	if (!registeredS8) registeredS8 = registerScalarLift(liftFlatS8, liftFlatS8Direct, liftFlatS8Memory);
 	if (ctx.useDirectParams) {
+		DEBUG: debugLog("[_liftFlatS8()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
-		val = ctx.params[0];
+		const value = ctx.params[0];
 		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
+		return [value, ctx];
 	}
+	return [liftFlatS8Memory(ctx), ctx];
+}
+function liftFlatS8Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatS8()] args", { ctx });
+	return takeParam(ctx, "expected at least a single i32 argument");
+}
+function liftFlatS8Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatS8()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 1) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s8 requires 1 byte)`);
-	val = new DataView(ctx.memory.buffer).getInt8(ctx.storagePtr);
+	val = memoryView(ctx).getInt8(ctx.storagePtr);
 	ctx.storagePtr += 1;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 1;
-	return [val, ctx];
+	return val;
 }
+let registeredU8;
 function liftFlatU8(ctx) {
-	debugLog("[_liftFlatU8()] args", { ctx });
-	let val;
+	if (!registeredU8) registeredU8 = registerScalarLift(liftFlatU8, liftFlatU8Direct, liftFlatU8Memory);
 	if (ctx.useDirectParams) {
+		DEBUG: debugLog("[_liftFlatU8()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
-		val = ctx.params[0];
+		const value = ctx.params[0];
 		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
+		return [value, ctx];
 	}
+	return [liftFlatU8Memory(ctx), ctx];
+}
+function liftFlatU8Value(ctx) {
+	return ctx.useDirectParams ? liftFlatU8Direct(ctx) : liftFlatU8Memory(ctx);
+}
+function liftFlatU8Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatU8()] args", { ctx });
+	return takeParam(ctx, "expected at least a single i32 argument");
+}
+function liftFlatU8Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatU8()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 1) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u8 requires 1 byte)`);
-	val = new DataView(ctx.memory.buffer).getUint8(ctx.storagePtr);
+	val = memoryView(ctx).getUint8(ctx.storagePtr);
 	ctx.storagePtr += 1;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 1;
-	return [val, ctx];
+	return val;
 }
+let registeredS16;
 function liftFlatS16(ctx) {
-	debugLog("[_liftFlatS16()] args", { ctx });
-	let val;
+	if (!registeredS16) registeredS16 = registerScalarLift(liftFlatS16, liftFlatS16Direct, liftFlatS16Memory);
 	if (ctx.useDirectParams) {
+		DEBUG: debugLog("[_liftFlatS16()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
-		val = ctx.params[0];
+		const value = ctx.params[0];
 		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
+		return [value, ctx];
 	}
+	return [liftFlatS16Memory(ctx), ctx];
+}
+function liftFlatS16Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatS16()] args", { ctx });
+	return takeParam(ctx, "expected at least a single i32 argument");
+}
+function liftFlatS16Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatS16()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 2) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s16 requires 2 bytes)`);
-	val = new DataView(ctx.memory.buffer).getInt16(ctx.storagePtr, true);
+	val = memoryView(ctx).getInt16(ctx.storagePtr, true);
 	ctx.storagePtr += 2;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 2;
-	return [val, ctx];
+	return val;
 }
+let registeredU16;
 function liftFlatU16(ctx) {
-	debugLog("[_liftFlatU16()] args", { ctx });
-	let val;
+	if (!registeredU16) registeredU16 = registerScalarLift(liftFlatU16, liftFlatU16Direct, liftFlatU16Memory);
 	if (ctx.useDirectParams) {
+		DEBUG: debugLog("[_liftFlatU16()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
-		val = ctx.params[0];
+		const value = ctx.params[0];
 		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
+		return [value, ctx];
 	}
+	return [liftFlatU16Memory(ctx), ctx];
+}
+function liftFlatU16Value(ctx) {
+	return ctx.useDirectParams ? liftFlatU16Direct(ctx) : liftFlatU16Memory(ctx);
+}
+function liftFlatU16Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatU16()] args", { ctx });
+	return takeParam(ctx, "expected at least a single i32 argument");
+}
+function liftFlatU16Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatU16()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 2) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u16 requires 2 bytes)`);
-	val = new DataView(ctx.memory.buffer).getUint16(ctx.storagePtr, true);
+	val = memoryView(ctx).getUint16(ctx.storagePtr, true);
 	ctx.storagePtr += 2;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 2;
 	const rem = ctx.storagePtr % 2;
 	if (rem !== 0) ctx.storagePtr += 2 - rem;
-	return [val, ctx];
+	return val;
 }
+let registeredS32;
 function liftFlatS32(ctx) {
-	debugLog("[_liftFlatS32()] args", { ctx });
-	let val;
+	if (!registeredS32) registeredS32 = registerScalarLift(liftFlatS32, liftFlatS32Direct, liftFlatS32Memory);
 	if (ctx.useDirectParams) {
+		DEBUG: debugLog("[_liftFlatS32()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
-		val = ctx.params[0];
+		const value = ctx.params[0];
 		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
+		return [value, ctx];
 	}
+	return [liftFlatS32Memory(ctx), ctx];
+}
+function liftFlatS32Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatS32()] args", { ctx });
+	return takeParam(ctx, "expected at least a single i32 argument");
+}
+function liftFlatS32Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatS32()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 4) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s32 requires 4 bytes)`);
-	val = new DataView(ctx.memory.buffer).getInt32(ctx.storagePtr, true);
+	val = memoryView(ctx).getInt32(ctx.storagePtr, true);
 	ctx.storagePtr += 4;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 4;
-	return [val, ctx];
+	return val;
 }
+let registeredU32;
 function liftFlatU32(ctx) {
-	debugLog("[_liftFlatU32()] args", { ctx });
+	if (!registeredU32) registeredU32 = registerScalarLift(liftFlatU32, liftFlatU32Direct, liftFlatU32Memory);
+	return [ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx), ctx];
+}
+function liftFlatU32Value(ctx) {
+	return ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx);
+}
+function liftFlatU32Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatU32()] args", { ctx });
 	let val;
-	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least a single i34 argument");
-		val = ctx.params[0] >>> 0;
-		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
-	}
+	if (remainingParams(ctx) === 0) throw new Error("expected at least a single i34 argument");
+	val = readParam(ctx, 0) >>> 0;
+	consumeParams(ctx, 1);
+	return val;
+}
+function liftFlatU32Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatU32()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 4) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u32 requires 4 bytes)`);
-	val = new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true);
+	val = memoryView(ctx).getUint32(ctx.storagePtr, true);
 	ctx.storagePtr += 4;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 4;
-	return [val, ctx];
+	return val;
 }
+let registeredS64;
 function liftFlatS64(ctx) {
-	debugLog("[_liftFlatS64()] args", { ctx });
+	if (!registeredS64) registeredS64 = registerScalarLift(liftFlatS64, liftFlatS64Direct, liftFlatS64Memory);
+	return [ctx.useDirectParams ? liftFlatS64Direct(ctx) : liftFlatS64Memory(ctx), ctx];
+}
+function liftFlatS64Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatS64()] args", { ctx });
 	let val;
-	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least one single i64 argument");
-		if (typeof ctx.params[0] !== "bigint") throw new Error("expected bigint");
-		val = ctx.params[0];
-		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
-	}
+	if (remainingParams(ctx) === 0) throw new Error("expected at least one single i64 argument");
+	if (typeof readParam(ctx, 0) !== "bigint") throw new Error("expected bigint");
+	val = readParam(ctx, 0);
+	consumeParams(ctx, 1);
+	return val;
+}
+function liftFlatS64Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatS64()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 8) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s64 requires 8 bytes)`);
-	val = new DataView(ctx.memory.buffer).getBigInt64(ctx.storagePtr, true);
+	val = memoryView(ctx).getBigInt64(ctx.storagePtr, true);
 	ctx.storagePtr += 8;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 8;
-	return [val, ctx];
+	return val;
 }
+let registeredU64;
 function liftFlatU64(ctx) {
-	debugLog("[_liftFlatU64()] args", { ctx });
+	if (!registeredU64) registeredU64 = registerScalarLift(liftFlatU64, liftFlatU64Direct, liftFlatU64Memory);
+	return [ctx.useDirectParams ? liftFlatU64Direct(ctx) : liftFlatU64Memory(ctx), ctx];
+}
+function liftFlatU64Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatU64()] args", { ctx });
 	let val;
-	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least one single i64 argument");
-		if (typeof ctx.params[0] !== "bigint") throw new Error("expected bigint");
-		val = BigInt.asUintN(64, ctx.params[0]);
-		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
-	}
+	if (remainingParams(ctx) === 0) throw new Error("expected at least one single i64 argument");
+	if (typeof readParam(ctx, 0) !== "bigint") throw new Error("expected bigint");
+	val = BigInt.asUintN(64, readParam(ctx, 0));
+	consumeParams(ctx, 1);
+	return val;
+}
+function liftFlatU64Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatU64()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 8) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u64 requires 8 bytes)`);
-	val = new DataView(ctx.memory.buffer).getBigUint64(ctx.storagePtr, true);
+	val = memoryView(ctx).getBigUint64(ctx.storagePtr, true);
 	ctx.storagePtr += 8;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 8;
-	return [val, ctx];
+	return val;
 }
+let registeredFloat32;
 function liftFlatFloat32(ctx) {
-	debugLog("[_liftFlatFloat32()] args", { ctx });
+	if (!registeredFloat32) registeredFloat32 = registerScalarLift(liftFlatFloat32, liftFlatFloat32Direct, liftFlatFloat32Memory);
+	return [ctx.useDirectParams ? liftFlatFloat32Direct(ctx) : liftFlatFloat32Memory(ctx), ctx];
+}
+function liftFlatFloat32Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatFloat32()] args", { ctx });
 	let val;
-	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least one single f32 argument");
-		val = ctx.params[0];
-		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
-	}
+	if (remainingParams(ctx) === 0) throw new Error("expected at least one single f32 argument");
+	val = readParam(ctx, 0);
+	consumeParams(ctx, 1);
+	return val;
+}
+function liftFlatFloat32Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatFloat32()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 4) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f32 requires 4 bytes)`);
-	val = new DataView(ctx.memory.buffer).getFloat32(ctx.storagePtr, true);
+	val = memoryView(ctx).getFloat32(ctx.storagePtr, true);
 	ctx.storagePtr += 4;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 4;
-	return [val, ctx];
+	return val;
 }
+let registeredFloat64;
 function liftFlatFloat64(ctx) {
-	debugLog("[_liftFlatFloat64()] args", { ctx });
+	if (!registeredFloat64) registeredFloat64 = registerScalarLift(liftFlatFloat64, liftFlatFloat64Direct, liftFlatFloat64Memory);
+	return [ctx.useDirectParams ? liftFlatFloat64Direct(ctx) : liftFlatFloat64Memory(ctx), ctx];
+}
+function liftFlatFloat64Direct(ctx) {
+	DEBUG: debugLog("[_liftFlatFloat64()] args", { ctx });
 	let val;
-	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least one single f64 argument");
-		val = ctx.params[0];
-		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
-	}
+	if (remainingParams(ctx) === 0) throw new Error("expected at least one single f64 argument");
+	val = readParam(ctx, 0);
+	consumeParams(ctx, 1);
+	return val;
+}
+function liftFlatFloat64Memory(ctx) {
+	DEBUG: debugLog("[_liftFlatFloat64()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 8) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f64 requires 8 bytes)`);
-	val = new DataView(ctx.memory.buffer).getFloat64(ctx.storagePtr, true);
+	val = memoryView(ctx).getFloat64(ctx.storagePtr, true);
 	ctx.storagePtr += 8;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 8;
-	return [val, ctx];
+	return val;
 }
+let registeredChar;
 function liftFlatChar(ctx) {
-	debugLog("[_liftFlatChar()] args", { ctx });
+	if (!registeredChar) registeredChar = registerScalarLift(liftFlatChar, liftFlatCharDirect, liftFlatCharMemory);
+	return [ctx.useDirectParams ? liftFlatCharDirect(ctx) : liftFlatCharMemory(ctx), ctx];
+}
+function liftFlatCharDirect(ctx) {
+	DEBUG: debugLog("[_liftFlatChar()] args", { ctx });
 	let val;
-	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least one single i32 argument");
-		val = i32ToChar(ctx.params[0]);
-		ctx.params = ctx.params.slice(1);
-		return [val, ctx];
-	}
+	if (remainingParams(ctx) === 0) throw new Error("expected at least one single i32 argument");
+	val = i32ToChar(readParam(ctx, 0));
+	consumeParams(ctx, 1);
+	return val;
+}
+function liftFlatCharMemory(ctx) {
+	DEBUG: debugLog("[_liftFlatChar()] args", { ctx });
+	let val;
 	if (ctx.storageLen !== void 0 && ctx.storageLen < 4) throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (char requires 4 bytes)`);
-	val = i32ToChar(new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true));
+	val = i32ToChar(memoryView(ctx).getUint32(ctx.storagePtr, true));
 	ctx.storagePtr += 4;
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 4;
-	return [val, ctx];
+	return val;
 }
 function liftFlatStringAny(_context, ctx) {
 	switch (ctx.stringEncoding) {
@@ -6513,24 +7225,24 @@ function requireStringInMemory(RuntimeError, memory, offset, codeUnits, unitSize
 	if (offset > byteLength || codeUnits < 0 || codeUnits > Math.floor((byteLength - offset) / unitSize)) throw new RuntimeError("string pointer/length out of bounds of memory");
 }
 function liftFlatStringUTF8(_context, ctx) {
-	debugLog("[_liftFlatStringUTF8()] args", { ctx });
+	DEBUG: debugLog("[_liftFlatStringUTF8()] args", { ctx });
 	let val;
 	if (ctx.useDirectParams) {
-		if (ctx.params.length < 2) throw new Error("expected at least two u32 arguments");
-		let offset = ctx.params[0];
+		if (remainingParams(ctx) < 2) throw new Error("expected at least two u32 arguments");
+		let offset = readParam(ctx, 0);
 		if (typeof offset === "bigint") offset = Number(offset);
 		else offset >>>= 0;
 		if (!Number.isSafeInteger(offset)) throw new Error("invalid offset");
-		const len = ctx.params[1];
+		const len = readParam(ctx, 1);
 		if (!Number.isSafeInteger(len)) throw new Error("invalid len");
 		requireStringInMemory(_context.RuntimeError, ctx.memory, offset, len, 1);
 		val = decodeUtf8(_context.RuntimeError, _context.utf8, new DataView(ctx.memory.buffer, offset, len));
-		ctx.params = ctx.params.slice(2);
+		consumeParams(ctx, 2);
 		return [val, ctx];
 	}
 	const rem = ctx.storagePtr % 4;
 	if (rem !== 0) ctx.storagePtr += 4 - rem;
-	const dv = new DataView(ctx.memory.buffer);
+	const dv = memoryView(ctx);
 	const start = dv.getUint32(ctx.storagePtr, true);
 	const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
 	requireStringInMemory(_context.RuntimeError, ctx.memory, start, codeUnits, 1);
@@ -6540,24 +7252,24 @@ function liftFlatStringUTF8(_context, ctx) {
 	return [val, ctx];
 }
 function liftFlatStringUTF16(_context, ctx) {
-	debugLog("[_liftFlatStringUTF16()] args", { ctx });
+	DEBUG: debugLog("[_liftFlatStringUTF16()] args", { ctx });
 	let val;
 	if (ctx.useDirectParams) {
-		if (ctx.params.length < 2) throw new Error("expected at least two u32 arguments");
-		let offset = ctx.params[0];
+		if (remainingParams(ctx) < 2) throw new Error("expected at least two u32 arguments");
+		let offset = readParam(ctx, 0);
 		if (typeof offset === "bigint") offset = Number(offset);
 		else offset >>>= 0;
 		if (!Number.isSafeInteger(offset)) throw new Error("invalid offset");
-		const len = ctx.params[1];
+		const len = readParam(ctx, 1);
 		if (!Number.isSafeInteger(len)) throw new Error("invalid len");
 		requireStringInMemory(_context.RuntimeError, ctx.memory, offset, len, 2);
 		val = _context.utf16.decode(new DataView(ctx.memory.buffer, offset, len * 2));
-		ctx.params = ctx.params.slice(2);
+		consumeParams(ctx, 2);
 		return [val, ctx];
 	}
 	const rem = ctx.storagePtr % 4;
 	if (rem !== 0) ctx.storagePtr += 4 - rem;
-	const dv = new DataView(ctx.memory.buffer);
+	const dv = memoryView(ctx);
 	const start = dv.getUint32(ctx.storagePtr, true);
 	const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
 	requireStringInMemory(_context.RuntimeError, ctx.memory, start, codeUnits, 2);
@@ -6569,9 +7281,10 @@ function liftFlatStringUTF16(_context, ctx) {
 function liftFlatRecord(meta) {
 	const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
 	return function liftFlatRecordInner(ctx) {
-		debugLog("[_liftFlatRecord()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatRecord()] args", { ctx });
 		const originalPtr = ctx.storagePtr;
 		const res = {};
+		const useScalars = !ctx.useDirectParams || hasParamCursor(ctx);
 		for (const [key, liftFn, size32, align32] of fieldMetas) {
 			let fieldPtr;
 			if (ctx.storagePtr !== void 0) {
@@ -6581,9 +7294,13 @@ function liftFlatRecord(meta) {
 			}
 			let fieldLen;
 			if (ctx.storageLen !== void 0) fieldLen = ctx.storageLen;
-			let [val, newCtx] = liftFn(ctx);
-			res[key] = val;
-			ctx = newCtx;
+			const scalar = useScalars ? scalarLiftValue(liftFn, ctx.useDirectParams) : void 0;
+			if (scalar) res[key] = scalar(ctx);
+			else {
+				const [val, newCtx] = liftFn(ctx);
+				res[key] = val;
+				ctx = newCtx;
+			}
 			if (fieldPtr !== void 0) ctx.storagePtr = Math.max(ctx.storagePtr, fieldPtr + size32);
 			if (fieldLen !== void 0) ctx.storageLen = fieldLen - size32;
 		}
@@ -6598,18 +7315,15 @@ function liftFlatRecord(meta) {
 function liftFlatVariant(_context, meta) {
 	const { caseMetas, variantSize32, variantAlign32, variantPayloadOffset32, variantFlatCount, variantPayloadFlatTypes, isEnum } = meta;
 	return function liftFlatVariantInner(ctx) {
-		debugLog("[_liftFlatVariant()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatVariant()] args", { ctx });
 		const origUseParams = ctx.useDirectParams;
 		let caseIdx;
-		let liftRes;
 		const originalPtr = ctx.storagePtr;
 		const numCases = caseMetas.length;
-		if (caseMetas.length < 256) liftRes = liftFlatU8(ctx);
-		else if (numCases >= 256 && numCases < 65536) liftRes = liftFlatU16(ctx);
-		else if (numCases >= 65536 && numCases < 4294967296) liftRes = liftFlatU32(ctx);
+		if (caseMetas.length < 256) caseIdx = liftFlatU8Value(ctx);
+		else if (numCases >= 256 && numCases < 65536) caseIdx = liftFlatU16Value(ctx);
+		else if (numCases >= 65536 && numCases < 4294967296) caseIdx = liftFlatU32Value(ctx);
 		else throw new Error(`unsupported number of variant cases [${numCases}]`);
-		caseIdx = liftRes[0];
-		ctx = liftRes[1];
 		const [tag, liftFn, , , caseFlatCount, caseFlatTypes] = caseMetas[caseIdx];
 		if (variantPayloadOffset32 === void 0) throw new Error("unexpectedly missing payload offset");
 		if (originalPtr !== void 0) ctx.storagePtr = originalPtr + variantPayloadOffset32;
@@ -6625,7 +7339,7 @@ function liftFlatVariant(_context, meta) {
 					const have = variantPayloadFlatTypes[i];
 					const want = caseFlatTypes[i];
 					if (have === want) continue;
-					const val = ctx.params[i];
+					const val = readParam(ctx, i);
 					if (have === "i64" && want === "i32") ctx.params[i] = Number(BigInt.asIntN(32, val));
 					else if (have === "i64" && want === "f32") {
 						scratch.setInt32(0, Number(BigInt.asIntN(32, val)), true);
@@ -6648,14 +7362,14 @@ function liftFlatVariant(_context, meta) {
 		}
 		if (origUseParams) {
 			if (variantFlatCount === void 0 || variantFlatCount === null) {
-				debugLog("[_liftFlatVariant()] variant with unknown flat count", {
+				DEBUG: debugLog("[_liftFlatVariant()] variant with unknown flat count", {
 					ctx,
 					meta
 				});
 				throw new Error("cannot lift variant with unknown flat count");
 			}
 			if (caseFlatCount === void 0 || caseFlatCount === null) {
-				debugLog("[_liftFlatVariant()] case with unknown flat count", {
+				DEBUG: debugLog("[_liftFlatVariant()] case with unknown flat count", {
 					ctx,
 					meta,
 					case: meta.caseMetas[caseIdx]
@@ -6664,8 +7378,8 @@ function liftFlatVariant(_context, meta) {
 			}
 			const remainingPayloadParams = variantFlatCount - caseFlatCount - (isEnum ? 0 : 1);
 			if (remainingPayloadParams < 0) throw new Error(`invalid variant flat count metadata`);
-			if (ctx.params.length < remainingPayloadParams) throw new Error(`expected at least [${remainingPayloadParams}] remaining variant payload params, but got [${ctx.params.length}]`);
-			ctx.params = ctx.params.slice(remainingPayloadParams);
+			if (remainingParams(ctx) < remainingPayloadParams) throw new Error(`expected at least [${remainingPayloadParams}] remaining variant payload params, but got [${remainingParams(ctx)}]`);
+			consumeParams(ctx, remainingPayloadParams);
 		}
 		if (ctx.storagePtr !== void 0) {
 			const rem = ctx.storagePtr % variantAlign32;
@@ -6687,12 +7401,16 @@ function liftFlatList(_context, meta) {
 			val = new typedArray(ctx.memory.buffer.slice(dataPtr, ctx.storagePtr));
 		} else {
 			const values = [];
+			const scalar = scalarLiftValue(elemLiftFn, ctx.useDirectParams);
 			for (let i = 0; i < len; i++) {
 				const elemPtr = dataPtr + i * elemSize32;
 				ctx.storagePtr = elemPtr;
-				const [res, nextCtx] = elemLiftFn(ctx);
-				values.push(res);
-				ctx = nextCtx;
+				if (scalar) values.push(scalar(ctx));
+				else {
+					const [res, nextCtx] = elemLiftFn(ctx);
+					values.push(res);
+					ctx = nextCtx;
+				}
 				ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + elemSize32);
 			}
 			val = listValue(values);
@@ -6702,16 +7420,16 @@ function liftFlatList(_context, meta) {
 		return [val, ctx];
 	};
 	return function liftFlatListInner(ctx) {
-		debugLog("[_liftFlatList()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatList()] args", { ctx });
 		let liftResults;
 		if (knownLen !== void 0) {
 			if (ctx.useDirectParams) {
-				debugLog("memory unexpectedly missing while lifting unknown length list", { ctx });
-				liftResults = [listValue(ctx.params.slice(0, knownLen)), ctx];
-				ctx.params = ctx.params.slice(knownLen);
+				DEBUG: debugLog("memory unexpectedly missing while lifting unknown length list", { ctx });
+				liftResults = [listValue(copyParams(ctx, knownLen)), ctx];
+				consumeParams(ctx, knownLen);
 			} else {
 				if (ctx.memory === null) {
-					debugLog("memory unexpectedly missing while lifting known length list", {
+					DEBUG: debugLog("memory unexpectedly missing while lifting known length list", {
 						knownLen,
 						ctx
 					});
@@ -6722,9 +7440,9 @@ function liftFlatList(_context, meta) {
 				liftResults = readValuesAndReset(ctx, null, originalLen, ctx.storagePtr, knownLen);
 			}
 		} else if (ctx.useDirectParams) {
-			const dataPtr = ctx.params[0] >>> 0;
-			const len = ctx.params[1];
-			ctx.params = ctx.params.slice(2);
+			const dataPtr = readParam(ctx, 0) >>> 0;
+			const len = readParam(ctx, 1);
+			consumeParams(ctx, 2);
 			ctx.useDirectParams = false;
 			const originalPtr = ctx.storagePtr;
 			const originalLen = ctx.storageLen;
@@ -6734,12 +7452,8 @@ function liftFlatList(_context, meta) {
 		} else {
 			const originalLen = ctx.storageLen;
 			ctx.storageLen = 8;
-			const dataPtrLiftRes = liftFlatU32(ctx);
-			const dataPtr = dataPtrLiftRes[0];
-			ctx = dataPtrLiftRes[1];
-			const lenLiftRes = liftFlatU32(ctx);
-			const len = lenLiftRes[0];
-			ctx = lenLiftRes[1];
+			const dataPtr = liftFlatU32Value(ctx);
+			const len = liftFlatU32Value(ctx);
 			const originalPtr = ctx.storagePtr;
 			ctx.storagePtr = dataPtr;
 			ctx.storageLen = len * elemSize32;
@@ -6767,23 +7481,19 @@ function liftFlatMap(meta) {
 		return [val, ctx];
 	};
 	return function liftFlatMapInner(ctx) {
-		debugLog("[_liftFlatMap()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatMap()] args", { ctx });
 		let dataPtr;
 		let len;
 		let originalPtr = ctx.storagePtr;
 		const originalLen = ctx.storageLen;
 		if (ctx.useDirectParams) {
-			dataPtr = ctx.params[0] >>> 0;
-			len = ctx.params[1];
-			ctx.params = ctx.params.slice(2);
+			dataPtr = readParam(ctx, 0) >>> 0;
+			len = readParam(ctx, 1);
+			consumeParams(ctx, 2);
 		} else {
 			ctx.storageLen = 8;
-			let lifted = liftFlatU32(ctx);
-			dataPtr = lifted[0];
-			ctx = lifted[1];
-			lifted = liftFlatU32(ctx);
-			len = lifted[0];
-			ctx = lifted[1];
+			dataPtr = liftFlatU32Value(ctx);
+			len = liftFlatU32Value(ctx);
 			originalPtr = ctx.storagePtr;
 		}
 		const wasDirect = ctx.useDirectParams;
@@ -6797,7 +7507,7 @@ function liftFlatMap(meta) {
 function liftFlatTuple(meta) {
 	const { elemLiftFns, size32: tupleSize32, align32: tupleAlign32 } = meta;
 	return function liftFlatTupleInner(ctx) {
-		debugLog("[_liftFlatTuple()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatTuple()] args", { ctx });
 		const originalPtr = ctx.storagePtr;
 		const val = [];
 		for (const [liftFn, size32, align32] of elemLiftFns) {
@@ -6809,9 +7519,13 @@ function liftFlatTuple(meta) {
 			}
 			let elemLen;
 			if (ctx.storageLen !== void 0) elemLen = ctx.storageLen;
-			const [newValue, newCtx] = liftFn(ctx);
-			val.push(newValue);
-			ctx = newCtx;
+			const scalar = scalarLiftValue(liftFn, ctx.useDirectParams);
+			if (scalar) val.push(scalar(ctx));
+			else {
+				const [newValue, newCtx] = liftFn(ctx);
+				val.push(newValue);
+				ctx = newCtx;
+			}
 			if (elemPtr !== void 0) ctx.storagePtr = Math.max(ctx.storagePtr, elemPtr + size32);
 			if (elemLen !== void 0) ctx.storageLen = elemLen - size32;
 		}
@@ -6827,7 +7541,7 @@ function liftFlatEnum(_context, meta) {
 	meta.isEnum = true;
 	const f = liftFlatVariant(_context, meta);
 	return function liftFlatEnumInner(ctx) {
-		debugLog("[_liftFlatEnum()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatEnum()] args", { ctx });
 		const res = f(ctx);
 		res[0] = res[0].tag;
 		return res;
@@ -6837,7 +7551,7 @@ function liftFlatOption(_context, meta) {
 	const { payloadMaybeNull } = meta;
 	const f = liftFlatVariant(_context, meta);
 	return function liftFlatOptionInner(ctx) {
-		debugLog("[_liftFlatOption()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatOption()] args", { ctx });
 		const res = f(ctx);
 		if (!payloadMaybeNull) {
 			const value = res[0];
@@ -6849,7 +7563,7 @@ function liftFlatOption(_context, meta) {
 function liftFlatResult(_context, meta) {
 	const f = liftFlatVariant(_context, meta);
 	return function liftFlatResultInner(ctx) {
-		debugLog("[_liftFlatResult()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatResult()] args", { ctx });
 		const res = f(ctx);
 		const value = res[0];
 		if (!("val" in value)) value.val = void 0;
@@ -6859,23 +7573,21 @@ function liftFlatResult(_context, meta) {
 function liftFlatFlags(_context, meta) {
 	const { names, align32, intSizeBytes } = meta;
 	return function liftFlatFlagsInner(ctx) {
-		debugLog("[_liftFlatFlags()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatFlags()] args", { ctx });
 		let val = _context.asBigInt ? null : {};
-		let liftRes;
+		let bits;
 		switch (intSizeBytes) {
 			case 1:
-				liftRes = liftFlatU8(ctx);
+				bits = liftFlatU8Value(ctx);
 				break;
 			case 2:
-				liftRes = liftFlatU16(ctx);
+				bits = liftFlatU16Value(ctx);
 				break;
 			case 4:
-				liftRes = liftFlatU32(ctx);
+				bits = liftFlatU32Value(ctx);
 				break;
 			default: throw new Error("invalid flags size");
 		}
-		let bits = liftRes[0];
-		ctx = liftRes[1];
 		if (_context.asBigInt) val = BigInt(bits >>> 0);
 		else for (const name of names) {
 			val[name] = (bits & 1) === 1;
@@ -6889,7 +7601,7 @@ function liftFlatFlags(_context, meta) {
 function liftFlatOwn(meta) {
 	const { classNameFn, createResourceFn, componentIdx, tableIdx } = meta;
 	return function liftFlatOwnInner(ctx) {
-		debugLog("[_liftFlatOwn()] args", {
+		DEBUG: debugLog("[_liftFlatOwn()] args", {
 			ctx,
 			className: classNameFn()
 		});
@@ -6899,7 +7611,7 @@ function liftFlatOwn(meta) {
 	};
 }
 function liftFlatBorrow(componentTableIdx, size, memory, vals, storagePtr, storageLen) {
-	debugLog("[_liftFlatBorrow()] args", {
+	DEBUG: debugLog("[_liftFlatBorrow()] args", {
 		size,
 		memory,
 		vals,
@@ -6911,15 +7623,15 @@ function liftFlatBorrow(componentTableIdx, size, memory, vals, storagePtr, stora
 function liftFlatFuture(_context, meta) {
 	const { futureTableIdx, componentIdx } = meta;
 	return function liftFlatFutureInner(ctx) {
-		debugLog("[_liftFlatFuture()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatFuture()] args", { ctx });
 		const futureMeta = _context.tables[futureTableIdx];
 		if (futureMeta.componentIdx !== componentIdx) throw new Error("unexpectedly mismatched component idx");
 		const { table } = futureMeta;
 		if (componentIdx === void 0 || !table) throw new Error(`invalid global future table state for table [${futureTableIdx}]`);
 		let futureEndWaitableIdx;
 		if (ctx.useDirectParams) {
-			futureEndWaitableIdx = ctx.params[0];
-			ctx.params = ctx.params.slice(1);
+			futureEndWaitableIdx = readParam(ctx, 0);
+			consumeParams(ctx, 1);
 		} else {
 			const [waitableIdx, newCtx] = liftFlatU32(ctx);
 			ctx = newCtx;
@@ -6943,15 +7655,15 @@ function liftFlatFuture(_context, meta) {
 function liftFlatStream(_context, meta) {
 	const { streamTableIdx, componentIdx } = meta;
 	return function liftFlatStreamInner(ctx) {
-		debugLog("[_liftFlatStream()] args", { ctx });
+		DEBUG: debugLog("[_liftFlatStream()] args", { ctx });
 		const streamMeta = _context.tables[streamTableIdx];
 		if (streamMeta.componentIdx !== componentIdx) throw new Error("unexpectedly mismatched component idx");
 		const { table } = streamMeta;
 		if (componentIdx === void 0 || !table) throw new Error(`invalid global stream table state for table [${streamTableIdx}]`);
 		let streamEndWaitableIdx;
 		if (ctx.useDirectParams) {
-			streamEndWaitableIdx = ctx.params[0];
-			ctx.params = ctx.params.slice(1);
+			streamEndWaitableIdx = readParam(ctx, 0);
+			consumeParams(ctx, 1);
 		} else {
 			const [waitableIdx, newCtx] = liftFlatU32(ctx);
 			ctx = newCtx;
@@ -6986,13 +7698,13 @@ function liftFlatStream(_context, meta) {
 	};
 }
 function liftFlatErrorContext(_context, errCtxTableIdx, ctx) {
-	debugLog("[_liftFlatErrorContext()] ctx", ctx);
+	DEBUG: debugLog("[_liftFlatErrorContext()] ctx", ctx);
 	let val;
 	let table;
 	if (ctx.useDirectParams) {
-		if (ctx.params.length === 0) throw new Error("expected at least one single i32 argument");
-		val = ctx.params[0];
-		ctx.params = ctx.params.slice(1);
+		if (remainingParams(ctx) === 0) throw new Error("expected at least one single i32 argument");
+		val = readParam(ctx, 0);
+		consumeParams(ctx, 1);
 		table = errCtxGetLocalTable(_context.local, ctx.componentIdx, errCtxTableIdx);
 	} else throw new Error("indirect flat lift for error-contexts not yet implemented!");
 	let handle = table.get(val);
@@ -7042,6 +7754,10 @@ function genReadFnFromLowerableStream(context, stream) {
 
 //#endregion
 //#region runtime/intrinsics/stream/injection.js
+/**
+* Feed queued host stream values into a pending component read.
+* Preserve source order across cancellation and finish or rebuffer each injected write.
+*/
 function genStreamHostInjectFn(_context, genArgs) {
 	const { readFn, hostWriteEnd, readEnd } = genArgs;
 	if (!readEnd) throw new TypeError("missing read end");
@@ -7075,13 +7791,15 @@ function genStreamHostInjectFn(_context, genArgs) {
 		};
 		readEnd.setHostCancelFn?.(() => {
 			const buffer = readEnd.getPendingBufferMeta?.().buffer;
-			if (!buffer || pendingValues.length === 0) return false;
+			if (!buffer || pendingValues.length === 0 && values.length === 0) return false;
+			if (values.length > 0) pendingValues.prepend(values.splice(0));
 			const cancelValues = [];
 			pendingValues.drainInto(cancelValues, buffer.remaining());
 			if (cancelValues.length === 0) return false;
 			resetWriteEndToIdleFn();
+			const remaining = buffer.remaining();
 			const writePromise = hostWriteEnd.writeMany(cancelValues);
-			if (!hostWriteEnd.hasPendingEvent()) {
+			if (!hostWriteEnd.hasPendingEvent() && buffer.remaining() === remaining) {
 				pendingValues.prepend(cancelValues);
 				return false;
 			}
@@ -7092,7 +7810,8 @@ function genStreamHostInjectFn(_context, genArgs) {
 		if (!hasPendingReadBuffer()) return doNothingFn;
 		if (count === 0) {
 			if (pendingValues.length === 0 && !pendingValues.done) {
-				await pendingValues.readSource();
+				const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+				if (typeof result !== "number") await result;
 				if (readEnd.hasPendingEvent() || !hasPendingReadBuffer()) return doNothingFn;
 			}
 			if (pendingValues.length > 0) readEnd.resetAndNotifyPending(readEnd.constructor.CopyResult.COMPLETED);
@@ -7104,7 +7823,8 @@ function genStreamHostInjectFn(_context, genArgs) {
 		}
 		drainPendingValues();
 		while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {
-			const appended = await pendingValues.readSource();
+			const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+			const appended = typeof result === "number" ? result : await result;
 			if (readEnd.hasPendingEvent()) return bail();
 			if (!hasPendingReadBuffer()) return bail();
 			drainPendingValues();
@@ -7131,7 +7851,7 @@ function genStreamHostInjectFn(_context, genArgs) {
 * Create a future and pack its readable and writable indices into one i64.
 */
 function futureNew(_context, ctx) {
-	debugLog("[futureNew()] args", { ctx });
+	DEBUG: debugLog("[futureNew()] args", { ctx });
 	const { componentIdx, futureTableIdx, elemMeta } = ctx;
 	const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
 	if (!taskMeta) throw new Error("invalid/missing async task meta");
@@ -7148,7 +7868,7 @@ function futureNew(_context, ctx) {
 }
 /** Expose a guest future as a lazy host awaitable. */
 function futureNewFromLift(_context, ctx) {
-	debugLog("[futureNewFromLift()] args", { ctx });
+	DEBUG: debugLog("[futureNewFromLift()] args", { ctx });
 	const { componentIdx, futureEndWaitableIdx, futureTableIdx, payloadLiftFn, payloadTypeSize32, payloadLowerFn } = ctx;
 	const future = new _context.HostFuture({
 		componentIdx,
@@ -7166,7 +7886,7 @@ function futureNewFromLift(_context, ctx) {
 * Write one value, returning a canonical result or waiting for a synchronous copy.
 */
 function futureWrite(_context, ctx, futureEndWaitableIdx, ptr) {
-	debugLog("[futureWrite()] args", {
+	DEBUG: debugLog("[futureWrite()] args", {
 		ctx,
 		futureEndWaitableIdx,
 		ptr
@@ -7230,7 +7950,7 @@ function futureWrite(_context, ctx, futureEndWaitableIdx, ptr) {
 * Read one value, returning a canonical result or waiting for a synchronous copy.
 */
 function futureRead(_context, ctx, futureEndWaitableIdx, ptr) {
-	debugLog("[futureRead()] args", {
+	DEBUG: debugLog("[futureRead()] args", {
 		ctx,
 		futureEndWaitableIdx,
 		ptr
@@ -7294,7 +8014,7 @@ function futureRead(_context, ctx, futureEndWaitableIdx, ptr) {
 * Cancel an active read and report its completion event.
 */
 function futureCancelRead(_context, ctx, futureEndWaitableIdx) {
-	debugLog("[futureCancelRead()] args", {
+	DEBUG: debugLog("[futureCancelRead()] args", {
 		ctx,
 		futureEndWaitableIdx
 	});
@@ -7331,7 +8051,7 @@ function futureCancelRead(_context, ctx, futureEndWaitableIdx) {
 * Cancel an active write and report its completion event.
 */
 function futureCancelWrite(_context, ctx, futureEndWaitableIdx) {
-	debugLog("[futureCancelWrite()] args", {
+	DEBUG: debugLog("[futureCancelWrite()] args", {
 		ctx,
 		futureEndWaitableIdx
 	});
@@ -7368,7 +8088,7 @@ function futureCancelWrite(_context, ctx, futureEndWaitableIdx) {
 * Remove and drop the readable endpoint from its owning tables.
 */
 function futureDropReadable(_context, ctx, futureEndWaitableIdx) {
-	debugLog("[futureDropReadable()] args", { ctx });
+	DEBUG: debugLog("[futureDropReadable()] args", { ctx });
 	const { componentIdx, futureTableIdx } = ctx;
 	if (!getOrCreateAsyncState(_context.tables.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave");
 	const futureEnd = removeFutureEndFromTable(_context.tables, {
@@ -7383,7 +8103,7 @@ function futureDropReadable(_context, ctx, futureEndWaitableIdx) {
 * Remove and drop a writable endpoint after its value was written.
 */
 function futureDropWritable(_context, ctx, futureEndWaitableIdx) {
-	debugLog("[futureDropWritable()] args", { ctx });
+	DEBUG: debugLog("[futureDropWritable()] args", { ctx });
 	const { componentIdx, futureTableIdx } = ctx;
 	if (!getOrCreateAsyncState(_context.tables.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave");
 	const futureEnd = removeFutureEndFromTable(_context.tables, {
@@ -7395,7 +8115,7 @@ function futureDropWritable(_context, ctx, futureEndWaitableIdx) {
 }
 /** Transfer a readable endpoint between component tables. */
 function futureTransfer(_context, srcFutureWaitableIdx, srcTableIdx, destTableIdx) {
-	debugLog("[futureTransfer()] args", {
+	DEBUG: debugLog("[futureTransfer()] args", {
 		srcFutureWaitableIdx,
 		srcTableIdx,
 		destTableIdx
@@ -7420,7 +8140,7 @@ function futureTransfer(_context, srcFutureWaitableIdx, srcTableIdx, destTableId
 		futureEnd
 	});
 	futureEnd.setTarget(`future read end (waitable [${waitableIdx}])`);
-	debugLog("[futureTransfer()] successfully transferred", {
+	DEBUG: debugLog("[futureTransfer()] successfully transferred", {
 		dest: {
 			futureEndHandle: handle,
 			futureEndWaitableIdx: waitableIdx,
@@ -7451,7 +8171,7 @@ function genFutureHostInjectFn(_context, genArgs) {
 		} catch (err) {
 			if (hostWriteEnd.isPeerDropped()) return () => {};
 			if (!hostWriteEnd.getElemMeta().payloadTypeName?.startsWith("Result(")) {
-				debugLog("failed to inject host write", err);
+				DEBUG: debugLog("failed to inject host write", err);
 				throw new Error("cannot inject write: promise failed");
 			}
 			value = {
@@ -7468,7 +8188,7 @@ function genFutureHostInjectFn(_context, genArgs) {
 				getReallocFn
 			});
 		} catch (err) {
-			debugLog("failed to inject host write", err);
+			DEBUG: debugLog("failed to inject host write", err);
 			throw new Error("cannot inject write: promise failed");
 		}
 		hostWriteEnd.getPendingEvent();
@@ -7503,105 +8223,105 @@ function flagsValue(context, value, names) {
 	return bits;
 }
 function lowerFlatBool(_context, ctx) {
-	debugLog("[_lowerFlatBool()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatBool()] args", { ctx });
 	if (!ctx.memory) throw new Error("missing memory for lower");
 	if (ctx.vals.length !== 1) throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
 	if (_context.strict && typeof ctx.vals[0] !== "boolean") throw new TypeError(`invalid bool value [${ctx.vals[0]}]`);
-	new DataView(ctx.memory.buffer).setUint8(ctx.storagePtr, ctx.vals[0] ? 1 : 0);
+	memoryView(ctx).setUint8(ctx.storagePtr, ctx.vals[0] ? 1 : 0);
 	ctx.storagePtr += 1;
 }
 function lowerFlatS8(_context, ctx) {
-	debugLog("[_lowerFlatS8()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatS8()] args", { ctx });
 	if (ctx.vals.length !== 1) throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
 	if (!ctx.memory) throw new Error("missing memory for lower");
 	if (_context.strict && !isInt8(ctx.vals[0])) invalidNumericPrimitive("s8", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setInt8(ctx.storagePtr, ctx.vals[0]);
+	memoryView(ctx).setInt8(ctx.storagePtr, ctx.vals[0]);
 	ctx.storagePtr += 1;
 }
 function lowerFlatU8(_context, ctx) {
-	debugLog("[_lowerFlatU8()] args", ctx);
+	DEBUG: debugLog("[_lowerFlatU8()] args", ctx);
 	if (ctx.vals.length !== 1) throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
 	if (_context.strict && !isUint8(ctx.vals[0])) invalidNumericPrimitive("u8", ctx.vals[0]);
 	if (!ctx.memory) throw new Error("missing memory for lower");
-	new DataView(ctx.memory.buffer).setUint8(ctx.storagePtr, ctx.vals[0]);
+	memoryView(ctx).setUint8(ctx.storagePtr, ctx.vals[0]);
 	ctx.storagePtr += 1;
 }
 function lowerFlatS16(_context, ctx) {
-	debugLog("[_lowerFlatS16()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatS16()] args", { ctx });
 	if (!ctx.memory) throw new Error("missing memory for lower");
 	if (ctx.vals.length !== 1) throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
 	const rem = ctx.storagePtr % 2;
 	if (rem !== 0) ctx.storagePtr += 2 - rem;
 	if (_context.strict && !isInt16(ctx.vals[0])) invalidNumericPrimitive("s16", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setInt16(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setInt16(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 2;
 }
 function lowerFlatU16(_context, ctx) {
-	debugLog("[_lowerFlatU16()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatU16()] args", { ctx });
 	if (!ctx.memory) throw new Error("missing memory for lower");
 	if (ctx.vals.length !== 1) throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
 	const rem = ctx.storagePtr % 2;
 	if (rem !== 0) ctx.storagePtr += 2 - rem;
 	if (_context.strict && !isUint16(ctx.vals[0])) invalidNumericPrimitive("u16", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setUint16(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setUint16(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 2;
 }
 function lowerFlatS32(_context, ctx) {
-	debugLog("[_lowerFlatS32()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatS32()] args", { ctx });
 	if (ctx.vals.length !== 1) throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
 	const rem = ctx.storagePtr % 4;
 	if (rem !== 0) ctx.storagePtr += 4 - rem;
 	if (_context.strict && !isInt32(ctx.vals[0])) invalidNumericPrimitive("s32", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setInt32(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setInt32(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 4;
 }
 function lowerFlatU32(_context, ctx) {
-	debugLog("[_lowerFlatU32()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatU32()] args", { ctx });
 	if (ctx.vals.length !== 1) throw new Error(`expected single value to lower, got [${ctx.vals.length}]`);
 	const rem = ctx.storagePtr % 4;
 	if (rem !== 0) ctx.storagePtr += 4 - rem;
 	if (_context.strict && !isUint32(ctx.vals[0])) invalidNumericPrimitive("u32", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setUint32(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 4;
 }
 function lowerFlatS64(_context, ctx) {
-	debugLog("[_lowerFlatS64()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatS64()] args", { ctx });
 	if (ctx.vals.length !== 1) throw new Error("unexpected number of vals");
 	const rem = ctx.storagePtr % 8;
 	if (rem !== 0) ctx.storagePtr += 8 - rem;
 	if (_context.strict && !isInt64(ctx.vals[0])) invalidNumericPrimitive("s64", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setBigInt64(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setBigInt64(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 8;
 }
 function lowerFlatU64(_context, ctx) {
-	debugLog("[_lowerFlatU64()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatU64()] args", { ctx });
 	if (ctx.vals.length !== 1) throw new Error("unexpected number of vals");
 	const rem = ctx.storagePtr % 8;
 	if (rem !== 0) ctx.storagePtr += 8 - rem;
 	if (_context.strict && !isUint64(ctx.vals[0])) invalidNumericPrimitive("u64", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setBigUint64(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setBigUint64(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 8;
 }
 function lowerFlatFloat32(_context, ctx) {
-	debugLog("[_lowerFlatFloat32()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatFloat32()] args", { ctx });
 	if (ctx.vals.length !== 1) throw new Error("unexpected number of vals");
 	const rem = ctx.storagePtr % 4;
 	if (rem !== 0) ctx.storagePtr += 4 - rem;
 	if (_context.strict && typeof ctx.vals[0] !== "number") invalidNumericPrimitive("f32", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setFloat32(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setFloat32(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 4;
 }
 function lowerFlatFloat64(_context, ctx) {
-	debugLog("[_lowerFlatFloat64()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatFloat64()] args", { ctx });
 	if (ctx.vals.length !== 1) throw new Error("unexpected number of vals");
 	const rem = ctx.storagePtr % 8;
 	if (rem !== 0) ctx.storagePtr += 8 - rem;
 	if (_context.strict && typeof ctx.vals[0] !== "number") invalidNumericPrimitive("f64", ctx.vals[0]);
-	new DataView(ctx.memory.buffer).setFloat64(ctx.storagePtr, ctx.vals[0], true);
+	memoryView(ctx).setFloat64(ctx.storagePtr, ctx.vals[0], true);
 	ctx.storagePtr += 8;
 }
 function lowerFlatChar(ctx) {
-	debugLog("[_lowerFlatChar()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatChar()] args", { ctx });
 	const rem = ctx.storagePtr % 4;
 	if (rem !== 0) ctx.storagePtr += 4 - rem;
 	if (ctx.vals.length !== 1) throw new Error("unexpected number of vals");
@@ -7609,7 +8329,7 @@ function lowerFlatChar(ctx) {
 	if (typeof value !== "string") throw new TypeError("char must be a string");
 	const codePoint = value.codePointAt(0);
 	if (codePoint === void 0 || codePoint >= 55296 && codePoint <= 57343 || value.length !== (codePoint > 65535 ? 2 : 1)) throw new TypeError("char must contain one Unicode scalar value");
-	new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, codePoint, true);
+	memoryView(ctx).setUint32(ctx.storagePtr, codePoint, true);
 	ctx.storagePtr += 4;
 }
 function lowerFlatStringAny(_context, ctx) {
@@ -7619,7 +8339,7 @@ function lowerFlatStringAny(_context, ctx) {
 		case "compact-utf16": {
 			if (!ctx.realloc) throw new Error("missing realloc during flat string lower");
 			const { ptr, len } = compactUtf16Encode(_context.utf16, ctx.vals[0], ctx.realloc, ctx.memory);
-			const view = new DataView(ctx.memory.buffer);
+			const view = memoryView(ctx);
 			view.setUint32(ctx.storagePtr, ptr, true);
 			view.setUint32(ctx.storagePtr + 4, len, true);
 			ctx.storagePtr += 8;
@@ -7629,19 +8349,19 @@ function lowerFlatStringAny(_context, ctx) {
 	}
 }
 function lowerFlatStringUTF16(_context, ctx) {
-	debugLog("[_lowerFlatStringUTF16()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatStringUTF16()] args", { ctx });
 	if (!ctx.realloc) throw new Error("missing realloc during flat string lower");
 	const { ptr, len } = utf16Encode(_context, ctx.vals[0], ctx.realloc, ctx.memory);
-	const view = new DataView(ctx.memory.buffer);
+	const view = memoryView(ctx);
 	view.setUint32(ctx.storagePtr, ptr, true);
 	view.setUint32(ctx.storagePtr + 4, len, true);
 	ctx.storagePtr += 8;
 }
 function lowerFlatStringUTF8(_context, ctx) {
-	debugLog("[_lowerFlatStringUTF8()] args", ctx);
+	DEBUG: debugLog("[_lowerFlatStringUTF8()] args", ctx);
 	if (!ctx.realloc) throw new Error("missing realloc during flat string lower");
 	const { ptr, len } = utf8Encode(_context, ctx.vals[0], ctx.realloc, ctx.memory);
-	const view = new DataView(ctx.memory.buffer);
+	const view = memoryView(ctx);
 	view.setUint32(ctx.storagePtr, ptr, true);
 	view.setUint32(ctx.storagePtr + 4, len, true);
 	ctx.storagePtr += 8;
@@ -7649,7 +8369,7 @@ function lowerFlatStringUTF8(_context, ctx) {
 function lowerFlatRecord(meta) {
 	const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
 	return function lowerFlatRecordInner(ctx) {
-		debugLog("[_lowerFlatRecord()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatRecord()] args", { ctx });
 		const originalPtr = ctx.storagePtr;
 		const r = ctx.vals[0];
 		for (const [tag, lowerFn, size32, align32] of fieldMetas) {
@@ -7676,7 +8396,7 @@ function lowerFlatVariant(_context, meta) {
 		};
 	}
 	return function lowerFlatVariantInner(ctx) {
-		debugLog("[_lowerFlatVariant()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatVariant()] args", { ctx });
 		const { tag, val } = ctx.vals[0];
 		const variantCase = caseLookup[tag];
 		if (!variantCase) throw new Error(`missing tag [${tag}] (valid tags: ${Object.keys(caseLookup)})`);
@@ -7699,16 +8419,16 @@ function lowerFlatList(_context, meta) {
 	const { elemLowerFn, knownLen, size32, elemSize32, elemAlign32, typedArray } = meta;
 	if (!elemLowerFn) throw new TypeError("missing/invalid element lower fn for list");
 	return function lowerFlatListInner(ctx) {
-		debugLog("[_lowerFlatList()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatList()] args", { ctx });
 		if (ctx.useDirectParams) {
-			if (ctx.params.length < 2) throw new Error("insufficient params left to lower list");
-			const storagePtr = ctx.params[0] >>> 0;
-			const elemCount = ctx.params[1];
-			ctx.params = ctx.params.slice(2);
+			if (remainingParams(ctx) < 2) throw new Error("insufficient params left to lower list");
+			const storagePtr = readParam(ctx, 0) >>> 0;
+			const elemCount = readParam(ctx, 1);
+			consumeParams(ctx, 2);
 			const list = ctx.vals[0];
 			if (!list) throw new Error("missing direct param value");
 			if (elemCount !== list.length) throw new Error("list length does not match allocated storage");
-			const lowerCtx = {
+			const lowerCtx = createLowerContext({
 				storagePtr,
 				memory: ctx.memory,
 				stringEncoding: ctx.stringEncoding,
@@ -7716,7 +8436,7 @@ function lowerFlatList(_context, meta) {
 				realloc: ctx.realloc,
 				lowerResource: ctx.lowerResource,
 				vals: []
-			};
+			});
 			for (let idx = 0; idx < list.length; idx++) {
 				const elemPtr = storagePtr + idx * elemSize32;
 				lowerCtx.storagePtr = elemPtr;
@@ -7764,16 +8484,16 @@ function lowerFlatList(_context, meta) {
 function lowerFlatMap(_context, meta) {
 	const { keyLowerFn, valueLowerFn, entrySize32, entryAlign32, valueOffset32 } = meta;
 	return function lowerFlatMapInner(ctx) {
-		debugLog("[_lowerFlatMap()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatMap()] args", { ctx });
 		const map = ctx.vals[0];
 		if (!(map instanceof Map)) throw new TypeError("expected a Map");
 		let dataPtr;
 		let restorePtr;
 		if (ctx.useDirectParams) {
-			if (ctx.params.length < 2) throw new Error("insufficient params left to lower map");
-			dataPtr = ctx.params[0] >>> 0;
-			const expectedLen = ctx.params[1];
-			ctx.params = ctx.params.slice(2);
+			if (remainingParams(ctx) < 2) throw new Error("insufficient params left to lower map");
+			dataPtr = readParam(ctx, 0) >>> 0;
+			const expectedLen = readParam(ctx, 1);
+			consumeParams(ctx, 2);
 			if (expectedLen !== map.size) throw new Error("map length does not match allocated storage");
 			restorePtr = ctx.storagePtr;
 		} else {
@@ -7802,7 +8522,7 @@ function lowerFlatMap(_context, meta) {
 function lowerFlatTuple(meta) {
 	const { elemLowerMetas, size32: tupleSize32, align32: tupleAlign32 } = meta;
 	return function lowerFlatTupleInner(ctx) {
-		debugLog("[_lowerFlatTuple()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatTuple()] args", { ctx });
 		const originalPtr = ctx.storagePtr;
 		const tuple = ctx.vals[0];
 		for (const [idx, [lowerFn, size32, align32]] of elemLowerMetas.entries()) {
@@ -7821,12 +8541,12 @@ function lowerFlatTuple(meta) {
 function lowerFlatFlags(_context, meta) {
 	const { names, align32, intSizeBytes } = meta;
 	return function lowerFlatFlagsInner(ctx) {
-		debugLog("[_lowerFlatFlags()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatFlags()] args", { ctx });
 		if (ctx.vals.length !== 1) throw new Error("unexpected number of vals");
 		const flagValue = flagsValue(_context, ctx.vals[0], names);
 		const rem = ctx.storagePtr % align32;
 		if (rem !== 0) ctx.storagePtr += align32 - rem;
-		const dv = new DataView(ctx.memory.buffer);
+		const dv = memoryView(ctx);
 		if (intSizeBytes === 1) dv.setUint8(ctx.storagePtr, flagValue);
 		else if (intSizeBytes === 2) dv.setUint16(ctx.storagePtr, flagValue, true);
 		else if (intSizeBytes === 4) dv.setUint32(ctx.storagePtr, flagValue, true);
@@ -7837,7 +8557,7 @@ function lowerFlatFlags(_context, meta) {
 function lowerFlatEnum(_context, meta) {
 	const f = lowerFlatVariant(_context, meta);
 	return function lowerFlatEnumInner(ctx) {
-		debugLog("[_lowerFlatEnum()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatEnum()] args", { ctx });
 		const v = ctx.vals[0];
 		if (v === null || typeof v !== "object" || Object.keys(v).length !== 2 || !("tag" in v)) ctx.vals[0] = { tag: v };
 		f(ctx);
@@ -7847,7 +8567,7 @@ function lowerFlatOption(_context, meta) {
 	const { payloadMaybeNull } = meta;
 	const f = lowerFlatVariant(_context, meta);
 	return function lowerFlatOptionInner(ctx) {
-		debugLog("[_lowerFlatOption()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatOption()] args", { ctx });
 		const v = ctx.vals[0];
 		if (v === null || v === void 0) ctx.vals[0] = { tag: "none" };
 		else if (payloadMaybeNull) {
@@ -7865,7 +8585,7 @@ function lowerFlatOption(_context, meta) {
 function lowerFlatResult(_context, meta) {
 	const f = lowerFlatVariant(_context, meta);
 	return function lowerFlatResultInner(ctx) {
-		debugLog("[_lowerFlatResult()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatResult()] args", { ctx });
 		const v = ctx.vals[0];
 		if (v === null || typeof v !== "object" || Object.keys(v).length !== 2 || !("tag" in v) || !("ok" === v.tag || "err" === v.tag) || !("val" in v)) ctx.vals[0] = {
 			tag: "ok",
@@ -7877,7 +8597,7 @@ function lowerFlatResult(_context, meta) {
 function lowerFlatOwn(_context, meta) {
 	const { lowerFn, componentIdx, tableIdx } = meta;
 	return function lowerFlatOwnInner(ctx) {
-		debugLog("[_lowerFlatOwn()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatOwn()] args", { ctx });
 		if (ctx.componentIdx !== componentIdx) throw new Error(`component index mismatch (expected [${componentIdx}], lift called from [${ctx.componentIdx}])`);
 		const obj = ctx.vals[0];
 		if (obj === void 0 || obj === null) throw new Error("missing resource");
@@ -7887,13 +8607,13 @@ function lowerFlatOwn(_context, meta) {
 	};
 }
 function lowerFlatBorrow(ctx) {
-	debugLog("[_lowerFlatBorrow()] args", { ctx });
+	DEBUG: debugLog("[_lowerFlatBorrow()] args", { ctx });
 	throw new Error("flat lower for borrowed resources is not supported!");
 }
 function lowerFlatFuture(_context, meta) {
 	const { componentIdx, futureTableIdx, elemMeta } = meta;
 	return function lowerFlatFutureInner(ctx) {
-		debugLog("[_lowerFlatFuture()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatFuture()] args", { ctx });
 		let future = ctx.vals[0];
 		if (!future) throw new Error("missing external future value");
 		if (!isFutureLowerableObject(future)) future = Promise.resolve(future);
@@ -7929,7 +8649,7 @@ function lowerFlatFuture(_context, meta) {
 function lowerFlatStream(_context, meta) {
 	const { componentIdx, streamTableIdx, elemMeta } = meta;
 	return function lowerFlatStreamInner(ctx) {
-		debugLog("[_lowerFlatStream()] args", { ctx });
+		DEBUG: debugLog("[_lowerFlatStream()] args", { ctx });
 		const stream = ctx.vals[0];
 		if (!stream) throw new Error("missing external stream value");
 		let globalRep;
@@ -7971,7 +8691,7 @@ function lowerFlatStream(_context, meta) {
 	};
 }
 function lowerFlatErrorContext(_context, errCtxTableIdx, ctx) {
-	debugLog("[_lowerFlatErrorContext()] args", {
+	DEBUG: debugLog("[_lowerFlatErrorContext()] args", {
 		errCtxTableIdx,
 		ctx
 	});
@@ -7998,24 +8718,29 @@ function lowerFlatErrorContext(_context, errCtxTableIdx, ctx) {
 		globalErrCtx.pendingLifts -= 1;
 		errCtxGlobalRefCountAdd(_context.globalTable, errCtxGlobalRep, -1);
 	}
-	const lowerCtx = {
+	const lowerCtx = createLowerContext({
 		memory,
 		realloc,
 		vals: [handle],
 		storagePtr,
 		storageLen,
 		componentIdx
-	};
+	});
 	lowerFlatU32(_context.numeric, lowerCtx);
 	ctx.storagePtr = lowerCtx.storagePtr;
 }
 
 //#endregion
 //#region runtime/intrinsics/future/value.js
-/** Keep each store's constructor and private brand together. */
-function initializeFutureValueClass(disposeSymbol) {
-	var _a;
-	class FutureValue {
+let dropFutureValue;
+/** Everything of a future value but the method named by the dispose symbol of a store. */
+function defineBaseFutureValue() {
+	return class BaseFutureValue {
+		static {
+			dropFutureValue = (value) => value.#drop();
+		}
+		#disposeSymbol;
+		#store;
 		#start;
 		#dropFn;
 		#dropped = false;
@@ -8023,7 +8748,9 @@ function initializeFutureValueClass(disposeSymbol) {
 		#settled;
 		#hideThen = 0;
 		#thenFn;
-		constructor(start, dropFn) {
+		constructor(disposeSymbol, store, start, dropFn) {
+			this.#disposeSymbol = disposeSymbol;
+			this.#store = store;
 			if (typeof start !== "function") throw new TypeError("future start operation must be a function");
 			this.#start = start;
 			this.#dropFn = dropFn;
@@ -8045,7 +8772,7 @@ function initializeFutureValueClass(disposeSymbol) {
 			}
 		}
 		#deliver(resolve, value) {
-			if (value instanceof _a) {
+			if (typeof value === "object" && value !== null && #store in value && value.#store === this.#store) {
 				value.resolveAsValue(resolve);
 				return;
 			}
@@ -8063,17 +8790,29 @@ function initializeFutureValueClass(disposeSymbol) {
 			}, reject);
 		}
 		/** Drop the readable end and dispose copied values that never reached a recipient. */
-		[disposeSymbol]() {
+		#drop() {
 			if (this.#dropped) return;
 			this.#dropped = true;
 			this.#dropFn?.();
 			this.#settled?.then((box) => {
-				if (!this.#delivered) disposeHostValue(disposeSymbol, box.value);
+				if (!this.#delivered) disposeHostValue(this.#disposeSymbol, box.value);
 			}, () => {});
 		}
-	}
-	_a = FutureValue;
-	return FutureValue;
+	};
+}
+let sharedBaseFutureValue;
+/** Create the future value class of a store, whose instances dispose under the given symbol. */
+function initializeFutureValueClass(disposeSymbol) {
+	const BaseFutureValue = sharedBaseFutureValue ??= defineBaseFutureValue();
+	const store = {};
+	return class FutureValue extends BaseFutureValue {
+		constructor(start, dropFn) {
+			super(disposeSymbol, store, start, dropFn);
+		}
+		[disposeSymbol]() {
+			dropFutureValue(this);
+		}
+	};
 }
 
 //#endregion
@@ -8101,7 +8840,7 @@ function initializeFutureEndClass(events) {
 		#isPeerDroppedFn;
 		#notifyPeerDroppedFn;
 		constructor(args) {
-			debugLog("[FutureEnd#constructor()] args", args);
+			DEBUG: debugLog("[FutureEnd#constructor()] args", args);
 			if (!args.pendingBufferMeta) throw new Error("missing pending buffer");
 			this.#pendingBufferMeta = args.pendingBufferMeta;
 			if (!args.waitable) throw new Error("missing pending buffer");
@@ -8167,7 +8906,7 @@ function initializeFutureEndClass(events) {
 		}
 		setPendingEvent(fn) {
 			if (!this.#waitable) throw new Error("missing/invalid waitable");
-			debugLog("[FutureEnd#setPendingEvent()]", {
+			DEBUG: debugLog("[FutureEnd#setPendingEvent()]", {
 				waitable: this.#waitable,
 				waitableinSet: this.#waitable.isInSet(),
 				componentIdx: this.#waitable.componentIdx()
@@ -8184,7 +8923,7 @@ function initializeFutureEndClass(events) {
 		}
 		getPendingEvent() {
 			if (!this.#waitable) throw new Error("missing/invalid waitable");
-			debugLog("[FutureEnd#getPendingEvent()]", {
+			DEBUG: debugLog("[FutureEnd#getPendingEvent()]", {
 				waitable: this.#waitable,
 				waitableinSet: this.#waitable.isInSet(),
 				componentIdx: this.#waitable.componentIdx()
@@ -8249,7 +8988,7 @@ function initializeFutureReadableEndClass(_context) {
 		#promise;
 		target;
 		constructor(args) {
-			debugLog("[FutureReadableEnd#constructor()] args", args);
+			DEBUG: debugLog("[FutureReadableEnd#constructor()] args", args);
 			super(args);
 			if (!args.elemMeta) throw new Error("missing/invalid element meta");
 			this.#elemMeta = args.elemMeta;
@@ -8306,7 +9045,7 @@ function initializeFutureReadableEndClass(_context) {
 			return this.#promise;
 		}
 		cancel() {
-			debugLog("[FutureEnd#cancel()]");
+			DEBUG: debugLog("[FutureEnd#cancel()]");
 			this.resetAndNotifyPending(FutureEnd.CopyResult.CANCELLED);
 		}
 		_read(args) {
@@ -8327,12 +9066,12 @@ function initializeFutureReadableEndClass(_context) {
 			}
 			if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) throw new _context.RuntimeError("cannot read from and write to intra-component future");
 			const transferResources = buffer.componentIdx() !== -1 && meta.buffer.componentIdx() !== -1;
-			buffer.write(meta.buffer.read(1, { transferResources }), { transferResources });
+			transferBuffer(meta.buffer, buffer, 1, { transferResources });
 			this.resetAndNotifyPending(FutureEnd.CopyResult.COMPLETED);
 			onCopyDoneFn(FutureEnd.CopyResult.COMPLETED);
 		}
 		guestRead(args) {
-			debugLog("[FutureReadableEnd#guestRead()] args", args);
+			DEBUG: debugLog("[FutureReadableEnd#guestRead()] args", args);
 			const { componentIdx, stringEncoding, memory, realloc, ptr, data } = args;
 			const elemMeta = {
 				...args.elemMeta ?? this.#elemMeta,
@@ -8448,7 +9187,7 @@ function initializeFutureWritableEndClass(_context) {
 		#promise;
 		target;
 		constructor(args) {
-			debugLog("[FutureWritableEnd#constructor()] args", args);
+			DEBUG: debugLog("[FutureWritableEnd#constructor()] args", args);
 			super(args);
 			if (!args.elemMeta) throw new Error("missing/invalid element meta");
 			this.#elemMeta = args.elemMeta;
@@ -8505,7 +9244,7 @@ function initializeFutureWritableEndClass(_context) {
 			return this.#promise;
 		}
 		cancel() {
-			debugLog("[FutureEnd#cancel()]");
+			DEBUG: debugLog("[FutureEnd#cancel()]");
 			this.resetAndNotifyPending(FutureEnd.CopyResult.CANCELLED);
 		}
 		_write(args) {
@@ -8530,12 +9269,12 @@ function initializeFutureWritableEndClass(_context) {
 			}
 			if (componentIdx === meta.componentIdx && componentIdx !== -1 && !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)) throw new _context.RuntimeError("cannot read from and write to intra-component future");
 			const transferResources = buffer.componentIdx() !== -1 && meta.buffer.componentIdx() !== -1;
-			meta.buffer.write(buffer.read(1, { transferResources }), { transferResources });
+			transferBuffer(buffer, meta.buffer, 1, { transferResources });
 			this.resetAndNotifyPending(FutureEnd.CopyResult.COMPLETED);
 			onCopyDoneFn(FutureEnd.CopyResult.COMPLETED);
 		}
 		guestWrite(args) {
-			debugLog("[FutureWritableEnd#guestWrite()] args", args);
+			DEBUG: debugLog("[FutureWritableEnd#guestWrite()] args", args);
 			const { componentIdx, stringEncoding, memory, realloc, ptr, data } = args;
 			const elemMeta = {
 				...args.elemMeta ?? this.#elemMeta,
@@ -8619,23 +9358,22 @@ function initializeFutureWritableEndClass(_context) {
 
 //#endregion
 //#region runtime/intrinsics/future/internal.js
-/** Create future pairs using the selected readable and writable constructors. */
-function initializeInternalFutureClass(_context) {
-	class InternalFuture {
+function defineInternalFuture() {
+	return class InternalFuture {
 		#globalFutureMapRep;
 		#pendingBufferMeta = {};
 		#elemMeta;
 		#readEnd;
 		#writeEnd;
-		constructor(args) {
-			debugLog("[InternalFuture#constructor()] args", args);
+		constructor(context, args) {
+			DEBUG: debugLog("[InternalFuture#constructor()] args", args);
 			if (!args.elemMeta) throw new Error("missing/invalid future element metadata");
 			if (args.tableIdx === void 0) throw new Error("missing/invalid future table idx");
 			if (!args.readWaitable) throw new Error("missing/invalid read waitable");
 			if (!args.writeWaitable) throw new Error("missing/invalid write waitable");
 			const { tableIdx, elemMeta, readWaitable, writeWaitable } = args;
 			this.#elemMeta = args.elemMeta;
-			this.#readEnd = new _context.FutureReadableEnd({
+			this.#readEnd = new context.FutureReadableEnd({
 				tableIdx,
 				elemMeta: this.#elemMeta,
 				pendingBufferMeta: this.#pendingBufferMeta,
@@ -8645,7 +9383,7 @@ function initializeInternalFutureClass(_context) {
 				isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
 				notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped()
 			});
-			this.#writeEnd = new _context.FutureWritableEnd({
+			this.#writeEnd = new context.FutureWritableEnd({
 				tableIdx,
 				elemMeta: this.#elemMeta,
 				pendingBufferMeta: this.#pendingBufferMeta,
@@ -8678,15 +9416,31 @@ function initializeInternalFutureClass(_context) {
 			this.#readEnd.setGlobalFutureMapRep(rep);
 			this.#writeEnd.setGlobalFutureMapRep(rep);
 		}
+	};
+}
+let sharedInternalFuture;
+/** Create future pairs using the selected readable and writable constructors. */
+function initializeInternalFutureClass(_context) {
+	const InternalFuture = sharedInternalFuture ??= defineInternalFuture();
+	/**
+	* Construct a future whose ends are of the classes in the context.
+	*
+	* @param args - options of the future
+	* @returns the future
+	*/
+	class StoreInternalFuture extends InternalFuture {
+		constructor(args) {
+			super(_context, args);
+		}
 	}
-	return InternalFuture;
+	return StoreInternalFuture;
 }
 
 //#endregion
 //#region runtime/intrinsics/future/host.js
-/** Create host wrappers that look up endpoints in the selected future tables. */
-function initializeHostFutureClass(_context) {
-	class HostFuture {
+function defineHostFuture() {
+	return class HostFuture {
+		#context;
 		#componentIdx;
 		#futureEndWaitableIdx;
 		#futureTableIdx;
@@ -8694,8 +9448,9 @@ function initializeHostFutureClass(_context) {
 		#payloadLowerFn;
 		#userFuture;
 		#rep = null;
-		constructor(args) {
-			debugLog("[HostFuture#constructor()] args", args);
+		constructor(context, args) {
+			DEBUG: debugLog("[HostFuture#constructor()] args", args);
+			this.#context = context;
 			if (args.componentIdx === void 0) throw new TypeError("missing component idx");
 			this.#componentIdx = args.componentIdx;
 			if (!args.payloadLiftFn) throw new TypeError("missing payload lift fn");
@@ -8716,18 +9471,34 @@ function initializeHostFutureClass(_context) {
 		createUserFuture() {
 			if (this.#userFuture) return this.#userFuture;
 			if (this.#rep === null) throw new Error("unexpectedly missing rep for host future");
-			if (!getOrCreateAsyncState(_context.lookup, this.#componentIdx)) throw new Error(`missing async state for component [${this.#componentIdx}]`);
-			const futureEnd = getFutureEnd(_context.ends, {
+			if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`missing async state for component [${this.#componentIdx}]`);
+			const futureEnd = getFutureEnd(this.#context.ends, {
 				tableIdx: this.#futureTableIdx,
 				futureEndWaitableIdx: this.#futureEndWaitableIdx
 			});
 			if (!futureEnd) throw new Error(`missing future [${this.#futureEndWaitableIdx}] (table [${this.#futureTableIdx}], component [${this.#componentIdx}]`);
-			if (futureEnd.isDoneState()) throw new _context.RuntimeError("cannot lift future after previous read succeeded");
-			if (futureEnd.isInSet()) throw new _context.RuntimeError("cannot lift future while it's in a waitable set");
+			if (futureEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift future after previous read succeeded");
+			if (futureEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift future while it's in a waitable set");
 			return futureEnd.promise();
 		}
+	};
+}
+let sharedHostFuture;
+/** Create host wrappers that look up endpoints in the selected future tables. */
+function initializeHostFutureClass(_context) {
+	const HostFuture = sharedHostFuture ??= defineHostFuture();
+	/**
+	* Construct a host future that uses the context.
+	*
+	* @param args - options of the host future
+	* @returns the host future
+	*/
+	class StoreHostFuture extends HostFuture {
+		constructor(args) {
+			super(_context, args);
+		}
 	}
-	return HostFuture;
+	return StoreHostFuture;
 }
 
 //#endregion
@@ -8868,7 +9639,7 @@ function initializeStreamEndClass(_context) {
 			}
 		}
 		setPendingEvent(fn) {
-			debugLog("[StreamEnd#setPendingEvent()]", {
+			DEBUG: debugLog("[StreamEnd#setPendingEvent()]", {
 				waitable: this.#waitable,
 				waitableinSet: this.#waitable.isInSet(),
 				componentIdx: this.#waitable.componentIdx()
@@ -8880,7 +9651,7 @@ function initializeStreamEndClass(_context) {
 		async waitForPendingEvent() {
 			do {
 				if (!this.hasPendingEvent()) await new Promise((resolve) => this.#pendingEventWaiters.push(resolve));
-				await new Promise((resolve) => setTimeout(resolve));
+				await yieldToHost();
 			} while (!this.hasPendingEvent());
 		}
 		hasPendingEvent() {
@@ -8890,7 +9661,7 @@ function initializeStreamEndClass(_context) {
 			return this.#waitable.isInSet();
 		}
 		getPendingEvent() {
-			debugLog("[StreamEnd#getPendingEvent()]", {
+			DEBUG: debugLog("[StreamEnd#getPendingEvent()]", {
 				waitable: this.#waitable,
 				waitableinSet: this.#waitable.isInSet(),
 				componentIdx: this.#waitable.componentIdx()
@@ -9027,7 +9798,7 @@ function initializeStreamEndClass(_context) {
 				const waitableIdx = this.getWaitable().idx();
 				if (code !== eventCode || index !== waitableIdx || payload === 4294967295) {
 					const errMsg = "invalid event code/event during stream operation";
-					debugLog(errMsg, {
+					DEBUG: debugLog(errMsg, {
 						event,
 						payload,
 						payloadIsBlockedConst: payload === asyncBlockedCode,
@@ -9050,7 +9821,7 @@ function initializeStreamEndClass(_context) {
 			if (!this.hasPendingEvent()) {
 				if (isAsync) {
 					this.setCopyState(_a.CopyState.ASYNC_COPYING);
-					debugLog("[StreamEnd#copy()] blocked", {
+					DEBUG: debugLog("[StreamEnd#copy()] blocked", {
 						componentIdx,
 						eventCode,
 						self: this
@@ -9119,7 +9890,7 @@ function initializeStreamEndClass(_context) {
 			if (f) f(result);
 		}
 		cancel() {
-			debugLog("[StreamEnd#cancel()]");
+			DEBUG: debugLog("[StreamEnd#cancel()]");
 			const completeCancel = () => {
 				if (this.isDropped()) return;
 				if (this.hasPendingEvent()) return;
@@ -9138,7 +9909,7 @@ function initializeStreamEndClass(_context) {
 			else completeCancel();
 		}
 		drop(opts = {}) {
-			debugLog("[StreamEnd#drop()]", {
+			DEBUG: debugLog("[StreamEnd#drop()]", {
 				waitable: this.#waitable,
 				waitableinSet: this.#waitable.isInSet(),
 				componentIdx: this.#waitable.componentIdx()
@@ -9160,17 +9931,26 @@ function initializeStreamEndClass(_context) {
 
 //#endregion
 //#region runtime/intrinsics/stream/external.js
-function initializeExternalStreamClass(_context) {
-	class Stream {
+let dropStream;
+/** Everything of a stream but the methods named by the symbols of a context. */
+function defineBaseStream() {
+	return class BaseStream {
+		static {
+			dropStream = (stream) => {
+				stream.#dropFn?.();
+			};
+		}
+		#context;
 		#isReadable;
 		#isWritable;
 		#writeFn;
 		#readFn;
 		#dropFn;
-		constructor(args) {
-			debugLog("[Stream#constructor()] args", args);
+		constructor(context, args) {
+			DEBUG: debugLog("[Stream#constructor()] args", args);
+			this.#context = context;
 			if (args.globalRep === void 0) throw new TypeError("missing host stream rep");
-			this[_context.resourceRep] = args.globalRep;
+			this[context.resourceRep] = args.globalRep;
 			if (args.isReadable === void 0) throw new TypeError("missing readable setting");
 			this.#isReadable = args.isReadable;
 			if (args.isWritable === void 0) throw new TypeError("missing writable setting");
@@ -9181,48 +9961,58 @@ function initializeExternalStreamClass(_context) {
 			this.#readFn = args.readFn;
 			this.#dropFn = args.dropFn;
 		}
-		[_context.asyncIteratorSymbol]() {
-			return this;
-		}
 		async return() {
-			this[_context.disposeSymbol]();
+			this[this.#context.disposeSymbol]();
 			return { done: true };
 		}
 		async next() {
-			debugLog("[Stream#next()]");
+			DEBUG: debugLog("[Stream#next()]");
 			return this.read();
 		}
 		async read(opts) {
-			debugLog("[Stream#read()]", { opts });
+			DEBUG: debugLog("[Stream#read()]", { opts });
 			if (!this.#isReadable) throw new Error("stream is not marked as readable and cannot be read from");
 			return this.#readFn(opts);
 		}
 		async write(...objects) {
-			debugLog("[Stream#write()]");
+			DEBUG: debugLog("[Stream#write()]");
 			if (!this.#isWritable) throw new Error("stream is not marked as writable and cannot be written to");
 			if (objects.length !== 1) throw new Error("only single object writes are currently supported");
 			const obj = objects[0];
 			await this.#writeFn(obj);
 		}
-		[_context.disposeSymbol]() {
-			this.#dropFn?.();
+	};
+}
+let sharedBaseStream;
+function initializeExternalStreamClass(_context) {
+	const BaseStream = sharedBaseStream ??= defineBaseStream();
+	return class Stream extends BaseStream {
+		constructor(args) {
+			super(_context, args);
 		}
-	}
-	return Stream;
+		[_context.asyncIteratorSymbol]() {
+			return this;
+		}
+		[_context.disposeSymbol]() {
+			dropStream(this);
+		}
+	};
 }
 
 //#endregion
 //#region runtime/intrinsics/stream/host.js
-function initializeHostStreamClass(_context) {
-	class HostStream {
+function defineHostStream() {
+	return class HostStream {
+		#context;
 		#componentIdx;
 		#streamEndWaitableIdx;
 		#streamTableIdx;
 		#payloadLiftFn;
 		#payloadLowerFn;
 		#rep = null;
-		constructor(args) {
-			debugLog("[HostStream#constructor()] args", args);
+		constructor(context, args) {
+			this.#context = context;
+			DEBUG: debugLog("[HostStream#constructor()] args", args);
 			if (args.componentIdx === void 0) throw new TypeError("missing component idx");
 			this.#componentIdx = args.componentIdx;
 			if (!args.payloadLiftFn) throw new TypeError("missing payload lift fn");
@@ -9242,13 +10032,13 @@ function initializeHostStreamClass(_context) {
 		}
 		createUserStream() {
 			if (this.#rep === null) throw new Error("unexpectedly missing rep for host stream");
-			const streamEnd = getStreamEnd(_context.ends, {
+			const streamEnd = getStreamEnd(this.#context.ends, {
 				tableIdx: this.#streamTableIdx,
 				streamEndWaitableIdx: this.#streamEndWaitableIdx
 			});
-			if (streamEnd.isDoneState()) throw new _context.RuntimeError("cannot lift stream after being notified that the writable end dropped");
-			if (streamEnd.isInSet()) throw new _context.RuntimeError("cannot lift stream while it's in a waitable set");
-			return new _context.Stream({
+			if (streamEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift stream after being notified that the writable end dropped");
+			if (streamEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
+			return new this.#context.Stream({
 				isReadable: streamEnd.isReadable(),
 				isWritable: streamEnd.isWritable(),
 				globalRep: this.#rep,
@@ -9261,28 +10051,43 @@ function initializeHostStreamClass(_context) {
 				dropFn: () => streamEnd.drop({ allowPendingEvent: true })
 			});
 		}
+	};
+}
+let sharedHostStream;
+function initializeHostStreamClass(_context) {
+	const HostStream = sharedHostStream ??= defineHostStream();
+	/**
+	* Construct a host stream that uses the context.
+	*
+	* @param args - options of the host stream
+	* @returns the host stream
+	*/
+	class StoreHostStream extends HostStream {
+		constructor(args) {
+			super(_context, args);
+		}
 	}
-	return HostStream;
+	return StoreHostStream;
 }
 
 //#endregion
 //#region runtime/intrinsics/stream/internal.js
-function initializeInternalStreamClass(_context) {
-	class InternalStream {
+function defineInternalStream() {
+	return class InternalStream {
 		#pendingBufferMeta = {};
 		#elemMeta;
 		#globalStreamMapRep;
 		#readEnd;
 		#writeEnd;
-		constructor(args) {
-			debugLog("[InternalStream#constructor()] args", args);
+		constructor(context, args) {
+			DEBUG: debugLog("[InternalStream#constructor()] args", args);
 			if (!args.elemMeta) throw new Error("missing/invalid stream element metadata");
 			if (args.tableIdx === void 0) throw new Error("missing/invalid stream table idx");
 			if (!args.readWaitable) throw new Error("missing/invalid read waitable");
 			if (!args.writeWaitable) throw new Error("missing/invalid write waitable");
 			const { tableIdx, elemMeta, readWaitable, writeWaitable } = args;
 			this.#elemMeta = elemMeta;
-			this.#readEnd = new _context.StreamReadableEnd({
+			this.#readEnd = new context.StreamReadableEnd({
 				tableIdx,
 				elemMeta: this.#elemMeta,
 				pendingBufferMeta: this.#pendingBufferMeta,
@@ -9291,7 +10096,7 @@ function initializeInternalStreamClass(_context) {
 				isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
 				notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped()
 			});
-			this.#writeEnd = new _context.StreamWritableEnd({
+			this.#writeEnd = new context.StreamWritableEnd({
 				tableIdx,
 				elemMeta: this.#elemMeta,
 				pendingBufferMeta: this.#pendingBufferMeta,
@@ -9322,22 +10127,45 @@ function initializeInternalStreamClass(_context) {
 			this.#readEnd.onInstanceStop();
 			this.#writeEnd.drop({ allowPendingEvent: true });
 		}
+	};
+}
+let sharedInternalStream;
+function initializeInternalStreamClass(_context) {
+	const InternalStream = sharedInternalStream ??= defineInternalStream();
+	/**
+	* Construct a stream whose ends are of the classes in the context.
+	*
+	* @param args - options of the stream
+	* @returns the stream
+	*/
+	class StoreInternalStream extends InternalStream {
+		constructor(args) {
+			super(_context, args);
+		}
 	}
-	return InternalStream;
+	return StoreInternalStream;
 }
 
 //#endregion
 //#region runtime/intrinsics/stream/queue.js
-function initializePendingValueQueueClass(tracking) {
-	class PendingValueQueue {
+/**
+* Buffer values from a host stream and transfer them to readers in source order.
+* Source reads and cooperative batch yields share the store's host-operation tracking.
+*/
+function definePendingValueQueue() {
+	return class PendingValueQueue {
+		#tracking;
 		#readFn;
 		#elemMeta;
 		#done = false;
 		#sourceReadPromise = null;
+		#synchronousReads = 0;
 		#chunks = [];
-		#offset = 0;
+		#head = 0;
+		#prepended = [];
 		#length = 0;
-		constructor(readFn, elemMeta) {
+		constructor(tracking, readFn, elemMeta) {
+			this.#tracking = tracking;
 			this.#readFn = readFn;
 			this.#elemMeta = elemMeta;
 		}
@@ -9352,7 +10180,10 @@ function initializePendingValueQueueClass(tracking) {
 		}
 		push(source) {
 			if (source.length === 0) return 0;
-			this.#chunks.push(source);
+			this.#chunks.push({
+				data: source,
+				offset: 0
+			});
 			this.#length += source.length;
 			return source.length;
 		}
@@ -9364,60 +10195,124 @@ function initializePendingValueQueueClass(tracking) {
 			}
 			return this.push([value]);
 		}
-		async readSource() {
-			if (!this.#sourceReadPromise) this.#sourceReadPromise = (async () => {
-				let hostRead;
-				let res;
-				try {
-					res = await trackHostOperation(tracking, () => hostRead = this.#readFn());
-				} catch (err) {
-					if (!tracking.storeTrap.stopped) throw err;
-					Promise.resolve(hostRead).then((late) => disposeHostValue(tracking.symbolDispose, late?.value), () => {});
-					this.#done = true;
-					return 0;
+		/** Preserve the promise-returning API and coalesce concurrent public reads. */
+		readSource() {
+			if (this.#sourceReadPromise) return this.#sourceReadPromise;
+			try {
+				const result = this.readSourceOrPromise();
+				if (typeof result !== "number") return result;
+				return this.#sourceReadPromise = Promise.resolve(result).finally(() => {
+					this.#sourceReadPromise = null;
+				});
+			} catch (error) {
+				return this.#sourceReadPromise = Promise.reject(error).finally(() => {
+					this.#sourceReadPromise = null;
+				});
+			}
+		}
+		/** Keep ready reads synchronous until a bounded batch must yield to the host. */
+		readSourceOrPromise() {
+			if (this.#sourceReadPromise) return this.#sourceReadPromise;
+			let hostRead;
+			try {
+				const result = trackHostOperation(this.#tracking, () => {
+					if (this.#synchronousReads < 64) return hostRead = this.#readFn();
+					return hostRead = yieldToHost().then(() => {
+						if (this.#tracking.storeTrap.stopped) throw this.#tracking.storeTrap.error;
+						return this.#readFn.dropped ? {
+							done: true,
+							value: void 0
+						} : this.#readFn();
+					});
+				});
+				if (!isPromiseLike(result)) {
+					this.#synchronousReads++;
+					return this.#acceptRead(result);
 				}
-				if (this.#readFn.dropped) {
-					disposeHostValue(tracking.symbolDispose, res.value);
-					this.#done = true;
-					return 0;
-				}
-				const appended = this.appendReadValue(res.value);
-				this.#done = !!res.done;
-				return appended;
-			})().finally(() => {
-				this.#sourceReadPromise = null;
-			});
-			return this.#sourceReadPromise;
+				this.#synchronousReads = 0;
+				return this.#sourceReadPromise = Promise.resolve(result).then((value) => this.#acceptRead(value), (error) => this.#failedRead(error, hostRead)).finally(() => {
+					this.#sourceReadPromise = null;
+				});
+			} catch (error) {
+				return this.#failedRead(error, hostRead);
+			}
+		}
+		#acceptRead(result) {
+			if (this.#readFn.dropped) {
+				disposeHostValue(this.#tracking.symbolDispose, result.value);
+				this.#done = true;
+				return 0;
+			}
+			const appended = this.appendReadValue(result.value);
+			this.#done = !!result.done;
+			return appended;
+		}
+		#failedRead(error, hostRead) {
+			if (!this.#tracking.storeTrap.stopped) throw error;
+			Promise.resolve(hostRead).then((late) => disposeHostValue(this.#tracking.symbolDispose, late?.value), () => {});
+			this.#done = true;
+			return 0;
 		}
 		prepend(source) {
 			if (source.length === 0) return;
-			if (this.#offset !== 0 && this.#chunks.length > 0) {
-				this.#chunks[0] = this.#chunks[0].slice(this.#offset);
-				this.#offset = 0;
+			const current = this.#prepended.length > 0 ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+			if (current && current.offset !== 0) {
+				current.data = current.data.slice(current.offset);
+				current.offset = 0;
 			}
-			this.#chunks.unshift(source);
+			this.#prepended.push({
+				data: source,
+				offset: 0
+			});
 			this.#length += source.length;
 		}
 		drainInto(target, maxCount) {
 			let transferred = 0;
 			let remaining = Math.min(maxCount, this.#length);
 			while (remaining > 0) {
-				const chunk = this.#chunks[0];
-				const transfer = Math.min(remaining, chunk.length - this.#offset);
-				for (let i = 0; i < transfer; i++) target.push(chunk[this.#offset + i]);
-				this.#offset += transfer;
+				const front = this.#prepended.length > 0;
+				const cursor = front ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+				const chunk = cursor.data;
+				const transfer = Math.min(remaining, chunk.length - cursor.offset);
+				for (let i = 0; i < transfer; i++) target.push(chunk[cursor.offset + i]);
+				cursor.offset += transfer;
 				this.#length -= transfer;
 				transferred += transfer;
 				remaining -= transfer;
-				if (this.#offset === chunk.length) {
-					this.#chunks.shift();
-					this.#offset = 0;
+				if (cursor.offset === chunk.length) {
+					if (front) this.#prepended.pop();
+					else {
+						this.#chunks[this.#head++] = void 0;
+						if (this.#head === this.#chunks.length) {
+							this.#chunks = [];
+							this.#head = 0;
+						} else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
+							this.#chunks = this.#chunks.slice(this.#head);
+							this.#head = 0;
+						}
+					}
 				}
 			}
 			return transferred;
 		}
+	};
+}
+let sharedPendingValueQueue;
+function initializePendingValueQueueClass(tracking) {
+	const PendingValueQueue = sharedPendingValueQueue ??= definePendingValueQueue();
+	/**
+	* Construct a queue that tracks its host reads in the context.
+	*
+	* @param readFn - reads the next value of the source
+	* @param elemMeta - metadata of the element type
+	* @returns the queue
+	*/
+	class StorePendingValueQueue extends PendingValueQueue {
+		constructor(readFn, elemMeta) {
+			super(tracking, readFn, elemMeta);
+		}
 	}
-	return PendingValueQueue;
+	return StorePendingValueQueue;
 }
 
 //#endregion
@@ -9430,7 +10325,7 @@ function initializeStreamReadableEndClass(_context) {
 		#endOfStream = false;
 		#stopError = null;
 		constructor(args) {
-			debugLog("[StreamReadableEnd#constructor()] args", args);
+			DEBUG: debugLog("[StreamReadableEnd#constructor()] args", args);
 			super(args);
 			this.#elemMeta = args.elemMeta;
 		}
@@ -9445,7 +10340,7 @@ function initializeStreamReadableEndClass(_context) {
 			this.drop({ allowPendingEvent: true });
 		}
 		async read(opts = 1) {
-			debugLog("[StreamReadableEnd#read()]");
+			DEBUG: debugLog("[StreamReadableEnd#read()]");
 			if (this.#endOfStream) return {
 				value: void 0,
 				done: true
@@ -9458,7 +10353,7 @@ function initializeStreamReadableEndClass(_context) {
 				this.#result = newResult;
 				await p;
 			} catch (err) {
-				debugLog("[StreamReadableEnd#read()] error waiting for previous read", err);
+				DEBUG: debugLog("[StreamReadableEnd#read()] error waiting for previous read", err);
 			}
 			else this.#result = newResult;
 			const { promise, resolve, reject } = newResult;
@@ -9505,10 +10400,11 @@ function initializeStreamReadableEndClass(_context) {
 				}
 				if (this.#result === newResult) this.#result = null;
 				if (transferred > 0) {
-					const values = buffer.read(transferred);
 					const { typedArray } = this.#elemMeta;
+					const bytes = typedArray === Uint8Array ? buffer.readBytes?.(transferred) : void 0;
+					const values = bytes ? void 0 : buffer.read(transferred);
 					resolve({
-						value: typedArray === void 0 ? count === 1 ? values[0] : values : new typedArray(values),
+						value: bytes ?? (typedArray === void 0 ? count === 1 ? values[0] : values : new typedArray(values)),
 						done: false
 					});
 				} else resolve({
@@ -9516,7 +10412,7 @@ function initializeStreamReadableEndClass(_context) {
 					done: true
 				});
 			} catch (err) {
-				debugLog("[StreamReadableEnd#read()] error", err);
+				DEBUG: debugLog("[StreamReadableEnd#read()] error", err);
 				reject(err);
 			}
 			const result = await promise;
@@ -9577,7 +10473,7 @@ function initializeStreamReadableEndClass(_context) {
 				if (bufferRemaining > 0) {
 					const count = Math.min(pendingRemaining, bufferRemaining);
 					const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-					buffer.write(pending.buffer.read(count, { transferResources }), { transferResources });
+					transferBuffer(pending.buffer, buffer, count, { transferResources });
 					pending.onCopyFn(() => this.resetPendingBufferMeta(), shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
 				}
 				onCopyDoneFn(shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
@@ -9605,7 +10501,7 @@ function initializeStreamWritableEndClass(_context) {
 		#elemMeta;
 		#sourceRebufferFn = null;
 		constructor(args) {
-			debugLog("[StreamWritableEnd#constructor()] args", args);
+			DEBUG: debugLog("[StreamWritableEnd#constructor()] args", args);
 			super(args);
 			this.#elemMeta = args.elemMeta;
 		}
@@ -9619,7 +10515,7 @@ function initializeStreamWritableEndClass(_context) {
 			this.#sourceRebufferFn = f;
 		}
 		async write(v) {
-			debugLog("[StreamWritableEnd#write()] args", { v });
+			DEBUG: debugLog("[StreamWritableEnd#write()] args", { v });
 			let data;
 			if (this.#elemMeta.isNumeric) {
 				if (v instanceof ArrayBuffer) v = new Uint8Array(v);
@@ -9632,7 +10528,7 @@ function initializeStreamWritableEndClass(_context) {
 		* for a guest read, so a write the reader has not taken yet stays pending and is not awaited.
 		*/
 		async writeMany(values, opts = {}) {
-			debugLog("[StreamWritableEnd#writeMany()] args", { values });
+			DEBUG: debugLog("[StreamWritableEnd#writeMany()] args", { values });
 			if (!Array.isArray(values)) throw new TypeError("writeMany values must be an array");
 			const count = values.length;
 			const { id: bufferID, buffer } = _context.buffers.createBuffer({
@@ -9717,7 +10613,7 @@ function initializeStreamWritableEndClass(_context) {
 				}
 				const numElements = Math.min(buffer.remaining(), pending.buffer.remaining());
 				const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-				pending.buffer.write(buffer.read(numElements, { transferResources }), { transferResources });
+				transferBuffer(buffer, pending.buffer, numElements, { transferResources });
 				pending.onCopyFn(() => this.resetPendingBufferMeta(), shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
 			}
 			onCopyDoneFn(shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
@@ -9733,7 +10629,7 @@ function initializeStreamWritableEndClass(_context) {
 * Create a stream and pack its readable and writable indices into one i64.
 */
 function streamNew(_context, ctx) {
-	debugLog("[streamNew()] args", { ctx });
+	DEBUG: debugLog("[streamNew()] args", { ctx });
 	const { streamTableIdx, callerComponentIdx, elemMeta } = ctx;
 	if (callerComponentIdx === void 0) throw new Error("missing caller component idx during stream.new");
 	const taskMeta = getCurrentTask(_context.taskLookup, callerComponentIdx);
@@ -9747,7 +10643,7 @@ function streamNew(_context, ctx) {
 		tableIdx: streamTableIdx,
 		elemMeta
 	});
-	debugLog("[streamNew()] created stream ends", {
+	DEBUG: debugLog("[streamNew()] created stream ends", {
 		writeEnd: {
 			waitableIdx: writeEndWaitableIdx,
 			handle: writeEndHandle
@@ -9762,7 +10658,7 @@ function streamNew(_context, ctx) {
 	return BigInt(writeEndWaitableIdx) << 32n | BigInt(readEndWaitableIdx);
 }
 function streamNewFromLift(_context, ctx) {
-	debugLog("[streamNewFromLift()] args", { ctx });
+	DEBUG: debugLog("[streamNewFromLift()] args", { ctx });
 	const { componentIdx, streamEndWaitableIdx, streamTableIdx, payloadLiftFn, payloadTypeSize32, payloadLowerFn } = ctx;
 	const stream = new _context.HostStream({
 		componentIdx,
@@ -9792,7 +10688,7 @@ const WRITABLE = {
 	busyDrop: "cannot drop busy stream"
 };
 function streamCopy(_context, direction, ctx, streamEndWaitableIdx, ptr, count) {
-	debugLog(`[${direction.copy}()] args`, {
+	DEBUG: debugLog(`[${direction.copy}()] args`, {
 		ctx,
 		streamEndWaitableIdx,
 		ptr,
@@ -9845,7 +10741,7 @@ function streamWrite(_context, ctx, streamEndWaitableIdx, ptr, count) {
 	return streamCopy(_context, WRITABLE, ctx, streamEndWaitableIdx, ptr, count);
 }
 function streamCancel(_context, direction, ctx, streamEndWaitableIdx) {
-	debugLog(`[${direction.cancel}()] args`, {
+	DEBUG: debugLog(`[${direction.cancel}()] args`, {
 		ctx,
 		streamEndWaitableIdx
 	});
@@ -9864,7 +10760,7 @@ function streamCancel(_context, direction, ctx, streamEndWaitableIdx) {
 		if (streamEnd.isCopying()) throw new Error(`stream end (idx [${streamEndWaitableIdx}]) is still in copying state`);
 		if (code !== _context.events[direction.event]) throw new Error(`unexpected event code [${code}], expected [ASYNC_EVENT_CODE.${direction.event}]`);
 		if (index !== streamEnd.waitableIdx()) throw new Error("event index does not match stream end");
-		debugLog(`[${direction.cancel}()] successful cancel`, {
+		DEBUG: debugLog(`[${direction.cancel}()] successful cancel`, {
 			ctx,
 			streamEndWaitableIdx,
 			streamEnd,
@@ -9900,7 +10796,7 @@ function streamCancelWrite(_context, ctx, streamEndWaitableIdx) {
 	return streamCancel(_context, WRITABLE, ctx, streamEndWaitableIdx);
 }
 function streamDrop(_context, direction, ctx, streamEndWaitableIdx) {
-	debugLog(`[${direction.drop}()] args`, {
+	DEBUG: debugLog(`[${direction.drop}()] args`, {
 		ctx,
 		streamEndWaitableIdx
 	});
@@ -9933,7 +10829,7 @@ function streamDropWritable(_context, ctx, streamEndWaitableIdx) {
 	streamDrop(_context, WRITABLE, ctx, streamEndWaitableIdx);
 }
 function streamTransfer(_context, srcStreamWaitableIdx, srcTableIdx, destTableIdx) {
-	debugLog("[streamTransfer()] args", {
+	DEBUG: debugLog("[streamTransfer()] args", {
 		srcStreamWaitableIdx,
 		srcTableIdx,
 		destTableIdx
@@ -9958,7 +10854,7 @@ function streamTransfer(_context, srcStreamWaitableIdx, srcTableIdx, destTableId
 		streamEnd
 	});
 	streamEnd.setTarget(`stream read end (waitable [${waitableIdx}])`);
-	debugLog("[streamTransfer()] successfully transferred", {
+	DEBUG: debugLog("[streamTransfer()] successfully transferred", {
 		dest: {
 			streamEndHandle: handle,
 			streamEndWaitableIdx: waitableIdx,

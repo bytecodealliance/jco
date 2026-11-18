@@ -1,3 +1,6 @@
+import { createLowerContext } from './call-context.js';
+import { consumeParams, readParam, remainingParams } from './flat-params.js';
+import { memoryView } from './memory-view.js';
 import type {
     TaskLowerContext,
     TaskLowerFn,
@@ -68,7 +71,7 @@ function flagsValue(context: LiftFlagsContext, value: unknown, names: readonly s
 }
 
 export function lowerFlatBool(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatBool()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatBool()] args', { ctx });
 
     if (!ctx.memory) {
         throw new Error('missing memory for lower');
@@ -80,13 +83,13 @@ export function lowerFlatBool(_context: StrictNumericContext, ctx: TaskLowerCont
     if (_context.strict && typeof ctx.vals[0] !== 'boolean') {
         throw new TypeError(`invalid bool value [${ctx.vals[0]}]`);
     }
-    new DataView(ctx.memory!.buffer).setUint8(ctx.storagePtr!, (ctx.vals[0] as number) ? 1 : 0);
+    memoryView(ctx).setUint8(ctx.storagePtr!, (ctx.vals[0] as number) ? 1 : 0);
 
     ctx.storagePtr! += 1;
 }
 
 export function lowerFlatS8(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatS8()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatS8()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
@@ -98,13 +101,13 @@ export function lowerFlatS8(_context: StrictNumericContext, ctx: TaskLowerContex
     if (_context.strict && !isInt8(ctx.vals[0])) {
         invalidNumericPrimitive('s8', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setInt8(ctx.storagePtr!, ctx.vals[0] as number);
+    memoryView(ctx).setInt8(ctx.storagePtr!, ctx.vals[0] as number);
 
     ctx.storagePtr! += 1;
 }
 
 export function lowerFlatU8(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatU8()] args', ctx);
+    DEBUG: debugLog('[_lowerFlatU8()] args', ctx);
 
     if (ctx.vals.length !== 1) {
         throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
@@ -117,13 +120,13 @@ export function lowerFlatU8(_context: StrictNumericContext, ctx: TaskLowerContex
     if (!ctx.memory) {
         throw new Error('missing memory for lower');
     }
-    new DataView(ctx.memory!.buffer).setUint8(ctx.storagePtr!, ctx.vals[0] as number);
+    memoryView(ctx).setUint8(ctx.storagePtr!, ctx.vals[0] as number);
 
     ctx.storagePtr! += 1;
 }
 
 export function lowerFlatS16(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatS16()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatS16()] args', { ctx });
 
     if (!ctx.memory) {
         throw new Error('missing memory for lower');
@@ -140,13 +143,13 @@ export function lowerFlatS16(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isInt16(ctx.vals[0])) {
         invalidNumericPrimitive('s16', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setInt16(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setInt16(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 2;
 }
 
 export function lowerFlatU16(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatU16()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatU16()] args', { ctx });
 
     if (!ctx.memory) {
         throw new Error('missing memory for lower');
@@ -163,13 +166,13 @@ export function lowerFlatU16(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isUint16(ctx.vals[0])) {
         invalidNumericPrimitive('u16', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setUint16(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setUint16(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 2;
 }
 
 export function lowerFlatS32(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatS32()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatS32()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error(`unexpected number [${ctx.vals.length}] of vals (expected 1)`);
@@ -183,13 +186,13 @@ export function lowerFlatS32(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isInt32(ctx.vals[0])) {
         invalidNumericPrimitive('s32', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setInt32(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setInt32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 4;
 }
 
 export function lowerFlatU32(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatU32()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatU32()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error(`expected single value to lower, got [${ctx.vals.length}]`);
@@ -203,13 +206,13 @@ export function lowerFlatU32(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isUint32(ctx.vals[0])) {
         invalidNumericPrimitive('u32', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setUint32(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setUint32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 4;
 }
 
 export function lowerFlatS64(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatS64()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatS64()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -223,13 +226,13 @@ export function lowerFlatS64(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isInt64(ctx.vals[0])) {
         invalidNumericPrimitive('s64', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setBigInt64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
+    memoryView(ctx).setBigInt64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
 
     ctx.storagePtr! += 8;
 }
 
 export function lowerFlatU64(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatU64()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatU64()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -243,13 +246,13 @@ export function lowerFlatU64(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isUint64(ctx.vals[0])) {
         invalidNumericPrimitive('u64', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setBigUint64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
+    memoryView(ctx).setBigUint64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
 
     ctx.storagePtr! += 8;
 }
 
 export function lowerFlatFloat32(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatFloat32()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatFloat32()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -263,13 +266,13 @@ export function lowerFlatFloat32(_context: StrictNumericContext, ctx: TaskLowerC
     if (_context.strict && typeof ctx.vals[0] !== 'number') {
         invalidNumericPrimitive('f32', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setFloat32(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setFloat32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 4;
 }
 
 export function lowerFlatFloat64(_context: StrictNumericContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatFloat64()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatFloat64()] args', { ctx });
 
     if (ctx.vals.length !== 1) {
         throw new Error('unexpected number of vals');
@@ -283,13 +286,13 @@ export function lowerFlatFloat64(_context: StrictNumericContext, ctx: TaskLowerC
     if (_context.strict && typeof ctx.vals[0] !== 'number') {
         invalidNumericPrimitive('f64', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setFloat64(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setFloat64(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 8;
 }
 
 export function lowerFlatChar(ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatChar()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatChar()] args', { ctx });
 
     const rem = ctx.storagePtr! % 4;
     if (rem !== 0) {
@@ -311,7 +314,7 @@ export function lowerFlatChar(ctx: TaskLowerContext) {
     ) {
         throw new TypeError('char must contain one Unicode scalar value');
     }
-    new DataView(ctx.memory!.buffer).setUint32(ctx.storagePtr!, codePoint, true);
+    memoryView(ctx).setUint32(ctx.storagePtr!, codePoint, true);
 
     ctx.storagePtr! += 4;
 }
@@ -327,7 +330,7 @@ export function lowerFlatStringAny(_context: LowerStringContext, ctx: TaskLowerC
                 throw new Error('missing realloc during flat string lower');
             }
             const { ptr, len } = compactUtf16Encode(_context.utf16, ctx.vals[0] as string, ctx.realloc, ctx.memory!);
-            const view = new DataView(ctx.memory!.buffer);
+            const view = memoryView(ctx);
             view.setUint32(ctx.storagePtr!, ptr, true);
             view.setUint32(ctx.storagePtr! + 4, len, true);
             ctx.storagePtr! += 8;
@@ -339,14 +342,14 @@ export function lowerFlatStringAny(_context: LowerStringContext, ctx: TaskLowerC
 }
 
 export function lowerFlatStringUTF16(_context: Utf16EncodingContext, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatStringUTF16()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatStringUTF16()] args', { ctx });
     if (!ctx.realloc) {
         throw new Error('missing realloc during flat string lower');
     }
 
     const { ptr, len } = utf16Encode(_context, ctx.vals[0], ctx.realloc, ctx.memory!);
 
-    const view = new DataView(ctx.memory!.buffer);
+    const view = memoryView(ctx);
     view.setUint32(ctx.storagePtr!, ptr, true);
     view.setUint32(ctx.storagePtr! + 4, len, true);
 
@@ -354,14 +357,14 @@ export function lowerFlatStringUTF16(_context: Utf16EncodingContext, ctx: TaskLo
 }
 
 export function lowerFlatStringUTF8(_context: StringEncodeInto, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatStringUTF8()] args', ctx);
+    DEBUG: debugLog('[_lowerFlatStringUTF8()] args', ctx);
     if (!ctx.realloc) {
         throw new Error('missing realloc during flat string lower');
     }
 
     const { ptr, len } = utf8Encode(_context, ctx.vals[0], ctx.realloc, ctx.memory!);
 
-    const view = new DataView(ctx.memory!.buffer);
+    const view = memoryView(ctx);
     view.setUint32(ctx.storagePtr!, ptr, true);
     view.setUint32(ctx.storagePtr! + 4, len, true);
 
@@ -371,7 +374,7 @@ export function lowerFlatStringUTF8(_context: StringEncodeInto, ctx: TaskLowerCo
 export function lowerFlatRecord(meta: LowerRecordMeta): TaskLowerFn {
     const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
     return function lowerFlatRecordInner(ctx) {
-        debugLog('[_lowerFlatRecord()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatRecord()] args', { ctx });
 
         const originalPtr = ctx.storagePtr!;
         const r = ctx.vals[0] as Record<string, unknown>;
@@ -408,7 +411,7 @@ export function lowerFlatVariant(_context: StrictNumericContext, meta: LowerVari
     }
 
     return function lowerFlatVariantInner(ctx) {
-        debugLog('[_lowerFlatVariant()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatVariant()] args', { ctx });
 
         const { tag, val } = ctx.vals[0] as { tag: string; val?: unknown };
         const variantCase = caseLookup[tag];
@@ -454,15 +457,15 @@ export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): 
     }
 
     return function lowerFlatListInner(ctx) {
-        debugLog('[_lowerFlatList()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatList()] args', { ctx });
 
         if (ctx.useDirectParams) {
-            if (ctx.params!.length < 2) {
+            if (remainingParams(ctx) < 2) {
                 throw new Error('insufficient params left to lower list');
             }
-            const storagePtr = (ctx.params![0] as number) >>> 0;
-            const elemCount = ctx.params![1];
-            ctx.params = ctx.params!.slice(2);
+            const storagePtr = (readParam(ctx, 0) as number) >>> 0;
+            const elemCount = readParam(ctx, 1);
+            consumeParams(ctx, 2);
 
             const list = ctx.vals[0] as unknown[];
             if (!list) {
@@ -472,7 +475,7 @@ export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): 
                 throw new Error('list length does not match allocated storage');
             }
 
-            const lowerCtx: TaskLowerContext = {
+            const lowerCtx: TaskLowerContext = createLowerContext({
                 storagePtr,
                 memory: ctx.memory,
                 stringEncoding: ctx.stringEncoding,
@@ -480,7 +483,7 @@ export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): 
                 realloc: ctx.realloc,
                 lowerResource: ctx.lowerResource,
                 vals: [],
-            };
+            });
             for (let idx = 0; idx < list.length; idx++) {
                 const elemPtr = storagePtr + idx * elemSize32;
                 lowerCtx.storagePtr = elemPtr;
@@ -563,7 +566,7 @@ export function lowerFlatMap(_context: StrictNumericContext, meta: LowerMapMeta)
     const { keyLowerFn, valueLowerFn, entrySize32, entryAlign32, valueOffset32 } = meta;
 
     return function lowerFlatMapInner(ctx) {
-        debugLog('[_lowerFlatMap()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatMap()] args', { ctx });
         const map = ctx.vals[0];
         if (!(map instanceof Map)) {
             throw new TypeError('expected a Map');
@@ -572,12 +575,12 @@ export function lowerFlatMap(_context: StrictNumericContext, meta: LowerMapMeta)
         let dataPtr;
         let restorePtr;
         if (ctx.useDirectParams) {
-            if (ctx.params!.length < 2) {
+            if (remainingParams(ctx) < 2) {
                 throw new Error('insufficient params left to lower map');
             }
-            dataPtr = (ctx.params![0] as number) >>> 0;
-            const expectedLen = ctx.params![1];
-            ctx.params = ctx.params!.slice(2);
+            dataPtr = (readParam(ctx, 0) as number) >>> 0;
+            const expectedLen = readParam(ctx, 1);
+            consumeParams(ctx, 2);
             if (expectedLen !== map.size) {
                 throw new Error('map length does not match allocated storage');
             }
@@ -613,7 +616,7 @@ export function lowerFlatMap(_context: StrictNumericContext, meta: LowerMapMeta)
 export function lowerFlatTuple(meta: LowerTupleMeta): TaskLowerFn {
     const { elemLowerMetas, size32: tupleSize32, align32: tupleAlign32 } = meta;
     return function lowerFlatTupleInner(ctx) {
-        debugLog('[_lowerFlatTuple()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatTuple()] args', { ctx });
         const originalPtr = ctx.storagePtr!;
         const tuple = ctx.vals[0] as unknown[];
         for (const [idx, [lowerFn, size32, align32]] of elemLowerMetas.entries()) {
@@ -641,7 +644,7 @@ export function lowerFlatFlags(_context: LiftFlagsContext, meta: LiftFlagsMeta):
     const { names, align32, intSizeBytes } = meta;
 
     return function lowerFlatFlagsInner(ctx) {
-        debugLog('[_lowerFlatFlags()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatFlags()] args', { ctx });
         if (ctx.vals.length !== 1) {
             throw new Error('unexpected number of vals');
         }
@@ -653,7 +656,7 @@ export function lowerFlatFlags(_context: LiftFlagsContext, meta: LiftFlagsMeta):
             ctx.storagePtr! += align32 - rem;
         }
 
-        const dv = new DataView(ctx.memory!.buffer);
+        const dv = memoryView(ctx);
         if (intSizeBytes === 1) {
             dv.setUint8(ctx.storagePtr!, flagValue);
         } else if (intSizeBytes === 2) {
@@ -671,7 +674,7 @@ export function lowerFlatFlags(_context: LiftFlagsContext, meta: LiftFlagsMeta):
 export function lowerFlatEnum(_context: StrictNumericContext, meta: LowerVariantMeta): TaskLowerFn {
     const f = lowerFlatVariant(_context, meta);
     return function lowerFlatEnumInner(ctx) {
-        debugLog('[_lowerFlatEnum()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatEnum()] args', { ctx });
 
         const v = ctx.vals[0];
         const isNotEnumObject = v === null || typeof v !== 'object' || Object.keys(v).length !== 2 || !('tag' in v);
@@ -687,7 +690,7 @@ export function lowerFlatOption(_context: StrictNumericContext, meta: LowerVaria
     const { payloadMaybeNull } = meta;
     const f = lowerFlatVariant(_context, meta);
     return function lowerFlatOptionInner(ctx) {
-        debugLog('[_lowerFlatOption()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatOption()] args', { ctx });
 
         const v = ctx.vals[0];
         if (v === null || v === undefined) {
@@ -713,7 +716,7 @@ export function lowerFlatOption(_context: StrictNumericContext, meta: LowerVaria
 export function lowerFlatResult(_context: StrictNumericContext, meta: LowerVariantMeta): TaskLowerFn {
     const f = lowerFlatVariant(_context, meta);
     return function lowerFlatResultInner(ctx) {
-        debugLog('[_lowerFlatResult()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatResult()] args', { ctx });
 
         const v = ctx.vals[0];
         const isNotResultObject =
@@ -735,7 +738,7 @@ export function lowerFlatOwn(_context: StrictNumericContext, meta: LowerOwnMeta)
     const { lowerFn, componentIdx, tableIdx } = meta;
 
     return function lowerFlatOwnInner(ctx) {
-        debugLog('[_lowerFlatOwn()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatOwn()] args', { ctx });
 
         if (ctx.componentIdx !== componentIdx) {
             throw new Error(
@@ -755,7 +758,7 @@ export function lowerFlatOwn(_context: StrictNumericContext, meta: LowerOwnMeta)
 }
 
 export function lowerFlatBorrow(ctx: TaskLowerContext): never {
-    debugLog('[_lowerFlatBorrow()] args', { ctx });
+    DEBUG: debugLog('[_lowerFlatBorrow()] args', { ctx });
     throw new Error('flat lower for borrowed resources is not supported!');
 }
 
@@ -763,7 +766,7 @@ export function lowerFlatFuture(_context: LowerFutureContext, meta: LowerFutureM
     const { componentIdx, futureTableIdx, elemMeta } = meta;
 
     return function lowerFlatFutureInner(ctx) {
-        debugLog('[_lowerFlatFuture()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatFuture()] args', { ctx });
 
         let future = ctx.vals[0];
         if (!future) {
@@ -825,7 +828,7 @@ export function lowerFlatStream(_context: LowerStreamContext, meta: LowerStreamM
     const { componentIdx, streamTableIdx, elemMeta } = meta;
 
     return function lowerFlatStreamInner(ctx) {
-        debugLog('[_lowerFlatStream()] args', { ctx });
+        DEBUG: debugLog('[_lowerFlatStream()] args', { ctx });
 
         const stream = ctx.vals[0];
         if (!stream) {
@@ -887,7 +890,7 @@ export function lowerFlatStream(_context: LowerStreamContext, meta: LowerStreamM
 }
 
 export function lowerFlatErrorContext(_context: LowerErrorContext, errCtxTableIdx: number, ctx: TaskLowerContext) {
-    debugLog('[_lowerFlatErrorContext()] args', { errCtxTableIdx, ctx });
+    DEBUG: debugLog('[_lowerFlatErrorContext()] args', { errCtxTableIdx, ctx });
     const { memory, realloc, vals, storagePtr, storageLen, componentIdx } = ctx;
 
     const errCtxGlobalRep = vals[0] as number;
@@ -934,7 +937,7 @@ export function lowerFlatErrorContext(_context: LowerErrorContext, errCtxTableId
         errCtxGlobalRefCountAdd(_context.globalTable, errCtxGlobalRep, -1);
     }
 
-    const lowerCtx = { memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx };
+    const lowerCtx = createLowerContext({ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx });
     lowerFlatU32(_context.numeric, lowerCtx);
     ctx.storagePtr = lowerCtx.storagePtr;
 }

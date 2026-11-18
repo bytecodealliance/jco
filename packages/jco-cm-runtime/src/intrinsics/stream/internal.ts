@@ -8,8 +8,9 @@ import type {
     StreamWritableEnd,
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
-export function initializeInternalStreamClass(_context: InternalStreamClassContext): InternalStreamConstructor {
-    class InternalStream {
+
+function defineInternalStream() {
+    return class InternalStream {
         #pendingBufferMeta: StreamPendingBufferMeta = {}; // shared between read/write ends
         #elemMeta: StreamElementMetadata;
 
@@ -18,8 +19,8 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
         #readEnd: StreamReadableEnd;
         #writeEnd: StreamWritableEnd;
 
-        constructor(args: InternalStreamOptions) {
-            debugLog('[InternalStream#constructor()] args', args);
+        constructor(context: InternalStreamClassContext, args: InternalStreamOptions) {
+            DEBUG: debugLog('[InternalStream#constructor()] args', args);
             if (!args.elemMeta) {
                 throw new Error('missing/invalid stream element metadata');
             }
@@ -36,7 +37,7 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
 
             this.#elemMeta = elemMeta;
 
-            this.#readEnd = new _context.StreamReadableEnd({
+            this.#readEnd = new context.StreamReadableEnd({
                 tableIdx,
                 elemMeta: this.#elemMeta,
                 pendingBufferMeta: this.#pendingBufferMeta,
@@ -46,7 +47,7 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
                 notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped(),
             });
 
-            this.#writeEnd = new _context.StreamWritableEnd({
+            this.#writeEnd = new context.StreamWritableEnd({
                 tableIdx,
                 elemMeta: this.#elemMeta,
                 pendingBufferMeta: this.#pendingBufferMeta,
@@ -83,7 +84,22 @@ export function initializeInternalStreamClass(_context: InternalStreamClassConte
             this.#readEnd.onInstanceStop();
             this.#writeEnd.drop({ allowPendingEvent: true });
         }
-    }
+    };
+}
+let sharedInternalStream: ReturnType<typeof defineInternalStream>;
 
-    return InternalStream;
+export function initializeInternalStreamClass(_context: InternalStreamClassContext): InternalStreamConstructor {
+    const InternalStream = (sharedInternalStream ??= defineInternalStream());
+    /**
+     * Construct a stream whose ends are of the classes in the context.
+     *
+     * @param args - options of the stream
+     * @returns the stream
+     */
+    class StoreInternalStream extends InternalStream {
+        constructor(args: InternalStreamOptions) {
+            super(_context, args);
+        }
+    }
+    return StoreInternalStream;
 }

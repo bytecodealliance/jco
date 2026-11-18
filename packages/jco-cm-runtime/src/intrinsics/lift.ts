@@ -1,3 +1,6 @@
+import { registerScalarLift, scalarLiftValue } from './scalar-lift.js';
+import { consumeParams, readParam, remainingParams, copyParams, takeParam, hasParamCursor } from './flat-params.js';
+import { memoryView } from './memory-view.js';
 import type {
     LiftModule,
     StreamReadableEnd,
@@ -92,130 +95,201 @@ export const initializeLiftVariant: LiftModule['initializeLiftVariant'] = () => 
     scratch: new DataView(new ArrayBuffer(8)),
 });
 
+let registeredBool: boolean;
 export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatBool()] args', { ctx });
+    if (!registeredBool) {
+        registeredBool = registerScalarLift(liftFlatBool, liftFlatBoolDirect, liftFlatBoolMemory);
+    }
+    return [ctx.useDirectParams ? liftFlatBoolDirect(ctx) : liftFlatBoolMemory(ctx), ctx];
+}
+
+function liftFlatBoolDirect(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatBool()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
-            throw new Error('expected at least a single i32 argument');
-        }
-        val = ctx.params[0] === 1;
-        ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i32 argument');
     }
+    val = readParam(ctx, 0) === 1;
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatBoolMemory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatBool()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (bool requires 1 byte)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getUint8(ctx.storagePtr!) === 1;
+    val = memoryView(ctx).getUint8(ctx.storagePtr!) === 1;
 
     ctx.storagePtr! += 1;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 1;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredS8: boolean;
 export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatS8()] args', { ctx });
-    let val;
-
+    if (!registeredS8) {
+        registeredS8 = registerScalarLift(liftFlatS8, liftFlatS8Direct, liftFlatS8Memory);
+    }
     if (ctx.useDirectParams) {
+        DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
+        const value = ctx.params[0];
         ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+        return [value, ctx];
     }
+    return [liftFlatS8Memory(ctx), ctx];
+}
+
+function liftFlatS8Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
+    return takeParam(ctx, 'expected at least a single i32 argument');
+}
+
+function liftFlatS8Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s8 requires 1 byte)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getInt8(ctx.storagePtr!);
+    val = memoryView(ctx).getInt8(ctx.storagePtr!);
     ctx.storagePtr! += 1;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 1;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredU8: boolean;
 export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatU8()] args', { ctx });
-    let val;
-
+    if (!registeredU8) {
+        registeredU8 = registerScalarLift(liftFlatU8, liftFlatU8Direct, liftFlatU8Memory);
+    }
     if (ctx.useDirectParams) {
+        DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
+        const value = ctx.params[0];
         ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+        return [value, ctx];
     }
+    return [liftFlatU8Memory(ctx), ctx];
+}
+
+function liftFlatU8Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatU8Direct(ctx) : liftFlatU8Memory(ctx);
+}
+
+function liftFlatU8Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
+    return takeParam(ctx, 'expected at least a single i32 argument');
+}
+
+function liftFlatU8Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u8 requires 1 byte)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getUint8(ctx.storagePtr!);
+    val = memoryView(ctx).getUint8(ctx.storagePtr!);
 
     ctx.storagePtr! += 1;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 1;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredS16: boolean;
 export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatS16()] args', { ctx });
-    let val;
-
+    if (!registeredS16) {
+        registeredS16 = registerScalarLift(liftFlatS16, liftFlatS16Direct, liftFlatS16Memory);
+    }
     if (ctx.useDirectParams) {
+        DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
+        const value = ctx.params[0];
         ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+        return [value, ctx];
     }
+    return [liftFlatS16Memory(ctx), ctx];
+}
+
+function liftFlatS16Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
+    return takeParam(ctx, 'expected at least a single i32 argument');
+}
+
+function liftFlatS16Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 2) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s16 requires 2 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getInt16(ctx.storagePtr!, true);
+    val = memoryView(ctx).getInt16(ctx.storagePtr!, true);
     ctx.storagePtr! += 2;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 2;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredU16: boolean;
 export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatU16()] args', { ctx });
-    let val;
-
+    if (!registeredU16) {
+        registeredU16 = registerScalarLift(liftFlatU16, liftFlatU16Direct, liftFlatU16Memory);
+    }
     if (ctx.useDirectParams) {
+        DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
+        const value = ctx.params[0];
         ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+        return [value, ctx];
     }
+    return [liftFlatU16Memory(ctx), ctx];
+}
+
+function liftFlatU16Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatU16Direct(ctx) : liftFlatU16Memory(ctx);
+}
+
+function liftFlatU16Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
+    return takeParam(ctx, 'expected at least a single i32 argument');
+}
+
+function liftFlatU16Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 2) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u16 requires 2 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getUint16(ctx.storagePtr!, true);
+    val = memoryView(ctx).getUint16(ctx.storagePtr!, true);
 
     ctx.storagePtr! += 2;
     if (ctx.storageLen !== undefined) {
@@ -227,199 +301,282 @@ export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storagePtr! += 2 - rem;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredS32: boolean;
 export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatS32()] args', { ctx });
-    let val;
-
+    if (!registeredS32) {
+        registeredS32 = registerScalarLift(liftFlatS32, liftFlatS32Direct, liftFlatS32Memory);
+    }
     if (ctx.useDirectParams) {
+        DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
+        const value = ctx.params[0];
         ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+        return [value, ctx];
     }
+    return [liftFlatS32Memory(ctx), ctx];
+}
+
+function liftFlatS32Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
+    return takeParam(ctx, 'expected at least a single i32 argument');
+}
+
+function liftFlatS32Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s32 requires 4 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getInt32(ctx.storagePtr!, true);
+    val = memoryView(ctx).getInt32(ctx.storagePtr!, true);
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredU32: boolean;
 export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatU32()] args', { ctx });
+    if (!registeredU32) {
+        registeredU32 = registerScalarLift(liftFlatU32, liftFlatU32Direct, liftFlatU32Memory);
+    }
+    return [ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx), ctx];
+}
+
+function liftFlatU32Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx);
+}
+
+function liftFlatU32Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU32()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
-            throw new Error('expected at least a single i34 argument');
-        }
-        // core i32 values arrive as signed numbers
-        val = (ctx.params[0] as number) >>> 0;
-        ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i34 argument');
     }
+    // core i32 values arrive as signed numbers
+    val = (readParam(ctx, 0) as number) >>> 0;
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatU32Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU32()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u32 requires 4 bytes)`);
     }
-    val = new DataView(ctx.memory!.buffer).getUint32(ctx.storagePtr!, true);
+    val = memoryView(ctx).getUint32(ctx.storagePtr!, true);
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredS64: boolean;
 export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatS64()] args', { ctx });
+    if (!registeredS64) {
+        registeredS64 = registerScalarLift(liftFlatS64, liftFlatS64Direct, liftFlatS64Memory);
+    }
+    return [ctx.useDirectParams ? liftFlatS64Direct(ctx) : liftFlatS64Memory(ctx), ctx];
+}
+
+function liftFlatS64Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS64()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
-            throw new Error('expected at least one single i64 argument');
-        }
-        if (typeof ctx.params[0] !== 'bigint') {
-            throw new Error('expected bigint');
-        }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single i64 argument');
     }
+    if (typeof readParam(ctx, 0) !== 'bigint') {
+        throw new Error('expected bigint');
+    }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatS64Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS64()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s64 requires 8 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getBigInt64(ctx.storagePtr!, true);
+    val = memoryView(ctx).getBigInt64(ctx.storagePtr!, true);
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 8;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredU64: boolean;
 export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatU64()] args', { ctx });
+    if (!registeredU64) {
+        registeredU64 = registerScalarLift(liftFlatU64, liftFlatU64Direct, liftFlatU64Memory);
+    }
+    return [ctx.useDirectParams ? liftFlatU64Direct(ctx) : liftFlatU64Memory(ctx), ctx];
+}
+
+function liftFlatU64Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU64()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
-            throw new Error('expected at least one single i64 argument');
-        }
-        if (typeof ctx.params[0] !== 'bigint') {
-            throw new Error('expected bigint');
-        }
-        // core i64 values arrive as signed BigInts
-        val = BigInt.asUintN(64, ctx.params[0]);
-        ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single i64 argument');
     }
+    if (typeof readParam(ctx, 0) !== 'bigint') {
+        throw new Error('expected bigint');
+    }
+    // core i64 values arrive as signed BigInts
+    val = BigInt.asUintN(64, readParam(ctx, 0) as bigint);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatU64Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU64()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u64 requires 8 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getBigUint64(ctx.storagePtr!, true);
+    val = memoryView(ctx).getBigUint64(ctx.storagePtr!, true);
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 8;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredFloat32: boolean;
 export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatFloat32()] args', { ctx });
+    if (!registeredFloat32) {
+        registeredFloat32 = registerScalarLift(liftFlatFloat32, liftFlatFloat32Direct, liftFlatFloat32Memory);
+    }
+    return [ctx.useDirectParams ? liftFlatFloat32Direct(ctx) : liftFlatFloat32Memory(ctx), ctx];
+}
+
+function liftFlatFloat32Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatFloat32()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
-            throw new Error('expected at least one single f32 argument');
-        }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
-
-        return [val, ctx];
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single f32 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+
+    return val;
+}
+
+function liftFlatFloat32Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatFloat32()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f32 requires 4 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getFloat32(ctx.storagePtr!, true);
+    val = memoryView(ctx).getFloat32(ctx.storagePtr!, true);
 
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredFloat64: boolean;
 export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatFloat64()] args', { ctx });
+    if (!registeredFloat64) {
+        registeredFloat64 = registerScalarLift(liftFlatFloat64, liftFlatFloat64Direct, liftFlatFloat64Memory);
+    }
+    return [ctx.useDirectParams ? liftFlatFloat64Direct(ctx) : liftFlatFloat64Memory(ctx), ctx];
+}
+
+function liftFlatFloat64Direct(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatFloat64()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
-            throw new Error('expected at least one single f64 argument');
-        }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
-
-        return [val, ctx];
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single f64 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+
+    return val;
+}
+
+function liftFlatFloat64Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatFloat64()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f64 requires 8 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getFloat64(ctx.storagePtr!, true);
+    val = memoryView(ctx).getFloat64(ctx.storagePtr!, true);
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 8;
     }
 
-    return [val, ctx];
+    return val;
 }
 
+let registeredChar: boolean;
 export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatChar()] args', { ctx });
+    if (!registeredChar) {
+        registeredChar = registerScalarLift(liftFlatChar, liftFlatCharDirect, liftFlatCharMemory);
+    }
+    return [ctx.useDirectParams ? liftFlatCharDirect(ctx) : liftFlatCharMemory(ctx), ctx];
+}
+
+function liftFlatCharDirect(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatChar()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
-            throw new Error('expected at least one single i32 argument');
-        }
-        val = i32ToChar(ctx.params[0] as number);
-        ctx.params = ctx.params.slice(1);
-        return [val, ctx];
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single i32 argument');
     }
+    val = i32ToChar(readParam(ctx, 0) as number);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatCharMemory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatChar()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (char requires 4 bytes)`);
     }
 
-    val = i32ToChar(new DataView(ctx.memory!.buffer).getUint32(ctx.storagePtr!, true));
+    val = i32ToChar(memoryView(ctx).getUint32(ctx.storagePtr!, true));
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
 export function liftFlatStringAny(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
@@ -456,14 +613,14 @@ function requireStringInMemory(
 }
 
 export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatStringUTF8()] args', { ctx });
+    DEBUG: debugLog('[_liftFlatStringUTF8()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length < 2) {
+        if (remainingParams(ctx) < 2) {
             throw new Error('expected at least two u32 arguments');
         }
-        let offset = ctx.params[0] as number | bigint;
+        let offset = readParam(ctx, 0) as number | bigint;
         if (typeof offset === 'bigint') {
             offset = Number(offset);
         } else {
@@ -472,13 +629,13 @@ export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftCon
         if (!Number.isSafeInteger(offset)) {
             throw new Error('invalid offset');
         }
-        const len = ctx.params[1] as number;
+        const len = readParam(ctx, 1) as number;
         if (!Number.isSafeInteger(len)) {
             throw new Error('invalid len');
         }
         requireStringInMemory(_context.RuntimeError, ctx.memory!, offset, len, 1);
         val = decodeUtf8(_context.RuntimeError, _context.utf8, new DataView(ctx.memory!.buffer, offset, len));
-        ctx.params = ctx.params.slice(2);
+        consumeParams(ctx, 2);
         return [val, ctx];
     }
 
@@ -487,7 +644,7 @@ export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftCon
         ctx.storagePtr! += 4 - rem;
     }
 
-    const dv = new DataView(ctx.memory!.buffer);
+    const dv = memoryView(ctx);
     const start = dv.getUint32(ctx.storagePtr!, true);
     const codeUnits = dv.getUint32(ctx.storagePtr! + 4, true);
 
@@ -503,14 +660,14 @@ export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftCon
 }
 
 export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatStringUTF16()] args', { ctx });
+    DEBUG: debugLog('[_liftFlatStringUTF16()] args', { ctx });
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length < 2) {
+        if (remainingParams(ctx) < 2) {
             throw new Error('expected at least two u32 arguments');
         }
-        let offset = ctx.params[0] as number | bigint;
+        let offset = readParam(ctx, 0) as number | bigint;
         if (typeof offset === 'bigint') {
             offset = Number(offset);
         } else {
@@ -519,13 +676,13 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
         if (!Number.isSafeInteger(offset)) {
             throw new Error('invalid offset');
         }
-        const len = ctx.params[1] as number;
+        const len = readParam(ctx, 1) as number;
         if (!Number.isSafeInteger(len)) {
             throw new Error('invalid len');
         }
         requireStringInMemory(_context.RuntimeError, ctx.memory!, offset, len, 2);
         val = _context.utf16.decode(new DataView(ctx.memory!.buffer, offset, len * 2));
-        ctx.params = ctx.params.slice(2);
+        consumeParams(ctx, 2);
         return [val, ctx];
     }
 
@@ -534,7 +691,7 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
         ctx.storagePtr! += 4 - rem;
     }
 
-    const dv = new DataView(ctx.memory!.buffer);
+    const dv = memoryView(ctx);
     const start = dv.getUint32(ctx.storagePtr!, true);
     const codeUnits = dv.getUint32(ctx.storagePtr! + 4, true);
 
@@ -551,11 +708,12 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
 
 export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
-    return function liftFlatRecordInner(ctx) {
-        debugLog('[_liftFlatRecord()] args', { ctx });
+    return function liftFlatRecordInner(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+        DEBUG: debugLog('[_liftFlatRecord()] args', { ctx });
 
         const originalPtr = ctx.storagePtr!;
         const res: Record<string, unknown> = {};
+        const useScalars = !ctx.useDirectParams || hasParamCursor(ctx);
         for (const [key, liftFn, size32, align32] of fieldMetas) {
             let fieldPtr;
             if (ctx.storagePtr! !== undefined) {
@@ -579,9 +737,14 @@ export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => 
                 fieldLen = ctx.storageLen;
             }
 
-            let [val, newCtx] = liftFn(ctx);
-            res[key] = val;
-            ctx = newCtx;
+            const scalar = useScalars ? scalarLiftValue(liftFn, ctx.useDirectParams) : undefined;
+            if (scalar) {
+                res[key] = scalar(ctx);
+            } else {
+                const [val, newCtx] = liftFn(ctx);
+                res[key] = val;
+                ctx = newCtx;
+            }
 
             if (fieldPtr !== undefined) {
                 ctx.storagePtr! = Math.max(ctx.storagePtr!, fieldPtr + size32);
@@ -621,24 +784,21 @@ export function liftFlatVariant(
     } = meta;
 
     return function liftFlatVariantInner(ctx) {
-        debugLog('[_liftFlatVariant()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatVariant()] args', { ctx });
         const origUseParams = ctx.useDirectParams;
 
         let caseIdx: number;
-        let liftRes;
         const originalPtr = ctx.storagePtr!;
         const numCases = caseMetas.length;
         if (caseMetas.length < 256) {
-            liftRes = liftFlatU8(ctx);
+            caseIdx = liftFlatU8Value(ctx) as number;
         } else if (numCases >= 256 && numCases < 65536) {
-            liftRes = liftFlatU16(ctx);
+            caseIdx = liftFlatU16Value(ctx) as number;
         } else if (numCases >= 65536 && numCases < 4_294_967_296) {
-            liftRes = liftFlatU32(ctx);
+            caseIdx = liftFlatU32Value(ctx) as number;
         } else {
             throw new Error(`unsupported number of variant cases [${numCases}]`);
         }
-        caseIdx = liftRes[0] as number;
-        ctx = liftRes[1];
 
         const [tag, liftFn, , , caseFlatCount, caseFlatTypes] = caseMetas[caseIdx];
 
@@ -675,7 +835,7 @@ export function liftFlatVariant(
                     if (have === want) {
                         continue;
                     }
-                    const val = ctx.params[i];
+                    const val = readParam(ctx, i);
                     if (have === 'i64' && want === 'i32') {
                         ctx.params[i] = Number(BigInt.asIntN(32, val as bigint));
                     } else if (have === 'i64' && want === 'f32') {
@@ -700,11 +860,11 @@ export function liftFlatVariant(
 
         if (origUseParams) {
             if (variantFlatCount === undefined || variantFlatCount === null) {
-                debugLog('[_liftFlatVariant()] variant with unknown flat count', { ctx, meta });
+                DEBUG: debugLog('[_liftFlatVariant()] variant with unknown flat count', { ctx, meta });
                 throw new Error('cannot lift variant with unknown flat count');
             }
             if (caseFlatCount === undefined || caseFlatCount === null) {
-                debugLog('[_liftFlatVariant()] case with unknown flat count', {
+                DEBUG: debugLog('[_liftFlatVariant()] case with unknown flat count', {
                     ctx,
                     meta,
                     case: meta.caseMetas[caseIdx],
@@ -716,12 +876,12 @@ export function liftFlatVariant(
             if (remainingPayloadParams < 0) {
                 throw new Error(`invalid variant flat count metadata`);
             }
-            if (ctx.params.length < remainingPayloadParams) {
+            if (remainingParams(ctx) < remainingPayloadParams) {
                 throw new Error(
-                    `expected at least [${remainingPayloadParams}] remaining variant payload params, but got [${ctx.params.length}]`,
+                    `expected at least [${remainingPayloadParams}] remaining variant payload params, but got [${remainingParams(ctx)}]`,
                 );
             }
-            ctx.params = ctx.params.slice(remainingPayloadParams);
+            consumeParams(ctx, remainingPayloadParams);
         }
 
         if (ctx.storagePtr! !== undefined) {
@@ -773,12 +933,18 @@ export function liftFlatList(
             val = new typedArray(ctx.memory!.buffer.slice(dataPtr, ctx.storagePtr));
         } else {
             const values = [];
+            // A scalar lift keeps the context it is given, so one lookup serves every element.
+            const scalar = scalarLiftValue(elemLiftFn, ctx.useDirectParams);
             for (let i = 0; i < len; i++) {
                 const elemPtr = dataPtr + i * elemSize32;
                 ctx.storagePtr = elemPtr;
-                const [res, nextCtx] = elemLiftFn(ctx);
-                values.push(res);
-                ctx = nextCtx;
+                if (scalar) {
+                    values.push(scalar(ctx));
+                } else {
+                    const [res, nextCtx] = elemLiftFn(ctx);
+                    values.push(res);
+                    ctx = nextCtx;
+                }
 
                 ctx.storagePtr = Math.max(ctx.storagePtr!, elemPtr + elemSize32);
             }
@@ -794,19 +960,19 @@ export function liftFlatList(
     };
 
     return function liftFlatListInner(ctx) {
-        debugLog('[_liftFlatList()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatList()] args', { ctx });
 
         let liftResults: [unknown, TaskLiftContext];
         if (knownLen !== undefined) {
             // list with known length
             if (ctx.useDirectParams) {
-                debugLog('memory unexpectedly missing while lifting unknown length list', { ctx });
-                liftResults = [listValue(ctx.params.slice(0, knownLen)), ctx];
-                ctx.params = ctx.params.slice(knownLen);
+                DEBUG: debugLog('memory unexpectedly missing while lifting unknown length list', { ctx });
+                liftResults = [listValue(copyParams(ctx, knownLen)), ctx];
+                consumeParams(ctx, knownLen);
             } else {
                 // indirect params
                 if (ctx.memory === null) {
-                    debugLog('memory unexpectedly missing while lifting known length list', { knownLen, ctx });
+                    DEBUG: debugLog('memory unexpectedly missing while lifting known length list', { knownLen, ctx });
                     throw new Error(`memory missing while lifting known length (${knownLen}) list`);
                 }
 
@@ -820,9 +986,9 @@ export function liftFlatList(
 
             if (ctx.useDirectParams) {
                 // unknown length list ptr w/ direct params
-                const dataPtr = (ctx.params[0] as number) >>> 0;
-                const len = ctx.params[1] as number;
-                ctx.params = ctx.params.slice(2);
+                const dataPtr = (readParam(ctx, 0) as number) >>> 0;
+                const len = readParam(ctx, 1) as number;
+                consumeParams(ctx, 2);
 
                 ctx.useDirectParams = false;
                 const originalPtr = ctx.storagePtr!;
@@ -837,13 +1003,8 @@ export function liftFlatList(
                 const originalLen = ctx.storageLen;
                 ctx.storageLen = 8;
 
-                const dataPtrLiftRes = liftFlatU32(ctx);
-                const dataPtr = dataPtrLiftRes[0] as number;
-                ctx = dataPtrLiftRes[1];
-
-                const lenLiftRes = liftFlatU32(ctx);
-                const len = lenLiftRes[0] as number;
-                ctx = lenLiftRes[1];
+                const dataPtr = liftFlatU32Value(ctx) as number;
+                const len = liftFlatU32Value(ctx) as number;
 
                 const originalPtr = ctx.storagePtr!;
                 ctx.storagePtr! = dataPtr;
@@ -888,24 +1049,20 @@ export function liftFlatMap(meta: LiftMapMeta): (ctx: TaskLiftContext) => [unkno
     };
 
     return function liftFlatMapInner(ctx) {
-        debugLog('[_liftFlatMap()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatMap()] args', { ctx });
 
         let dataPtr;
         let len;
         let originalPtr = ctx.storagePtr!;
         const originalLen = ctx.storageLen;
         if (ctx.useDirectParams) {
-            dataPtr = (ctx.params[0] as number) >>> 0;
-            len = ctx.params[1] as number;
-            ctx.params = ctx.params.slice(2);
+            dataPtr = (readParam(ctx, 0) as number) >>> 0;
+            len = readParam(ctx, 1) as number;
+            consumeParams(ctx, 2);
         } else {
             ctx.storageLen = 8;
-            let lifted = liftFlatU32(ctx);
-            dataPtr = lifted[0] as number;
-            ctx = lifted[1];
-            lifted = liftFlatU32(ctx);
-            len = lifted[0] as number;
-            ctx = lifted[1];
+            dataPtr = liftFlatU32Value(ctx) as number;
+            len = liftFlatU32Value(ctx) as number;
             originalPtr = ctx.storagePtr!;
         }
 
@@ -921,7 +1078,7 @@ export function liftFlatMap(meta: LiftMapMeta): (ctx: TaskLiftContext) => [unkno
 export function liftFlatTuple(meta: LiftTupleMeta): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const { elemLiftFns, size32: tupleSize32, align32: tupleAlign32 } = meta;
     return function liftFlatTupleInner(ctx) {
-        debugLog('[_liftFlatTuple()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatTuple()] args', { ctx });
 
         const originalPtr = ctx.storagePtr!;
         const val = [];
@@ -946,9 +1103,14 @@ export function liftFlatTuple(meta: LiftTupleMeta): (ctx: TaskLiftContext) => [u
                 elemLen = ctx.storageLen;
             }
 
-            const [newValue, newCtx] = liftFn(ctx);
-            val.push(newValue);
-            ctx = newCtx;
+            const scalar = scalarLiftValue(liftFn, ctx.useDirectParams);
+            if (scalar) {
+                val.push(scalar(ctx));
+            } else {
+                const [newValue, newCtx] = liftFn(ctx);
+                val.push(newValue);
+                ctx = newCtx;
+            }
 
             if (elemPtr !== undefined) {
                 ctx.storagePtr! = Math.max(ctx.storagePtr!, elemPtr + size32);
@@ -980,7 +1142,7 @@ export function liftFlatEnum(
     meta.isEnum = true;
     const f = liftFlatVariant(_context, meta);
     return function liftFlatEnumInner(ctx) {
-        debugLog('[_liftFlatEnum()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatEnum()] args', { ctx });
         const res = f(ctx);
         res[0] = (res[0] as { tag: string }).tag;
         return res;
@@ -994,7 +1156,7 @@ export function liftFlatOption(
     const { payloadMaybeNull } = meta;
     const f = liftFlatVariant(_context, meta);
     return function liftFlatOptionInner(ctx) {
-        debugLog('[_liftFlatOption()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatOption()] args', { ctx });
         const res = f(ctx);
         if (!payloadMaybeNull) {
             const value = res[0] as { tag: string; val?: unknown };
@@ -1010,7 +1172,7 @@ export function liftFlatResult(
 ): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const f = liftFlatVariant(_context, meta);
     return function liftFlatResultInner(ctx) {
-        debugLog('[_liftFlatResult()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatResult()] args', { ctx });
         const res = f(ctx);
         const value = res[0] as { tag: string; val?: unknown };
         if (!('val' in value)) {
@@ -1027,26 +1189,24 @@ export function liftFlatFlags(
     const { names, align32, intSizeBytes } = meta;
 
     return function liftFlatFlagsInner(ctx) {
-        debugLog('[_liftFlatFlags()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatFlags()] args', { ctx });
 
         let val = _context.asBigInt ? null : {};
 
-        let liftRes;
+        let bits: number;
         switch (intSizeBytes) {
             case 1:
-                liftRes = liftFlatU8(ctx);
+                bits = liftFlatU8Value(ctx) as number;
                 break;
             case 2:
-                liftRes = liftFlatU16(ctx);
+                bits = liftFlatU16Value(ctx) as number;
                 break;
             case 4:
-                liftRes = liftFlatU32(ctx);
+                bits = liftFlatU32Value(ctx) as number;
                 break;
             default:
                 throw new Error('invalid flags size');
         }
-        let bits = liftRes[0] as number;
-        ctx = liftRes[1];
 
         if (_context.asBigInt) {
             val = BigInt(bits >>> 0);
@@ -1070,7 +1230,7 @@ export function liftFlatOwn(meta: LiftOwnMeta): (ctx: TaskLiftContext) => [unkno
     const { classNameFn, createResourceFn, componentIdx, tableIdx } = meta;
 
     return function liftFlatOwnInner(ctx) {
-        debugLog('[_liftFlatOwn()] args', { ctx, className: classNameFn() });
+        DEBUG: debugLog('[_liftFlatOwn()] args', { ctx, className: classNameFn() });
 
         if (ctx.componentIdx !== componentIdx) {
             throw new Error('invalid component for resource lift');
@@ -1093,7 +1253,7 @@ export function liftFlatBorrow(
     storagePtr: number,
     storageLen: number,
 ): never {
-    debugLog('[_liftFlatBorrow()] args', { size, memory, vals, storagePtr, storageLen });
+    DEBUG: debugLog('[_liftFlatBorrow()] args', { size, memory, vals, storagePtr, storageLen });
     throw new Error('flat lift for borrowed resources is not supported!');
 }
 
@@ -1104,7 +1264,7 @@ export function liftFlatFuture(
     const { futureTableIdx, componentIdx } = meta;
 
     return function liftFlatFutureInner(ctx) {
-        debugLog('[_liftFlatFuture()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatFuture()] args', { ctx });
 
         const futureMeta = _context.tables[futureTableIdx];
         if (futureMeta.componentIdx !== componentIdx) {
@@ -1117,8 +1277,8 @@ export function liftFlatFuture(
 
         let futureEndWaitableIdx;
         if (ctx.useDirectParams) {
-            futureEndWaitableIdx = ctx.params[0];
-            ctx.params = ctx.params.slice(1);
+            futureEndWaitableIdx = readParam(ctx, 0);
+            consumeParams(ctx, 1);
         } else {
             const [waitableIdx, newCtx] = liftFlatU32(ctx);
             ctx = newCtx;
@@ -1171,7 +1331,7 @@ export function liftFlatStream(
     const { streamTableIdx, componentIdx } = meta;
 
     return function liftFlatStreamInner(ctx) {
-        debugLog('[_liftFlatStream()] args', { ctx });
+        DEBUG: debugLog('[_liftFlatStream()] args', { ctx });
 
         const streamMeta = _context.tables[streamTableIdx];
         if (streamMeta.componentIdx !== componentIdx) {
@@ -1184,8 +1344,8 @@ export function liftFlatStream(
 
         let streamEndWaitableIdx;
         if (ctx.useDirectParams) {
-            streamEndWaitableIdx = ctx.params[0];
-            ctx.params = ctx.params.slice(1);
+            streamEndWaitableIdx = readParam(ctx, 0);
+            consumeParams(ctx, 1);
         } else {
             const [waitableIdx, newCtx] = liftFlatU32(ctx);
             ctx = newCtx;
@@ -1254,16 +1414,16 @@ export function liftFlatErrorContext(
     errCtxTableIdx: number,
     ctx: TaskLiftContext,
 ): [unknown, TaskLiftContext] {
-    debugLog('[_liftFlatErrorContext()] ctx', ctx);
+    DEBUG: debugLog('[_liftFlatErrorContext()] ctx', ctx);
 
     let val;
     let table;
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least one single i32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         table = errCtxGetLocalTable(_context.local, ctx.componentIdx, errCtxTableIdx);
     } else {
         throw new Error('indirect flat lift for error-contexts not yet implemented!');

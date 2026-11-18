@@ -1,4 +1,4 @@
-import { getCurrentTaskMeta, withCurrentTaskMeta } from './task-context.js';
+import { readTaskRegister, withCurrentTaskMeta } from './task-context.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './async-task/task-operations.js';
 import type { ResourceModule, ResourceHandleTables, ResourceTable } from '../runtime.js';
 
@@ -100,8 +100,7 @@ export const transferBorrow: ResourceModule['transferBorrow'] = (context, handle
     const { rep, own } = tableGet(context, fromTable, handle);
     const toTable = getOrCreateTable(context.tables, toTid);
     const componentIdx = toTable._componentIdx;
-    const meta =
-        componentIdx === undefined ? undefined : getCurrentTaskMeta(context.taskLookup.registers, componentIdx);
+    const meta = componentIdx === undefined ? undefined : readTaskRegister(context.taskLookup.registers, componentIdx);
     const borrowTask = meta ? getCurrentTask(context.taskLookup, componentIdx!, meta.taskID)?.task : undefined;
     if (borrowTask && own) {
         fromTable[handle << 1]++;

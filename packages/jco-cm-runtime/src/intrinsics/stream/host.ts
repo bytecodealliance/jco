@@ -10,8 +10,11 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { getStreamEnd } from './state.js';
-export function initializeHostStreamClass(_context: HostStreamClassContext): HostStreamConstructor {
-    class HostStream {
+
+function defineHostStream() {
+    return class HostStream {
+        #context: HostStreamClassContext;
+
         #componentIdx: number;
         #streamEndWaitableIdx: number;
         #streamTableIdx: number;
@@ -21,8 +24,9 @@ export function initializeHostStreamClass(_context: HostStreamClassContext): Hos
 
         #rep: number | null = null;
 
-        constructor(args: HostStreamOptions) {
-            debugLog('[HostStream#constructor()] args', args);
+        constructor(context: HostStreamClassContext, args: HostStreamOptions) {
+            this.#context = context;
+            DEBUG: debugLog('[HostStream#constructor()] args', args);
             if (args.componentIdx === undefined) {
                 throw new TypeError('missing component idx');
             }
@@ -60,20 +64,20 @@ export function initializeHostStreamClass(_context: HostStreamClassContext): Hos
                 throw new Error('unexpectedly missing rep for host stream');
             }
 
-            const streamEnd = getStreamEnd(_context.ends, {
+            const streamEnd = getStreamEnd(this.#context.ends, {
                 tableIdx: this.#streamTableIdx,
                 streamEndWaitableIdx: this.#streamEndWaitableIdx,
             });
             if (streamEnd.isDoneState()) {
-                throw new _context.RuntimeError(
+                throw new this.#context.RuntimeError(
                     'cannot lift stream after being notified that the writable end dropped',
                 );
             }
             if (streamEnd.isInSet()) {
-                throw new _context.RuntimeError("cannot lift stream while it's in a waitable set");
+                throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
             }
 
-            return new _context.Stream({
+            return new this.#context.Stream({
                 isReadable: streamEnd.isReadable(),
                 isWritable: streamEnd.isWritable(),
                 globalRep: this.#rep,
@@ -89,7 +93,22 @@ export function initializeHostStreamClass(_context: HostStreamClassContext): Hos
                 dropFn: () => streamEnd.drop({ allowPendingEvent: true }),
             });
         }
-    }
+    };
+}
+let sharedHostStream: ReturnType<typeof defineHostStream>;
 
-    return HostStream;
+export function initializeHostStreamClass(_context: HostStreamClassContext): HostStreamConstructor {
+    const HostStream = (sharedHostStream ??= defineHostStream());
+    /**
+     * Construct a host stream that uses the context.
+     *
+     * @param args - options of the host stream
+     * @returns the host stream
+     */
+    class StoreHostStream extends HostStream {
+        constructor(args: HostStreamOptions) {
+            super(_context, args);
+        }
+    }
+    return StoreHostStream;
 }

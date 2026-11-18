@@ -275,3 +275,60 @@ test.concurrent('UTF8 allocation calls the supplied encoder with its own receive
     const memory = { buffer: new ArrayBuffer(8) };
     expect(string.utf8Encode(encoder, 'é', () => 0, memory)).toEqual({ ptr: 0, len: 2, codepoints: 1 });
 });
+
+test.concurrent.each(['', 'ascii', '😀𝄞', '\ud800x\udc00', 'a😀\ud800é'.repeat(256)])(
+    'UTF-16 encoding counts scalars without changing surrogate repair: %j',
+    async (value) => {
+        const memory = new WebAssembly.Memory({ initial: 1, maximum: 3 });
+        const context = string.initializeUtf16Encoding();
+        const realloc = () => {
+            memory.grow(1);
+            return 65536;
+        };
+        const encoded = string.utf16Encode(context, value, realloc, memory);
+        expect(encoded.codepoints).toBe([...value].length);
+        expect(new TextDecoder('utf-16le').decode(new Uint8Array(memory.buffer, encoded.ptr, encoded.len * 2))).toBe(
+            value.toWellFormed(),
+        );
+        const asynchronous = await string.utf16EncodeAsync(context, value, async () => realloc(), memory);
+        expect(asynchronous).toEqual(encoded);
+    },
+);
+
+test.concurrent.each(['ascii', 'é', '😀', '\ud800x\udc00', '\ufeff'])(
+    'UTF-8 bytes and scalar counts agree with TextEncoder: %j',
+    async (unit) => {
+        const value = unit.repeat(1024);
+        const encoder = string.initializeUtf8Encoder();
+        const expected = new TextEncoder().encode(value);
+        const memory = new WebAssembly.Memory({ initial: 1, maximum: 3 });
+        const realloc = (_ptr: number, _old: number, align: number, size: number) => {
+            expect(align).toBe(1);
+            expect(size).toBe(expected.length);
+            memory.grow(1);
+            return 65536;
+        };
+        const encoded = string.utf8Encode(encoder, value, realloc, memory);
+        expect(encoded.codepoints).toBe([...value].length);
+        expect(new Uint8Array(memory.buffer, encoded.ptr, encoded.len)).toEqual(expected);
+        let calls = 0;
+        const original = encoder.encodeInto.bind(encoder);
+        const changed = await string.utf8EncodeAsync(
+            encoder,
+            value,
+            async (...args) => {
+                Object.defineProperty(encoder, 'encodeInto', {
+                    value: (input: string, output: Uint8Array) => {
+                        calls++;
+                        return original(input, output);
+                    },
+                });
+                return realloc(...args);
+            },
+            memory,
+        );
+        expect(calls).toBe(1);
+        expect(changed).toEqual(encoded);
+        expect(new Uint8Array(memory.buffer, changed.ptr, changed.len)).toEqual(expected);
+    },
+);

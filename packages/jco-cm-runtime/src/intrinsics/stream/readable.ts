@@ -1,3 +1,4 @@
+import { transferBuffer } from '../buffers.js';
 import type {
     StreamReadableEndConstructor,
     StreamEndpointClassContext,
@@ -24,7 +25,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         #stopError: Error | null = null;
 
         constructor(args: StreamEndOptions) {
-            debugLog('[StreamReadableEnd#constructor()] args', args);
+            DEBUG: debugLog('[StreamReadableEnd#constructor()] args', args);
             super(args);
             this.#elemMeta = args.elemMeta;
         }
@@ -47,7 +48,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         }
 
         async read(opts: number | StreamReadOptions = 1): Promise<StreamReadResult> {
-            debugLog('[StreamReadableEnd#read()]');
+            DEBUG: debugLog('[StreamReadableEnd#read()]');
 
             if (this.#endOfStream) {
                 return { value: undefined, done: true };
@@ -71,7 +72,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     this.#result = newResult;
                     await p;
                 } catch (err) {
-                    debugLog('[StreamReadableEnd#read()] error waiting for previous read', err);
+                    DEBUG: debugLog('[StreamReadableEnd#read()] error waiting for previous read', err);
                     // If the previous write we were waiting on errors for any reason,
                     // we can ignore it and attempt to continue with this read
                     // which may also fail for a similar reason
@@ -167,17 +168,19 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     this.#result = null;
                 }
                 if (transferred > 0) {
-                    const values = buffer.read(transferred);
                     const { typedArray } = this.#elemMeta;
+                    const bytes = typedArray === Uint8Array ? buffer.readBytes?.(transferred) : undefined;
+                    const values = bytes ? undefined : buffer.read(transferred);
                     const value =
-                        typedArray === undefined ? (count === 1 ? values[0] : values) : new typedArray(values);
+                        bytes ??
+                        (typedArray === undefined ? (count === 1 ? values![0] : values!) : new typedArray(values!));
                     // An option's none value is undefined, but still an item.
                     resolve({ value, done: false });
                 } else {
                     resolve({ value: undefined, done: true });
                 }
             } catch (err) {
-                debugLog('[StreamReadableEnd#read()] error', err);
+                DEBUG: debugLog('[StreamReadableEnd#read()] error', err);
                 reject(err);
             }
 
@@ -274,9 +277,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                 if (bufferRemaining > 0) {
                     const count = Math.min(pendingRemaining, bufferRemaining);
                     const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-                    buffer.write(pending.buffer.read(count, { transferResources }), {
-                        transferResources,
-                    });
+                    transferBuffer(pending.buffer, buffer, count, { transferResources });
                     pending.onCopyFn!(
                         () => this.resetPendingBufferMeta(),
                         shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,

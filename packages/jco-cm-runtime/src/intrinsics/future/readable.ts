@@ -1,3 +1,4 @@
+import { transferBuffer } from '../buffers.js';
 import type {
     FutureReadableClassContext,
     FutureReadableEndConstructor,
@@ -30,7 +31,7 @@ export function initializeFutureReadableEndClass(_context: FutureReadableClassCo
         target: unknown;
 
         constructor(args: FutureEndpointOptions) {
-            debugLog('[FutureReadableEnd#constructor()] args', args);
+            DEBUG: debugLog('[FutureReadableEnd#constructor()] args', args);
             super(args);
 
             if (!args.elemMeta) {
@@ -113,7 +114,7 @@ export function initializeFutureReadableEndClass(_context: FutureReadableClassCo
         }
 
         cancel() {
-            debugLog('[FutureEnd#cancel()]');
+            DEBUG: debugLog('[FutureEnd#cancel()]');
             this.resetAndNotifyPending(FutureEnd.CopyResult.CANCELLED);
         }
 
@@ -153,14 +154,14 @@ export function initializeFutureReadableEndClass(_context: FutureReadableClassCo
             }
 
             const transferResources = buffer.componentIdx() !== -1 && meta.buffer.componentIdx() !== -1;
-            buffer.write(meta.buffer.read(1, { transferResources }), { transferResources });
+            transferBuffer(meta.buffer, buffer, 1, { transferResources });
             this.resetAndNotifyPending(FutureEnd.CopyResult.COMPLETED);
             onCopyDoneFn(FutureEnd.CopyResult.COMPLETED);
         }
 
         // TODO: rename, guestRead also handles host reads (when data is present)...
         guestRead(args: FutureGuestCopyOptions) {
-            debugLog('[FutureReadableEnd#guestRead()] args', args);
+            DEBUG: debugLog('[FutureReadableEnd#guestRead()] args', args);
             const { componentIdx, stringEncoding, memory, realloc, ptr, data } = args;
 
             const elemMeta = {

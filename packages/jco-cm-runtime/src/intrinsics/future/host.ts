@@ -10,9 +10,10 @@ import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { getFutureEnd } from './state.js';
 
-/** Create host wrappers that look up endpoints in the selected future tables. */
-export function initializeHostFutureClass(_context: HostFutureClassContext): HostFutureConstructor {
-    class HostFuture {
+function defineHostFuture() {
+    return class HostFuture {
+        #context: HostFutureClassContext;
+
         #componentIdx: number;
         #futureEndWaitableIdx: number;
         #futureTableIdx: number;
@@ -24,8 +25,9 @@ export function initializeHostFutureClass(_context: HostFutureClassContext): Hos
 
         #rep: number | null = null;
 
-        constructor(args: HostFutureOptions) {
-            debugLog('[HostFuture#constructor()] args', args);
+        constructor(context: HostFutureClassContext, args: HostFutureOptions) {
+            DEBUG: debugLog('[HostFuture#constructor()] args', args);
+            this.#context = context;
             if (args.componentIdx === undefined) {
                 throw new TypeError('missing component idx');
             }
@@ -66,12 +68,12 @@ export function initializeHostFutureClass(_context: HostFutureClassContext): Hos
                 throw new Error('unexpectedly missing rep for host future');
             }
 
-            const cstate = getOrCreateAsyncState(_context.lookup, this.#componentIdx);
+            const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             if (!cstate) {
                 throw new Error(`missing async state for component [${this.#componentIdx}]`);
             }
 
-            const futureEnd = getFutureEnd(_context.ends, {
+            const futureEnd = getFutureEnd(this.#context.ends, {
                 tableIdx: this.#futureTableIdx,
                 futureEndWaitableIdx: this.#futureEndWaitableIdx,
             });
@@ -81,15 +83,31 @@ export function initializeHostFutureClass(_context: HostFutureClassContext): Hos
                 );
             }
             if (futureEnd.isDoneState()) {
-                throw new _context.RuntimeError('cannot lift future after previous read succeeded');
+                throw new this.#context.RuntimeError('cannot lift future after previous read succeeded');
             }
             if (futureEnd.isInSet()) {
-                throw new _context.RuntimeError("cannot lift future while it's in a waitable set");
+                throw new this.#context.RuntimeError("cannot lift future while it's in a waitable set");
             }
 
             return futureEnd.promise();
         }
-    }
+    };
+}
+let sharedHostFuture: ReturnType<typeof defineHostFuture>;
 
-    return HostFuture;
+/** Create host wrappers that look up endpoints in the selected future tables. */
+export function initializeHostFutureClass(_context: HostFutureClassContext): HostFutureConstructor {
+    const HostFuture = (sharedHostFuture ??= defineHostFuture());
+    /**
+     * Construct a host future that uses the context.
+     *
+     * @param args - options of the host future
+     * @returns the host future
+     */
+    class StoreHostFuture extends HostFuture {
+        constructor(args: HostFutureOptions) {
+            super(_context, args);
+        }
+    }
+    return StoreHostFuture;
 }

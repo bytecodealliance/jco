@@ -193,9 +193,9 @@ test.concurrent('file and fetch compilation preserve selected WebAssembly and no
         const fromFile = await create().core.fetchCompile(url);
         expect(fromFile).toBeInstanceOf(WebAssembly.Module);
         const core = create({ nodejsCompat: false }).core;
-        const fromFetch = await core.fetchCompile(
-            new URL('data:application/wasm;base64,' + Buffer.from(emptyWasm).toString('base64')),
-        );
+        const dataUrl = new URL('data:application/wasm;base64,' + btoa(String.fromCharCode(...emptyWasm)));
+        const fromFetch = await core.fetchCompile(dataUrl);
+        expect(await create().core.fetchCompile(dataUrl)).toBeInstanceOf(WebAssembly.Module);
         expect(fromFetch).toBeInstanceOf(WebAssembly.Module);
         expect(await core.instantiateCore(fromFetch)).toBeInstanceOf(WebAssembly.Instance);
     } finally {
@@ -204,7 +204,7 @@ test.concurrent('file and fetch compilation preserve selected WebAssembly and no
 });
 
 // Sequential because this test temporarily removes process-wide host APIs.
-test('optional host APIs remain lazy and preserve existing fallbacks', async () => {
+test.sequential('optional host APIs remain lazy and preserve existing fallbacks', async () => {
     const descriptor = Object.getOwnPropertyDescriptor(Promise, 'withResolvers');
     let pending!: Promise<number>;
     try {
@@ -233,7 +233,7 @@ test('optional host APIs remain lazy and preserve existing fallbacks', async () 
     await expect(pending).resolves.toBe(42);
 });
 
-test('debug logging snapshots the environment at module load', async () => {
+test.sequential('debug logging snapshots the environment at module load', async () => {
     const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
     try {
         vi.stubEnv('JCO_DEBUG', '');

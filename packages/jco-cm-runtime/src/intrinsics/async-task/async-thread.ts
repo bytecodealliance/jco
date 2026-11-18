@@ -1,3 +1,4 @@
+import { withConstructorStatics } from '../core/shared-class.js';
 import type {
     AsyncThreadClassContext,
     AsyncThreadConstructor,
@@ -13,9 +14,10 @@ const THREAD_NOT_STARTED = 'not-started';
 const THREAD_RUNNING = 'running';
 const THREAD_COMPLETED = 'completed';
 
-export function initializeAsyncThreadClass(context: AsyncThreadClassContext): AsyncThreadConstructor {
-    const { lookup: _lookup, registers: _registers } = context;
-    class AsyncThread {
+function defineAsyncThread() {
+    return class AsyncThread {
+        #context: AsyncThreadClassContext;
+
         static State = {
             // Explicitly spawned (`thread.new-indirect`) threads start
             // here; the implicit thread of a task skips straight to
@@ -40,7 +42,8 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
         #startFn: (() => unknown) | null = null;
         storage = [0, 0];
 
-        constructor(opts: AsyncThreadOptions) {
+        constructor(context: AsyncThreadClassContext, opts: AsyncThreadOptions) {
+            this.#context = context;
             if (opts?.componentIdx === undefined) {
                 throw new TypeError('missing component id during thread creation');
             }
@@ -104,7 +107,7 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
         }
 
         async suspend(opts: TaskSuspendOptions & { releaseLock?: boolean }) {
-            const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
+            const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             const task = this.#task;
             task.endFirstSlice();
             task.settleCompletion();
@@ -147,12 +150,12 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
             const startFn = this.#startFn!;
             this.#startFn = null;
 
-            withCurrentTaskMetaAsync(_registers, {
+            withCurrentTaskMetaAsync(this.#context.registers, {
                 threadID: this.#id!,
                 taskID: this.#task.id(),
                 componentIdx: this.#componentIdx,
                 fn: async () => {
-                    getOrCreateAsyncState(_lookup, this.#componentIdx).throwIfInterrupted();
+                    getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).throwIfInterrupted();
                     return startFn();
                 },
             })
@@ -161,9 +164,9 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
                     this.#task.removeThread(this);
                 })
                 .catch((err) => {
-                    err = recordTrap(context.traps, this.#componentIdx, err);
+                    err = recordTrap(this.#context.traps, this.#componentIdx, err);
                     this.#state = THREAD_COMPLETED;
-                    debugLog('[AsyncThread#start()] spawned thread errored', {
+                    DEBUG: debugLog('[AsyncThread#start()] spawned thread errored', {
                         threadID: this.#id!,
                         taskID: this.#task.id(),
                         componentIdx: this.#componentIdx,
@@ -174,6 +177,24 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
                     this.#task.removeThread(this);
                 });
         }
+    };
+}
+let sharedAsyncThread: ReturnType<typeof defineAsyncThread>;
+
+export function initializeAsyncThreadClass(context: AsyncThreadClassContext): AsyncThreadConstructor {
+    const AsyncThread = (sharedAsyncThread ??= defineAsyncThread());
+    /**
+     * Construct a thread that uses the context.
+     *
+     * @param options - options of the thread
+     * @returns the thread
+     */
+    class ContextAsyncThread extends AsyncThread {
+        constructor(options: ConstructorParameters<typeof AsyncThread>[1]) {
+            super(context, options);
+        }
     }
-    return AsyncThread;
+    return withConstructorStatics(ContextAsyncThread, {
+        State: { value: { ...AsyncThread.State }, enumerable: true },
+    });
 }

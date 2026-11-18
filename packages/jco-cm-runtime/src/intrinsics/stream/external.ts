@@ -5,22 +5,35 @@ import type {
     StreamReadOptions,
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
-export function initializeExternalStreamClass(_context: ExternalStreamClassContext): ExternalStreamConstructor {
-    class Stream {
+
+// Calls the drop function of a stream. Assigned in the class body, which alone reaches it.
+let dropStream: (stream: InstanceType<ReturnType<typeof defineBaseStream>>) => void;
+
+/** Everything of a stream but the methods named by the symbols of a context. */
+function defineBaseStream() {
+    return class BaseStream {
+        static {
+            dropStream = (stream) => {
+                stream.#dropFn?.();
+            };
+        }
+
         [key: symbol]: unknown;
+        #context: ExternalStreamClassContext;
         #isReadable: boolean;
         #isWritable: boolean;
         #writeFn: ExternalStreamOptions['writeFn'];
         #readFn: ExternalStreamOptions['readFn'];
         #dropFn: ExternalStreamOptions['dropFn'];
 
-        constructor(args: ExternalStreamOptions) {
-            debugLog('[Stream#constructor()] args', args);
+        constructor(context: ExternalStreamClassContext, args: ExternalStreamOptions) {
+            DEBUG: debugLog('[Stream#constructor()] args', args);
+            this.#context = context;
 
             if (args.globalRep === undefined) {
                 throw new TypeError('missing host stream rep');
             }
-            this[_context.resourceRep] = args.globalRep;
+            this[context.resourceRep] = args.globalRep;
 
             if (args.isReadable === undefined) {
                 throw new TypeError('missing readable setting');
@@ -45,22 +58,18 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
             this.#dropFn = args.dropFn;
         }
 
-        [_context.asyncIteratorSymbol]() {
-            return this;
-        }
-
         async return(): Promise<{ done: true }> {
-            (this[_context.disposeSymbol] as () => void)();
+            (this[this.#context.disposeSymbol] as () => void)();
             return { done: true };
         }
 
         async next() {
-            debugLog('[Stream#next()]');
+            DEBUG: debugLog('[Stream#next()]');
             return this.read();
         }
 
         async read(opts?: number | StreamReadOptions) {
-            debugLog('[Stream#read()]', { opts });
+            DEBUG: debugLog('[Stream#read()]', { opts });
             if (!this.#isReadable) {
                 throw new Error('stream is not marked as readable and cannot be read from');
             }
@@ -69,7 +78,7 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
         }
 
         async write(...objects: unknown[]) {
-            debugLog('[Stream#write()]');
+            DEBUG: debugLog('[Stream#write()]');
             if (!this.#isWritable) {
                 throw new Error('stream is not marked as writable and cannot be written to');
             }
@@ -81,11 +90,23 @@ export function initializeExternalStreamClass(_context: ExternalStreamClassConte
 
             await this.#writeFn!(obj);
         }
+    };
+}
+let sharedBaseStream: ReturnType<typeof defineBaseStream>;
+
+export function initializeExternalStreamClass(_context: ExternalStreamClassContext): ExternalStreamConstructor {
+    const BaseStream = (sharedBaseStream ??= defineBaseStream());
+    return class Stream extends BaseStream {
+        constructor(args: ExternalStreamOptions) {
+            super(_context, args);
+        }
+
+        [_context.asyncIteratorSymbol]() {
+            return this;
+        }
 
         [_context.disposeSymbol]() {
-            this.#dropFn?.();
+            dropStream(this);
         }
-    }
-
-    return Stream;
+    };
 }

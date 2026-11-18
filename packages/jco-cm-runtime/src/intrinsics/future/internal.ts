@@ -9,9 +9,8 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 
-/** Create future pairs using the selected readable and writable constructors. */
-export function initializeInternalFutureClass(_context: InternalFutureClassContext): InternalFutureConstructor {
-    class InternalFuture {
+function defineInternalFuture() {
+    return class InternalFuture {
         #globalFutureMapRep?: number;
         #pendingBufferMeta: FuturePendingBufferMeta = {}; // Shared between read and write ends
         #elemMeta: FutureElementMetadata;
@@ -19,8 +18,8 @@ export function initializeInternalFutureClass(_context: InternalFutureClassConte
         #readEnd: FutureReadableEnd;
         #writeEnd: FutureWritableEnd;
 
-        constructor(args: InternalFutureOptions) {
-            debugLog('[InternalFuture#constructor()] args', args);
+        constructor(context: InternalFutureClassContext, args: InternalFutureOptions) {
+            DEBUG: debugLog('[InternalFuture#constructor()] args', args);
             if (!args.elemMeta) {
                 throw new Error('missing/invalid future element metadata');
             }
@@ -38,7 +37,7 @@ export function initializeInternalFutureClass(_context: InternalFutureClassConte
 
             this.#elemMeta = args.elemMeta;
 
-            this.#readEnd = new _context.FutureReadableEnd({
+            this.#readEnd = new context.FutureReadableEnd({
                 tableIdx,
                 elemMeta: this.#elemMeta,
                 pendingBufferMeta: this.#pendingBufferMeta,
@@ -52,7 +51,7 @@ export function initializeInternalFutureClass(_context: InternalFutureClassConte
                 notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped(),
             });
 
-            this.#writeEnd = new _context.FutureWritableEnd({
+            this.#writeEnd = new context.FutureWritableEnd({
                 tableIdx,
                 elemMeta: this.#elemMeta,
                 pendingBufferMeta: this.#pendingBufferMeta,
@@ -88,7 +87,23 @@ export function initializeInternalFutureClass(_context: InternalFutureClassConte
             this.#readEnd.setGlobalFutureMapRep(rep);
             this.#writeEnd.setGlobalFutureMapRep(rep);
         }
-    }
+    };
+}
+let sharedInternalFuture: ReturnType<typeof defineInternalFuture>;
 
-    return InternalFuture;
+/** Create future pairs using the selected readable and writable constructors. */
+export function initializeInternalFutureClass(_context: InternalFutureClassContext): InternalFutureConstructor {
+    const InternalFuture = (sharedInternalFuture ??= defineInternalFuture());
+    /**
+     * Construct a future whose ends are of the classes in the context.
+     *
+     * @param args - options of the future
+     * @returns the future
+     */
+    class StoreInternalFuture extends InternalFuture {
+        constructor(args: InternalFutureOptions) {
+            super(_context, args);
+        }
+    }
+    return StoreInternalFuture;
 }

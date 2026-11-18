@@ -73,3 +73,172 @@ intercept its calls. There is no mutable namespace receiver or implicit override
 registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
+
+## Runtime profiles
+
+Runtime diagnostic statements carry a `DEBUG` JavaScript label.
+A profile is the choice of whether to keep them:
+
+| Profile   | Diagnostics (`DEBUG`) | Package entry                                |
+| --------- | --------------------- | -------------------------------------------- |
+| `checked` | removed               | `@bytecodealliance/jco-cm-runtime` (default) |
+| `debug`   | kept                  | `@bytecodealliance/jco-cm-runtime/debug`     |
+
+Removing a labeled statement removes the whole statement,
+including object literals, string formatting, and diagnostic getters passed as log arguments.
+Diagnostic arguments must not perform required work.
+
+Canonical ABI traps, resource-handle validation, Unicode validation, ownership, cancellation,
+and lifecycle checks are never labeled, and remain in both profiles.
+
+Assertions about internal implementation invariants carry a `SAFETY` label, and also remain in both profiles.
+The label marks statements that guard against defects of the runtime itself rather than against its callers,
+such as the check of the representation table's internal freelist head.
+Adding a `SAFETY` label requires auditing both the checked condition
+and any work performed while evaluating it.
+
+Only the `debug` profile logs: when `JCO_DEBUG` is set,
+or for bundled runtimes when an instance is created with the `debug` option.
+The `checked` profile omits runtime log calls even when `JCO_DEBUG` is set.
+The exported `debugLog` is an empty function in the checked profile. When a
+bundler includes the checked runtime, it can remove calls to that function
+from the generated bindings as well.
+
+### Bindings that bundle the runtime
+
+The transpiler applies a profile when it bundles the runtime into generated bindings.
+Select it with `runtimeProfile` (`--runtime-profile` on the command line); the default is `checked`.
+
+### Bindings that import the runtime
+
+Both profiles have the same exports, type declarations, and runtime API version,
+so the profile is chosen by the base that bindings import:
+
+```sh
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime       # checked
+jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/debug # debug
+```
+
+Modules of different profiles do not share state or private brands,
+so one program should import a single profile.
+
+### Building profiles
+
+`pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
+the `checked` profile at the top of `dist`, with `dist/debug` beside it.
+The `checked` profile is bundled and minified, one module per entry point with shared chunks;
+the `debug` profile keeps one module per source file.
+
+To build one profile into a directory of its own,
+run `node scripts/build.mjs --profile <profile> --out-dir /path/to/runtime` from this package,
+and use that directory as `cmRuntimeEsModule`.
+
+A bundler can also remove labels from the `debug` profile itself, for example with Rolldown:
+
+```js
+const bundle = await rolldown({
+    input: 'component.js',
+    transform: { dropLabels: ['DEBUG'] },
+});
+```
+
+The runtime must be included in the bundle, rather than marked external.
+Apply label removal before optimization passes that discard unused labels.
+
+See the [runtime microbenchmarks](../bench/labels/README.md) for label-removal checks and measurements.
+
+## Allocation and scheduling behavior
+
+### Consuming flat arguments
+
+`params` holds the arguments a lift has yet to consume. For example, a provider
+can lift two integers in sequence using the context returned by each lift.
+
+```js
+const input = { componentIdx: 0, useDirectParams: true, params: [10, 20] };
+const [x, rest] = liftFlatS32(input);
+const [y, end] = liftFlatS32(rest);
+// x === 10, y === 20, end.params is empty
+```
+
+Caller-created contexts, including ones with custom accessors, keep ordinary
+array consumption. The runtime uses the same approach for short, one-shot calls.
+For runtime-owned vectors of at least 64 arguments, or contexts explicitly
+created for reuse, a private cursor lets successive built-in lifts advance
+without copying the remaining array for each field. Reading `params` between
+lifts can materialize that array. Read it when a custom lift needs the remaining
+values or must retain a snapshot.
+
+### Lifting scalars from guest memory
+
+A scalar lift from memory advances the byte offset and reuses a `DataView` while
+the backing buffer stays the same. The next lift refreshes the view if the memory
+grows. A provider that keeps its own views must check the buffer after any call
+that can grow or replace memory.
+
+```js
+const ctx = { componentIdx: 0, memory, useDirectParams: false, storagePtr: 0, storageLen: 8 };
+const [first, next] = liftFlatS32(ctx); // reads bytes 0–3
+memory.grow(1);
+const [second] = liftFlatS32(next); // reads bytes 4–7 of the current buffer
+```
+
+Built-in composite lifts can read scalar fields directly into a record, avoiding
+a temporary result pair per field. Custom lift functions return `[value, context]`.
+Return a replacement context when the next field should use different storage.
+
+### Encoding UTF-8 into guest memory
+
+Reuse the store’s encoder across calls. The default uses the Web platform’s
+`TextEncoder.encodeInto` to write directly into the guest allocation in browsers
+and Node.js. For long ASCII inputs the byte length and scalar count both equal
+the JavaScript string length. Mixed Unicode needs a sizing pass. Each nonempty
+string makes one exact allocation, and the encoder obtains the destination view
+after `realloc` returns so growth during allocation is safe.
+
+```js
+const encoder = initializeUtf8Encoder();
+const { ptr, len, codepoints } = utf8Encode(encoder, 'A😀', realloc, memory);
+// Five bytes at ptr encode two Unicode scalars.
+```
+
+A provider can supply its own `encodeInto(input, destination)` to instrument
+writes or integrate an existing UTF-8 codec. It must fill the supplied buffer
+and report the UTF-16 units read and bytes written.
+
+### Transferring byte buffers
+
+Compatible byte buffers can copy directly between typed arrays. This avoids
+building an intermediate JavaScript array of individual bytes. A custom buffer
+can decline the bulk copy before consuming anything. For resource payloads the
+element-wise path carries the ownership options through both operations.
+
+```js
+if (!source.copyTo?.(target, count)) {
+    target.write(source.read(count, options), options);
+}
+```
+
+For a byte stream delivered to the host, an optional `readBytes(count)` returns
+an owned `Uint8Array`. Copy guest-backed bytes before returning them so later
+guest writes and memory growth cannot change a chunk the host has retained.
+
+### Reading streams and yielding to the host
+
+The public `queue.readSource()` returns a promise. A provider with data already
+available can also expose `readSourceOrPromise()`, which returns the number of
+items appended immediately or a promise for that count. Stream injection uses
+this capability to avoid a promise and microtask for every ready chunk.
+
+```js
+const read = queue.readSourceOrPromise?.() ?? queue.readSource();
+const appended = typeof read === 'number' ? read : await read;
+```
+
+Use the promise path for a source waiting on I/O. The runtime can deliver
+buffered async values while the rest of a requested batch is still unavailable.
+After 64 consecutive synchronous source reads, the default queue yields to the
+host so timers and cancellation can run. The store tracks that yield as pending
+work. Host completions within a microtask checkpoint share a scheduler wakeup.
+Each tick resumes one guest thread, giving it time to restore its registers
+before the next continuation runs.

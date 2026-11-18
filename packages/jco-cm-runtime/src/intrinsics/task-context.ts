@@ -4,6 +4,20 @@ import { debugLog } from './core/debug.js';
 
 export const initializeTaskRegisters: CoreModule['initializeTaskRegisters'] = () => ({});
 
+/**
+ * Key of the register of a component instance.
+ *
+ * Host tasks use the component index -1. A negative number is not an array index,
+ * so engines look it up as a string-keyed property; a named slot keeps the access
+ * that every host call makes on the fast path.
+ *
+ * @param componentIdx - index of a component instance, or -1 for the host
+ * @returns the key of that register in the registers object
+ */
+export function registerSlot(componentIdx: number): number | 'host' {
+    return componentIdx === -1 ? 'host' : componentIdx;
+}
+
 function validate(args: TaskMeta) {
     if (!args) {
         throw new TypeError('args missing');
@@ -19,34 +33,54 @@ function validate(args: TaskMeta) {
     }
 }
 
+/**
+ * Read a task register without copying what it holds.
+ *
+ * A register is only ever replaced, never changed in place, so the runtime reads it
+ * directly. The value must not be modified; `getCurrentTaskMeta` hands out a copy
+ * to callers outside the runtime.
+ *
+ * @param registers - the task registers of the store
+ * @param componentIdx - index of a component instance, or nothing for the executing task
+ * @returns the identity the register holds, if any
+ */
+export function readTaskRegister(
+    registers: TaskRegisters,
+    componentIdx?: number | null,
+): Readonly<TaskMeta> | undefined {
+    const value =
+        componentIdx === undefined || componentIdx === null ? registers.current : registers[registerSlot(componentIdx)];
+    return value === undefined || value === null ? undefined : value;
+}
+
 export const getCurrentTaskMeta: CoreModule['getCurrentTaskMeta'] = (registers, componentIdx) => {
-    const value = componentIdx === undefined || componentIdx === null ? registers.current : registers[componentIdx];
-    return value === undefined || value === null ? undefined : { ...value };
+    const value = readTaskRegister(registers, componentIdx);
+    return value === undefined ? undefined : { ...value };
 };
 
 export const setCurrentTaskMeta: CoreModule['setCurrentTaskMeta'] = (registers, args) => {
     validate(args);
     const { taskID, threadID, componentIdx } = args;
-    return (registers.current = registers[componentIdx] = { taskID, threadID, componentIdx });
+    return (registers.current = registers[registerSlot(componentIdx)] = { taskID, threadID, componentIdx });
 };
 
 export function withCurrentTaskMeta<T>(registers: TaskRegisters, args: TaskMeta & { fn: () => T }): T {
-    debugLog('[_withGlobalCurrentThreadMeta()] args', args);
+    DEBUG: debugLog('[_withGlobalCurrentThreadMeta()] args', args);
     validate(args);
     if (!args.fn) {
         throw new TypeError('missing fn');
     }
     const { taskID, threadID, componentIdx, fn } = args;
-    const previous = registers[componentIdx] ?? null;
+    const previous = registers[registerSlot(componentIdx)] ?? null;
     const previousCurrent = registers.current ?? null;
     try {
-        registers.current = registers[componentIdx] = { taskID, threadID, componentIdx };
+        registers.current = registers[registerSlot(componentIdx)] = { taskID, threadID, componentIdx };
         return fn();
     } catch (error) {
-        debugLog('error while executing sync callee/callback', { ...args, err: error });
+        DEBUG: debugLog('error while executing sync callee/callback', { ...args, err: error });
         throw error;
     } finally {
-        registers[componentIdx] = previous;
+        registers[registerSlot(componentIdx)] = previous;
         registers.current = previousCurrent;
     }
 }
@@ -55,26 +89,26 @@ export function withCurrentTaskMetaAsync<T>(
     registers: TaskRegisters,
     args: TaskMeta & { fn: () => T },
 ): T | Promise<Awaited<T>> {
-    debugLog('[_withGlobalCurrentThreadMetaAsync()] args', args);
+    DEBUG: debugLog('[_withGlobalCurrentThreadMetaAsync()] args', args);
     validate(args);
     if (!args.fn) {
         throw new TypeError('missing fn');
     }
     const { taskID, threadID, componentIdx, fn } = args;
-    const previous = registers[componentIdx] ?? null;
+    const previous = registers[registerSlot(componentIdx)] ?? null;
     const previousCurrent = registers.current ?? null;
     let result: T;
     try {
-        registers.current = registers[componentIdx] = { taskID, threadID, componentIdx };
+        registers.current = registers[registerSlot(componentIdx)] = { taskID, threadID, componentIdx };
         result = fn();
     } catch (error) {
-        debugLog('error while executing sync callee/callback', { ...args, err: error });
-        registers[componentIdx] = previous;
+        DEBUG: debugLog('error while executing sync callee/callback', { ...args, err: error });
+        registers[registerSlot(componentIdx)] = previous;
         registers.current = previousCurrent;
         throw error;
     }
     if (!isPromiseLike(result)) {
-        registers[componentIdx] = previous;
+        registers[registerSlot(componentIdx)] = previous;
         registers.current = previousCurrent;
         return result;
     }
@@ -82,12 +116,15 @@ export function withCurrentTaskMetaAsync<T>(
         try {
             return (await result) as Awaited<T>;
         } catch (error) {
-            debugLog('error while executing async callee/callback', { ...args, err: error });
+            DEBUG: debugLog('error while executing async callee/callback', { ...args, err: error });
             throw error;
         } finally {
             // A later thread of the same task may already own either register.
-            if (registers[componentIdx]?.threadID === threadID && registers[componentIdx]?.taskID === taskID) {
-                registers[componentIdx] = null;
+            if (
+                registers[registerSlot(componentIdx)]?.threadID === threadID &&
+                registers[registerSlot(componentIdx)]?.taskID === taskID
+            ) {
+                registers[registerSlot(componentIdx)] = null;
             }
             if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) {
                 registers.current = null;
@@ -97,10 +134,10 @@ export function withCurrentTaskMetaAsync<T>(
 }
 
 export const clearCurrentTaskMeta: CoreModule['clearCurrentTaskMeta'] = async (registers, args) => {
-    debugLog('[_clearCurrentTask()] args', args);
+    DEBUG: debugLog('[_clearCurrentTask()] args', args);
     validate(args);
     const { taskID, threadID, componentIdx } = args;
-    const meta = registers[componentIdx];
+    const meta = registers[registerSlot(componentIdx)];
     if (!meta) {
         throw new Error(`missing current thread meta for component idx [${componentIdx}]`);
     }
@@ -113,7 +150,7 @@ export const clearCurrentTaskMeta: CoreModule['clearCurrentTaskMeta'] = async (r
     if (meta.componentIdx !== componentIdx) {
         throw new Error(`component idx [${meta.componentIdx}] != requested idx [${componentIdx}]`);
     }
-    registers[componentIdx] = null;
+    registers[registerSlot(componentIdx)] = null;
     if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) {
         registers.current = null;
     }

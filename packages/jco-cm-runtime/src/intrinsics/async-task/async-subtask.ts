@@ -1,3 +1,4 @@
+import { withConstructorStatics } from '../core/shared-class.js';
 import type {
     AsyncSubtaskClassContext,
     AsyncSubtaskConstructor,
@@ -22,12 +23,15 @@ const STARTED = 1;
 const RETURNED = 2;
 const CANCELLED_BEFORE_STARTED = 3;
 const CANCELLED_BEFORE_RETURNED = 4;
+
+/** Stands in for a list that was never allocated. */
+const NONE: readonly never[] = [];
 type SubtaskState = 0 | 1 | 2 | 3 | 4;
 
-export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): AsyncSubtaskConstructor {
-    const { lookup: _lookup, memories: _memories, disposeSymbol: _disposeSymbol, RuntimeError } = context;
-    class AsyncSubtask {
-        static _ID = 0n;
+function defineAsyncSubtask() {
+    return class AsyncSubtask {
+        #context: AsyncSubtaskClassContext;
+
         static State = {
             STARTING,
             STARTED,
@@ -48,8 +52,9 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
         #onProgressFn: (() => void) | null = null;
         #callMetadata: TaskCallMetadata = {};
         #resolved = false;
-        #onResolveHandlers: ((value: unknown) => void)[] = [];
-        #onStartHandlers: (() => void)[] = [];
+        // Allocated when a handler is first registered: most subtasks have none.
+        #onResolveHandlers: ((value: unknown) => void)[] | null = null;
+        #onStartHandlers: (() => void)[] | null = null;
         #result: unknown = null;
         #resultSet = false;
         // Pending value returned by a host implementation of this (async import)
@@ -61,12 +66,13 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
         isManualAsync: boolean | undefined;
         // One execution slice awaited by the conditional cancel trampoline.
         cancelProgress: Promise<unknown> | null = null;
-        constructor(args: AsyncSubtaskOptions) {
+        constructor(context: AsyncSubtaskClassContext, store: { id: bigint }, args: AsyncSubtaskOptions) {
+            this.#context = context;
             if (typeof args.componentIdx !== 'number') {
                 throw new Error('invalid componentIdx for subtask creation');
             }
             this.#componentIdx = args.componentIdx;
-            this.#id = ++AsyncSubtask._ID;
+            this.#id = ++store.id;
             this.fnName = args.fnName;
             if (!args.parentTask) {
                 throw new Error('missing parent task during subtask creation');
@@ -215,7 +221,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
         // (see `AsyncTask#onResolve`). The host is notified of the discard by
         // disposing the pending value it returned (see `setHostPendingResult`).
         requestCancellation() {
-            debugLog('[AsyncSubtask#requestCancellation()] args', {
+            DEBUG: debugLog('[AsyncSubtask#requestCancellation()] args', {
                 componentIdx: this.#componentIdx,
                 subtaskID: this.#id,
                 state: this.#state,
@@ -257,13 +263,13 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 return;
             }
             this.#hostPendingResult = null;
-            disposeHostValue(_disposeSymbol, pending);
+            disposeHostValue(this.#context.disposeSymbol, pending);
         }
         registerOnStartHandler(f: () => void) {
-            this.#onStartHandlers.push(f);
+            (this.#onStartHandlers ??= []).push(f);
         }
         onStart(args?: { startFnParams?: unknown[] }) {
-            debugLog('[AsyncSubtask#onStart()] args', {
+            DEBUG: debugLog('[AsyncSubtask#onStart()] args', {
                 componentIdx: this.#componentIdx,
                 subtaskID: this.#id,
                 parentTaskID: this.parentTaskID(),
@@ -292,7 +298,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             return result;
         }
         registerOnResolveHandler(f: (value: unknown) => void) {
-            this.#onResolveHandlers.push(f);
+            (this.#onResolveHandlers ??= []).push(f);
         }
         reject(subtaskErr: unknown) {
             if (this.#resolved) {
@@ -309,7 +315,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#parentTask.reject(subtaskErr);
         }
         onResolve(subtaskValue: unknown) {
-            debugLog('[AsyncSubtask#onResolve()] args', {
+            DEBUG: debugLog('[AsyncSubtask#onResolve()] args', {
                 componentIdx: this.#componentIdx,
                 subtaskID: this.#id,
                 isAsync: this.isAsync,
@@ -336,7 +342,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 this.#hostPendingResult = null;
             }
             this.setResult(subtaskValue);
-            for (const f of this.#onResolveHandlers) {
+            for (const f of this.#onResolveHandlers ?? NONE) {
                 try {
                     f(subtaskValue);
                 } catch (err) {
@@ -350,7 +356,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             const memory =
                 callMetadata.memory ??
                 this.#parentTask?.getReturnMemory() ??
-                lookupMemories(_memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
+                lookupMemories(this.#context.memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
             // NOTE: cancelled resolutions carry no value, so nothing is lowered
             const returned = this.#state === RETURNED;
             if (
@@ -387,7 +393,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                         }
                         this.drop();
                     } catch (err) {
-                        debugLog(
+                        DEBUG: debugLog(
                             '[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion',
                             err,
                         );
@@ -409,7 +415,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             return this.#state >= RETURNED;
         }
         addLender(handle: SubtaskLender) {
-            debugLog('[AsyncSubtask#addLender()] args', { handle });
+            DEBUG: debugLog('[AsyncSubtask#addLender()] args', { handle });
             if (!handle || typeof handle.lends !== 'number') {
                 throw new Error('missing/invalid lender handle [' + handle + ']');
             }
@@ -420,7 +426,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#lenders!.push(handle);
         }
         deliverResolve() {
-            debugLog('[AsyncSubtask#deliverResolve()] args', {
+            DEBUG: debugLog('[AsyncSubtask#deliverResolve()] args', {
                 lenders: this.#lenders,
                 parentTaskID: this.parentTaskID(),
                 subtaskID: this.#id,
@@ -438,14 +444,14 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#lenders = null;
         }
         resolveDelivered() {
-            debugLog('[AsyncSubtask#resolveDelivered()] args', {});
+            DEBUG: debugLog('[AsyncSubtask#resolveDelivered()] args', {});
             if (this.#lenders === null && !this.isResolved()) {
                 throw new Error('invalid subtask state, lenders missing and subtask has not been resolved');
             }
             return this.#lenders === null;
         }
         drop() {
-            debugLog('[AsyncSubtask#drop()] args', {
+            DEBUG: debugLog('[AsyncSubtask#drop()] args', {
                 componentIdx: this.#componentIdx,
                 parentTaskID: this.#parentTask?.id(),
                 parentTaskFnName: this.#parentTask?.entryFnName(),
@@ -457,26 +463,53 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                 throw new Error('missing/invalid inner waitable');
             }
             if (!this.resolveDelivered()) {
-                throw new RuntimeError('cannot drop a subtask which has not yet resolved');
+                throw new this.#context.RuntimeError('cannot drop a subtask which has not yet resolved');
             }
             if (this.#waitable) {
                 this.#waitable.drop();
             }
         }
         #getComponentState() {
-            const state = getOrCreateAsyncState(_lookup, this.#componentIdx);
+            const state = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             if (!state) {
                 throw new Error('invalid/missing async state for component [' + this.#componentIdx + ']');
             }
             return state;
         }
         getWaitableHandleIdx() {
-            debugLog('[AsyncSubtask#getWaitableHandleIdx()] args', {});
+            DEBUG: debugLog('[AsyncSubtask#getWaitableHandleIdx()] args', {});
             if (!this.#waitable) {
                 throw new Error('missing/invalid waitable');
             }
             return this.waitableRep();
         }
+    };
+}
+let sharedAsyncSubtask: ReturnType<typeof defineAsyncSubtask>;
+
+export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): AsyncSubtaskConstructor {
+    const AsyncSubtask = (sharedAsyncSubtask ??= defineAsyncSubtask());
+    const store: { id: bigint } = { id: 0n };
+
+    /**
+     * Construct a subtask that uses the context.
+     *
+     * @param options - options of the subtask
+     * @returns the subtask
+     */
+    class ContextAsyncSubtask extends AsyncSubtask {
+        constructor(options: ConstructorParameters<typeof AsyncSubtask>[2]) {
+            super(context, store, options);
+        }
     }
-    return AsyncSubtask satisfies AsyncSubtaskConstructor;
+    return withConstructorStatics(ContextAsyncSubtask, {
+        _ID: {
+            get: () => store.id,
+            set: (id: bigint) => {
+                store.id = id;
+            },
+            enumerable: true,
+        },
+        State: { value: { ...AsyncSubtask.State }, enumerable: true },
+    });
 }
