@@ -23,7 +23,8 @@ node compare.mjs external embedded
 The first argument to `gen.mjs` names the directory under `../output/perf/`.
 Generating the same name again replaces its bindings. The second argument is
 either `embedded` or a runtime directory relative to the current working directory.
-Additional arguments go to the transpiler, e.g. `node gen.mjs debug embedded --profile=debug`.
+Additional arguments go to the transpiler, e.g. `node gen.mjs debug embedded --profile=debug`,
+or `node gen.mjs fast embedded --perf-sync-fast-path` to skip the task of synchronous calls.
 To compare runtime revisions, build each runtime and supply its dist directory under a distinct variant name.
 
 `compare.mjs` takes the baseline first, followed by one or more variants.

@@ -60,6 +60,7 @@ Options include:
 * `--variants-inline-cases`: Inlines WIT variant cases in their discriminated unions instead of exporting a named interface for every case. The named interfaces remain the default for backwards compatibility.
 * `--use-namespace-objects`: Exports namespace objects for WIT enums, flags, and variants. This implies `--flags-as-bigint` and cannot be combined with `--variants-inline-cases`.
 * `--enum-values-screaming-snake-case`: Represents WIT enum values as `SCREAMING_SNAKE_CASE` strings instead of their original kebab-case names.
+* `--perf-sync-fast-path`: Call synchronous exports and imports without creating a Component Model task for each call. Applies only to a component of one instance that uses no asynchronous function, stream, future, JSPI import or export, call tracking or `--js`; other components are generated as without the option. Off by default. See [Sync fast path](./performance/sync-fast-path.md).
 * `--tracing`: Emit tracing calls for all function entry and exits.
 * `--call-tracking`: Emit optional invocation handles to observe selected guest execution. See [Tracking individual calls](./advanced/call-tracking.md).
 * `--no-component-error-wrapping`: Throw the lifted error payload directly for a top-level `result::err` instead of wrapping it in a generated `ComponentError`. Jco preserves wrapping by default for compatibility.
