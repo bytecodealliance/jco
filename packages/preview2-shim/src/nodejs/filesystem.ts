@@ -98,6 +98,8 @@ class Descriptor implements IDescriptor {
     // Options given to the preopen this descriptor descends from, if any.
     #performance: PerformanceConfig | undefined;
     #fullPath;
+    // The resolved #hostPreopen or #fullPath, kept only with cacheDirectoryPaths.
+    #realBasePath: string | undefined;
     #virtualDirectory = false;
     private _id = 0;
 
@@ -745,7 +747,14 @@ class Descriptor implements IDescriptor {
 
         let baseResolved: string;
         try {
-            baseResolved = realHostPath(base);
+            // A failed resolution is not kept: the directory may appear later.
+            if (this.#performanceOptions.cacheDirectoryPaths) {
+                baseResolved = this.#realBasePath ??= realHostPath(base);
+            } else {
+                // Nothing kept from a time the option was on may be used later.
+                this.#realBasePath = undefined;
+                baseResolved = realHostPath(base);
+            }
         } catch (error) {
             throw convertFsError(error);
         }

@@ -169,6 +169,13 @@ export interface PerformanceConfig {
      * and sockets stay in the worker.
      */
     mainThreadFilesystem?: boolean;
+    /**
+     * Resolve the host path of each preopen and of each opened directory
+     * once instead of on every path operation. A directory reached through a
+     * symlink that is repointed afterwards keeps resolving to where it was
+     * first found.
+     */
+    cacheDirectoryPaths?: boolean;
 }
 
 /**
