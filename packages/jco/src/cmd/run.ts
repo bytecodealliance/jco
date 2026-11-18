@@ -24,6 +24,7 @@ interface RunComponentOptions extends GetSandboxSetupArgs {
     jcoMap?: string[];
     jcoTrace?: boolean;
     jcoCmRuntimeEsModule?: string;
+    jcoRuntimeProfile?: "checked" | "debug";
 }
 
 export type RunOptions = RunComponentOptions;
@@ -317,6 +318,7 @@ async function runComponent(
                 outDir,
                 tracing: opts.jcoTrace,
                 cmRuntimeEsModule: opts.jcoCmRuntimeEsModule,
+                runtimeProfile: opts.jcoRuntimeProfile,
                 map: opts.jcoMap ? Object.fromEntries(opts.jcoMap.map((mapping) => mapping.split("="))) : undefined,
                 importBindings: opts.jcoImportBindings,
                 instantiation: opts.isolateRequests ? "sync" : undefined,

@@ -202,6 +202,14 @@ program
     )
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
+    .addOption(
+        new Option(
+            "--runtime-profile <profile>",
+            "what the bundled Component Model runtime keeps: checked removes diagnostics, debug keeps them (logged with JCO_DEBUG)",
+        )
+            .choices(["checked", "debug"])
+            .default("checked"),
+    )
     .option(
         "--cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base (named runtime and intrinsics/* subpaths)",
@@ -331,6 +339,14 @@ program
         "--jco-cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base imported by the transpiled code",
     )
+    .addOption(
+        new Option(
+            "--jco-runtime-profile <profile>",
+            "what the bundled Component Model runtime keeps: checked removes diagnostics, debug keeps them (logged with JCO_DEBUG)",
+        )
+            .choices(["checked", "debug"])
+            .default("checked"),
+    )
     .option(
         "--jco-import <module>",
         "Custom module to import before the run executes to support custom environment setup",
@@ -374,6 +390,14 @@ program
     .option(
         "--jco-cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base imported by the transpiled code",
+    )
+    .addOption(
+        new Option(
+            "--jco-runtime-profile <profile>",
+            "what the bundled Component Model runtime keeps: checked removes diagnostics, debug keeps them (logged with JCO_DEBUG)",
+        )
+            .choices(["checked", "debug"])
+            .default("checked"),
     )
     .option(
         "--jco-import <module>",

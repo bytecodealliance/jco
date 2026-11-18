@@ -357,7 +357,7 @@ export interface InstantiateOptions {
 
 | Option | Purpose | Default |
 | --- | --- | --- |
-| [`debug`](#debug-logging) | Enable or disable debug logging for this instance. Absent when the bindings import an external runtime. | The truthiness of `JCO_DEBUG` when instantiation begins. |
+| [`debug`](#debug-logging) | Enable or disable diagnostics retained by the `debug` runtime profile. Absent when the bindings import an external runtime. | The truthiness of `JCO_DEBUG` when instantiation begins. |
 | [`onTrap`](#trap-notifications) | Receive traps, including traps from background guest tasks. | No callback; failed calls still report their errors. |
 | [`shim.globals.WebAssembly`](#runtime-overrides) | Supply the WebAssembly implementation used by runtime helpers and the default core instantiator. | `globalThis.WebAssembly`. |
 
@@ -370,20 +370,44 @@ const instance = await instantiate(getCoreModule, imports, undefined, {
 
 #### Debug logging
 
-`debug: true` enables `console.debug` diagnostics; `debug: false` disables them even
-when `JCO_DEBUG` is set. If omitted, the runtime reads `JCO_DEBUG` once during
-instantiation. Each instance keeps its own setting, so later changes to the
-options object or environment do not affect it.
+Generated bindings use the `checked` runtime profile by default, which removes
+runtime diagnostics. Setting `JCO_DEBUG=1` or `debug: true` cannot restore those
+statements. To debug a component, regenerate its bindings with the `debug` profile:
 
-The option exists only where the bindings contain their runtime. Bindings that import
-an external runtime share that module's logger between instances, so their
-`InstantiateOptions` has no `debug` property and the provider configures its own
-logging. The default external runtime reads `JCO_DEBUG` once when it loads.
+```sh
+jco transpile component.wasm -o output --runtime-profile debug
+JCO_DEBUG=1 node app.js
+```
 
-Direct ESM output has no instantiation options, and also reads `JCO_DEBUG` once when
-the module loads. In either case, setting `JCO_DEBUG` after the module has loaded has
-no effect: set it before starting the process, or before the first import of the
-bindings.
+The JavaScript API accepts the equivalent `runtimeProfile: 'debug'` transpilation
+option. Both profiles retain canonical ABI validation, traps, and assertions.
+
+`jco run` and `jco serve` generate bindings as they start, and take the profile as
+`--jco-runtime-profile`:
+
+```sh
+JCO_DEBUG=1 jco run --jco-runtime-profile debug component.wasm
+```
+
+With the `debug` profile, `debug: true` enables `console.debug` diagnostics;
+`debug: false` disables them even when `JCO_DEBUG` is set. If omitted, the runtime
+reads `JCO_DEBUG` once during instantiation. Each instance keeps its own setting,
+so later changes to the options object or environment do not affect it.
+
+The option exists only where the bindings contain their runtime. Bindings that
+import an external runtime share that module's logger between instances, so their
+`InstantiateOptions` has no `debug` property. Select the external debug build by
+its module base; `--runtime-profile` does not select an external runtime's profile:
+
+```sh
+jco transpile component.wasm -o output \
+  --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/debug
+JCO_DEBUG=1 node app.js
+```
+
+The external debug runtime reads `JCO_DEBUG` once when it loads. Direct ESM output
+with a bundled debug runtime also reads it once when the module loads. Set the
+variable before starting the process or before the first import of the bindings.
 
 #### Trap notifications
 
