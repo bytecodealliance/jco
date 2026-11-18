@@ -48,7 +48,7 @@
           end
         )
 
-        (local.get $next)
+        (local.get $ret)
       )
     )
     (core instance $libc (instantiate $libc))
