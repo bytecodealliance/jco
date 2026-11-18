@@ -5,30 +5,23 @@ import { program, Option } from "commander";
 import { styleText } from "./common.js";
 
 /**
- * Loaders of the functions that implement the commands, by function name.
+ * Loaders of the modules that implement the commands.
  *
- * Between them the command modules import the transpiler, the bundler, the componentization
+ * Between them these modules import the transpiler, the bundler, the componentization
  * backends and the tool components, which takes several times as long as parsing the
- * arguments does. A command is therefore imported when it runs, so that `--help`,
- * `--version` and every other command start without it.
+ * arguments does. A module is therefore imported when one of its commands runs, so that
+ * `--help`, `--version` and every other command start without it.
  */
-const COMMANDS = {
-    opt: async () => (await import("./cmd/opt.js")).opt,
-    transpileCmd: async () => (await import("./cmd/transpile.js")).transpileCmd,
-    types: async () => (await import("./cmd/types.js")).types,
-    guestTypes: async () => (await import("./cmd/types.js")).guestTypes,
-    run: async () => (await import("./cmd/run.js")).run,
-    serve: async () => (await import("./cmd/run.js")).serve,
-    parse: async () => (await import("./cmd/wasm-tools.js")).parse,
-    print: async () => (await import("./cmd/wasm-tools.js")).print,
-    componentNew: async () => (await import("./cmd/wasm-tools.js")).componentNew,
-    componentEmbed: async () => (await import("./cmd/wasm-tools.js")).componentEmbed,
-    metadataAdd: async () => (await import("./cmd/wasm-tools.js")).metadataAdd,
-    metadataShow: async () => (await import("./cmd/wasm-tools.js")).metadataShow,
-    componentWit: async () => (await import("./cmd/wasm-tools.js")).componentWit,
-    componentizeCommand: async () => (await import("./cmd/componentize.js")).componentizeCommand,
-    createProject: async () => (await import("./cmd/new.js")).createProject,
+const COMMAND_MODULES = {
+    componentize: () => import("./cmd/componentize.js"),
+    new: () => import("./cmd/new.js"),
+    opt: () => import("./cmd/opt.js"),
+    run: () => import("./cmd/run.js"),
+    transpile: () => import("./cmd/transpile.js"),
+    types: () => import("./cmd/types.js"),
+    "wasm-tools": () => import("./cmd/wasm-tools.js"),
 };
+type CommandModules = typeof COMMAND_MODULES;
 
 program
     .name("jco")
@@ -139,7 +132,7 @@ program
     )
     .option("--debug-binary-path <path>", "Path to which to write the generated debug binary")
     .option("--debug-enable-wizer-logging", "Enable wizer call debugging")
-    .action(commandAction("componentizeCommand"));
+    .action(commandAction("componentize", "componentizeCommand"));
 
 program
     .command("transpile")
@@ -245,7 +238,7 @@ program
     .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
     .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
     .allowExcessArguments(true)
-    .action(commandAction("transpileCmd"));
+    .action(commandAction("transpile", "transpileCmd"));
 
 program
     .command("types")
@@ -298,7 +291,7 @@ program
     .option("--typed-error-classes", "export named result error classes (implies --separate-interface-types)")
     .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
     .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
-    .action(commandAction("types"));
+    .action(commandAction("types", "types"));
 
 program
     .command("guest-types")
@@ -337,7 +330,7 @@ program
     .option("--typed-error-classes", "export named result error classes (implies --separate-interface-types)")
     .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
     .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
-    .action(commandAction("guestTypes"));
+    .action(commandAction("types", "guestTypes"));
 
 program
     .command("run")
@@ -378,8 +371,8 @@ program
             if (cmd === "--help" || cmd === "-h") {
                 command.help();
             } else {
-                const runCommand = await COMMANDS.run();
-                return runCommand(cmd, args, opts);
+                const { run } = await COMMAND_MODULES.run();
+                return run(cmd, args, opts);
             }
         }),
     );
@@ -431,8 +424,8 @@ program
             if (cmd === "--help" || cmd === "-h") {
                 command.help();
             } else {
-                const serveCommand = await COMMANDS.serve();
-                return serveCommand(cmd, args, opts);
+                const { serve } = await COMMAND_MODULES.run();
+                return serve(cmd, args, opts);
             }
         }),
     );
@@ -447,7 +440,7 @@ program
     .option("-q, --quiet")
     .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: 'binaryen/bin/wasm-opt')")
     .allowExcessArguments(true)
-    .action(commandAction("opt"));
+    .action(commandAction("opt", "opt"));
 
 program
     .command("wit")
@@ -455,21 +448,21 @@ program
     .argument("<component-path>", "Wasm component binary filepath")
     .option("-d, --document <name>", "WIT document of a package to print")
     .option("-o, --output <output-file>", "WIT output file path")
-    .action(commandAction("componentWit"));
+    .action(commandAction("wasm-tools", "componentWit"));
 
 program
     .command("print")
     .description("print the WebAssembly WAT text for a binary file [wasm-tools print]")
     .argument("<input>", "input file to process")
     .option("-o, --output <output-file>", "output file path")
-    .action(commandAction("print"));
+    .action(commandAction("wasm-tools", "print"));
 
 program
     .command("metadata-show")
     .description("extract the producer metadata for a Wasm binary [wasm-tools metadata show]")
     .argument("[module]", "Wasm component or core module filepath")
     .option("--json", "output component metadata as JSON")
-    .action(commandAction("metadataShow"));
+    .action(commandAction("wasm-tools", "metadataShow"));
 
 program
     .command("metadata-add")
@@ -477,14 +470,14 @@ program
     .argument("[module]", "Wasm component or core module filepath")
     .requiredOption("-m, --metadata <metadata...>", "field=name[@version] producer metadata to add with the embedding")
     .requiredOption("-o, --output <output-file>", "output binary path")
-    .action(commandAction("metadataAdd"));
+    .action(commandAction("wasm-tools", "metadataAdd"));
 
 program
     .command("parse")
     .description("parses the Wasm text format into a binary file [wasm-tools parse]")
     .argument("<input>", "input file to process")
     .requiredOption("-o, --output <output-file>", "output binary file path")
-    .action(commandAction("parse"));
+    .action(commandAction("wasm-tools", "parse"));
 
 program
     .command("scaffold")
@@ -514,7 +507,7 @@ program
             if (!opts.wit) {
                 throw new Error("required option '--wit <path|builtin>' not specified");
             }
-            const createProject = await COMMANDS.createProject();
+            const { createProject } = await COMMAND_MODULES.new();
             await createProject(projectDirectory, {
                 wit: opts.wit,
                 world: opts.world,
@@ -535,7 +528,7 @@ program
     .option("--adapt <[NAME=]adapter...>", "component adapters to apply")
     .option("--wasi-reactor", "build with the WASI Reactor adapter")
     .option("--wasi-command", "build with the WASI Command adapter")
-    .action(commandAction("componentNew"));
+    .action(commandAction("wasm-tools", "componentNew"));
 
 const tool = program.command("tool").description("Low-level WebAssembly conversion utilities");
 
@@ -547,7 +540,7 @@ tool.command("core-to-component")
     .option("--adapt <[NAME=]adapter...>", "component adapters to apply")
     .option("--wasi-reactor", "build with the WASI Reactor adapter")
     .option("--wasi-command", "build with the WASI Command adapter")
-    .action(commandAction("componentNew"));
+    .action(commandAction("wasm-tools", "componentNew"));
 
 program
     .command("embed")
@@ -559,21 +552,26 @@ program
     .option("--string-encoding <utf8|utf16|compact-utf16>", "set the component string encoding")
     .option("-n, --world-name <world-name>", "world name to embed")
     .option("-m, --metadata <metadata...>", "field=name[@version] producer metadata to add with the embedding")
-    .action(commandAction("componentEmbed"));
+    .action(commandAction("wasm-tools", "componentEmbed"));
 
 program.showHelpAfterError();
 
 program.parse();
 
 /**
- * Build the action of a command that `COMMANDS` implements, loading it when the action runs.
+ * Build the action of a command, importing the module that implements it when the action runs.
  *
- * @param name - key of the command in `COMMANDS`
+ * @param module - key of the module in `COMMAND_MODULES`
+ * @param name - export of that module that implements the command
  * @returns the action to register with the command
  */
-function commandAction(name: keyof typeof COMMANDS) {
+function commandAction<Module extends keyof CommandModules>(
+    module: Module,
+    name: string & keyof Awaited<ReturnType<CommandModules[Module]>>,
+) {
     const action = async (...args: any[]) => {
-        const command: (...args: any[]) => unknown = await COMMANDS[name]();
+        const exports: Record<string, unknown> = await COMMAND_MODULES[module]();
+        const command = exports[name] as (...args: any[]) => unknown;
         return command(...args);
     };
 
