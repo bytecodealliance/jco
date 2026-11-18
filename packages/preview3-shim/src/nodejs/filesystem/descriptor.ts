@@ -280,6 +280,8 @@ class Descriptor {
    * its first use
    */
   #dir: Dir | undefined;
+  /** The pending open of a preopen's directory, on its first use. */
+  #opening: Promise<Dir> | undefined;
   /** Whether this descriptor refers to a directory. */
   #isDirectory = false;
 
@@ -562,10 +564,10 @@ class Descriptor {
    */
   async setTimes(atimeDesc, mtimeDesc) {
     if (this.#isDirectory) {
-      const dir = this.#directory();
+      const dir = await this.#directory();
       const [atime, mtime] = [newTime(atimeDesc), newTime(mtimeDesc)];
       try {
-        dir.setTimes(atime, mtime);
+        await dir.promises.setTimes(atime, mtime);
       } catch (e) {
         throw FSError.from(e);
       }
@@ -598,15 +600,18 @@ class Descriptor {
   readDirectory() {
     // The listing is taken from the directory's handle, so it is of the
     // directory that was opened, whatever its path refers to by now
-    let entries = [];
-    let result = Promise.resolve();
-    try {
-      entries = this.#directory()
-        .readDir()
-        .map(({ name, type }) => ({ name, type: descriptorType(type) }));
-    } catch (e) {
-      result = Promise.reject(FSError.from(e));
-    }
+    const listing = this.#directory().then((dir) => dir.promises.readDir());
+    const entries = listing.then(
+      (list) => list.map(({ name, type }) => ({ name, type: descriptorType(type) })),
+      // The failure is reported by the future, and the stream is empty
+      () => [],
+    );
+    const result = listing.then(
+      () => {},
+      (e) => {
+        throw FSError.from(e);
+      },
+    );
 
     return [new StreamReader(iteratorOf(entries)), new FutureReader(result)];
   }
@@ -639,9 +644,9 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async createDirectoryAt(path) {
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     try {
-      dir.createDirAt(path);
+      await dir.promises.createDirAt(path);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -661,7 +666,7 @@ class Descriptor {
   async stat() {
     try {
       if (this.#isDirectory) {
-        return descriptorStatFromHandle(this.#directory().stat());
+        return descriptorStatFromHandle(await (await this.#directory()).promises.stat());
       }
 
       this.#ensureHandle();
@@ -693,9 +698,11 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async statAt(flags, path) {
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     try {
-      return descriptorStatFromHandle(dir.statAt(path, Boolean(flags.symlinkFollow)));
+      return descriptorStatFromHandle(
+        await dir.promises.statAt(path, Boolean(flags.symlinkFollow)),
+      );
     } catch (e) {
       throw FSError.from(e);
     }
@@ -722,10 +729,10 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async setTimesAt(flags, path, atimeDesc, mtimeDesc) {
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     const [atime, mtime] = [newTime(atimeDesc), newTime(mtimeDesc)];
     try {
-      dir.setTimesAt(path, atime, mtime, Boolean(flags.symlinkFollow));
+      await dir.promises.setTimesAt(path, atime, mtime, Boolean(flags.symlinkFollow));
     } catch (e) {
       throw FSError.from(e);
     }
@@ -752,8 +759,8 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async linkAt(oldFlags, oldPath, newDesc, newPath) {
-    const dir = this.#directory(oldPath);
-    const newDir = newDesc.#directory(newPath);
+    const dir = await this.#directory(oldPath);
+    const newDir = await newDesc.#directory(newPath);
 
     // On Windows, a trailing '/' means the path is treated as a
     // directory and hard links to directory are not supported
@@ -763,7 +770,7 @@ class Descriptor {
 
     try {
       // A symlink at `oldPath` is linked itself, whatever `oldFlags` says
-      dir.linkAt(oldPath, newDir, newPath);
+      await dir.promises.linkAt(oldPath, newDir, newPath);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -794,7 +801,7 @@ class Descriptor {
       throw new FSError("access");
     }
 
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     const mode = {
       ...df,
       read: df.read || !df.write,
@@ -803,7 +810,7 @@ class Descriptor {
 
     let opened;
     try {
-      opened = dir.openAt(path, {
+      opened = await dir.promises.openAt(path, {
         read: Boolean(mode.read),
         write: Boolean(mode.write),
         create: Boolean(of.create),
@@ -834,10 +841,10 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async readlinkAt(path) {
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     let target;
     try {
-      target = dir.readlinkAt(path);
+      target = await dir.promises.readlinkAt(path);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -865,9 +872,9 @@ class Descriptor {
     if (path === ".") {
       throw new FSError("invalid");
     }
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     try {
-      dir.removeDirAt(path);
+      await dir.promises.removeDirAt(path);
     } catch (e) {
       if (process.platform === "win32" && e.code === "ENOENT") {
         throw new FSError("not-directory");
@@ -891,10 +898,10 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async renameAt(oldPath, newDesc, newPath) {
-    const dir = this.#directory(oldPath);
-    const newDir = newDesc.#directory(newPath);
+    const dir = await this.#directory(oldPath);
+    const newDir = await newDesc.#directory(newPath);
     try {
-      dir.renameAt(oldPath, newDir, newPath);
+      await dir.promises.renameAt(oldPath, newDir, newPath);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -917,16 +924,16 @@ class Descriptor {
     if (target.startsWith("/")) {
       throw new FSError("not-permitted");
     }
-    const dir = this.#directory(target, path);
+    const dir = await this.#directory(target, path);
 
     try {
-      dir.symlinkAt(target, path);
+      await dir.promises.symlinkAt(target, path);
     } catch (e) {
       const isWin = process.platform === "win32";
       if (path.endsWith("/") && e.code === "EEXIST") {
         let isDir = false;
         try {
-          isDir = dir.statAt(path, true).type === "directory";
+          isDir = (await dir.promises.statAt(path, true)).type === "directory";
         } catch {
           // Not a directory, as far as the guest can tell
         }
@@ -956,9 +963,9 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async unlinkFileAt(path) {
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     try {
-      dir.unlinkAt(path);
+      await dir.promises.unlinkAt(path);
     } catch (err) {
       throw FSError.from(err);
     }
@@ -1014,9 +1021,9 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async metadataHashAt(flags, path) {
-    const dir = this.#directory(path);
+    const dir = await this.#directory(path);
     try {
-      const s = dir.statAt(path, Boolean(flags.symlinkFollow));
+      const s = await dir.promises.statAt(path, Boolean(flags.symlinkFollow));
       return { upper: s.mtimeNs, lower: s.ino };
     } catch (e) {
       throw FSError.from(e);
@@ -1025,7 +1032,7 @@ class Descriptor {
 
   async #syncDir() {
     try {
-      this.#directory().sync();
+      await (await this.#directory()).promises.sync();
     } catch (e) {
       throw FSError.from(e);
     }
@@ -1087,10 +1094,10 @@ class Descriptor {
    * lead outside of it, whatever happens to the directory's own path
    *
    * @param {...string} paths The paths the operation is given
-   * @returns {Dir} The directory handle
+   * @returns {Promise<Dir>} The directory handle
    * @throws {FSError} `payload.tag` contains mapped WASI error code
    */
-  #directory(...paths: string[]): Dir {
+  async #directory(...paths: string[]): Promise<Dir> {
     if (!this.#isDirectory) {
       throw new FSError("not-directory");
     }
@@ -1108,8 +1115,12 @@ class Descriptor {
       const { Dir } = native();
       // The Windows preopen for every path is the root of the current drive
       const hostPath = this.#hostPreopen === "//" ? "/" : this.#hostPreopen;
+      // Concurrent first uses share one open, and a failed one is retried
+      this.#opening ??= Dir.promises.open(hostPath).finally(() => {
+        this.#opening = undefined;
+      });
       try {
-        this.#dir = Dir.open(hostPath);
+        this.#dir ??= await this.#opening;
       } catch (e) {
         throw FSError.from(e);
       }
@@ -1119,7 +1130,7 @@ class Descriptor {
 
   async #statForIdentity() {
     if (this.#isDirectory) {
-      return this.#directory().stat();
+      return (await this.#directory()).promises.stat();
     }
     this.#ensureHandle();
     return this.#sharedHandle.use((handle) => handle.stat());
@@ -1196,22 +1207,24 @@ function descriptorStatFromHandle(s: Stat) {
 }
 
 /**
- * Build an async iterator over values that are already available
+ * Build an async iterator over values that become available together
  *
  * @template T
- * @param {T[]} values The values to yield
+ * @param {Promise<T[]>} pending The values to yield, which must not reject
  * @returns {AsyncIterableIterator<T>} The iterator
  */
-function iteratorOf(values) {
+function iteratorOf(pending) {
   let index = 0;
+  let done = false;
   return {
     async next() {
-      return index < values.length
+      const values = await pending;
+      return !done && index < values.length
         ? { done: false, value: values[index++] }
         : { done: true, value: undefined };
     },
     async return(value) {
-      index = values.length;
+      done = true;
       return { done: true, value };
     },
     [Symbol.asyncIterator]() {

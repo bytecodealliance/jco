@@ -60,6 +60,7 @@ A directory descriptor owns an open directory handle from
 resolved beneath that handle. `..`, absolute paths and symlinks cannot lead outside
 of a preopened directory, including while the host rearranges the tree, and a
 descriptor keeps referring to the directory it opened when that directory is renamed.
+These operations run on the libuv thread pool and do not block the event loop.
 
 This follows Wasmtime's filesystem semantics:
 

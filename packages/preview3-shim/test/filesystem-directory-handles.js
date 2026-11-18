@@ -218,20 +218,31 @@ describe.skipIf(process.platform === "win32")("Descriptor directory handles", ()
   test("rearranging the tree between two operations cannot lead outside", async () => {
     const victim = await openDirectory("parent/victim");
 
-    // The second operation starts before the tree is rearranged and the
-    // third after, while the first is still pending
+    // The first two operations run off the main thread while the tree is
+    // rearranged, and the last two start after
     const first = victim.createDirectoryAt("first");
-    const second = preopen.createDirectoryAt("parent/victim/second");
+    const second = preopen.createDirectoryAt("parent/victim/second").catch((error) => error);
     await swapForSymlinkToOutside("sandbox/parent/victim");
     const third = victim.createDirectoryAt("third");
     const fourth = preopen.createDirectoryAt("parent/victim/fourth").catch((error) => error);
 
-    await Promise.all([first, second, third]);
+    await Promise.all([first, third]);
     expect(await fourth).toMatchObject({ payload: { tag: "not-permitted" } });
+
+    // The path of the second operation is resolved before, during or after
+    // the rearrangement: it reaches the original directory or fails
+    const raced = await second;
+    if (raced !== undefined) {
+      expect(["no-entry", "not-permitted"]).toContain(raced.payload?.tag);
+    }
 
     await expectOutsideUntouched();
     const moved = await fs.readdir(host("sandbox/parent/victim.moved"));
-    expect(moved.sort()).toEqual(["first", "inside.txt", "second", "third"]);
+    const expected = ["first", "inside.txt", "third"];
+    if (raced === undefined) {
+      expected.push("second");
+    }
+    expect(moved.sort()).toEqual(expected.sort());
 
     victim[Symbol.dispose]();
   });
