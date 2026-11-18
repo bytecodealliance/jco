@@ -191,14 +191,14 @@ Return a replacement context when the next field should use different storage.
 
 Reuse the store’s encoder across calls. The default uses the Web platform’s
 `TextEncoder.encodeInto` to write directly into the guest allocation in browsers
-and Node.js. For long ASCII inputs the byte length and scalar count both equal
-the JavaScript string length. Mixed Unicode needs a sizing pass. Each nonempty
+and Node.js. For long ASCII inputs the byte length equals the JavaScript string
+length. Mixed Unicode needs a sizing pass. Each nonempty
 string makes one exact allocation, and the encoder obtains the destination view
 after `realloc` returns so growth during allocation is safe.
 
 ```js
 const encoder = initializeUtf8Encoder();
-const { ptr, len, codepoints } = utf8Encode(encoder, 'A😀', realloc, memory);
+const { ptr, len } = utf8Encode(encoder, 'A😀', realloc, memory);
 // Five bytes at ptr encode two Unicode scalars.
 ```
 

@@ -261,8 +261,6 @@ export interface StringMemory {
 export interface StringAllocation {
     ptr: number;
     len: number;
-    /** Omitted for the empty UTF-8 sentinel. */
-    codepoints?: number;
 }
 export interface StringDecoder {
     readonly decode: (input: ArrayBufferLike | ArrayBufferView) => string;
