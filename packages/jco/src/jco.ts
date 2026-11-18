@@ -200,6 +200,10 @@ program
         "--perf-strings-skip-copy-utf16-validation",
         "skip validating utf16 strings copied between components that both use utf16 (validated by default)",
     )
+    .option(
+        "--perf-sync-fast-path",
+        "call synchronous functions without a task per call, in components where that cannot be observed",
+    )
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
     .addOption(
