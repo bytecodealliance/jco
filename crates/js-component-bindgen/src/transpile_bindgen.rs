@@ -33,7 +33,7 @@ use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{
     ErrHandling, FunctionBindgen, FunctionBindgenComponentState, PayloadTypeMetadata, ResourceData,
-    ResourceExtraData, ResourceMap, ResourceTable,
+    ResourceExtraData, ResourceMap, ResourceTable, SYNC_FAST_PATH_CALL_FAILURE,
 };
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
@@ -229,10 +229,11 @@ pub enum InstantiationMode {
 /// What a call on the fast path still does, because it is observable: an
 /// export refuses to enter an instance that trapped or was stopped, records a
 /// trap of its core function and of its post-return, and fails if the store
-/// was stopped while it ran; an import checks `may_leave`, runs the host
-/// function as a tracked host operation, records a trap the host function
-/// throws, and does not return to the guest once the instance trapped or
-/// stopped.
+/// was stopped or a host function threw while it ran, as its rejected task
+/// would (see `SYNC_FAST_PATH_CALL_FAILURE`); an import checks `may_leave`,
+/// runs the host function as a tracked host operation, records a trap the
+/// host function throws, and does not return to the guest once the instance
+/// trapped or stopped.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum SyncFastPathBlocker {
     /// Core modules, lifts or lowers of more than one component instance, or a
@@ -247,7 +248,7 @@ pub(crate) enum SyncFastPathBlocker {
     /// Optimized and hybrid import bindings replace the lowered import.
     ImportBindings,
     /// A canonical built-in other than a synchronous `lower`, `resource.new`,
-    /// `resource.rep`, `resource.drop` or a trap stub.
+    /// `resource.rep` or `resource.drop`.
     Builtin,
     /// A core module imports `context.get` or `context.set`.
     ContextSlots,
@@ -323,8 +324,9 @@ pub(crate) fn sync_fast_path_blocker(
             }
             Trampoline::ResourceNew { .. }
             | Trampoline::ResourceRep { .. }
-            | Trampoline::ResourceDrop { .. }
-            | Trampoline::Trap(_) => {}
+            | Trampoline::ResourceDrop { .. } => {}
+            // (this includes the trap stubs of fused adapters, which record a
+            // trap against the instance of the task that is running)
             _ => return Some(SyncFastPathBlocker::Builtin),
         }
     }
@@ -1563,6 +1565,10 @@ impl<'a> Instantiator<'a, '_> {
 
             let i = self.lowering_options.push((options, i, *lower_ty));
             assert_eq!(i, *index);
+        }
+
+        if self.sync_fast_path {
+            uwriteln!(self.src.js, "let {SYNC_FAST_PATH_CALL_FAILURE} = null;");
         }
 
         // Set up global stream map, which is used by intrinsics like stream.transfer.
@@ -5864,6 +5870,18 @@ impl<'a> Instantiator<'a, '_> {
             );
             uwriteln!(self.src.js, "try {{\n{check_may_leave};");
         }
+        // An export on the sync fast path starts with no failed host function, as
+        // a new task would, and leaves its caller's failure as it found it: an
+        // export can run while an import of another export call is on the stack.
+        let sync_fast_path_export = !for_import && self.sync_fast_path;
+        if sync_fast_path_export {
+            uwriteln!(
+                self.src.js,
+                "const callerFailure = {SYNC_FAST_PATH_CALL_FAILURE};"
+            );
+            uwriteln!(self.src.js, "{SYNC_FAST_PATH_CALL_FAILURE} = null;");
+            uwriteln!(self.src.js, "try {{");
+        }
         if wrap_async_future_result {
             let future_value = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                 AsyncFutureIntrinsic::FutureValueClass,
@@ -6065,6 +6083,14 @@ impl<'a> Instantiator<'a, '_> {
                 &format!("{}, err, false", opts.instance.as_u32()),
             );
             uwriteln!(self.src.js, "}} catch (err) {{\nthrow {record_trap};\n}}");
+        }
+        if sync_fast_path_export {
+            uwriteln!(self.src.js, "}} finally {{");
+            uwriteln!(
+                self.src.js,
+                "{SYNC_FAST_PATH_CALL_FAILURE} = callerFailure;"
+            );
+            uwriteln!(self.src.js, "}}");
         }
 
         // Close function body
