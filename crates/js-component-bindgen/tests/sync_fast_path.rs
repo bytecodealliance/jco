@@ -30,6 +30,43 @@ const ELIGIBLE: &str = r#"
     (canon lift (core func $i "consume"))))
 "#;
 
+/// One component instance that defines a resource, whose destructor calls an import.
+const GUEST_RESOURCE: &str = r#"
+(component
+  (import "notify" (func $notify (param "code" u32)))
+  (component $api
+    (import "notify" (func $notify (param "code" u32)))
+    (core func $notify (canon lower (func $notify)))
+    (core module $destructor
+      (import "" "notify" (func $notify (param i32)))
+      (func (export "dtor") (param i32) (call $notify (local.get 0))))
+    (core instance $destructor (instantiate $destructor
+      (with "" (instance (export "notify" (func $notify))))))
+    (type $thing (resource (rep i32) (dtor (core func $destructor "dtor"))))
+    (core func $new (canon resource.new $thing))
+    (core func $rep (canon resource.rep $thing))
+    (core func $drop (canon resource.drop $thing))
+    (core module $m
+      (import "" "new" (func $new (param i32) (result i32)))
+      (import "" "rep" (func $rep (param i32) (result i32)))
+      (import "" "drop" (func $drop (param i32)))
+      (func (export "new") (param i32) (result i32) (call $new (local.get 0)))
+      (func (export "consume") (param i32) (result i32)
+        (call $rep (local.get 0))
+        (call $drop (local.get 0))))
+    (core instance $i (instantiate $m (with "" (instance
+      (export "new" (func $new))
+      (export "rep" (func $rep))
+      (export "drop" (func $drop))))))
+    (export $exported "thing" (type $thing))
+    (func (export "[constructor]thing") (param "value" u32) (result (own $exported))
+      (canon lift (core func $i "new")))
+    (func (export "[static]thing.consume") (param "thing" (own $exported)) (result u32)
+      (canon lift (core func $i "consume"))))
+  (instance $api (instantiate $api (with "notify" (func $notify))))
+  (export "api" (instance $api)))
+"#;
+
 /// A function whose type is `async`, although it is lifted synchronously.
 const ASYNC_FUNCTION_TYPE: &str = r#"
 (component
@@ -114,6 +151,9 @@ const TWO_INSTANCES: &str = r#"
   (export "run" (func $caller "run")))
 "#;
 
+/// A change to the configuration of a transpilation.
+type Configure<'a> = &'a dyn Fn(&mut TranspileConfig);
+
 /// Generate the JavaScript bindings of a component.
 fn bindings(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> String {
     let component = wat::parse_str(wat).expect("fixture should be valid WAT");
@@ -169,6 +209,11 @@ fn function<'a>(source: &'a str, name: &str) -> &'a str {
     &body[..end]
 }
 
+/// Generated code without its spaces, which the source printer does not keep stable.
+fn compact(source: &str) -> String {
+    source.replace(' ', "")
+}
+
 /// Whether generated code creates or uses a task.
 fn uses_task(source: &str) -> bool {
     source.contains("task.") || source.contains("createNewCurrentImplicitThread")
@@ -193,7 +238,24 @@ fn eligible_component_skips_the_task_machinery() {
     assert!(export.contains(".throwIfTrapped();"), "{export}");
     assert!(export.contains(".markTrapped(err);"), "{export}");
     assert!(export.contains(".stopped) { throw "), "{export}");
-    assert!(export.contains("throw _postReturnTrap("), "{export}");
+    assert!(export.contains("_postReturnTrap("), "{export}");
+
+    // An export fails with what a host function threw during its call, and
+    // leaves the failure of the call it is nested in as it was.
+    assert!(on.contains("let _jcoSyncCallFailure = null;"));
+    assert!(!off.contains("_jcoSyncCallFailure"));
+    assert!(
+        export.contains("const callerFailure = _jcoSyncCallFailure;"),
+        "{export}"
+    );
+    assert!(
+        export.contains("if (_jcoSyncCallFailure !== null) { throw _jcoSyncCallFailure.error; }"),
+        "{export}"
+    );
+    assert!(
+        export.contains("_jcoSyncCallFailure = callerFailure;"),
+        "{export}"
+    );
 
     // The core module imports the generated import itself, which keeps the
     // checks of the wrappers it replaces.
@@ -207,6 +269,40 @@ fn eligible_component_skips_the_task_machinery() {
     assert!(import.contains("_trackHostOperation("), "{import}");
     assert!(import.contains(".throwIfInterrupted();"), "{import}");
     assert!(import.contains("throw _recordTrap("), "{import}");
+    assert!(
+        compact(import).contains("_jcoSyncCallFailure={error:err};"),
+        "{import}"
+    );
+}
+
+#[test]
+fn component_that_defines_a_resource_is_eligible() {
+    let (off, on) = off_and_on(GUEST_RESOURCE, |_| {});
+    assert_ne!(off, on);
+    assert!(!on.contains("createNewCurrentImplicitThread("));
+
+    // The built-ins of the resource and its destructor are generated as before.
+    for source in [&off, &on] {
+        assert!(source.contains("_guardMayLeave("));
+        assert!(source.contains("exports0.dtor"));
+    }
+}
+
+/// Bindings that import their runtime call its trap and `may_leave` checks
+/// directly from the functions generated for imports.
+#[cfg(feature = "external-runtime")]
+#[test]
+fn imported_runtime_provides_what_the_fast_path_calls() {
+    let (off, on) = off_and_on(ELIGIBLE, |config| {
+        config.cm_runtime_es_module = Some("@example/runtime".into());
+    });
+    assert_ne!(off, on);
+
+    let import = function(&on, "_trampoline0");
+    assert!(!uses_task(import), "{import}");
+    for call in ["checkMayLeave(", "recordTrap(", "trackHostOperation("] {
+        assert!(import.contains(call), "{call} in {import}");
+    }
 }
 
 #[test]
@@ -240,7 +336,7 @@ fn ineligible_configurations_are_generated_as_without_the_option() {
             exports: Vec::new(),
         });
     };
-    let cases: [(&str, &dyn Fn(&mut TranspileConfig)); 4] = [
+    let cases: [(&str, Configure); 4] = [
         ("JSPI", &jspi),
         ("asm.js", &|config| config.opts.asmjs = true),
         ("call tracking", &|config| config.call_tracking = true),

@@ -29,6 +29,15 @@ use crate::names::js_string_literal;
 use crate::{ManagesIntrinsics, get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
+/// Variable of bindings on the sync fast path that holds, boxed, what the first
+/// host function to fail during the export call that is running threw, or `null`.
+///
+/// It stands in for the error a task is rejected with. One variable serves a
+/// whole component because the fast path applies to a single component
+/// instance whose calls nest but never interleave: an export saves and clears
+/// it on entry, and restores it on exit.
+pub(crate) const SYNC_FAST_PATH_CALL_FAILURE: &str = "_jcoSyncCallFailure";
+
 /// The `getCallbackFn` property of the options a task is created with.
 ///
 /// A function without a callback has none to look up, so its tasks are created
@@ -2759,11 +2768,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     format!("{call_prefix}{callee_fn_js}({callee_args_js})")
                 };
-                // What is checked of the instance once the host function has returned,
-                // and whether a trap the host function throws is recorded.
-                let sync_fast_path_component_state = self
-                    .sync_fast_path
-                    .then(|| self.sync_fast_path_component_state());
+                // The instance whose state is checked once the host function has
+                // returned, if this function checks it at all.
+                let component_state = if self.sync_fast_path {
+                    Some(self.sync_fast_path_component_state())
+                } else {
+                    task_managed.then(|| format!("{get_component_state}{component_idx_expr})"))
+                };
                 // Embedders that manage calls themselves release borrows per call
                 let scoped_borrows = self.skip_fn_call_task_management;
                 let (vars_init, assignment_lhs) = if self.err == ErrHandling::ResultCatchHandler {
@@ -2803,6 +2814,28 @@ impl Bindgen for FunctionBindgen<'_> {
                               }}
                             "#
                             );
+                        } else if self.sync_fast_path {
+                            // A host function that throws has failed the export that
+                            // is running, even if the guest catches the exception:
+                            // with a task, the rejected subtask rejects it. The first
+                            // failure of a call is the one its export reports, and a
+                            // stop of the store that came before it is that failure.
+                            let store = self.intrinsic(Intrinsic::Component(
+                                ComponentIntrinsic::GlobalStoreTrap,
+                            ));
+                            uwriteln!(
+                                self.src,
+                                r#"
+                              try {{
+                                 {assignment_lhs}{call};
+                              }} catch (err) {{
+                                  if (!{store}.stopped && {SYNC_FAST_PATH_CALL_FAILURE} === null) {{
+                                      {SYNC_FAST_PATH_CALL_FAILURE} = {{ error: err }};
+                                  }}
+                                  throw err;
+                              }}
+                            "#
+                            );
                         } else {
                             uwriteln!(self.src, "{assignment_lhs}{call};");
                         }
@@ -2838,17 +2871,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             self.intrinsic_call_prefix(Intrinsic::GetErrorPayload)
                         };
                         // (a trap the host function throws is never a WIT error value)
-                        let trap_check = if let Some(component_state) =
-                            &sync_fast_path_component_state
-                        {
-                            Some(format!(
-                                "if ({component_state}.markTrapped(e)) {{ throw e; }}"
-                            ))
-                        } else {
-                            task_managed.then(|| format!(
-                                "if ({get_component_state}{component_idx_expr}).markTrapped(e)) {{ throw e; }}"
-                            ))
-                        };
+                        let trap_check = component_state.as_ref().map(|component_state| {
+                            format!("if ({component_state}.markTrapped(e)) {{ throw e; }}")
+                        });
                         uwriteln!(
                             self.src,
                             r#"
@@ -2885,13 +2910,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 // A host can stop the instance during an import, including an
                 // import returning a WIT result whose catch handler wraps errors.
                 // Do not lower that result or return to guest code afterwards.
-                if let Some(component_state) = &sync_fast_path_component_state {
+                if let Some(component_state) = &component_state {
                     uwriteln!(self.src, "{component_state}.throwIfInterrupted();");
-                } else if task_managed {
-                    uwriteln!(
-                        self.src,
-                        "{get_component_state}{component_idx_expr}).throwIfInterrupted();"
-                    );
                 }
 
                 // TODO: if it was an async call, we may not be able to clear the borrows yet.
@@ -2970,52 +2990,51 @@ impl Bindgen for FunctionBindgen<'_> {
                             ComponentIntrinsic::PostReturnTrap,
                         ))
                     });
+                // (whatever a post-return throws is a trap of its instance; only a task
+                // has anything to do about it besides)
+                let (post_return_reject, post_return_exit) = if task_managed {
+                    (
+                        "// Cleanup can fail after the result was recorded.\ntask.reject(err);",
+                        "task.exit();",
+                    )
+                } else {
+                    ("", "")
+                };
                 let gen_post_return_js =
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
-                        if sync_fast_path {
-                            // Whatever a post-return throws is a trap of its instance
-                            return format!(
-                                r#"
-                        try {{
-                            {post_return_call}
-                        }} catch (err) {{
-                            throw {post_return_trap_fn}{component_idx_expr}, err);
-                        }}
-                        {ret_stmt}
-                            "#,
-                                post_return_trap_fn = post_return_trap_fn.as_ref().unwrap(),
-                                ret_stmt = ret_stmt.unwrap_or_default(),
-                            );
-                        }
-                        if !task_managed {
-                            return format!("{post_return_call}\n{}", ret_stmt.unwrap_or_default());
-                        }
+                        let ret_stmt = ret_stmt.unwrap_or_default();
+                        let Some(post_return_trap_fn) = &post_return_trap_fn else {
+                            return format!("{post_return_call}\n{ret_stmt}");
+                        };
                         format!(
                             r#"
                         try {{
                             {post_return_call}
                         }} catch (err) {{
                             err = {post_return_trap_fn}{component_idx_expr}, err);
-                            // Cleanup can fail after the result was recorded.
-                            task.reject(err);
+                            {post_return_reject}
                             throw err;
                         }}
-                        task.exit();
+                        {post_return_exit}
                         {ret_stmt}
                             "#,
-                            post_return_trap_fn = post_return_trap_fn.as_ref().unwrap(),
-                            ret_stmt = ret_stmt.unwrap_or_default(),
                         )
                     };
 
                 // An export on the sync fast path fails where its task would have failed
-                // to resolve: a stop of the store rejects the tasks that are running, even
-                // if their guest code then runs to its end (e.g. after stopping from the
-                // destructor of a host resource, which no import returns from).
+                // to resolve, with the error the task would have been rejected with:
+                // - what the first host function to fail in this call threw, even if
+                //   the guest caught it;
+                // - the error of a stop of the store, even if the guest code then ran
+                //   to its end (e.g. after stopping from the destructor of a host
+                //   resource, which no import returns from).
                 let stopped_check = (sync_fast_path && self.for_import != Some(true)).then(|| {
                     let store =
                         self.intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
-                    format!("if ({store}.stopped) {{ throw {store}.error; }}")
+                    format!(
+                        "if ({SYNC_FAST_PATH_CALL_FAILURE} !== null) {{ throw {SYNC_FAST_PATH_CALL_FAILURE}.error; }}
+                         if ({store}.stopped) {{ throw {store}.error; }}"
+                    )
                 });
 
                 // Depending how many values are on the stack after returning, we must execute differently.
