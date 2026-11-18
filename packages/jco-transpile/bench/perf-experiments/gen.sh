@@ -42,3 +42,8 @@ mkdir -p "$OUT/stream-pass-through"
 wasm-tools parse "$P3_FIXTURES/streams/stream-pass-through.wat" -o "$OUT/stream-pass-through/stream-pass-through.wasm"
 args=("${wasi[@]}" --jspi)
 "$ROOT/target/debug/examples/transpile" "$OUT/stream-pass-through/stream-pass-through.wasm" "$OUT/stream-pass-through" "${args[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
+
+# Two components with a memory each, whose calls copy through a fused adapter.
+mkdir -p "$OUT/echo-composed"
+wasm-tools parse "$HERE/echo-composed.wat" -o "$OUT/echo-composed/echo-composed.wasm"
+"$ROOT/target/debug/examples/transpile" "$OUT/echo-composed/echo-composed.wasm" "$OUT/echo-composed" ${EXTRA[@]+"${EXTRA[@]}"}

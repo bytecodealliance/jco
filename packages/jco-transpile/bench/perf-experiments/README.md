@@ -35,6 +35,10 @@ To try a runtime change, copy `dist` elsewhere, edit the copy, and pass it to `g
 - `sharing.mjs` times the first instance of a variant as further instances load in the same process.
 - `sharing-instantiate.mjs` does the same for bindings that export `instantiate`.
 - `list-array.mjs` times lowering a plain array as `list<u8>`, which `bench.mjs` does not cover.
+- `composed.mjs` times calls between two components with a memory each (`echo-composed.wat`),
+  for example `./gen.sh multi-memory embedded --multi-memory` against a variant built without the flag.
+- `string-lower.mjs` times lowering strings of several lengths and kinds as UTF-8,
+  given runtime builds instead of variants: `node string-lower.mjs <dist-copy> ../../../jco-cm-runtime/dist`.
 
 Run on an idle machine: timings vary severalfold under load.
 Cases share one process, so runtime functions see every fixture's objects;
