@@ -75,3 +75,53 @@ test("blocking write flushes 4096 bytes even when Node's buffer is smaller", ():
     expect(callExtension(module, "written-bytes", [])).toBe(before + 4096);
     output[Symbol.dispose]();
 });
+
+/**
+ * Create a source stream holding "abc" and a sink stream, both in the worker.
+ *
+ * @returns the streams and a function reading what the sink received
+ */
+function splicePair() {
+    const ids = callExtension(module, "splice-pair", []);
+    assert(ids !== null && typeof ids === "object" && "input" in ids && "output" in ids);
+    assert(typeof ids.input === "number" && typeof ids.output === "number");
+    const { input: inputId, output: outputId } = ids;
+    return {
+        inputId,
+        input: inputStreamCreate(inputId),
+        output: outputStreamCreate(outputId),
+        received: () => callExtension(module, "splice-received", [outputId]),
+    };
+}
+
+test("splice moves the bytes a source has buffered, up to the requested length", (): void => {
+    const { inputId, input, output, received } = splicePair();
+    try {
+        expect(output.splice(input, 2n)).toBe(2n);
+        // Fewer bytes are buffered than asked for, and the source is still open.
+        expect(output.splice(input, 1024n)).toBe(1n);
+        expect(output.splice(input, 1024n)).toBe(0n);
+        output.blockingFlush();
+        expect(received()).toBe("abc");
+        callExtension(module, "splice-end", [inputId]);
+        assert.throws(() => output.blockingSplice(input, 1024n), { tag: "closed" });
+    } finally {
+        input[Symbol.dispose]();
+        output[Symbol.dispose]();
+    }
+});
+
+test("blocking-splice waits for the source to have bytes", (): void => {
+    const { inputId, input, output, received } = splicePair();
+    try {
+        expect(output.blockingSplice(input, 1024n)).toBe(3n);
+        callExtension(module, "splice-feed-later", [inputId, "defg"]);
+        expect(output.blockingSplice(input, 2n)).toBe(2n);
+        expect(output.blockingSplice(input, 1024n)).toBe(2n);
+        output.blockingFlush();
+        expect(received()).toBe("abcdefg");
+    } finally {
+        input[Symbol.dispose]();
+        output[Symbol.dispose]();
+    }
+});
