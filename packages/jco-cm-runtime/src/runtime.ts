@@ -2820,8 +2820,8 @@ export interface PendingValueQueue {
     readonly drainInto: (target: unknown[], maxCount: number) => number;
     /**
      * Optional capability to remove up to `maxCount` bytes of the first queued chunk, as a copy.
-     * Returns nothing unless that chunk is a `Uint8Array` holding `maxCount` bytes,
-     * or, if `allowShort`, everything queued.
+     * Returns nothing unless that chunk is a `Uint8Array`, and one that holds `maxCount` bytes
+     * unless `allowShort`.
      */
     readonly takeBytes?: (maxCount: number, allowShort: boolean) => Uint8Array | undefined;
 }

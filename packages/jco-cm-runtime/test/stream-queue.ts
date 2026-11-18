@@ -130,14 +130,12 @@ test.concurrent('bytes are taken from a chunk that can serve the read alone', ()
     const head = queue.takeBytes!(2, false)!;
     expect(head).toEqual(new Uint8Array([1, 2]));
     expect(head.buffer).not.toBe(source.buffer);
-    // The rest of the chunk is short of the count, and more is queued behind it.
+    // The rest of the chunk is short of the count, and a short read ends with the chunk.
     expect(queue.takeBytes!(4, false)).toBeUndefined();
-    expect(queue.takeBytes!(4, true)).toBeUndefined();
-    expect(queue.takeBytes!(3, false)).toEqual(new Uint8Array([3, 4, 5]));
+    expect(queue.takeBytes!(4, true)).toEqual(new Uint8Array([3, 4, 5]));
     // A chunk of values is not taken as bytes.
     expect(queue.takeBytes!(1, true)).toBeUndefined();
     queue.drainInto([], 2);
-    // The last chunk may serve a longer read, if a short one is allowed.
     expect(queue.takeBytes!(4, false)).toBeUndefined();
     expect(queue.takeBytes!(4, true)).toEqual(new Uint8Array([8]));
     expect(queue.length).toBe(0);
