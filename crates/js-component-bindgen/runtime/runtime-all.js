@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 5edebbb9904c9272ad11ca7553a31b4098afdd08
+// generated from commit 919f7dd683cff4d2fbf0ad9c69b88f7cd06056ce
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -7727,6 +7727,10 @@ function genReadFnFromLowerableStream(context, stream) {
 
 //#endregion
 //#region runtime/intrinsics/stream/injection.js
+/**
+* Feed queued host stream values into a pending component read.
+* Preserve source order across cancellation and finish or rebuffer each injected write.
+*/
 function genStreamHostInjectFn(_context, genArgs) {
 	const { readFn, hostWriteEnd, readEnd } = genArgs;
 	if (!readEnd) throw new TypeError("missing read end");
@@ -7791,14 +7795,9 @@ function genStreamHostInjectFn(_context, genArgs) {
 			return doNothingFn;
 		}
 		drainPendingValues();
-		let synchronousReads = 0;
 		while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {
 			const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
 			const appended = typeof result === "number" ? result : await result;
-			if (typeof result === "number" && ++synchronousReads >= 64) {
-				synchronousReads = 0;
-				await yieldToHost();
-			} else if (typeof result !== "number") synchronousReads = 0;
 			if (readEnd.hasPendingEvent()) return bail();
 			if (!hasPendingReadBuffer()) return bail();
 			drainPendingValues();
@@ -10097,12 +10096,17 @@ function initializeInternalStreamClass(_context) {
 
 //#endregion
 //#region runtime/intrinsics/stream/queue.js
+/**
+* Buffer values from a host stream and transfer them to readers in source order.
+* Source reads and cooperative batch yields share the store's host-operation tracking.
+*/
 var PendingValueQueue = class {
 	#tracking;
 	#readFn;
 	#elemMeta;
 	#done = false;
 	#sourceReadPromise = null;
+	#synchronousReads = 0;
 	#chunks = [];
 	#head = 0;
 	#prepended = [];
@@ -10153,13 +10157,26 @@ var PendingValueQueue = class {
 			});
 		}
 	}
-	/** Avoid a promise and a microtask when the source actually completes synchronously. */
+	/** Keep ready reads synchronous until a bounded batch must yield to the host. */
 	readSourceOrPromise() {
 		if (this.#sourceReadPromise) return this.#sourceReadPromise;
 		let hostRead;
 		try {
-			const result = trackHostOperation(this.#tracking, () => hostRead = this.#readFn());
-			if (!isPromiseLike(result)) return this.#acceptRead(result);
+			const result = trackHostOperation(this.#tracking, () => {
+				if (this.#synchronousReads < 64) return hostRead = this.#readFn();
+				return hostRead = yieldToHost().then(() => {
+					if (this.#tracking.storeTrap.stopped) throw this.#tracking.storeTrap.error;
+					return this.#readFn.dropped ? {
+						done: true,
+						value: void 0
+					} : this.#readFn();
+				});
+			});
+			if (!isPromiseLike(result)) {
+				this.#synchronousReads++;
+				return this.#acceptRead(result);
+			}
+			this.#synchronousReads = 0;
 			return this.#sourceReadPromise = Promise.resolve(result).then((value) => this.#acceptRead(value), (error) => this.#failedRead(error, hostRead)).finally(() => {
 				this.#sourceReadPromise = null;
 			});
