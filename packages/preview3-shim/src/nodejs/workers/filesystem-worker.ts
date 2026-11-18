@@ -9,7 +9,7 @@ import fs from "fs";
 const readAsync = promisify(fs.read);
 const writeAsync = promisify(fs.write);
 const fstatAsync = promisify(fs.fstat);
-const { opendir } = fs.promises;
+const { opendir, stat } = fs.promises;
 
 const CHUNK_BYTES = 64 * 1024;
 const MAX_SAFE_FILE_POSITION = BigInt(Number.MAX_SAFE_INTEGER);
@@ -189,21 +189,34 @@ function filePosition(position) {
   return Number(position);
 }
 
-async function handleReadDir({ fullPath, stream, preopens }) {
+/**
+ * Write the entries of a directory to a stream
+ *
+ * @param {object} msg
+ * @param {string} msg.fullPath Host path the directory's descriptor was opened on
+ * @param {WritableStream} msg.stream Receives the directory entries
+ * @param {{ dev: bigint, ino: bigint } | null} msg.identity Device and inode of the directory
+ *   that was opened, or null when not known. A path that leads to anything else is rejected
+ * @returns {Promise<{ ok: true }>}
+ * @throws {FSError} `not-permitted` if the path no longer leads to the directory
+ */
+async function handleReadDir({ fullPath, stream, identity }) {
   if (!stream || typeof stream.getWriter !== "function") {
     throw new TypeError("stream must have a getWriter() method");
   }
 
   const writer = stream.getWriter();
-  const canAccess = preopens.some((p) => fullPath === p || fullPath.startsWith(p + "/"));
-
-  if (!canAccess) {
-    const err = new FSError("not-permitted");
-    await writer.abort(err);
-    throw err;
-  }
 
   try {
+    // The path is only a record of where the directory was when it was opened.
+    // It may since have been replaced, ex: by a symlink that leads elsewhere
+    if (identity) {
+      const stats = await stat(fullPath, { bigint: true });
+      if (stats.dev !== identity.dev || stats.ino !== identity.ino) {
+        throw new FSError("not-permitted");
+      }
+    }
+
     // Leaving this loop early closes the directory.
     const walker = await opendir(fullPath);
     for await (const dirent of walker) {
