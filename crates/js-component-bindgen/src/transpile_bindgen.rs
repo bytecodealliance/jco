@@ -234,7 +234,7 @@ pub enum InstantiationMode {
 /// runs the host function as a tracked host operation, records a trap the
 /// host function throws, and does not return to the guest once the instance
 /// trapped or stopped.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum SyncFastPathBlocker {
     /// Core modules, lifts or lowers of more than one component instance, or a
     /// fused adapter between instances, which runs on behalf of the calling task.
@@ -248,8 +248,8 @@ pub(crate) enum SyncFastPathBlocker {
     /// Optimized and hybrid import bindings replace the lowered import.
     ImportBindings,
     /// A canonical built-in other than a synchronous `lower`, `resource.new`,
-    /// `resource.rep` or `resource.drop`.
-    Builtin,
+    /// `resource.rep` or `resource.drop`, by the name of its trampoline.
+    Builtin(String),
     /// A core module imports `context.get` or `context.set`.
     ContextSlots,
     /// An asynchronous lift or lower, or one with a callback.
@@ -258,6 +258,35 @@ pub(crate) enum SyncFastPathBlocker {
     AsyncFunctionType,
     /// A stream, future or error-context type.
     AsyncValueType,
+}
+
+impl std::fmt::Display for SyncFastPathBlocker {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::MultipleComponentInstances => {
+                formatter.write_str("more than one component instance owns core modules")
+            }
+            Self::AsyncMode => formatter.write_str("JSPI async imports or exports were requested"),
+            Self::AsmJs => formatter.write_str("asm.js output was requested"),
+            Self::CallTracking => formatter.write_str("call tracking is enabled"),
+            Self::ImportBindings => {
+                formatter.write_str("optimized or hybrid import bindings were requested")
+            }
+            Self::Builtin(trampoline) => {
+                write!(formatter, "a core module uses the built-in {trampoline}")
+            }
+            Self::ContextSlots => {
+                formatter.write_str("a core module imports context.get or context.set")
+            }
+            Self::AsyncCanonicalOptions => {
+                formatter.write_str("a lift or lower is asynchronous or has a callback")
+            }
+            Self::AsyncFunctionType => formatter.write_str("a function is async"),
+            Self::AsyncValueType => {
+                formatter.write_str("a stream, future or error-context type is used")
+            }
+        }
+    }
 }
 
 /// Find out whether the synchronous calls of a component may skip the task
@@ -327,7 +356,15 @@ pub(crate) fn sync_fast_path_blocker(
             | Trampoline::ResourceDrop { .. } => {}
             // (this includes the trap stubs of fused adapters, which record a
             // trap against the instance of the task that is running)
-            _ => return Some(SyncFastPathBlocker::Builtin),
+            other => {
+                // (the name of the variant, without its fields)
+                let description = format!("{other:?}");
+                let name = description
+                    .split(|character: char| !character.is_alphanumeric())
+                    .next()
+                    .unwrap_or_default();
+                return Some(SyncFastPathBlocker::Builtin(name.into()));
+            }
         }
     }
     if component
@@ -554,9 +591,12 @@ pub fn transpile_bindgen(
             &opts,
             call_tracking,
         ) {
-            None => true,
+            None => {
+                log::debug!("component [{name}] uses the sync fast path");
+                true
+            }
             Some(blocker) => {
-                log::debug!("component [{name}] keeps the task machinery: {blocker:?}");
+                log::debug!("component [{name}] does not use the sync fast path: {blocker}");
                 false
             }
         };
@@ -9231,6 +9271,29 @@ mod tests {
     fn test_parse_mapping_leading_hash() {
         // Leading '#' should not be treated as a separator
         assert_eq!(parse_mapping("#foo"), ("#foo".into(), None));
+    }
+
+    #[test]
+    fn sync_fast_path_blockers_give_their_reason() {
+        assert_eq!(
+            SyncFastPathBlocker::Builtin("ContextGet".into()).to_string(),
+            "a core module uses the built-in ContextGet"
+        );
+        let reasons = [
+            SyncFastPathBlocker::MultipleComponentInstances,
+            SyncFastPathBlocker::AsyncMode,
+            SyncFastPathBlocker::AsmJs,
+            SyncFastPathBlocker::CallTracking,
+            SyncFastPathBlocker::ImportBindings,
+            SyncFastPathBlocker::ContextSlots,
+            SyncFastPathBlocker::AsyncCanonicalOptions,
+            SyncFastPathBlocker::AsyncFunctionType,
+            SyncFastPathBlocker::AsyncValueType,
+        ]
+        .map(|blocker| blocker.to_string());
+        let distinct: std::collections::BTreeSet<_> = reasons.iter().collect();
+        assert_eq!(distinct.len(), reasons.len());
+        assert!(reasons.iter().all(|reason| !reason.is_empty()));
     }
 
     #[test]
