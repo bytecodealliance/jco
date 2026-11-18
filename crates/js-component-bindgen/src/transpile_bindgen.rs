@@ -7865,8 +7865,7 @@ pub fn gen_flat_lift_fn_js_expr(
     }
 }
 
-/// The JS typed array class that holds elements of a type, for the types that have one.
-pub(crate) fn js_typed_array_ctor(ty: &InterfaceType) -> Option<&'static str> {
+fn js_typed_array_ctor(ty: &InterfaceType) -> Option<&'static str> {
     match ty {
         InterfaceType::U8 => Some("Uint8Array"),
         InterfaceType::S8 => Some("Int8Array"),
