@@ -165,6 +165,13 @@ them all. `--sandbox-fs-preopen HOST[::GUEST]` exposes a directory (using the ho
 path when it is omitted). The environment and preopen options may be repeated; values are applied
 in command-line order.
 
+`--perf-main-thread-filesystem` and `--perf-cache-directory-paths` turn on the
+[performance options](https://github.com/bytecodealliance/jco/blob/main/packages/preview2-shim/README.md#performance-options-nodejs)
+of preview2-shim for the component, on `jco run` and `jco serve` alike. They are off by default: the
+first makes file I/O block the event loop for the duration of each call, with the second a later
+change to a symlink in the host path of a preopen is not seen. Both need a version of preview2-shim
+that has the options; with an older one the run stops with an error that says so.
+
 Without `--sandbox`, `jco run` itself preopens the host root and passes the host environment through. The preview2-shim WASI implementation no longer grants filesystem access on its own.
 
 For HTTP Proxy components, `jco serve` provides a JS server implementation:

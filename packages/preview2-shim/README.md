@@ -313,6 +313,110 @@ using `WASIShim` with the `sandbox` option containing `preopens` and `env`.
 When `sandbox.enableNetwork: false`, socket operations and outbound HTTP receive instance-local
 denied network capabilities.
 
+## Performance options (Node.js)
+
+The Node.js build runs blocking I/O in a worker thread and waits for each answer, so that a
+synchronous WASI call can block without help from the guest. The `performance` options trade a
+part of that arrangement for speed. All of them are off by default.
+
+| Option                 | Effect                                                                          | What changes                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `mainThreadFilesystem` | Regular files and directories are operated on with synchronous `node:fs` calls. | File I/O blocks the event loop; see [observable differences](#observable-differences).                       |
+| `cacheDirectoryPaths`  | The host path of a preopen, and of each opened directory, is resolved once.     | A later change to a symlink in that path is not seen; see [Directory path caching](#directory-path-caching). |
+
+The options are accepted, under the same names, in each place that configures a filesystem:
+
+```js
+import { filesystem } from "@bytecodealliance/preview2-shim";
+import { WASIShim } from "@bytecodealliance/preview2-shim/instantiation";
+
+const performance = { mainThreadFilesystem: true, cacheDirectoryPaths: true };
+
+// The sandbox preopens of one instance.
+new WASIShim({ sandbox: { preopens: { "/data": "/tmp/guest-data" } }, performance });
+
+// A filesystem of its own, or single preopens.
+filesystem.createFilesystem({ preopens: { "/data": "/tmp/guest-data" }, performance });
+filesystem._setPreopens({ "/data": "/tmp/guest-data" }, { performance });
+filesystem._addPreopen("/cache", "/tmp/guest-cache", { performance });
+
+// The default for every preopen that is created without the member.
+filesystem._setPerformance(performance);
+```
+
+A preopen passes its options on to every descriptor opened through it. The `performance` member
+of `WASIShim` applies to `sandbox.preopens`; an instance without them uses the shared preopens,
+which take their options from `_setPreopens`, `_addPreopen` or `_setPerformance`. `jco run` and
+`jco serve` set the default with `--perf-main-thread-filesystem` and
+`--perf-cache-directory-paths`.
+
+`node bench/filesystem.mjs` in this package, after a build, prints the cost per call of common
+filesystem operations for each combination of the options.
+
+### Main-thread filesystem
+
+With `mainThreadFilesystem`, a file call no longer makes a round trip to the worker. The call
+runs on the main thread instead, which means that **file I/O blocks the event loop for the
+duration of each call**. A synchronous guest already blocks the event loop for as long as it
+runs, the wait for the worker included, so for it only the cost per call changes. A host that
+relies on the event loop turning while a guest built with async imports waits for a file should
+leave the option off, or keep in mind that a read from a slow disk or a network mount holds the
+thread until it returns.
+
+Async imports (JSPI) need no special handling: the shim's functions are synchronous in both
+modes, and with the option on they return without having waited.
+
+#### What stays in the worker
+
+Only what cannot wait indefinitely is taken out of the worker. The type of a file is read
+before it is opened and confirmed on the open descriptor:
+
+- regular files and directories are served on the main thread;
+- FIFOs, character and block devices, sockets, and anything else keep the worker, where a read
+  that waits for a writer does not stop the process;
+- standard I/O, sockets, HTTP and clocks are not affected by the option.
+
+#### Observable differences
+
+Descriptor operations return the same results and error codes in both modes. The streams of a
+file served on the main thread differ from those of the worker in these ways:
+
+- Their pollables are ready from the moment they are created. A pollable of a worker file
+  stream is ready once the worker has bytes to hand out or room to take them.
+- `read` returns bytes of the file whenever it is called. In the worker, a `read` that is not
+  preceded by a `block`, a `poll` or a `blocking-read` can return no bytes.
+- A write reaches the file before the call returns, and `flush` has nothing left to do.
+- `poll` on a list that holds one of these pollables returns at once, with them and with
+  whichever worker pollables are ready at that moment. It waits in the worker only when the
+  list holds no main-thread pollable.
+- `splice` and `blocking-splice` between a main-thread stream and a worker stream copy through
+  the main thread, at most 64 KiB per call.
+
+For the host:
+
+- `inputStreamId` and `outputStreamId` of `@bytecodealliance/preview2-shim/io-worker` return
+  `undefined` for a main-thread file stream, because the worker does not know it. A host
+  extension that hands stream ids to the worker has to leave the option off for the files it
+  passes on, or read from the stream instead.
+- At most 2^20 pollables of main-thread file streams can be alive at once; subscribing to one
+  more throws.
+- Files are opened with `O_NONBLOCK`, to keep the open of a FIFO that replaced a regular file
+  from waiting. A file that reports itself as regular and can still wait for data, as some
+  `procfs` and FUSE files do, is therefore served on the main thread too: a blocking call on it
+  retries until it goes through, with the event loop blocked meanwhile, and a non-blocking
+  `read` returns no bytes while the pollable of the stream reports ready.
+
+### Directory path caching
+
+Every path operation starts from the host path of a preopen or of an opened directory, and
+resolves that path on the host first. With `cacheDirectoryPaths` the path is resolved once per
+preopen and once per opened directory, and the result is used from then on: a later change to a
+symlink in that path is not seen. If a preopen does not exist yet, nothing is kept until it
+does. The handling of the path that the guest passes is unchanged.
+
+Leave the option off when a preopen is, or sits below, a symlink that is switched while the
+component runs, such as a `current` link of a release directory.
+
 [jco]: https://www.npmjs.com/package/@bytecodealliance/jco
 
 # License

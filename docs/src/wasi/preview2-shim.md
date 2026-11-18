@@ -50,6 +50,35 @@ const component = await instantiate(loader, shim.getImportObject());
 See [Manual Wasm instantiation with WASI overrides](../advanced/manual-wasm-instantiation-with-wasi-overrides.md)
 for the full instantiation flow and for replacing individual interfaces.
 
+## Performance options
+
+On Node.js the shim runs blocking I/O in a worker thread and waits for each answer. The
+`performance` options, all off by default, trade a part of that for speed:
+
+| Option                 | Effect                                                                      |
+| ---------------------- | --------------------------------------------------------------------------- |
+| `mainThreadFilesystem` | Operate on regular files and directories on the main thread                 |
+| `cacheDirectoryPaths`  | Resolve the host path of a preopen, and of each opened directory, only once |
+
+```js
+const performance = { mainThreadFilesystem: true };
+new WASIShim({ sandbox: { preopens: { "/data": "/tmp/guest-data" } }, performance });
+```
+
+The same object is accepted by `filesystem.createFilesystem`, `_setPreopens` and `_addPreopen`,
+`filesystem._setPerformance(performance)` sets the default for preopens created without it, and
+`jco run` and `jco serve` take `--perf-main-thread-filesystem` and `--perf-cache-directory-paths`.
+
+`WASIShim` applies its `performance` member to `sandbox.preopens`; the shared preopens take
+theirs from the `filesystem` functions.
+
+With `mainThreadFilesystem`, file I/O blocks the event loop for the duration of each call, as a
+synchronous guest already does while it runs. FIFOs, devices, sockets, standard I/O, HTTP and
+clocks stay in the worker, because their calls can wait indefinitely. The pollables of
+main-thread file streams are always ready and can be mixed with worker pollables in one `poll`.
+With `cacheDirectoryPaths`, a later change to a symlink in the host path of a preopen or of an
+opened directory is not seen. The [package README][p2-readme] lists the observable differences.
+
 ## Helpers
 
 Alongside the WASI implementations, the package exports host-side helper functions from `helpers/`
