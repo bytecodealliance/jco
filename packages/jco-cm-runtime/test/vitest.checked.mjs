@@ -20,6 +20,7 @@ export default defineConfig({
         },
     ],
     test: {
+        sequence: { concurrent: true },
         include: ['test/**/*.ts'],
         // Package/profile tests build their own artifacts and run in the normal suite.
         exclude: [

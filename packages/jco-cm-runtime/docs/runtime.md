@@ -143,25 +143,100 @@ const bundle = await rolldown({
 The runtime must be included in the bundle, rather than marked external.
 Apply label removal before optimization passes that discard unused labels.
 
-See the [label experiments](../bench/labels/README.md) for correctness checks and reproducible Node benchmarks.
+See the [runtime microbenchmarks](../bench/labels/README.md) for label-removal checks and measurements.
 
-### Allocation and scheduling behavior
+## Allocation and scheduling behavior
 
-Long or explicitly reused runtime-owned flat-argument contexts expose remaining
-arguments through `params`, copying only when a caller observes or retains that
-array. Short one-shot contexts, caller-created contexts and custom property
-accessors keep ordinary array consumption. Cursor setup defaults to vectors of
-at least 64 arguments because setup outweighs slicing for short calls. Scalar memory views refresh after buffer replacement, including
-memory growth. Custom lift functions keep the pair-returning API and may replace
-their context; built-in scalar composition can avoid constructing those pairs.
+### Consuming flat arguments
 
-The default Node UTF-8 codec uses native byte primitives for ASCII strings of at least
-256 UTF-16 code units. Browser codecs and custom `encodeInto` implementations keep
-the portable path. Reallocations remain exact and occur once per string.
+`params` holds the arguments a lift has yet to consume. For example, a provider
+can lift two integers in sequence using the context returned by each lift.
 
-Buffers may optionally implement bulk `copyTo` and owned `readBytes` capabilities;
-providers without them continue using resource-aware array reads and writes.
-Ready stream sources may expose `readSourceOrPromise`; `readSource` retains its
-promise API. Synchronous sources yield after 64 reads, and host completions share
-scheduler wakeups within a microtask checkpoint. The scheduler still resumes one
-thread per tick to preserve thread-register restoration.
+```js
+const input = { componentIdx: 0, useDirectParams: true, params: [10, 20] };
+const [x, rest] = liftFlatS32(input);
+const [y, end] = liftFlatS32(rest);
+// x === 10, y === 20, end.params is empty
+```
+
+Caller-created contexts, including ones with custom accessors, keep ordinary
+array consumption. The runtime uses the same approach for short, one-shot calls.
+For runtime-owned vectors of at least 64 arguments, or contexts explicitly
+created for reuse, a private cursor lets successive built-in lifts advance
+without copying the remaining array for each field. Reading `params` between
+lifts can materialize that array. Read it when a custom lift needs the remaining
+values or must retain a snapshot.
+
+### Lifting scalars from guest memory
+
+A scalar lift from memory advances the byte offset and reuses a `DataView` while
+the backing buffer stays the same. The next lift refreshes the view if the memory
+grows. A provider that keeps its own views must check the buffer after any call
+that can grow or replace memory.
+
+```js
+const ctx = { componentIdx: 0, memory, useDirectParams: false, storagePtr: 0, storageLen: 8 };
+const [first, next] = liftFlatS32(ctx); // reads bytes 0–3
+memory.grow(1);
+const [second] = liftFlatS32(next); // reads bytes 4–7 of the current buffer
+```
+
+Built-in composite lifts can read scalar fields directly into a record, avoiding
+a temporary result pair per field. Custom lift functions return `[value, context]`.
+Return a replacement context when the next field should use different storage.
+
+### Encoding UTF-8 into guest memory
+
+Reuse the store’s encoder across calls. The default uses the Web platform’s
+`TextEncoder.encodeInto` to write directly into the guest allocation in browsers
+and Node.js. For long ASCII inputs the byte length and scalar count both equal
+the JavaScript string length. Mixed Unicode needs a sizing pass. Each nonempty
+string makes one exact allocation, and the encoder obtains the destination view
+after `realloc` returns so growth during allocation is safe.
+
+```js
+const encoder = initializeUtf8Encoder();
+const { ptr, len, codepoints } = utf8Encode(encoder, 'A😀', realloc, memory);
+// Five bytes at ptr encode two Unicode scalars.
+```
+
+A provider can supply its own `encodeInto(input, destination)` to instrument
+writes or integrate an existing UTF-8 codec. It must fill the supplied buffer
+and report the UTF-16 units read and bytes written.
+
+### Transferring byte buffers
+
+Compatible byte buffers can copy directly between typed arrays. This avoids
+building an intermediate JavaScript array of individual bytes. A custom buffer
+can decline the bulk copy before consuming anything. For resource payloads the
+element-wise path carries the ownership options through both operations.
+
+```js
+if (!source.copyTo?.(target, count)) {
+    target.write(source.read(count, options), options);
+}
+```
+
+For a byte stream delivered to the host, an optional `readBytes(count)` returns
+an owned `Uint8Array`. Copy guest-backed bytes before returning them so later
+guest writes and memory growth cannot change a chunk the host has retained.
+
+### Reading streams and yielding to the host
+
+The public `queue.readSource()` returns a promise. A provider with data already
+available can also expose `readSourceOrPromise()`, which returns the number of
+items appended immediately or a promise for that count. Stream injection uses
+this capability to avoid a promise and microtask for every ready chunk.
+
+```js
+const read = queue.readSourceOrPromise?.() ?? queue.readSource();
+const appended = typeof read === 'number' ? read : await read;
+```
+
+Use the promise path for a source waiting on I/O. The runtime can deliver
+buffered async values while the rest of a requested batch is still unavailable.
+After 64 consecutive synchronous source reads, the default queue yields to the
+host so timers and cancellation can run. The store tracks that yield as pending
+work. Host completions within a microtask checkpoint share a scheduler wakeup.
+Each tick resumes one guest thread, giving it time to restore its registers
+before the next continuation runs.

@@ -12,7 +12,8 @@ import { clearDeadlockCheck, stopStore, task } from './component-helpers.js';
 import { create, createPair, dropPair, guestOptions } from './stream-helpers.js';
 
 // Run the actual deadlock timer between batches of a guest's pending read.
-test('a guest awaiting a large synchronous host stream does not deadlock', async () => {
+test.sequential('a guest awaiting a large synchronous host stream does not deadlock', async () => {
+    vi.stubGlobal('MessageChannel', undefined);
     vi.useFakeTimers();
     const selected = createPair();
     const state = selected.component.getOrCreateAsyncState(0);
@@ -59,11 +60,13 @@ test('a guest awaiting a large synchronous host stream does not deadlock', async
         clearDeadlockCheck(selected.component);
         dropPair(selected.pair);
         vi.useRealTimers();
+        vi.unstubAllGlobals();
     }
 });
 
 // Shutdown must settle a deferred read without calling the host source again.
-test('stopping a store during a stream batch yield releases the pending operation', async () => {
+test.sequential('stopping a store during a stream batch yield releases the pending operation', async () => {
+    vi.stubGlobal('MessageChannel', undefined);
     vi.useFakeTimers();
     const selected = create();
     let calls = 0;
@@ -90,5 +93,6 @@ test('stopping a store during a stream batch yield releases the pending operatio
     } finally {
         clearDeadlockCheck(selected.component);
         vi.useRealTimers();
+        vi.unstubAllGlobals();
     }
 });

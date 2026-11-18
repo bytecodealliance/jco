@@ -6,7 +6,7 @@ import type {
     ComponentMemoryMap,
     MemoryMeta,
     RuntimeMemory,
-    FetchCompileContext,
+    FileCompileReader,
     ConditionalTrampoline,
     ConditionalSlowFn,
     ConditionalSuspendingPlatform,
@@ -84,24 +84,22 @@ export const typeCheckValidI32 = (value: unknown): value is number =>
     typeof value === 'number' && value >= i32Min && value <= i32Max;
 export const typeCheckAsyncFn: CoreModule['typeCheckAsyncFn'] = (constructor, value) => value instanceof constructor;
 export const base64Compile: CoreModule['base64Compile'] = (context, encoded) => {
-    const host = globalThis as typeof globalThis & {
-        Buffer?: { from(value: string, encoding: string): Uint8Array<ArrayBuffer> };
-    };
-    return context.WebAssembly.compile(
-        context.nodejsCompat && typeof host.Buffer !== 'undefined'
-            ? host.Buffer.from(encoded, 'base64')
-            : Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0)),
-    );
+    const bytes =
+        typeof Uint8Array.fromBase64 === 'function'
+            ? Uint8Array.fromBase64(encoded)
+            : Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0));
+    return context.WebAssembly.compile(bytes);
 };
-async function fetchWithNode(context: FetchCompileContext, url: URL) {
-    if (context.fileCache.node) {
-        context.fileCache.fs = context.fileCache.fs || (await import('node:fs/promises'));
+export const fetchCompile: CoreModule['fetchCompile'] = async (context, url) => {
+    if (url.protocol === 'file:' && context.nodejsCompat && context.fileCache.node) {
+        // Resolve the filesystem module only for Node file URLs. Browser bundlers
+        // can compile the fetch path without resolving Node builtins.
+        const moduleUrl = new URL('node:fs/promises');
+        context.fileCache.fs ??= (await import(/* @vite-ignore */ moduleUrl.href)) as FileCompileReader;
         return context.WebAssembly.compile(await context.fileCache.fs.readFile(url));
     }
     return fetch(url).then(context.WebAssembly.compileStreaming);
-}
-export const fetchCompile: CoreModule['fetchCompile'] = (context, url) =>
-    context.nodejsCompat ? fetchWithNode(context, url) : fetch(url).then(context.WebAssembly.compileStreaming);
+};
 export const instantiateCore: CoreModule['instantiateCore'] = (platform, module, imports) =>
     platform.instantiate(module, imports);
 export const clampGuest: CoreModule['clampGuest'] = (value, min, max) => {

@@ -315,7 +315,7 @@ async function drainMacrotasks(count = 5) {
     }
 }
 
-test('the tick loop starts and resumes on the next macrotask, without a timer', async () => {
+test.sequential('the tick loop starts and resumes on the next macrotask, without a timer', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
         const { state, ticks } = scriptedTicks(['resumed', 'resumed', 'done']);
@@ -327,7 +327,7 @@ test('the tick loop starts and resumes on the next macrotask, without a timer', 
     }
 });
 
-test('an idle tick loop polls again after the idle interval', async () => {
+test.sequential('an idle tick loop polls again after the idle interval', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
         const { state, ticks } = scriptedTicks(['idle', 'done']);
@@ -343,7 +343,7 @@ test('an idle tick loop polls again after the idle interval', async () => {
     }
 });
 
-test('stopping the state cancels the scheduled tick', async () => {
+test.concurrent('stopping the state cancels the scheduled tick', async () => {
     const { state, ticks } = scriptedTicks(['resumed', 'done']);
     state.runTickLoop();
     state.stop();
@@ -351,13 +351,13 @@ test('stopping the state cancels the scheduled tick', async () => {
     expect(ticks).toEqual([]);
 });
 
-test('without setImmediate the tick loop resumes through a MessageChannel', async () => {
-    vi.stubGlobal('setImmediate', undefined);
-    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+test.sequential('the tick loop uses a timer when MessageChannel is unavailable', async () => {
+    vi.stubGlobal('MessageChannel', undefined);
+    vi.useFakeTimers();
     try {
         const { state, ticks } = scriptedTicks(['resumed', 'done']);
         state.runTickLoop();
-        await drainMacrotasks();
+        await vi.runAllTimersAsync();
         expect(ticks).toEqual(['resumed', 'done']);
     } finally {
         vi.useRealTimers();

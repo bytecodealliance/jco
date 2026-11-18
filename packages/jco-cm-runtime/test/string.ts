@@ -296,7 +296,7 @@ test.concurrent.each(['', 'ascii', '😀𝄞', '\ud800x\udc00', 'a😀\ud800é'.
 );
 
 test.concurrent.each(['ascii', 'é', '😀', '\ud800x\udc00', '\ufeff'])(
-    'optimized UTF-8 agrees with the portable codec: %j',
+    'UTF-8 bytes and scalar counts agree with TextEncoder: %j',
     async (unit) => {
         const value = unit.repeat(1024);
         const encoder = string.initializeUtf8Encoder();
