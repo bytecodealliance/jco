@@ -36,3 +36,9 @@ for fixture in round-trip/async-round-trip-stackless streams/async-closed-stream
   args=("${wasi[@]}" --jspi "--map=local:local/*=$HERE/hosts.mjs#p3")
   "$ROOT/target/debug/examples/transpile" "$P3_FIXTURES/$fixture.wasm" "$OUT/$component" "${args[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
 done
+
+# A guest that returns the streams it is given, which is kept as text.
+mkdir -p "$OUT/stream-pass-through"
+wasm-tools parse "$P3_FIXTURES/streams/stream-pass-through.wat" -o "$OUT/stream-pass-through/stream-pass-through.wasm"
+args=("${wasi[@]}" --jspi)
+"$ROOT/target/debug/examples/transpile" "$OUT/stream-pass-through/stream-pass-through.wasm" "$OUT/stream-pass-through" "${args[@]}" ${EXTRA[@]+"${EXTRA[@]}"}

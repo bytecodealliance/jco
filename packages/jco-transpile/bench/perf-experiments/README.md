@@ -28,6 +28,7 @@ To try a runtime change, copy `dist` elsewhere, edit the copy, and pass it to `g
 - `bench.mjs` times one variant in one process:
   synchronous calls of the `runtime` fixtures,
   and asynchronous calls, streams and futures of the checked-in `p3` fixtures, awaited one at a time.
+  One of those fixtures is kept as text, which `gen.sh` parses with `wasm-tools`.
 - `compare.mjs` interleaves fresh processes and keeps the fastest observation of each case.
 - `strip.mjs` removes labeled statements, or calls of named functions, from built JavaScript.
 - `profile-summary.mjs` lists self time per function of a `--cpu-prof` profile.

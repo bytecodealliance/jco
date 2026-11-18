@@ -22,18 +22,20 @@ if (!variant) {
  */
 const load = (name) => import(new URL(`../output/perf/${variant}/${name}/${name}.js`, import.meta.url).href);
 
-const [numbers, strings, lists, records, roundTrip, closedStreams, readiness, transmit] = await Promise.all(
-    [
-        'numbers',
-        'strings',
-        'lists',
-        'records',
-        'async-round-trip-stackless',
-        'async-closed-streams',
-        'async-readiness',
-        'async-synchronous-transmit',
-    ].map(load),
-);
+const [numbers, strings, lists, records, roundTrip, closedStreams, readiness, transmit, passThrough] =
+    await Promise.all(
+        [
+            'numbers',
+            'strings',
+            'lists',
+            'records',
+            'async-round-trip-stackless',
+            'async-closed-streams',
+            'async-readiness',
+            'async-synchronous-transmit',
+            'stream-pass-through',
+        ].map(load),
+    );
 
 const bytes = new Uint8Array(64).map((_, index) => index);
 const record = { a: 8, b: { b0: true, b1: false, b2: true } };
@@ -88,6 +90,23 @@ async function streamAndFutureThroughGuest() {
     return Promise.all([outputStream.read({ count: expected.length, dropAfterCopy: true }), outputFuture]);
 }
 
+const largeChunk = new Uint8Array(65_536).fill(7);
+
+/**
+ * Pass a stream of one chunk to a guest that returns it unread, and read the chunk back.
+ *
+ * @param {Uint8Array} bytes - the chunk the stream yields
+ * @returns {Promise<unknown>} the chunk read from the returned stream
+ */
+async function streamReturnedUnread(bytes) {
+    const output = await passThrough.passBytes(
+        (async function* () {
+            yield bytes;
+        })(),
+    );
+    return output.read({ count: bytes.length, dropAfterCopy: true });
+}
+
 /**
  * Benchmark cases: the function to time and how many calls make one round.
  * A function that returns a promise is awaited before the next call.
@@ -109,6 +128,8 @@ const cases = {
     'async export reading a stream<u8>': [() => closedStreams.closed.readStream(byteStream(), chunk), 2_000],
     'stream<u8> through the guest': [streamThroughGuest, 1_000],
     'stream<u8> and future<u8> through the guest': [streamAndFutureThroughGuest, 1_000],
+    'stream<u8> returned unread by the guest': [() => streamReturnedUnread(chunk), 1_000],
+    '64 KiB stream<u8> returned unread by the guest': [() => streamReturnedUnread(largeChunk), 200],
 };
 
 const results = {};
