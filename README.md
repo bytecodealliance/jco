@@ -60,7 +60,7 @@ As Jco aims to do many things, it contains many subprojects that are organized i
 | `js-component-bindgen-component` | Rust       | `crates/js-component-bindgen-component` | WebAssembly component that (when transpiled) makes `js-component-bindgen` available in JS `jco` |
 | `wasm-tools-component`           | Rust       | `crates/wasm-tools-component`           | WebAssembly component containing pieces of [`wasm-tools`][wt] used by `jco`                     |
 
-[wasi-p2]: https://github.com/WebAssembly/WASI/blob/main/docs/Preview2.md
+[wasi-p2]: https://github.com/WebAssembly/WASI/blob/wasi-0.2/docs/Preview2.md
 
 ## Quickstart
 
