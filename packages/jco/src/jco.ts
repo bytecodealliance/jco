@@ -2,22 +2,33 @@
 
 import { program, Option } from "commander";
 
-import { opt } from "./cmd/opt.js";
-import { transpileCmd } from "./cmd/transpile.js";
-import { types, guestTypes } from "./cmd/types.js";
-import { run as runCmd, serve as serveCmd } from "./cmd/run.js";
-import {
-    parse,
-    print,
-    componentNew,
-    componentEmbed,
-    metadataAdd,
-    metadataShow,
-    componentWit,
-} from "./cmd/wasm-tools.js";
-import { componentizeCommand } from "./cmd/componentize.js";
-import { createProject } from "./cmd/new.js";
 import { styleText } from "./common.js";
+
+/**
+ * Loaders of the functions that implement the commands, by function name.
+ *
+ * Between them the command modules import the transpiler, the bundler, the componentization
+ * backends and the tool components, which takes several times as long as parsing the
+ * arguments does. A command is therefore imported when it runs, so that `--help`,
+ * `--version` and every other command start without it.
+ */
+const COMMANDS = {
+    opt: async () => (await import("./cmd/opt.js")).opt,
+    transpileCmd: async () => (await import("./cmd/transpile.js")).transpileCmd,
+    types: async () => (await import("./cmd/types.js")).types,
+    guestTypes: async () => (await import("./cmd/types.js")).guestTypes,
+    run: async () => (await import("./cmd/run.js")).run,
+    serve: async () => (await import("./cmd/run.js")).serve,
+    parse: async () => (await import("./cmd/wasm-tools.js")).parse,
+    print: async () => (await import("./cmd/wasm-tools.js")).print,
+    componentNew: async () => (await import("./cmd/wasm-tools.js")).componentNew,
+    componentEmbed: async () => (await import("./cmd/wasm-tools.js")).componentEmbed,
+    metadataAdd: async () => (await import("./cmd/wasm-tools.js")).metadataAdd,
+    metadataShow: async () => (await import("./cmd/wasm-tools.js")).metadataShow,
+    componentWit: async () => (await import("./cmd/wasm-tools.js")).componentWit,
+    componentizeCommand: async () => (await import("./cmd/componentize.js")).componentizeCommand,
+    createProject: async () => (await import("./cmd/new.js")).createProject,
+};
 
 program
     .name("jco")
@@ -128,7 +139,7 @@ program
     )
     .option("--debug-binary-path <path>", "Path to which to write the generated debug binary")
     .option("--debug-enable-wizer-logging", "Enable wizer call debugging")
-    .action(asyncAction(componentizeCommand));
+    .action(commandAction("componentizeCommand"));
 
 program
     .command("transpile")
@@ -231,7 +242,7 @@ program
     .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
     .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
     .allowExcessArguments(true)
-    .action(asyncAction(transpileCmd));
+    .action(commandAction("transpileCmd"));
 
 program
     .command("types")
@@ -284,7 +295,7 @@ program
     .option("--typed-error-classes", "export named result error classes (implies --separate-interface-types)")
     .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
     .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
-    .action(asyncAction(types));
+    .action(commandAction("types"));
 
 program
     .command("guest-types")
@@ -323,7 +334,7 @@ program
     .option("--typed-error-classes", "export named result error classes (implies --separate-interface-types)")
     .option("--separate-interface-types", "generate separate import-side and export-side interface declarations")
     .option("--optional-result-payloads", "make empty result payloads optional (changes generic Result narrowing)")
-    .action(asyncAction(guestTypes));
+    .action(commandAction("guestTypes"));
 
 program
     .command("run")
@@ -364,7 +375,8 @@ program
             if (cmd === "--help" || cmd === "-h") {
                 command.help();
             } else {
-                return runCmd(cmd, args, opts);
+                const runCommand = await COMMANDS.run();
+                return runCommand(cmd, args, opts);
             }
         }),
     );
@@ -416,7 +428,8 @@ program
             if (cmd === "--help" || cmd === "-h") {
                 command.help();
             } else {
-                return serveCmd(cmd, args, opts);
+                const serveCommand = await COMMANDS.serve();
+                return serveCommand(cmd, args, opts);
             }
         }),
     );
@@ -431,7 +444,7 @@ program
     .option("-q, --quiet")
     .option("--wasm-opt-bin <path-to-wasm-opt>', 'wasm-opt binary path (default: 'binaryen/bin/wasm-opt')")
     .allowExcessArguments(true)
-    .action(asyncAction(opt));
+    .action(commandAction("opt"));
 
 program
     .command("wit")
@@ -439,21 +452,21 @@ program
     .argument("<component-path>", "Wasm component binary filepath")
     .option("-d, --document <name>", "WIT document of a package to print")
     .option("-o, --output <output-file>", "WIT output file path")
-    .action(asyncAction(componentWit));
+    .action(commandAction("componentWit"));
 
 program
     .command("print")
     .description("print the WebAssembly WAT text for a binary file [wasm-tools print]")
     .argument("<input>", "input file to process")
     .option("-o, --output <output-file>", "output file path")
-    .action(asyncAction(print));
+    .action(commandAction("print"));
 
 program
     .command("metadata-show")
     .description("extract the producer metadata for a Wasm binary [wasm-tools metadata show]")
     .argument("[module]", "Wasm component or core module filepath")
     .option("--json", "output component metadata as JSON")
-    .action(asyncAction(metadataShow));
+    .action(commandAction("metadataShow"));
 
 program
     .command("metadata-add")
@@ -461,14 +474,14 @@ program
     .argument("[module]", "Wasm component or core module filepath")
     .requiredOption("-m, --metadata <metadata...>", "field=name[@version] producer metadata to add with the embedding")
     .requiredOption("-o, --output <output-file>", "output binary path")
-    .action(asyncAction(metadataAdd));
+    .action(commandAction("metadataAdd"));
 
 program
     .command("parse")
     .description("parses the Wasm text format into a binary file [wasm-tools parse]")
     .argument("<input>", "input file to process")
     .requiredOption("-o, --output <output-file>", "output binary file path")
-    .action(asyncAction(parse));
+    .action(commandAction("parse"));
 
 program
     .command("scaffold")
@@ -498,6 +511,7 @@ program
             if (!opts.wit) {
                 throw new Error("required option '--wit <path|builtin>' not specified");
             }
+            const createProject = await COMMANDS.createProject();
             await createProject(projectDirectory, {
                 wit: opts.wit,
                 world: opts.world,
@@ -518,7 +532,7 @@ program
     .option("--adapt <[NAME=]adapter...>", "component adapters to apply")
     .option("--wasi-reactor", "build with the WASI Reactor adapter")
     .option("--wasi-command", "build with the WASI Command adapter")
-    .action(asyncAction(componentNew));
+    .action(commandAction("componentNew"));
 
 const tool = program.command("tool").description("Low-level WebAssembly conversion utilities");
 
@@ -530,7 +544,7 @@ tool.command("core-to-component")
     .option("--adapt <[NAME=]adapter...>", "component adapters to apply")
     .option("--wasi-reactor", "build with the WASI Reactor adapter")
     .option("--wasi-command", "build with the WASI Command adapter")
-    .action(asyncAction(componentNew));
+    .action(commandAction("componentNew"));
 
 program
     .command("embed")
@@ -542,11 +556,29 @@ program
     .option("--string-encoding <utf8|utf16|compact-utf16>", "set the component string encoding")
     .option("-n, --world-name <world-name>", "world name to embed")
     .option("-m, --metadata <metadata...>", "field=name[@version] producer metadata to add with the embedding")
-    .action(asyncAction(componentEmbed));
+    .action(commandAction("componentEmbed"));
 
 program.showHelpAfterError();
 
 program.parse();
+
+/**
+ * Build the action of a command that `COMMANDS` implements, loading it when the action runs.
+ *
+ * @param name - key of the command in `COMMANDS`
+ * @returns the action to register with the command
+ */
+function commandAction(name: keyof typeof COMMANDS) {
+    const action = async (...args: any[]) => {
+        const command: (...args: any[]) => unknown = await COMMANDS[name]();
+        return command(...args);
+    };
+
+    // A reported error names the function that implements the command.
+    Object.defineProperty(action, "name", { value: name });
+
+    return asyncAction(action);
+}
 
 function asyncAction(cmd: (...args: any[]) => unknown) {
     return function (...actionArgs: any[]) {
