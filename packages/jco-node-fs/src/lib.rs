@@ -1,5 +1,8 @@
 #![deny(clippy::all)]
 
+mod dir;
+mod error;
+
 use napi_derive::napi;
 
 #[cfg(target_os = "linux")]
