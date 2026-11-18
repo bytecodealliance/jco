@@ -1089,4 +1089,49 @@ mod tests {
         assert!(statement.trim_end().ends_with(").slice();"), "{statement}");
         assert!(!source.contains("new Uint32Array(memory0.buffer.slice("));
     }
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn memory_accesses_of_an_adapter_reuse_a_view_unless_memories_are_native() {
+        let component = wat::parse_str(TWO_MEMORIES).unwrap();
+        let source = |multi_memory: bool| {
+            let transpiled = transpile(
+                &component,
+                TranspileOpts::builder()
+                    .name("lists".into())
+                    .multi_memory(multi_memory)
+                    .build(),
+            )
+            .unwrap();
+            generated_javascript(&transpiled).to_string()
+        };
+
+        // Without multi-memory, the adapter imports each access to the second memory.
+        // The accesses share one view, which is replaced once the memory has another buffer.
+        let polyfilled = source(false);
+        let view = polyfilled.find("memoryView").unwrap();
+        let view = &polyfilled[view..];
+        let view = &view[..view.find("})();").unwrap()];
+        assert!(view.contains("view.buffer === memory.buffer ? view : "));
+        assert_eq!(view.matches("new DataView(memory.buffer)").count(), 2);
+        // (the spacing of the declaration depends on how the runtime is linked)
+        let name: String = view
+            .chars()
+            .take_while(|char| char.is_ascii_alphanumeric() || *char == '_')
+            .collect();
+        let declarations = [format!("{name} = "), format!("{name}= ")]
+            .iter()
+            .map(|declaration| polyfilled.matches(declaration.as_str()).count())
+            .sum::<usize>();
+        assert_eq!(declarations, 1);
+        for op in ["I32Load", "I32Store"] {
+            let import = polyfilled.find(&format!("\"mem1 {op}\"")).unwrap();
+            let body = polyfilled[import..].lines().next().unwrap();
+            assert!(body.contains(&format!("=> {name}().")), "{body}");
+            assert!(!body.contains("new DataView("), "{body}");
+        }
+
+        // With multi-memory, the adapter reaches both memories itself.
+        assert!(!source(true).contains("\"mem1 "));
+    }
 }

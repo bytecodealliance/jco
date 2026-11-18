@@ -4180,6 +4180,8 @@ impl<'a> Instantiator<'a, '_> {
         // correspond to the JS wasm embedding API. This is one of the major
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
+        let view_prefix = format!("memoryView{}_", self.instances.len());
+        let mut memory_views = Vec::new();
         for (module, name, arg) in self.modules[module_idx].imports(args) {
             let def = if instance.is_none() && module == "post_return" {
                 // FACT calls cleanup inside Wasm, bypassing the export wrapper.
@@ -4195,7 +4197,7 @@ impl<'a> Instantiator<'a, '_> {
                 let value = self.core_export_var_name(export);
                 format!("Object.assign({guard}{owner}, {value}), {{ _jcoMaySuspend: false }})")
             } else {
-                self.augmented_import_def(&arg)
+                self.augmented_import_def(&arg, &view_prefix, &mut memory_views)
             };
             let dst = import_obj.entry(module).or_insert(BTreeMap::new());
             let prev = dst.insert(name, def);
@@ -4244,6 +4246,19 @@ impl<'a> Instantiator<'a, '_> {
                 "unsupported duplicate import of `env::setTempRet0`"
             );
             assert!(prev.is_none());
+        }
+
+        // A view of a memory is current until the memory grows, which gives the memory
+        // another buffer: the one viewed is then detached, or keeps its length if shared.
+        for (view, memory) in memory_views.iter().enumerate() {
+            uwriteln!(
+                self.src.js_init,
+                "const {view_prefix}{view} = (() => {{
+                    const memory = {memory};
+                    let view = new DataView(memory.buffer);
+                    return () => (view.buffer === memory.buffer ? view : (view = new DataView(memory.buffer)));
+                }})();"
+            );
         }
 
         // Build list of imports
@@ -5874,7 +5889,17 @@ impl<'a> Instantiator<'a, '_> {
         self.src.js("}");
     }
 
-    fn augmented_import_def(&mut self, def: &core::AugmentedImport<'_>) -> String {
+    /// The JS value of an import of a core module, which may be an access to a memory.
+    ///
+    /// Such an access takes its view from a function named `view_prefix` followed by
+    /// the index of the memory in `memory_views`, where a memory is added when it is
+    /// first accessed. The caller defines those functions.
+    fn augmented_import_def(
+        &mut self,
+        def: &core::AugmentedImport<'_>,
+        view_prefix: &str,
+        memory_views: &mut Vec<String>,
+    ) -> String {
         match def {
             core::AugmentedImport::CoreDef(def) => {
                 let is_non_suspending_function =
@@ -5888,93 +5913,58 @@ impl<'a> Instantiator<'a, '_> {
             }
             core::AugmentedImport::Memory { mem, op } => {
                 let mem = self.core_def(mem);
-                match op {
-                    core::AugmentedOp::I32Load => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getInt32((ptr >>> 0) + off, true)"
-                        )
-                    }
-                    core::AugmentedOp::I32Load8U => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getUint8((ptr >>> 0) + off, true)"
-                        )
-                    }
-                    core::AugmentedOp::I32Load8S => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getInt8((ptr >>> 0) + off, true)"
-                        )
-                    }
+                let (params, access) = match op {
+                    core::AugmentedOp::I32Load => ("ptr, off", "getInt32((ptr >>> 0) + off, true)"),
+                    core::AugmentedOp::I32Load8U => ("ptr, off", "getUint8((ptr >>> 0) + off)"),
+                    core::AugmentedOp::I32Load8S => ("ptr, off", "getInt8((ptr >>> 0) + off)"),
                     core::AugmentedOp::I32Load16U => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getUint16((ptr >>> 0) + off, true)"
-                        )
+                        ("ptr, off", "getUint16((ptr >>> 0) + off, true)")
                     }
                     core::AugmentedOp::I32Load16S => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getInt16((ptr >>> 0) + off, true)"
-                        )
+                        ("ptr, off", "getInt16((ptr >>> 0) + off, true)")
                     }
                     core::AugmentedOp::I64Load => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getBigInt64((ptr >>> 0) + off, true)"
-                        )
+                        ("ptr, off", "getBigInt64((ptr >>> 0) + off, true)")
                     }
                     core::AugmentedOp::F32Load => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getFloat32((ptr >>> 0) + off, true)"
-                        )
+                        ("ptr, off", "getFloat32((ptr >>> 0) + off, true)")
                     }
                     core::AugmentedOp::F64Load => {
-                        format!(
-                            "(ptr, off) => new DataView({mem}.buffer).getFloat64((ptr >>> 0) + off, true)"
-                        )
+                        ("ptr, off", "getFloat64((ptr >>> 0) + off, true)")
                     }
                     core::AugmentedOp::I32Store8 => {
-                        format!(
-                            "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setInt8((ptr >>> 0) + offset, val, true);
-                            }}"
-                        )
+                        ("ptr, val, off", "setInt8((ptr >>> 0) + off, val)")
                     }
                     core::AugmentedOp::I32Store16 => {
-                        format!(
-                            "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setInt16((ptr >>> 0) + offset, val, true);
-                            }}"
-                        )
+                        ("ptr, val, off", "setInt16((ptr >>> 0) + off, val, true)")
                     }
                     core::AugmentedOp::I32Store => {
-                        format!(
-                            "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setInt32((ptr >>> 0) + offset, val, true);
-                            }}"
-                        )
+                        ("ptr, val, off", "setInt32((ptr >>> 0) + off, val, true)")
                     }
                     core::AugmentedOp::I64Store => {
-                        format!(
-                            "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setBigInt64((ptr >>> 0) + offset, val, true);
-                            }}"
-                        )
+                        ("ptr, val, off", "setBigInt64((ptr >>> 0) + off, val, true)")
                     }
                     core::AugmentedOp::F32Store => {
-                        format!(
-                            "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setFloat32((ptr >>> 0) + offset, val, true);
-                            }}"
-                        )
+                        ("ptr, val, off", "setFloat32((ptr >>> 0) + off, val, true)")
                     }
                     core::AugmentedOp::F64Store => {
-                        format!(
-                            "(ptr, val, offset) => {{
-                                new DataView({mem}.buffer).setFloat64((ptr >>> 0) + offset, val, true);
-                            }}"
-                        )
+                        ("ptr, val, off", "setFloat64((ptr >>> 0) + off, val, true)")
                     }
                     core::AugmentedOp::MemorySize => {
-                        format!("ptr => {mem}.buffer.byteLength / 65536")
+                        return format!("ptr => {mem}.buffer.byteLength / 65536");
                     }
-                }
+                };
+
+                // An adapter calls these once per scalar that it copies, so the accesses
+                // to one memory share a view of it instead of making one per call.
+                let view = match memory_views.iter().position(|viewed| *viewed == mem) {
+                    Some(view) => view,
+                    None => {
+                        memory_views.push(mem);
+                        memory_views.len() - 1
+                    }
+                };
+                format!("({params}) => {view_prefix}{view}().{access}")
             }
         }
     }
