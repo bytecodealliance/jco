@@ -300,7 +300,7 @@ class OutputStream extends WasiResource implements IOutputStream {
     }
     splice(src, len) {
         return streamIoErrorCall(OUTPUT_STREAM_SPLICE | this.#streamType, this.#id, {
-            src: src.#id,
+            src: inputStreamId(src),
             len,
         });
     }

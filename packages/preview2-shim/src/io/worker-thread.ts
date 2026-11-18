@@ -895,28 +895,31 @@ function handle(call, id, payload) {
             );
         case OUTPUT_STREAM_SPLICE: {
             const outputStream = getStreamOrThrow(id);
-            const inputStream = getStreamOrThrow(payload.src);
-            let bytesRemaining = Number(payload.len);
-            let chunk;
-            while (
-                bytesRemaining > 0 &&
-                (chunk = inputStream.stream.read(
-                    Math.min(
-                        outputStream.writableHighWaterMark - outputStream.writableLength,
-                        bytesRemaining,
-                    ),
-                ))
-            ) {
-                bytesRemaining -= chunk.byteLength;
-                outputStream.stream.write(chunk);
+            const inputStream = getStreamOrThrow(payload.src, true);
+            const source = inputStream.stream;
+            const destination = outputStream.stream;
+            // Bounded by what the source has buffered: asked for more, a Node
+            // readable returns nothing at all until it has that much or ends.
+            const length = Math.min(
+                Number(payload.len),
+                Math.max(destination.writableHighWaterMark - destination.writableLength, 0),
+                source.readableLength,
+            );
+            // A read of nothing still makes an empty source fetch more.
+            const chunk = source.read(length);
+            if (chunk) {
+                destination.write(chunk);
             }
-            if (inputStream.stream.errored) {
-                throw streamError(inputStream.stream.errored);
+            if (source.errored && source.readableLength === 0) {
+                throw streamError(source.errored);
             }
-            if (outputStream.stream.errored) {
-                throw streamError(outputStream.stream.errored);
+            if (destination.errored) {
+                throw streamError(destination.errored);
             }
-            return payload.len - BigInt(bytesRemaining);
+            if (!chunk && source.readableLength === 0 && source.readableEnded) {
+                throw { tag: "closed" };
+            }
+            return BigInt(chunk ? chunk.byteLength : 0);
         }
         case OUTPUT_STREAM_SUBSCRIBE:
             return createPoll(streams.get(id).pollState);
@@ -939,25 +942,17 @@ function handle(call, id, payload) {
                     },
                 );
             }
-            const inputStream = getStreamOrThrow(payload.src);
-            if (!inputStream.stream.readable) {
-                promise = promise.then(() =>
-                    new Promise((_resolve, _reject) => {
-                        inputStream.stream
-                            .once("readable", (resolve = _resolve))
-                            .once("error", (reject = _reject));
-                    }).then(
-                        () => {
-                            inputStream.stream.off("error", reject);
-                        },
-                        (err) => {
-                            inputStream.stream.off("readable", resolve);
-                            throw streamError(err);
-                        },
-                    ),
-                );
-            }
-            return promise.then(() => handle(OUTPUT_STREAM_SPLICE, id, payload));
+            // Wait for the source as a blocking read does: until it has bytes,
+            // has ended or has failed.
+            const { pollState } = getStreamOrThrow(payload.src, true);
+            return promise
+                .then(() => {
+                    pollStateCheck(pollState);
+                    if (!pollState.ready) {
+                        return new Promise((resolve) => void (pollState.listener = resolve));
+                    }
+                })
+                .then(() => handle(OUTPUT_STREAM_SPLICE, id, payload));
         }
         case OUTPUT_STREAM_DISPOSE: {
             const stream = streams.get(id);
