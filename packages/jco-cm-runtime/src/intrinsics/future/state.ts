@@ -26,7 +26,7 @@ export function createFuture(
     cstate: ComponentAsyncState,
     args: FutureCreateOptions,
 ): FutureCreated {
-    debugLog('[createFuture()] args', args);
+    DEBUG: debugLog('[createFuture()] args', args);
     const { tableIdx, elemMeta, hostInjectFn } = args;
     if (tableIdx === undefined) {
         throw new Error('missing table idx while adding future');
@@ -92,7 +92,7 @@ export function createFuture(
 
 /** Look up an endpoint by handle or waitable index using the selected constructor. */
 export function getFutureEnd(_context: FutureEndLookupContext, args: FutureEndLocation): FuturePayloadEnd {
-    debugLog('[getFutureEnd()] args', args);
+    DEBUG: debugLog('[getFutureEnd()] args', args);
     const { tableIdx, futureEndHandle, futureEndWaitableIdx } = args;
     if (tableIdx === undefined) {
         throw new Error('missing table idx while getting future end');
@@ -129,7 +129,7 @@ export function getFutureEnd(_context: FutureEndLookupContext, args: FutureEndLo
 
 /** Move an endpoint into the destination component and future tables. */
 export function addFutureEndToTable(_context: FutureTableContext, args: FutureEndInsertion) {
-    debugLog('[addFutureEndToTable()] args', args);
+    DEBUG: debugLog('[addFutureEndToTable()] args', args);
     const { tableIdx, futureEnd } = args;
     if (typeof futureEnd === 'number') {
         throw new Error('INSERTING BAD FUTUREEND');
@@ -148,7 +148,7 @@ export function addFutureEndToTable(_context: FutureTableContext, args: FutureEn
     const waitableIdx = cstate.handles.insert(futureEnd);
     futureEnd.setWaitableIdx(waitableIdx);
 
-    debugLog('[addFutureEndToTable()] added future end', {
+    DEBUG: debugLog('[addFutureEndToTable()] added future end', {
         tableIdx,
         table,
         handle,
@@ -161,7 +161,7 @@ export function addFutureEndToTable(_context: FutureTableContext, args: FutureEn
 
 /** Remove an endpoint from both its component and future tables. */
 export function removeFutureEndFromTable(_context: FutureTableContext, args: FutureEndRemoval): FuturePayloadEnd {
-    debugLog('[removeFutureEndFromTable()] args', args);
+    DEBUG: debugLog('[removeFutureEndFromTable()] args', args);
     const { tableIdx, futureWaitableIdx } = args;
     if (tableIdx === undefined) {
         throw new Error('missing table idx while removing future end');

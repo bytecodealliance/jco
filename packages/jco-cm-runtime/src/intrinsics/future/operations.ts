@@ -26,7 +26,7 @@ import { createFuture, getFutureEnd, removeFutureEndFromTable, addFutureEndToTab
  * Create a future and pack its readable and writable indices into one i64.
  */
 export function futureNew(_context: FutureNewContext, ctx: FutureNewOptions): bigint {
-    debugLog('[futureNew()] args', { ctx });
+    DEBUG: debugLog('[futureNew()] args', { ctx });
     const { componentIdx, futureTableIdx, elemMeta } = ctx;
 
     const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
@@ -56,7 +56,7 @@ export function futureNew(_context: FutureNewContext, ctx: FutureNewOptions): bi
 
 /** Expose a guest future as a lazy host awaitable. */
 export function futureNewFromLift(_context: FutureNewFromLiftContext, ctx: FutureNewFromLiftOptions): FutureValue {
-    debugLog('[futureNewFromLift()] args', { ctx });
+    DEBUG: debugLog('[futureNewFromLift()] args', { ctx });
     const { componentIdx, futureEndWaitableIdx, futureTableIdx, payloadLiftFn, payloadTypeSize32, payloadLowerFn } =
         ctx;
 
@@ -85,7 +85,7 @@ export function futureWrite(
     futureEndWaitableIdx: number,
     ptr: number,
 ): number | Promise<number> {
-    debugLog('[futureWrite()] args', {
+    DEBUG: debugLog('[futureWrite()] args', {
         ctx,
         futureEndWaitableIdx,
         ptr,
@@ -216,7 +216,7 @@ export function futureRead(
     futureEndWaitableIdx: number,
     ptr: number,
 ): number | Promise<number> {
-    debugLog('[futureRead()] args', {
+    DEBUG: debugLog('[futureRead()] args', {
         ctx,
         futureEndWaitableIdx,
         ptr,
@@ -346,7 +346,7 @@ export function futureCancelRead(
     ctx: FutureOperationOptions,
     futureEndWaitableIdx: number,
 ): number | Promise<number> {
-    debugLog('[futureCancelRead()] args', {
+    DEBUG: debugLog('[futureCancelRead()] args', {
         ctx,
         futureEndWaitableIdx,
     });
@@ -414,7 +414,7 @@ export function futureCancelWrite(
     ctx: FutureOperationOptions,
     futureEndWaitableIdx: number,
 ): number | Promise<number> {
-    debugLog('[futureCancelWrite()] args', {
+    DEBUG: debugLog('[futureCancelWrite()] args', {
         ctx,
         futureEndWaitableIdx,
     });
@@ -482,7 +482,7 @@ export function futureDropReadable(
     ctx: FutureOperationOptions,
     futureEndWaitableIdx: number,
 ): void {
-    debugLog('[futureDropReadable()] args', { ctx });
+    DEBUG: debugLog('[futureDropReadable()] args', { ctx });
     const { componentIdx, futureTableIdx } = ctx;
 
     const cstate = getOrCreateAsyncState(_context.tables.lookup, componentIdx);
@@ -510,7 +510,7 @@ export function futureDropWritable(
     ctx: FutureOperationOptions,
     futureEndWaitableIdx: number,
 ): void {
-    debugLog('[futureDropWritable()] args', { ctx });
+    DEBUG: debugLog('[futureDropWritable()] args', { ctx });
     const { componentIdx, futureTableIdx } = ctx;
 
     const cstate = getOrCreateAsyncState(_context.tables.lookup, componentIdx);
@@ -536,7 +536,7 @@ export function futureTransfer(
     srcTableIdx: number,
     destTableIdx: number,
 ): number {
-    debugLog('[futureTransfer()] args', {
+    DEBUG: debugLog('[futureTransfer()] args', {
         srcFutureWaitableIdx,
         srcTableIdx,
         destTableIdx,
@@ -581,7 +581,7 @@ export function futureTransfer(
     const { handle, waitableIdx } = addFutureEndToTable(_context, { tableIdx: destTableIdx, futureEnd });
     futureEnd.setTarget(`future read end (waitable [${waitableIdx}])`);
 
-    debugLog('[futureTransfer()] successfully transferred', {
+    DEBUG: debugLog('[futureTransfer()] successfully transferred', {
         dest: {
             futureEndHandle: handle,
             futureEndWaitableIdx: waitableIdx,
@@ -640,7 +640,7 @@ export function genFutureHostInjectFn(
             }
             const elemMeta = hostWriteEnd.getElemMeta();
             if (!elemMeta.payloadTypeName?.startsWith('Result(')) {
-                debugLog('failed to inject host write', err);
+                DEBUG: debugLog('failed to inject host write', err);
                 throw new Error('cannot inject write: promise failed');
             }
             value = { tag: 'err', val: getErrorPayload(_context.hasOwnProperty, err) };
@@ -661,7 +661,7 @@ export function genFutureHostInjectFn(
 
             delivered = await hostWriteEnd.hostWrite({ stringEncoding, value, getReallocFn });
         } catch (err) {
-            debugLog('failed to inject host write', err);
+            DEBUG: debugLog('failed to inject host write', err);
             throw new Error('cannot inject write: promise failed');
         }
 
