@@ -327,6 +327,24 @@ test('follows symlinks that stay inside the directory', symlinks, () => {
     );
 });
 
+test('links a symlink itself, or its target when asked to follow', symlinks, () => {
+    fs.symlinkSync('file', host('sandbox/link'), 'file');
+    fs.symlinkSync('link', host('sandbox/chain'), 'file');
+    fs.symlinkSync('missing', host('sandbox/dangling'), 'file');
+    fs.symlinkSync('../outside/secret', host('sandbox/escape'), 'file');
+
+    dir.linkAt('chain', dir, 'followed', true);
+    assert.equal(dir.statAt('followed', false).type, 'regular-file');
+    assert.equal(dir.statAt('followed', false).ino, dir.statAt('file', false).ino);
+
+    dir.linkAt('chain', dir, 'unfollowed');
+    assert.equal(dir.statAt('unfollowed', false).type, 'symbolic-link');
+
+    assert.throws(() => dir.linkAt('dangling', dir, 'other', true), { code: 'ENOENT' });
+    assert.throws(() => dir.linkAt('escape', dir, 'other', true), ESCAPE);
+    assert.equal(fs.existsSync(host('sandbox/other')), false);
+});
+
 test('refuses a symlink loop', symlinks, () => {
     fs.symlinkSync('loop-b', host('sandbox/loop-a'));
     fs.symlinkSync('loop-a', host('sandbox/loop-b'));

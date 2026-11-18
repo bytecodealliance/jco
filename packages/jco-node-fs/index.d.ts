@@ -37,8 +37,14 @@ export declare class DirHandle {
   unlinkAt(path: string): void
   /** Rename a path beneath this directory to a path beneath `new_dir`. */
   renameAt(oldPath: string, newDir: DirHandle, newPath: string): void
-  /** Create a hard link beneath `new_dir`. A symlink is linked, not its target. */
-  linkAt(oldPath: string, newDir: DirHandle, newPath: string): void
+  /**
+   * Create a hard link beneath `new_dir`.
+   *
+   * A symlink at `old_path` is linked itself unless `follow` is set. The host
+   * cannot follow it while linking, so with `follow` the path is resolved
+   * beneath this directory first and the result is linked.
+   */
+  linkAt(oldPath: string, newDir: DirHandle, newPath: string, follow?: boolean | undefined | null): void
   /**
    * Create a symlink at `path` that refers to `target`.
    *
