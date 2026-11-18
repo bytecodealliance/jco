@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { create, clearDeadlockCheck, task } from './component-helpers.js';
 import type { ComponentDeadlockDetail } from '../src/index.js';
+import { onNextMacrotask } from '../src/intrinsics/core/scheduling.js';
 
 test.concurrent('exclusive locks hand off FIFO and allow synchronous reentry during release', async () => {
     const state = create().component.getOrCreateAsyncState(0);
@@ -314,6 +315,15 @@ async function drainMacrotasks(count = 5) {
         });
     }
 }
+
+test.concurrent('cancelling a completed turn leaves the next callback scheduled', async () => {
+    await new Promise<void>((resolve) => {
+        const cancel = onNextMacrotask(() => {
+            onNextMacrotask(resolve);
+            cancel();
+        });
+    });
+});
 
 test.sequential('the tick loop starts and resumes on the next macrotask, without a timer', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
