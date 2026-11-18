@@ -1,5 +1,6 @@
 import fs, { type BigIntStats } from "node:fs";
 import { createRequire } from "node:module";
+import { boundedReadLength, UNCHECKED_READ_LENGTH } from "./file-common.js";
 import { promisify } from "node:util";
 import type { Advice, fadvise as Fadvise } from "@bytecodealliance/jco-node-fs";
 
@@ -115,8 +116,12 @@ export async function setFileResourceTimes(id: number, atime: number, mtime: num
 }
 
 export async function readFileResource(id: number, length: number, offset: number) {
+    const fd = fileResourceFd(id);
+    if (length > UNCHECKED_READ_LENGTH) {
+        length = boundedReadLength(length, offset, await fstatAsync(fd, { bigint: true }));
+    }
     const buffer = new Uint8Array(length);
-    const result = await readAsync(fileResourceFd(id), buffer, 0, length, offset);
+    const result = await readAsync(fd, buffer, 0, length, offset);
     // Deno v1 returns the byte count directly, while Node returns an object
     // containing the byte count and buffer through util.promisify's custom args.
     const bytesRead = typeof result === "number" ? result : result.bytesRead;
