@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 4f57ca097359fadc1dd206f7a918f29e0457d459
+// generated from commit 811474cd0c6458c2404c1860280d87df31bdc8e1
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -26,6 +26,8 @@ function isPromiseLike(value) {
 
 //#endregion
 //#region runtime/intrinsics/core/debug.js
+let diagnostics = false;
+DEBUG: diagnostics = true;
 /**
 * Log runtime diagnostics when enabled at module load. Snapshot the environment
 * so hot runtime operations never read process.env.
@@ -36,7 +38,7 @@ function isPromiseLike(value) {
 * Call sites use a DEBUG label so a bundler can remove argument evaluation too.
 * @param args Values to log.
 */
-const debugLog = globalThis?.process?.env?.JCO_DEBUG ? (message, ...args) => console.debug(message, ...args) : () => {};
+const debugLog = diagnostics && globalThis.process?.env?.JCO_DEBUG ? (message, ...args) => console.debug(message, ...args) : () => {};
 
 //#endregion
 //#region runtime/intrinsics/task-context.js
@@ -313,18 +315,22 @@ function createBufferContext(options) {
 
 //#endregion
 //#region runtime/intrinsics/scalar-lift.js
-const scalarLifts = /* @__PURE__ */ new WeakMap();
-/** Keep the public pair-returning ABI while making internal scalar calls allocation-free. */
-function defineScalarLift(lift, direct, memory) {
+let scalarLifts;
+/**
+* Register the scalar leaves when the public lift is first used. On a cache
+* miss a composite calls that public lift, which also consumes the first field.
+*/
+function registerScalarLift(lift, direct, memory) {
+	scalarLifts ??= /* @__PURE__ */ new WeakMap();
 	scalarLifts.set(lift, {
 		direct,
 		memory
 	});
-	return lift;
+	return true;
 }
 /** Custom lifts still use the public ABI, including replacement contexts. */
 function scalarLiftValue(lift, direct) {
-	const scalar = scalarLifts.get(lift);
+	const scalar = scalarLifts?.get(lift);
 	return direct ? scalar?.direct : scalar?.memory;
 }
 
@@ -754,465 +760,469 @@ function afterDelay(callback, ms) {
 	const handle = setTimeout(callback, ms);
 	return () => clearTimeout(handle);
 }
-var ComponentAsyncState = class ComponentAsyncState {
-	#context;
-	static EVENT_HANDLER_EVENTS = ["backpressure-change"];
-	static TickResult = {
-		DONE: TICK_DONE,
-		RESUMED: TICK_RESUMED,
-		IDLE: TICK_IDLE
-	};
-	#componentIdx;
-	#callingAsyncImport = false;
-	#syncImportWait = promiseWithResolvers();
-	#lockHolderTaskID = null;
-	#lockWaiters = [];
-	#admissionQueue = [];
-	#lockHandoffScheduled = false;
-	#pendingTaskStarts = 0;
-	#suspendedThreadsByRef = /* @__PURE__ */ new Map();
-	#errored = null;
-	#trapped = false;
-	#trapError = null;
-	#backpressure = 0;
-	#backpressureWaiters = 0n;
-	#handlers = [];
-	#nextHandlerID = 0n;
-	/** Cancels the scheduled tick while the tick loop runs. */
-	#tickLoop = null;
-	#onExclusiveReleaseHandlers = [];
-	#mayLeave = true;
-	handles;
-	subtasks;
-	threads;
-	constructor(context, args) {
-		this.#context = context;
-		this.#componentIdx = args.componentIdx;
-		this.handles = new this.#context.RepTable({
-			target: `component [${this.#componentIdx}] handles (waitable objects)`,
-			space: getHandleIndexSpace(this.#context.indexSpaces, this.#componentIdx)
-		});
-		this.subtasks = new this.#context.RepTable({ target: `component [${this.#componentIdx}] subtasks` });
-		this.threads = new this.#context.RepTable({ target: `component [${this.#componentIdx}] threads` });
-	}
-	componentIdx() {
-		return this.#componentIdx;
-	}
-	get mayLeave() {
-		const flags = this.#context.instanceFlags.get(this.#componentIdx);
-		return flags === void 0 ? this.#mayLeave : flags.value === 1;
-	}
-	set mayLeave(value) {
-		if (typeof value !== "boolean") throw new TypeError("mayLeave must be a boolean");
-		this.#mayLeave = value;
-		const flags = this.#context.instanceFlags.get(this.#componentIdx);
-		if (flags !== void 0) flags.value = value ? 1 : 0;
-	}
-	errored() {
-		return this.#errored !== null;
-	}
-	setErrored(err) {
-		DEBUG: debugLog("[ComponentAsyncState#setErrored()] component errored", {
-			err,
-			componentIdx: this.#componentIdx
-		});
-		if (this.#errored) return;
-		if (!err) err = Object.assign(/* @__PURE__ */ new Error("error elswehere (see other component instance error)"), { componentIdx: this.#componentIdx });
-		this.#errored = err;
-	}
-	markTrapped(err) {
-		if (!(err instanceof this.#context.RuntimeError)) return false;
-		const trap = normalizeCoreTrap(this.#context.normalization, err);
-		this.#trapped = true;
-		if (this.#trapError === null) this.#trapError = trap;
-		DEBUG: debugLog("[ComponentAsyncState#markTrapped()] component trapped", {
-			err,
-			componentIdx: this.#componentIdx
-		});
-		if (this.#context.storeTrap.error === null) this.#context.storeTrap.error = trap;
-		this.#context.reportTrap?.(trap);
-		this.#context.checkIdle?.();
-		return true;
-	}
-	isTrapped() {
-		return this.#trapped;
-	}
-	throwIfInterrupted() {
-		if (this.#context.storeTrap.stopped) throw this.#context.storeTrap.error;
-		if (this.#trapped) throw this.#trapError ?? new this.#context.RuntimeError(this.#context.cannotEnter);
-	}
-	throwIfTrapped() {
-		if (this.#context.storeTrap.stopped) throw this.#context.storeTrap.error;
-		if (this.#trapped) throw new this.#context.RuntimeError(this.#context.cannotEnter);
-	}
-	callingSyncImport(val) {
-		if (val === void 0) return this.#callingAsyncImport;
-		if (typeof val !== "boolean") throw new TypeError("invalid setting for async import");
-		const prev = this.#callingAsyncImport;
-		this.#callingAsyncImport = val;
-		if (prev === true && this.#callingAsyncImport === false) this.#notifySyncImportEnd();
-	}
-	#notifySyncImportEnd() {
-		const existing = this.#syncImportWait;
-		this.#syncImportWait = promiseWithResolvers();
-		existing.resolve();
-	}
-	async waitForSyncImportCallEnd() {
-		await this.#syncImportWait.promise;
-	}
-	setBackpressure(v) {
-		this.#backpressure = v;
-		for (const handler of this.#handlers.filter((handler) => handler.event === "backpressure-change")) handler.fn(v);
-		return this.#backpressure;
-	}
-	getBackpressure() {
-		return this.#backpressure;
-	}
-	incrementBackpressure() {
-		const current = this.#backpressure;
-		if (current < 0 || current > 2 ** 16) throw new Error(`invalid current backpressure value [${current}]`);
-		const newValue = this.getBackpressure() + 1;
-		if (newValue >= 2 ** 16) throw new Error(`invalid new backpressure value [${newValue}], overflow`);
-		return this.setBackpressure(newValue);
-	}
-	decrementBackpressure() {
-		const current = this.#backpressure;
-		if (current < 0 || current > 2 ** 16) throw new Error(`invalid current backpressure value [${current}]`);
-		const newValue = current - 1;
-		if (newValue < 0) throw new this.#context.RuntimeError("backpressure counter underflow");
-		return this.setBackpressure(newValue);
-	}
-	hasBackpressure() {
-		return this.#backpressure > 0;
-	}
-	waitForBackpressure() {
-		if (!this.hasBackpressure()) return Promise.resolve(null);
-		this.addBackpressureWaiter();
-		return new Promise((resolve) => {
-			let pending = true;
-			const handlerID = this.registerHandler({
-				event: "backpressure-change",
-				fn: (bp) => {
-					if (bp !== 0 || !pending) return;
-					pending = false;
-					this.removeHandler({
-						event: "backpressure-change",
-						handlerID
-					});
-					this.removeBackpressureWaiter();
-					resolve(null);
-				}
+function defineComponentAsyncState() {
+	return class ComponentAsyncState {
+		#context;
+		static EVENT_HANDLER_EVENTS = ["backpressure-change"];
+		static TickResult = {
+			DONE: TICK_DONE,
+			RESUMED: TICK_RESUMED,
+			IDLE: TICK_IDLE
+		};
+		#componentIdx;
+		#callingAsyncImport = false;
+		#syncImportWait = promiseWithResolvers();
+		#lockHolderTaskID = null;
+		#lockWaiters = [];
+		#admissionQueue = [];
+		#lockHandoffScheduled = false;
+		#pendingTaskStarts = 0;
+		#suspendedThreadsByRef = /* @__PURE__ */ new Map();
+		#errored = null;
+		#trapped = false;
+		#trapError = null;
+		#backpressure = 0;
+		#backpressureWaiters = 0n;
+		#handlers = [];
+		#nextHandlerID = 0n;
+		/** Cancels the scheduled tick while the tick loop runs. */
+		#tickLoop = null;
+		#onExclusiveReleaseHandlers = [];
+		#mayLeave = true;
+		handles;
+		subtasks;
+		threads;
+		constructor(context, args) {
+			this.#context = context;
+			this.#componentIdx = args.componentIdx;
+			this.handles = new this.#context.RepTable({
+				target: `component [${this.#componentIdx}] handles (waitable objects)`,
+				space: getHandleIndexSpace(this.#context.indexSpaces, this.#componentIdx)
 			});
-		});
-	}
-	registerHandler(args) {
-		const { event, fn } = args;
-		if (!event) throw new Error("missing handler event");
-		if (!fn) throw new Error("missing handler fn");
-		if (!ComponentAsyncState.EVENT_HANDLER_EVENTS.includes(event)) throw new Error(`unrecognized event handler [${event}]`);
-		const handlerID = this.#nextHandlerID++;
-		this.#handlers.push({
-			id: handlerID,
-			fn,
-			event
-		});
-		return handlerID;
-	}
-	removeHandler(args) {
-		const { event, handlerID } = args;
-		this.#handlers = this.#handlers.filter((handler) => handler.event !== event || handler.id !== handlerID);
-	}
-	getBackpressureWaiters() {
-		return this.#backpressureWaiters;
-	}
-	addBackpressureWaiter() {
-		this.#backpressureWaiters++;
-	}
-	removeBackpressureWaiter() {
-		this.#backpressureWaiters--;
-		if (this.#backpressureWaiters < 0) throw new Error("unexepctedly negative number of backpressure waiters");
-	}
-	isExclusivelyLocked() {
-		return this.#lockHolderTaskID !== null;
-	}
-	exclusivelyLockedBy(taskID) {
-		return this.#lockHolderTaskID === taskID;
-	}
-	exclusiveLock(taskID) {
-		DEBUG: debugLog("[ComponentAsyncState#exclusiveLock()]", {
-			holder: this.#lockHolderTaskID,
-			requester: taskID,
-			componentIdx: this.#componentIdx
-		});
-		if (taskID === void 0 || taskID === null) throw new Error("exclusive lock requires the acquiring task id");
-		if (this.#lockHolderTaskID !== null) throw new Error(`component [${this.#componentIdx}] exclusive lock held by task [${this.#lockHolderTaskID}], requested by [${taskID}]`);
-		this.#lockHolderTaskID = taskID;
-	}
-	acquireExclusiveLock(taskID) {
-		if (taskID === void 0 || taskID === null) throw new Error("exclusive lock requires the acquiring task id");
-		if (this.#lockHolderTaskID === null) {
-			this.#lockHolderTaskID = taskID;
-			DEBUG: debugLog("[ComponentAsyncState#acquireExclusiveLock()] acquired", {
-				holder: taskID,
+			this.subtasks = new this.#context.RepTable({ target: `component [${this.#componentIdx}] subtasks` });
+			this.threads = new this.#context.RepTable({ target: `component [${this.#componentIdx}] threads` });
+		}
+		componentIdx() {
+			return this.#componentIdx;
+		}
+		get mayLeave() {
+			const flags = this.#context.instanceFlags.get(this.#componentIdx);
+			return flags === void 0 ? this.#mayLeave : flags.value === 1;
+		}
+		set mayLeave(value) {
+			if (typeof value !== "boolean") throw new TypeError("mayLeave must be a boolean");
+			this.#mayLeave = value;
+			const flags = this.#context.instanceFlags.get(this.#componentIdx);
+			if (flags !== void 0) flags.value = value ? 1 : 0;
+		}
+		errored() {
+			return this.#errored !== null;
+		}
+		setErrored(err) {
+			DEBUG: debugLog("[ComponentAsyncState#setErrored()] component errored", {
+				err,
 				componentIdx: this.#componentIdx
 			});
-			return;
+			if (this.#errored) return;
+			if (!err) err = Object.assign(/* @__PURE__ */ new Error("error elswehere (see other component instance error)"), { componentIdx: this.#componentIdx });
+			this.#errored = err;
 		}
-		if (this.#lockHolderTaskID === taskID) throw new Error(`task [${taskID}] already holds the lock for component [${this.#componentIdx}]`);
-		DEBUG: debugLog("[ComponentAsyncState#acquireExclusiveLock()] waiting", {
-			holder: this.#lockHolderTaskID,
-			requester: taskID,
-			componentIdx: this.#componentIdx,
-			queued: this.#lockWaiters.length
-		});
-		return new Promise((resolve) => {
-			this.#lockWaiters.push({
-				taskID,
-				resolve
+		markTrapped(err) {
+			if (!(err instanceof this.#context.RuntimeError)) return false;
+			const trap = normalizeCoreTrap(this.#context.normalization, err);
+			this.#trapped = true;
+			if (this.#trapError === null) this.#trapError = trap;
+			DEBUG: debugLog("[ComponentAsyncState#markTrapped()] component trapped", {
+				err,
+				componentIdx: this.#componentIdx
 			});
-		});
-	}
-	takeAdmissionTicket(taskID) {
-		const ticket = {
-			taskID,
-			...promiseWithResolvers()
-		};
-		this.#admissionQueue.push(ticket);
-		return ticket;
-	}
-	hasPendingAdmissions() {
-		return this.#admissionQueue.length > 0;
-	}
-	waitForAdmissionTurn(ticket) {
-		if (this.#admissionQueue[0] === ticket) return;
-		return ticket.promise;
-	}
-	releaseAdmissionTicket(ticket) {
-		const idx = this.#admissionQueue.indexOf(ticket);
-		if (idx === -1) return;
-		this.#admissionQueue.splice(idx, 1);
-		if (idx === 0 && this.#admissionQueue.length > 0) this.#admissionQueue[0].resolve();
-	}
-	abandonAdmissionWaiters() {
-		const tickets = this.#admissionQueue.splice(0);
-		for (const ticket of tickets) ticket.resolve();
-	}
-	abandonLockWaiters() {
-		const waiters = this.#lockWaiters.splice(0);
-		for (const waiter of waiters) waiter.resolve();
-	}
-	cancelExclusiveLockWaiter(taskID) {
-		const idx = this.#lockWaiters.findIndex((waiter) => waiter.taskID === taskID);
-		if (idx === -1) return false;
-		const [waiter] = this.#lockWaiters.splice(idx, 1);
-		waiter.resolve();
-		return true;
-	}
-	exclusiveRelease(taskID) {
-		DEBUG: debugLog("[ComponentAsyncState#exclusiveRelease()] args", {
-			holder: this.#lockHolderTaskID,
-			releaser: taskID,
-			componentIdx: this.#componentIdx
-		});
-		if (this.#lockHolderTaskID !== taskID) {
-			DEBUG: debugLog("[ComponentAsyncState#exclusiveRelease()] ignoring foreign release", {
+			if (this.#context.storeTrap.error === null) this.#context.storeTrap.error = trap;
+			this.#context.reportTrap?.(trap);
+			this.#context.checkIdle?.();
+			return true;
+		}
+		isTrapped() {
+			return this.#trapped;
+		}
+		throwIfInterrupted() {
+			if (this.#context.storeTrap.stopped) throw this.#context.storeTrap.error;
+			if (this.#trapped) throw this.#trapError ?? new this.#context.RuntimeError(this.#context.cannotEnter);
+		}
+		throwIfTrapped() {
+			if (this.#context.storeTrap.stopped) throw this.#context.storeTrap.error;
+			if (this.#trapped) throw new this.#context.RuntimeError(this.#context.cannotEnter);
+		}
+		callingSyncImport(val) {
+			if (val === void 0) return this.#callingAsyncImport;
+			if (typeof val !== "boolean") throw new TypeError("invalid setting for async import");
+			const prev = this.#callingAsyncImport;
+			this.#callingAsyncImport = val;
+			if (prev === true && this.#callingAsyncImport === false) this.#notifySyncImportEnd();
+		}
+		#notifySyncImportEnd() {
+			const existing = this.#syncImportWait;
+			this.#syncImportWait = promiseWithResolvers();
+			existing.resolve();
+		}
+		async waitForSyncImportCallEnd() {
+			await this.#syncImportWait.promise;
+		}
+		setBackpressure(v) {
+			this.#backpressure = v;
+			for (const handler of this.#handlers.filter((handler) => handler.event === "backpressure-change")) handler.fn(v);
+			return this.#backpressure;
+		}
+		getBackpressure() {
+			return this.#backpressure;
+		}
+		incrementBackpressure() {
+			const current = this.#backpressure;
+			if (current < 0 || current > 2 ** 16) throw new Error(`invalid current backpressure value [${current}]`);
+			const newValue = this.getBackpressure() + 1;
+			if (newValue >= 2 ** 16) throw new Error(`invalid new backpressure value [${newValue}], overflow`);
+			return this.setBackpressure(newValue);
+		}
+		decrementBackpressure() {
+			const current = this.#backpressure;
+			if (current < 0 || current > 2 ** 16) throw new Error(`invalid current backpressure value [${current}]`);
+			const newValue = current - 1;
+			if (newValue < 0) throw new this.#context.RuntimeError("backpressure counter underflow");
+			return this.setBackpressure(newValue);
+		}
+		hasBackpressure() {
+			return this.#backpressure > 0;
+		}
+		waitForBackpressure() {
+			if (!this.hasBackpressure()) return Promise.resolve(null);
+			this.addBackpressureWaiter();
+			return new Promise((resolve) => {
+				let pending = true;
+				const handlerID = this.registerHandler({
+					event: "backpressure-change",
+					fn: (bp) => {
+						if (bp !== 0 || !pending) return;
+						pending = false;
+						this.removeHandler({
+							event: "backpressure-change",
+							handlerID
+						});
+						this.removeBackpressureWaiter();
+						resolve(null);
+					}
+				});
+			});
+		}
+		registerHandler(args) {
+			const { event, fn } = args;
+			if (!event) throw new Error("missing handler event");
+			if (!fn) throw new Error("missing handler fn");
+			if (!ComponentAsyncState.EVENT_HANDLER_EVENTS.includes(event)) throw new Error(`unrecognized event handler [${event}]`);
+			const handlerID = this.#nextHandlerID++;
+			this.#handlers.push({
+				id: handlerID,
+				fn,
+				event
+			});
+			return handlerID;
+		}
+		removeHandler(args) {
+			const { event, handlerID } = args;
+			this.#handlers = this.#handlers.filter((handler) => handler.event !== event || handler.id !== handlerID);
+		}
+		getBackpressureWaiters() {
+			return this.#backpressureWaiters;
+		}
+		addBackpressureWaiter() {
+			this.#backpressureWaiters++;
+		}
+		removeBackpressureWaiter() {
+			this.#backpressureWaiters--;
+			if (this.#backpressureWaiters < 0) throw new Error("unexepctedly negative number of backpressure waiters");
+		}
+		isExclusivelyLocked() {
+			return this.#lockHolderTaskID !== null;
+		}
+		exclusivelyLockedBy(taskID) {
+			return this.#lockHolderTaskID === taskID;
+		}
+		exclusiveLock(taskID) {
+			DEBUG: debugLog("[ComponentAsyncState#exclusiveLock()]", {
+				holder: this.#lockHolderTaskID,
+				requester: taskID,
+				componentIdx: this.#componentIdx
+			});
+			if (taskID === void 0 || taskID === null) throw new Error("exclusive lock requires the acquiring task id");
+			if (this.#lockHolderTaskID !== null) throw new Error(`component [${this.#componentIdx}] exclusive lock held by task [${this.#lockHolderTaskID}], requested by [${taskID}]`);
+			this.#lockHolderTaskID = taskID;
+		}
+		acquireExclusiveLock(taskID) {
+			if (taskID === void 0 || taskID === null) throw new Error("exclusive lock requires the acquiring task id");
+			if (this.#lockHolderTaskID === null) {
+				this.#lockHolderTaskID = taskID;
+				DEBUG: debugLog("[ComponentAsyncState#acquireExclusiveLock()] acquired", {
+					holder: taskID,
+					componentIdx: this.#componentIdx
+				});
+				return;
+			}
+			if (this.#lockHolderTaskID === taskID) throw new Error(`task [${taskID}] already holds the lock for component [${this.#componentIdx}]`);
+			DEBUG: debugLog("[ComponentAsyncState#acquireExclusiveLock()] waiting", {
+				holder: this.#lockHolderTaskID,
+				requester: taskID,
+				componentIdx: this.#componentIdx,
+				queued: this.#lockWaiters.length
+			});
+			return new Promise((resolve) => {
+				this.#lockWaiters.push({
+					taskID,
+					resolve
+				});
+			});
+		}
+		takeAdmissionTicket(taskID) {
+			const ticket = {
+				taskID,
+				...promiseWithResolvers()
+			};
+			this.#admissionQueue.push(ticket);
+			return ticket;
+		}
+		hasPendingAdmissions() {
+			return this.#admissionQueue.length > 0;
+		}
+		waitForAdmissionTurn(ticket) {
+			if (this.#admissionQueue[0] === ticket) return;
+			return ticket.promise;
+		}
+		releaseAdmissionTicket(ticket) {
+			const idx = this.#admissionQueue.indexOf(ticket);
+			if (idx === -1) return;
+			this.#admissionQueue.splice(idx, 1);
+			if (idx === 0 && this.#admissionQueue.length > 0) this.#admissionQueue[0].resolve();
+		}
+		abandonAdmissionWaiters() {
+			const tickets = this.#admissionQueue.splice(0);
+			for (const ticket of tickets) ticket.resolve();
+		}
+		abandonLockWaiters() {
+			const waiters = this.#lockWaiters.splice(0);
+			for (const waiter of waiters) waiter.resolve();
+		}
+		cancelExclusiveLockWaiter(taskID) {
+			const idx = this.#lockWaiters.findIndex((waiter) => waiter.taskID === taskID);
+			if (idx === -1) return false;
+			const [waiter] = this.#lockWaiters.splice(idx, 1);
+			waiter.resolve();
+			return true;
+		}
+		exclusiveRelease(taskID) {
+			DEBUG: debugLog("[ComponentAsyncState#exclusiveRelease()] args", {
 				holder: this.#lockHolderTaskID,
 				releaser: taskID,
 				componentIdx: this.#componentIdx
 			});
-			return false;
+			if (this.#lockHolderTaskID !== taskID) {
+				DEBUG: debugLog("[ComponentAsyncState#exclusiveRelease()] ignoring foreign release", {
+					holder: this.#lockHolderTaskID,
+					releaser: taskID,
+					componentIdx: this.#componentIdx
+				});
+				return false;
+			}
+			this.#lockHolderTaskID = null;
+			this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter((v) => !!v);
+			for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) try {
+				this.#onExclusiveReleaseHandlers[idx] = null;
+				f();
+			} catch (err) {
+				DEBUG: debugLog("error while executing handler for next exclusive release", err);
+				throw err;
+			}
+			this.#scheduleLockHandoff();
+			return true;
 		}
-		this.#lockHolderTaskID = null;
-		this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter((v) => !!v);
-		for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) try {
-			this.#onExclusiveReleaseHandlers[idx] = null;
-			f();
-		} catch (err) {
-			DEBUG: debugLog("error while executing handler for next exclusive release", err);
-			throw err;
+		#scheduleLockHandoff() {
+			if (this.#lockHandoffScheduled || this.#lockWaiters.length === 0) return;
+			this.#lockHandoffScheduled = true;
+			queueMicrotask(() => {
+				this.#lockHandoffScheduled = false;
+				if (this.#lockHolderTaskID !== null) return;
+				const next = this.#lockWaiters.shift();
+				if (!next) return;
+				this.#lockHolderTaskID = next.taskID;
+				next.resolve();
+			});
 		}
-		this.#scheduleLockHandoff();
-		return true;
-	}
-	#scheduleLockHandoff() {
-		if (this.#lockHandoffScheduled || this.#lockWaiters.length === 0) return;
-		this.#lockHandoffScheduled = true;
-		queueMicrotask(() => {
-			this.#lockHandoffScheduled = false;
-			if (this.#lockHolderTaskID !== null) return;
-			const next = this.#lockWaiters.shift();
-			if (!next) return;
-			this.#lockHolderTaskID = next.taskID;
-			next.resolve();
-		});
-	}
-	onNextExclusiveRelease(fn) {
-		DEBUG: debugLog("[ComponentAsyncState#()onNextExclusiveRelease] registering");
-		this.#onExclusiveReleaseHandlers.push(fn);
-	}
-	async waitForExclusiveRelease() {
-		while (this.isExclusivelyLocked()) await new Promise((resolve) => this.onNextExclusiveRelease(resolve));
-	}
-	#getSuspendedTaskMeta(taskID) {
-		const metas = [...this.#suspendedThreadsByRef.values()].filter((meta) => meta.thread.taskID() === taskID);
-		return metas.find((meta) => meta.cancellable && this.suspendedThreadReady(meta.thread)) ?? metas[0];
-	}
-	suspendTask(args) {
-		const { task, ...opts } = args;
-		task.endFirstSlice();
-		return this.suspendThread({
-			thread: task.defaultThread(),
-			...opts
-		});
-	}
-	resumeTaskByID(taskID) {
-		const meta = this.#getSuspendedTaskMeta(taskID);
-		return meta ? this.resumeThread(meta.thread) : false;
-	}
-	suspendedTaskReady(taskID) {
-		const meta = this.#getSuspendedTaskMeta(taskID);
-		return meta ? this.suspendedThreadReady(meta.thread) : false;
-	}
-	suspendedTaskCancellable(taskID) {
-		return !!this.#getSuspendedTaskMeta(taskID)?.cancellable;
-	}
-	isTaskSuspended(taskID) {
-		return !!this.#getSuspendedTaskMeta(taskID);
-	}
-	*suspendedTaskMetas() {
-		for (const meta of this.#suspendedThreadsByRef.values()) yield {
-			...meta,
-			task: meta.thread.task()
-		};
-	}
-	#removeSuspendedThreadMeta(thread) {
-		const meta = this.#suspendedThreadsByRef.get(thread);
-		this.#suspendedThreadsByRef.delete(thread);
-		return meta;
-	}
-	suspendThread(args) {
-		const { thread, readyFn, cancellable, onResume, suspended = false } = args;
-		DEBUG: debugLog("[ComponentAsyncState#suspendThread()]", {
-			threadID: thread.id(),
-			taskID: thread.taskID(),
-			componentIdx: this.#componentIdx
-		});
-		if (thread.componentIdx() !== this.#componentIdx) throw new Error("assert: thread component idx should match async state");
-		if (this.#suspendedThreadsByRef.has(thread)) throw new Error(`thread [${thread.id()}] already suspended`);
-		let promise;
-		let resume;
-		if (onResume) resume = () => onResume(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());
-		else {
-			const resolvers = promiseWithResolvers();
-			promise = resolvers.promise;
-			resume = () => resolvers.resolve(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());
+		onNextExclusiveRelease(fn) {
+			DEBUG: debugLog("[ComponentAsyncState#()onNextExclusiveRelease] registering");
+			this.#onExclusiveReleaseHandlers.push(fn);
 		}
-		if (this.#context.storeTrap.stopped) {
-			this.markTrapped(this.#context.storeTrap.error);
-			resume();
+		async waitForExclusiveRelease() {
+			while (this.isExclusivelyLocked()) await new Promise((resolve) => this.onNextExclusiveRelease(resolve));
+		}
+		#getSuspendedTaskMeta(taskID) {
+			const metas = [...this.#suspendedThreadsByRef.values()].filter((meta) => meta.thread.taskID() === taskID);
+			return metas.find((meta) => meta.cancellable && this.suspendedThreadReady(meta.thread)) ?? metas[0];
+		}
+		suspendTask(args) {
+			const { task, ...opts } = args;
+			task.endFirstSlice();
+			return this.suspendThread({
+				thread: task.defaultThread(),
+				...opts
+			});
+		}
+		resumeTaskByID(taskID) {
+			const meta = this.#getSuspendedTaskMeta(taskID);
+			return meta ? this.resumeThread(meta.thread) : false;
+		}
+		suspendedTaskReady(taskID) {
+			const meta = this.#getSuspendedTaskMeta(taskID);
+			return meta ? this.suspendedThreadReady(meta.thread) : false;
+		}
+		suspendedTaskCancellable(taskID) {
+			return !!this.#getSuspendedTaskMeta(taskID)?.cancellable;
+		}
+		isTaskSuspended(taskID) {
+			return !!this.#getSuspendedTaskMeta(taskID);
+		}
+		*suspendedTaskMetas() {
+			for (const meta of this.#suspendedThreadsByRef.values()) yield {
+				...meta,
+				task: meta.thread.task()
+			};
+		}
+		#removeSuspendedThreadMeta(thread) {
+			const meta = this.#suspendedThreadsByRef.get(thread);
+			this.#suspendedThreadsByRef.delete(thread);
+			return meta;
+		}
+		suspendThread(args) {
+			const { thread, readyFn, cancellable, onResume, suspended = false } = args;
+			DEBUG: debugLog("[ComponentAsyncState#suspendThread()]", {
+				threadID: thread.id(),
+				taskID: thread.taskID(),
+				componentIdx: this.#componentIdx
+			});
+			if (thread.componentIdx() !== this.#componentIdx) throw new Error("assert: thread component idx should match async state");
+			if (this.#suspendedThreadsByRef.has(thread)) throw new Error(`thread [${thread.id()}] already suspended`);
+			let promise;
+			let resume;
+			if (onResume) resume = () => onResume(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());
+			else {
+				const resolvers = promiseWithResolvers();
+				promise = resolvers.promise;
+				resume = () => resolvers.resolve(!thread.isCancelled() && !thread.isRejected() && !this.isTrapped());
+			}
+			if (this.#context.storeTrap.stopped) {
+				this.markTrapped(this.#context.storeTrap.error);
+				resume();
+				return promise;
+			}
+			this.#suspendedThreadsByRef.set(thread, {
+				thread,
+				cancellable,
+				readyFn,
+				resume,
+				suspended
+			});
+			thread.notifyProgress();
+			this.runTickLoop();
+			checkForDeadlock(this.#context.deadlock);
 			return promise;
 		}
-		this.#suspendedThreadsByRef.set(thread, {
-			thread,
-			cancellable,
-			readyFn,
-			resume,
-			suspended
-		});
-		thread.notifyProgress();
-		this.runTickLoop();
-		checkForDeadlock(this.#context.deadlock);
-		return promise;
-	}
-	resumeThread(thread) {
-		const meta = this.#removeSuspendedThreadMeta(thread);
-		if (!meta) return false;
-		meta.resume();
-		return true;
-	}
-	markThreadReady(thread) {
-		const meta = this.#suspendedThreadsByRef.get(thread);
-		if (!meta || !meta.suspended) return false;
-		meta.suspended = false;
-		meta.readyFn = () => true;
-		this.runTickLoop();
-		return true;
-	}
-	isThreadSuspended(thread) {
-		return this.#suspendedThreadsByRef.get(thread)?.suspended ?? false;
-	}
-	isThreadReady(thread) {
-		const meta = this.#suspendedThreadsByRef.get(thread);
-		return !!meta && !meta.suspended && (meta.thread.isRejected() || meta.readyFn());
-	}
-	suspendedThreadReady(thread) {
-		const meta = this.#suspendedThreadsByRef.get(thread);
-		if (!meta) return false;
-		if (!meta.readyFn) throw new Error(`suspended thread [${thread.id()}] is missing a readiness function`);
-		if (this.isTrapped() || meta.thread.isRejected()) return true;
-		if (!meta.readyFn()) return false;
-		const task = meta.thread.task();
-		return !task.needsExclusiveLock() || !this.isExclusivelyLocked() || this.exclusivelyLockedBy(task.id());
-	}
-	addPendingTaskStart() {
-		this.#pendingTaskStarts++;
-	}
-	removePendingTaskStart() {
-		this.#pendingTaskStarts--;
-	}
-	hasPendingSchedulerWork() {
-		if (this.#pendingTaskStarts > 0) return true;
-		if (this.#lockHandoffScheduled) return true;
-		for (const meta of this.#suspendedThreadsByRef.values()) if (this.suspendedThreadReady(meta.thread)) return true;
-		return false;
-	}
-	stop() {
-		this.#tickLoop?.();
-		this.#tickLoop = null;
-		this.abandonLockWaiters();
-		this.abandonAdmissionWaiters();
-		for (const thread of [...this.#suspendedThreadsByRef.keys()]) this.resumeThread(thread);
-	}
-	runTickLoop() {
-		if (this.#context.storeTrap.stopped || this.#tickLoop !== null) return;
-		const run = () => {
-			if (this.#context.storeTrap.stopped) {
-				this.#tickLoop = null;
-				return;
-			}
-			const result = this.tick();
-			if (this.#context.storeTrap.stopped || result === TICK_DONE) {
-				this.#tickLoop = null;
-				return;
-			}
-			if (result === TICK_IDLE) checkForDeadlock(this.#context.deadlock);
-			this.#tickLoop = result === TICK_RESUMED ? onNextMacrotask(run) : afterDelay(run, IDLE_POLL_MS);
-		};
-		this.#tickLoop = onNextMacrotask(run);
-	}
-	tick() {
-		for (const [thread, meta] of this.#suspendedThreadsByRef) {
-			if (!meta || !meta.readyFn) throw new Error(`missing/invalid thread meta despite thread [${thread.id()}] being present`);
-			if (this.isTrapped() || meta.thread.isRejected()) {
-				DEBUG: debugLog("[ComponentAsyncState#tick()] detected thread rejection, leaving early", { meta });
+		resumeThread(thread) {
+			const meta = this.#removeSuspendedThreadMeta(thread);
+			if (!meta) return false;
+			meta.resume();
+			return true;
+		}
+		markThreadReady(thread) {
+			const meta = this.#suspendedThreadsByRef.get(thread);
+			if (!meta || !meta.suspended) return false;
+			meta.suspended = false;
+			meta.readyFn = () => true;
+			this.runTickLoop();
+			return true;
+		}
+		isThreadSuspended(thread) {
+			return this.#suspendedThreadsByRef.get(thread)?.suspended ?? false;
+		}
+		isThreadReady(thread) {
+			const meta = this.#suspendedThreadsByRef.get(thread);
+			return !!meta && !meta.suspended && (meta.thread.isRejected() || meta.readyFn());
+		}
+		suspendedThreadReady(thread) {
+			const meta = this.#suspendedThreadsByRef.get(thread);
+			if (!meta) return false;
+			if (!meta.readyFn) throw new Error(`suspended thread [${thread.id()}] is missing a readiness function`);
+			if (this.isTrapped() || meta.thread.isRejected()) return true;
+			if (!meta.readyFn()) return false;
+			const task = meta.thread.task();
+			return !task.needsExclusiveLock() || !this.isExclusivelyLocked() || this.exclusivelyLockedBy(task.id());
+		}
+		addPendingTaskStart() {
+			this.#pendingTaskStarts++;
+		}
+		removePendingTaskStart() {
+			this.#pendingTaskStarts--;
+		}
+		hasPendingSchedulerWork() {
+			if (this.#pendingTaskStarts > 0) return true;
+			if (this.#lockHandoffScheduled) return true;
+			for (const meta of this.#suspendedThreadsByRef.values()) if (this.suspendedThreadReady(meta.thread)) return true;
+			return false;
+		}
+		stop() {
+			this.#tickLoop?.();
+			this.#tickLoop = null;
+			this.abandonLockWaiters();
+			this.abandonAdmissionWaiters();
+			for (const thread of [...this.#suspendedThreadsByRef.keys()]) this.resumeThread(thread);
+		}
+		runTickLoop() {
+			if (this.#context.storeTrap.stopped || this.#tickLoop !== null) return;
+			const run = () => {
+				if (this.#context.storeTrap.stopped) {
+					this.#tickLoop = null;
+					return;
+				}
+				const result = this.tick();
+				if (this.#context.storeTrap.stopped || result === TICK_DONE) {
+					this.#tickLoop = null;
+					return;
+				}
+				if (result === TICK_IDLE) checkForDeadlock(this.#context.deadlock);
+				this.#tickLoop = result === TICK_RESUMED ? onNextMacrotask(run) : afterDelay(run, IDLE_POLL_MS);
+			};
+			this.#tickLoop = onNextMacrotask(run);
+		}
+		tick() {
+			for (const [thread, meta] of this.#suspendedThreadsByRef) {
+				if (!meta || !meta.readyFn) throw new Error(`missing/invalid thread meta despite thread [${thread.id()}] being present`);
+				if (this.isTrapped() || meta.thread.isRejected()) {
+					DEBUG: debugLog("[ComponentAsyncState#tick()] detected thread rejection, leaving early", { meta });
+					this.resumeThread(thread);
+					return TICK_RESUMED;
+				}
+				if (!this.suspendedThreadReady(thread)) continue;
+				DEBUG: debugLog("[ComponentAsyncState#tick()] resuming thread via tick", {
+					threadID: thread.id(),
+					componentIdx: this.#componentIdx
+				});
 				this.resumeThread(thread);
 				return TICK_RESUMED;
 			}
-			if (!this.suspendedThreadReady(thread)) continue;
-			DEBUG: debugLog("[ComponentAsyncState#tick()] resuming thread via tick", {
-				threadID: thread.id(),
-				componentIdx: this.#componentIdx
-			});
-			this.resumeThread(thread);
-			return TICK_RESUMED;
+			return this.#suspendedThreadsByRef.size > 0 ? TICK_IDLE : TICK_DONE;
 		}
-		return this.#suspendedThreadsByRef.size > 0 ? TICK_IDLE : TICK_DONE;
-	}
-	createWaitable(args) {
-		return new this.#context.Waitable({ target: args?.target });
-	}
-};
+		createWaitable(args) {
+			return new this.#context.Waitable({ target: args?.target });
+		}
+	};
+}
+let sharedComponentAsyncState;
 function initializeComponentAsyncStateClass(context) {
+	const ComponentAsyncState = sharedComponentAsyncState ??= defineComponentAsyncState();
 	/**
 	* Construct a state of a component instance that uses the context.
 	*
@@ -2167,121 +2177,125 @@ const globalThisIdlProxy = (context) => {
 
 //#endregion
 //#region runtime/intrinsics/rep-table.js
-var RepTable = class {
-	#context;
-	#store;
-	#data = [0, null];
-	#size = 0;
-	target;
-	#space = null;
-	constructor(context, store, args) {
-		this.#context = context;
-		this.#store = store;
-		this.target = args?.target;
-		this.#space = args?.space ?? null;
-	}
-	data() {
-		return this.#data;
-	}
-	insert(val) {
-		if (this.#space !== null) {
-			const rep = this.#space.alloc();
-			this.#data[rep << 1] = val;
-			this.#data[(rep << 1) + 1] = null;
-			this.#size += 1;
-			return rep;
+function defineRepTable() {
+	return class RepTable {
+		#context;
+		#store;
+		#data = [0, null];
+		#size = 0;
+		target;
+		#space = null;
+		constructor(context, store, args) {
+			this.#context = context;
+			this.#store = store;
+			this.target = args?.target;
+			this.#space = args?.space ?? null;
 		}
-		DEBUG: debugLog("[RepTable#insert()] args", {
-			val,
-			target: this.target
-		});
-		const freeIdx = this.#data[0];
-		if (freeIdx === 0) {
-			this.#data.push(val);
-			this.#data.push(null);
-			const rep = (this.#data.length >> 1) - 1;
+		data() {
+			return this.#data;
+		}
+		insert(val) {
+			if (this.#space !== null) {
+				const rep = this.#space.alloc();
+				this.#data[rep << 1] = val;
+				this.#data[(rep << 1) + 1] = null;
+				this.#size += 1;
+				return rep;
+			}
+			DEBUG: debugLog("[RepTable#insert()] args", {
+				val,
+				target: this.target
+			});
+			const freeIdx = this.#data[0];
+			if (freeIdx === 0) {
+				this.#data.push(val);
+				this.#data.push(null);
+				const rep = (this.#data.length >> 1) - 1;
+				DEBUG: debugLog("[RepTable#insert()] inserted", {
+					val,
+					target: this.target,
+					rep
+				});
+				this.#size += 1;
+				return rep;
+			}
+			const placementIdx = freeIdx << 1;
+			SAFETY: if (this.#data[placementIdx] !== this.#store.free) throw new Error("corrupt rep table freelist: head does not point at a freed slot");
+			this.#data[0] = this.#data[placementIdx + 1];
+			this.#data[placementIdx] = val;
+			this.#data[placementIdx + 1] = null;
 			DEBUG: debugLog("[RepTable#insert()] inserted", {
 				val,
 				target: this.target,
-				rep
+				rep: freeIdx
 			});
 			this.#size += 1;
-			return rep;
+			return freeIdx;
 		}
-		const placementIdx = freeIdx << 1;
-		SAFETY: if (this.#data[placementIdx] !== this.#store.free) throw new Error("corrupt rep table freelist: head does not point at a freed slot");
-		this.#data[0] = this.#data[placementIdx + 1];
-		this.#data[placementIdx] = val;
-		this.#data[placementIdx + 1] = null;
-		DEBUG: debugLog("[RepTable#insert()] inserted", {
-			val,
-			target: this.target,
-			rep: freeIdx
-		});
-		this.#size += 1;
-		return freeIdx;
-	}
-	get(rep) {
-		DEBUG: debugLog("[RepTable#get()] args", {
-			rep,
-			target: this.target
-		});
-		if (rep === 0) throw new this.#context.RuntimeError("invalid resource rep during get, (cannot be 0)");
-		const baseIdx = rep << 1;
-		const val = this.#data[baseIdx];
-		if (val === this.#store.free) return;
-		return val;
-	}
-	contains(rep) {
-		DEBUG: debugLog("[RepTable#contains()] args", {
-			rep,
-			target: this.target
-		});
-		if (rep === 0) throw new Error("invalid resource rep during contains, (cannot be 0)");
-		const baseIdx = rep << 1;
-		const val = this.#data[baseIdx];
-		return val !== this.#store.free && !!val;
-	}
-	remove(rep) {
-		DEBUG: debugLog("[RepTable#remove()] args", {
-			rep,
-			target: this.target
-		});
-		if (rep === 0) throw new Error("invalid resource rep during remove, (cannot be 0)");
-		if (this.#space !== null) {
+		get(rep) {
+			DEBUG: debugLog("[RepTable#get()] args", {
+				rep,
+				target: this.target
+			});
+			if (rep === 0) throw new this.#context.RuntimeError("invalid resource rep during get, (cannot be 0)");
 			const baseIdx = rep << 1;
 			const val = this.#data[baseIdx];
-			if (val === void 0 || val === this.#store.free) throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
-			this.#data[baseIdx] = this.#store.free;
-			this.#data[baseIdx + 1] = null;
-			this.#size -= 1;
-			this.#space.release(rep);
+			if (val === this.#store.free) return;
 			return val;
 		}
-		if (this.#data.length === 2) throw new Error("invalid");
-		const baseIdx = rep << 1;
-		if (baseIdx >= this.#data.length) throw new Error(`invalid rep [${rep}] during remove, out of range`);
-		const val = this.#data[baseIdx];
-		if (val === this.#store.free) throw new this.#context.RuntimeError(`double removal of rep [${rep}] (already freed)`);
-		this.#data[baseIdx] = this.#store.free;
-		this.#data[baseIdx + 1] = this.#data[0];
-		this.#data[0] = rep;
-		this.#size -= 1;
-		return val;
-	}
-	size() {
-		return this.#size;
-	}
-	clear() {
-		DEBUG: debugLog("[RepTable#clear()] args", { target: this.target });
-		if (this.#space) {
-			for (let rep = 1; rep < this.#data.length / 2; rep++) if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== this.#store.free) this.#space.release(rep);
+		contains(rep) {
+			DEBUG: debugLog("[RepTable#contains()] args", {
+				rep,
+				target: this.target
+			});
+			if (rep === 0) throw new Error("invalid resource rep during contains, (cannot be 0)");
+			const baseIdx = rep << 1;
+			const val = this.#data[baseIdx];
+			return val !== this.#store.free && !!val;
 		}
-		this.#size = 0;
-		this.#data = [0, null];
-	}
-};
+		remove(rep) {
+			DEBUG: debugLog("[RepTable#remove()] args", {
+				rep,
+				target: this.target
+			});
+			if (rep === 0) throw new Error("invalid resource rep during remove, (cannot be 0)");
+			if (this.#space !== null) {
+				const baseIdx = rep << 1;
+				const val = this.#data[baseIdx];
+				if (val === void 0 || val === this.#store.free) throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
+				this.#data[baseIdx] = this.#store.free;
+				this.#data[baseIdx + 1] = null;
+				this.#size -= 1;
+				this.#space.release(rep);
+				return val;
+			}
+			if (this.#data.length === 2) throw new Error("invalid");
+			const baseIdx = rep << 1;
+			if (baseIdx >= this.#data.length) throw new Error(`invalid rep [${rep}] during remove, out of range`);
+			const val = this.#data[baseIdx];
+			if (val === this.#store.free) throw new this.#context.RuntimeError(`double removal of rep [${rep}] (already freed)`);
+			this.#data[baseIdx] = this.#store.free;
+			this.#data[baseIdx + 1] = this.#data[0];
+			this.#data[0] = rep;
+			this.#size -= 1;
+			return val;
+		}
+		size() {
+			return this.#size;
+		}
+		clear() {
+			DEBUG: debugLog("[RepTable#clear()] args", { target: this.target });
+			if (this.#space) {
+				for (let rep = 1; rep < this.#data.length / 2; rep++) if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== this.#store.free) this.#space.release(rep);
+			}
+			this.#size = 0;
+			this.#data = [0, null];
+		}
+	};
+}
+let sharedRepTable;
 function initializeRepTableClass(context) {
+	const RepTable = sharedRepTable ??= defineRepTable();
 	const store = { free: Symbol("RepTable.free") };
 	/**
 	* Construct a table that uses the context.
@@ -2316,217 +2330,221 @@ function validateGuestBuffer(context, memory, start, count, elemMeta) {
 	if (start % elemMeta.align32 !== 0) throw new context.RuntimeError("buffer pointer not aligned");
 	if (start + count * elemMeta.size32 > memory.buffer.byteLength) throw new context.RuntimeError("buffer pointer out of bounds of memory");
 }
-var ManagedBuffer = class ManagedBuffer {
-	static MAX_LENGTH = 2 ** 28 - 1;
-	#context;
-	#store;
-	#componentIdx;
-	#memory;
-	#elemMeta;
-	#start;
-	#ptr;
-	capacity;
-	processed = 0;
-	#hostOnlyData;
-	#hostBytes = null;
-	#hostByteLength = 0;
-	#hostOffset = 0;
-	#hostDataBorrowed = true;
-	target;
-	/**
-	* Whether a value was constructed through one `initializeManagedBufferClass` call.
-	*
-	* @param value - any value
-	* @param store - the store of that call
-	* @returns whether the value is an instance belonging to that store
-	*/
-	static constructedIn(value, store) {
-		return typeof value === "object" && value !== null && #store in value && value.#store === store;
-	}
-	constructor(context, store, args) {
-		this.#context = context;
-		this.#store = store;
-		if (args.capacity > ManagedBuffer.MAX_LENGTH) throw new Error(`buffer size [${args.capacity}] greater than max length`);
-		if (args.componentIdx === void 0) throw new TypeError("missing/invalid component idx");
-		if (args.capacity === void 0) throw new TypeError("missing/invalid capacity");
-		if (!args.elemMeta || typeof args.elemMeta.align32 !== "number") throw new TypeError("missing/invalid element metadata");
-		if (!args.memory && args.start === void 0 && args.data === void 0) throw new TypeError("either memory and start ptr or data must be provided for managed buffers");
-		if (args.memory && args.start == void 0) throw new TypeError("missing/invalid start ptr, depsite memory being present");
-		validateGuestBuffer(context, args.memory, args.start, args.capacity, args.elemMeta);
-		this.#componentIdx = args.componentIdx;
-		this.#memory = args.memory;
-		this.#start = args.start;
-		this.#ptr = this.#start;
-		this.capacity = args.capacity;
-		this.#elemMeta = args.elemMeta;
-		if (args.data !== void 0 && !Array.isArray(args.data)) throw new TypeError("host-only data must be an array");
-		this.#hostOnlyData = args.data;
-		this.target = args.target;
-	}
-	setTarget(tgt) {
-		this.target = tgt;
-	}
-	remaining() {
-		return this.capacity - this.processed;
-	}
-	componentIdx() {
-		return this.#componentIdx;
-	}
-	getElemMeta() {
-		return this.#elemMeta;
-	}
-	isHostOwned() {
-		return !this.#memory;
-	}
-	/** Copy bytes in bulk; return false for another provider or a non-byte payload. */
-	copyTo(target, count) {
-		if (target === this || !ManagedBuffer.constructedIn(target, this.#store) || this.#elemMeta.payloadTypeName !== "U8" || target.#elemMeta.payloadTypeName !== "U8") return false;
-		if (!this.#memory && !this.#hostBytes || !target.#memory && !target.#hostBytes && target.#hostOnlyData.length !== 0) return false;
-		if (!Number.isInteger(count) || count < 0 || count > this.remaining() || count > target.remaining()) throw new RangeError("byte copy exceeds remaining buffer capacity");
-		const source = this.#memory ? new Uint8Array(this.#memory.buffer, this.#ptr, count) : this.#hostBytes.subarray(this.#hostOffset, this.#hostOffset + count);
-		if (source.length !== count) throw new RangeError("byte copy exceeds available host data");
-		if (target.#memory) {
-			new Uint8Array(target.#memory.buffer, target.#ptr, count).set(source);
-			target.#ptr += count;
-		} else {
-			const length = target.#hostByteLength + count;
-			if (!target.#hostBytes || target.#hostBytes.length < length) {
-				const bytes = new Uint8Array(Math.min(target.capacity, Math.max(length, (target.#hostBytes?.length ?? 0) * 2, 64)));
-				if (target.#hostBytes) bytes.set(target.#hostBytes.subarray(0, target.#hostByteLength));
-				target.#hostBytes = bytes;
-			}
-			target.#hostBytes.set(source, target.#hostByteLength);
-			target.#hostByteLength = length;
+function defineManagedBuffer() {
+	return class ManagedBuffer {
+		static MAX_LENGTH = 2 ** 28 - 1;
+		#context;
+		#store;
+		#componentIdx;
+		#memory;
+		#elemMeta;
+		#start;
+		#ptr;
+		capacity;
+		processed = 0;
+		#hostOnlyData;
+		#hostBytes = null;
+		#hostByteLength = 0;
+		#hostOffset = 0;
+		#hostDataBorrowed = true;
+		target;
+		/**
+		* Whether a value was constructed through one `initializeManagedBufferClass` call.
+		*
+		* @param value - any value
+		* @param store - the store of that call
+		* @returns whether the value is an instance belonging to that store
+		*/
+		static constructedIn(value, store) {
+			return typeof value === "object" && value !== null && #store in value && value.#store === store;
 		}
-		if (this.#memory) this.#ptr += count;
-		else this.#hostOffset += count;
-		this.processed += count;
-		target.processed += count;
-		return true;
-	}
-	/** Return an owned byte chunk; guest memory never escapes to the host. */
-	readBytes(count) {
-		if (this.#elemMeta.payloadTypeName !== "U8" || !this.#memory && !this.#hostBytes) return;
-		if (!Number.isInteger(count) || count <= 0 || count > this.capacity) throw new RangeError("invalid byte read count");
-		let bytes;
-		if (this.#memory) {
-			bytes = new Uint8Array(this.#memory.buffer, this.#ptr, count).slice();
-			this.#ptr += count;
-		} else {
-			if (this.#hostOffset + count > this.#hostByteLength) throw new RangeError("byte read exceeds available host data");
-			bytes = this.#hostBytes.slice(this.#hostOffset, this.#hostOffset + count);
-			this.#hostOffset += count;
+		constructor(context, store, args) {
+			this.#context = context;
+			this.#store = store;
+			if (args.capacity > ManagedBuffer.MAX_LENGTH) throw new Error(`buffer size [${args.capacity}] greater than max length`);
+			if (args.componentIdx === void 0) throw new TypeError("missing/invalid component idx");
+			if (args.capacity === void 0) throw new TypeError("missing/invalid capacity");
+			if (!args.elemMeta || typeof args.elemMeta.align32 !== "number") throw new TypeError("missing/invalid element metadata");
+			if (!args.memory && args.start === void 0 && args.data === void 0) throw new TypeError("either memory and start ptr or data must be provided for managed buffers");
+			if (args.memory && args.start == void 0) throw new TypeError("missing/invalid start ptr, depsite memory being present");
+			validateGuestBuffer(context, args.memory, args.start, args.capacity, args.elemMeta);
+			this.#componentIdx = args.componentIdx;
+			this.#memory = args.memory;
+			this.#start = args.start;
+			this.#ptr = this.#start;
+			this.capacity = args.capacity;
+			this.#elemMeta = args.elemMeta;
+			if (args.data !== void 0 && !Array.isArray(args.data)) throw new TypeError("host-only data must be an array");
+			this.#hostOnlyData = args.data;
+			this.target = args.target;
 		}
-		this.processed += count;
-		return bytes;
-	}
-	read(count, opts = {}) {
-		DEBUG: debugLog("[ManagedBuffer#read()] args", { count });
-		if (this.#hostBytes) return Array.from(this.readBytes(count));
-		if (count === void 0 || count <= 0) throw new TypeError(`missing/invalid count [${count}]`);
-		const cap = this.capacity;
-		if (count > cap) throw new Error(`cannot read [${count}] elements from buffer with capacity [${cap}]`);
-		let values = [];
-		if (this.#elemMeta.isNone) values = [...new Array(count)].map(() => null);
-		else if (this.isHostOwned()) {
-			values = this.#hostOnlyData.slice(this.#hostOffset, this.#hostOffset + count);
-			if (this.#hostDataBorrowed) {
-				this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset + count);
-				this.#hostDataBorrowed = false;
-				this.#hostOffset = 0;
+		setTarget(tgt) {
+			this.target = tgt;
+		}
+		remaining() {
+			return this.capacity - this.processed;
+		}
+		componentIdx() {
+			return this.#componentIdx;
+		}
+		getElemMeta() {
+			return this.#elemMeta;
+		}
+		isHostOwned() {
+			return !this.#memory;
+		}
+		/** Copy bytes in bulk; return false for another provider or a non-byte payload. */
+		copyTo(target, count) {
+			if (target === this || !ManagedBuffer.constructedIn(target, this.#store) || this.#elemMeta.payloadTypeName !== "U8" || target.#elemMeta.payloadTypeName !== "U8") return false;
+			if (!this.#memory && !this.#hostBytes || !target.#memory && !target.#hostBytes && target.#hostOnlyData.length !== 0) return false;
+			if (!Number.isInteger(count) || count < 0 || count > this.remaining() || count > target.remaining()) throw new RangeError("byte copy exceeds remaining buffer capacity");
+			const source = this.#memory ? new Uint8Array(this.#memory.buffer, this.#ptr, count) : this.#hostBytes.subarray(this.#hostOffset, this.#hostOffset + count);
+			if (source.length !== count) throw new RangeError("byte copy exceeds available host data");
+			if (target.#memory) {
+				new Uint8Array(target.#memory.buffer, target.#ptr, count).set(source);
+				target.#ptr += count;
 			} else {
-				this.#hostOnlyData.fill(void 0, this.#hostOffset, this.#hostOffset + count);
+				const length = target.#hostByteLength + count;
+				if (!target.#hostBytes || target.#hostBytes.length < length) {
+					const bytes = new Uint8Array(Math.min(target.capacity, Math.max(length, (target.#hostBytes?.length ?? 0) * 2, 64)));
+					if (target.#hostBytes) bytes.set(target.#hostBytes.subarray(0, target.#hostByteLength));
+					target.#hostBytes = bytes;
+				}
+				target.#hostBytes.set(source, target.#hostByteLength);
+				target.#hostByteLength = length;
+			}
+			if (this.#memory) this.#ptr += count;
+			else this.#hostOffset += count;
+			this.processed += count;
+			target.processed += count;
+			return true;
+		}
+		/** Return an owned byte chunk; guest memory never escapes to the host. */
+		readBytes(count) {
+			if (this.#elemMeta.payloadTypeName !== "U8" || !this.#memory && !this.#hostBytes) return;
+			if (!Number.isInteger(count) || count <= 0 || count > this.capacity) throw new RangeError("invalid byte read count");
+			let bytes;
+			if (this.#memory) {
+				bytes = new Uint8Array(this.#memory.buffer, this.#ptr, count).slice();
+				this.#ptr += count;
+			} else {
+				if (this.#hostOffset + count > this.#hostByteLength) throw new RangeError("byte read exceeds available host data");
+				bytes = this.#hostBytes.slice(this.#hostOffset, this.#hostOffset + count);
 				this.#hostOffset += count;
-				if (this.#hostOffset === this.#hostOnlyData.length) {
-					this.#hostOnlyData = [];
+			}
+			this.processed += count;
+			return bytes;
+		}
+		read(count, opts = {}) {
+			DEBUG: debugLog("[ManagedBuffer#read()] args", { count });
+			if (this.#hostBytes) return Array.from(this.readBytes(count));
+			if (count === void 0 || count <= 0) throw new TypeError(`missing/invalid count [${count}]`);
+			const cap = this.capacity;
+			if (count > cap) throw new Error(`cannot read [${count}] elements from buffer with capacity [${cap}]`);
+			let values = [];
+			if (this.#elemMeta.isNone) values = [...new Array(count)].map(() => null);
+			else if (this.isHostOwned()) {
+				values = this.#hostOnlyData.slice(this.#hostOffset, this.#hostOffset + count);
+				if (this.#hostDataBorrowed) {
+					this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset + count);
+					this.#hostDataBorrowed = false;
 					this.#hostOffset = 0;
-				} else if (this.#hostOffset >= 1024 && this.#hostOffset * 2 >= this.#hostOnlyData.length) {
+				} else {
+					this.#hostOnlyData.fill(void 0, this.#hostOffset, this.#hostOffset + count);
+					this.#hostOffset += count;
+					if (this.#hostOffset === this.#hostOnlyData.length) {
+						this.#hostOnlyData = [];
+						this.#hostOffset = 0;
+					} else if (this.#hostOffset >= 1024 && this.#hostOffset * 2 >= this.#hostOnlyData.length) {
+						this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
+						this.#hostOffset = 0;
+					}
+				}
+			} else if (this.#elemMeta.payloadTypeName === "U8") {
+				values = Array.from(new Uint8Array(this.#memory.buffer, this.#ptr, count));
+				this.#ptr += count;
+			} else {
+				let currentCount = count;
+				let startPtr = this.#ptr;
+				if (this.#elemMeta.stringEncoding === void 0) throw new Error("string encoding unknown during read");
+				let liftCtx = createBufferContext({
+					storagePtr: startPtr,
+					memory: this.#memory,
+					componentIdx: this.#componentIdx,
+					stringEncoding: this.#elemMeta.stringEncoding,
+					liftResource: opts.transferResources ? (handle, tableIdx) => {
+						const { rep } = tableRemove(this.#context, this.#context.tables[tableIdx], handle);
+						return { rep };
+					} : void 0
+				});
+				if (currentCount < 0) throw new Error("unexpectedly invalid count");
+				while (currentCount > 0) {
+					const [value] = this.#elemMeta.liftFn(liftCtx);
+					values.push(value);
+					currentCount -= 1;
+				}
+				this.#ptr = liftCtx.storagePtr;
+			}
+			this.processed += count;
+			return values;
+		}
+		write(values, opts = {}) {
+			DEBUG: debugLog("[ManagedBuffer#write()] args", { values });
+			if (!Array.isArray(values)) throw new TypeError("values input to write() must be an array");
+			let rc = this.remaining();
+			if (values.length > rc) throw new Error(`cannot write [${values.length}] elements to managed buffer with remaining capacity [${rc}]`);
+			if (this.#elemMeta.isNone) {
+				if (!values.every((v) => v === null)) throw new Error("non-null values in write() to unit managed buffer");
+			} else if (this.isHostOwned()) {
+				if (this.#hostBytes) {
+					this.#hostOnlyData = Array.from(this.#hostBytes.subarray(this.#hostOffset, this.#hostByteLength));
+					this.#hostBytes = null;
+					this.#hostByteLength = 0;
+					this.#hostOffset = 0;
+					this.#hostDataBorrowed = false;
+				}
+				if (this.#hostDataBorrowed) {
 					this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
 					this.#hostOffset = 0;
+					this.#hostDataBorrowed = false;
 				}
+				for (const value of values) this.#hostOnlyData.push(value);
+			} else if (this.#elemMeta.payloadTypeName === "U8") {
+				new Uint8Array(this.#memory.buffer, this.#ptr, values.length).set(values);
+				this.#ptr += values.length;
+			} else {
+				let startPtr = this.#ptr;
+				if (this.#elemMeta.stringEncoding === void 0) throw new Error("string encoding unknown during write");
+				const lowerCtx = createBufferContext({
+					memory: this.#memory,
+					storagePtr: startPtr,
+					componentIdx: this.#componentIdx,
+					stringEncoding: this.#elemMeta.stringEncoding,
+					realloc: this.#elemMeta.getReallocFn?.(),
+					getReallocFn: this.#elemMeta.getReallocFn,
+					lowerResource: opts.transferResources ? (value, tableIdx) => {
+						let table = this.#context.tables[tableIdx];
+						if (!table) {
+							table = [tableFlag, 0];
+							table._createdReps = /* @__PURE__ */ new Set();
+							this.#context.tables[tableIdx] = table;
+						}
+						return tableCreateOwn(this.#context.indexSpaces, table, value.rep);
+					} : void 0
+				});
+				for (const v of values) {
+					lowerCtx.vals = [v];
+					this.#elemMeta.lowerFn(lowerCtx);
+				}
+				this.#ptr = lowerCtx.storagePtr;
 			}
-		} else if (this.#elemMeta.payloadTypeName === "U8") {
-			values = Array.from(new Uint8Array(this.#memory.buffer, this.#ptr, count));
-			this.#ptr += count;
-		} else {
-			let currentCount = count;
-			let startPtr = this.#ptr;
-			if (this.#elemMeta.stringEncoding === void 0) throw new Error("string encoding unknown during read");
-			let liftCtx = createBufferContext({
-				storagePtr: startPtr,
-				memory: this.#memory,
-				componentIdx: this.#componentIdx,
-				stringEncoding: this.#elemMeta.stringEncoding,
-				liftResource: opts.transferResources ? (handle, tableIdx) => {
-					const { rep } = tableRemove(this.#context, this.#context.tables[tableIdx], handle);
-					return { rep };
-				} : void 0
-			});
-			if (currentCount < 0) throw new Error("unexpectedly invalid count");
-			while (currentCount > 0) {
-				const [value] = this.#elemMeta.liftFn(liftCtx);
-				values.push(value);
-				currentCount -= 1;
-			}
-			this.#ptr = liftCtx.storagePtr;
+			this.processed += values.length;
 		}
-		this.processed += count;
-		return values;
-	}
-	write(values, opts = {}) {
-		DEBUG: debugLog("[ManagedBuffer#write()] args", { values });
-		if (!Array.isArray(values)) throw new TypeError("values input to write() must be an array");
-		let rc = this.remaining();
-		if (values.length > rc) throw new Error(`cannot write [${values.length}] elements to managed buffer with remaining capacity [${rc}]`);
-		if (this.#elemMeta.isNone) {
-			if (!values.every((v) => v === null)) throw new Error("non-null values in write() to unit managed buffer");
-		} else if (this.isHostOwned()) {
-			if (this.#hostBytes) {
-				this.#hostOnlyData = Array.from(this.#hostBytes.subarray(this.#hostOffset, this.#hostByteLength));
-				this.#hostBytes = null;
-				this.#hostByteLength = 0;
-				this.#hostOffset = 0;
-				this.#hostDataBorrowed = false;
-			}
-			if (this.#hostDataBorrowed) {
-				this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
-				this.#hostOffset = 0;
-				this.#hostDataBorrowed = false;
-			}
-			for (const value of values) this.#hostOnlyData.push(value);
-		} else if (this.#elemMeta.payloadTypeName === "U8") {
-			new Uint8Array(this.#memory.buffer, this.#ptr, values.length).set(values);
-			this.#ptr += values.length;
-		} else {
-			let startPtr = this.#ptr;
-			if (this.#elemMeta.stringEncoding === void 0) throw new Error("string encoding unknown during write");
-			const lowerCtx = createBufferContext({
-				memory: this.#memory,
-				storagePtr: startPtr,
-				componentIdx: this.#componentIdx,
-				stringEncoding: this.#elemMeta.stringEncoding,
-				realloc: this.#elemMeta.getReallocFn?.(),
-				getReallocFn: this.#elemMeta.getReallocFn,
-				lowerResource: opts.transferResources ? (value, tableIdx) => {
-					let table = this.#context.tables[tableIdx];
-					if (!table) {
-						table = [tableFlag, 0];
-						table._createdReps = /* @__PURE__ */ new Set();
-						this.#context.tables[tableIdx] = table;
-					}
-					return tableCreateOwn(this.#context.indexSpaces, table, value.rep);
-				} : void 0
-			});
-			for (const v of values) {
-				lowerCtx.vals = [v];
-				this.#elemMeta.lowerFn(lowerCtx);
-			}
-			this.#ptr = lowerCtx.storagePtr;
-		}
-		this.processed += values.length;
-	}
-};
+	};
+}
+let sharedManagedBuffer;
 function initializeManagedBufferClass(context) {
+	const ManagedBuffer = sharedManagedBuffer ??= defineManagedBuffer();
 	const store = {};
 	/**
 	* Construct a buffer that uses the context.
@@ -2547,66 +2565,70 @@ function initializeManagedBufferClass(context) {
 		validateGuestBuffer: { value: (memory, start, count, elemMeta) => validateGuestBuffer(context, memory, start, count, elemMeta) }
 	});
 }
-var BufferManager = class {
-	#ManagedBuffer;
-	#buffers = /* @__PURE__ */ new Map();
-	#bufferIDs = /* @__PURE__ */ new Map();
-	constructor(ManagedBuffer) {
-		this.#ManagedBuffer = ManagedBuffer;
-	}
-	getNextBufferID(componentIdx) {
-		const current = this.#bufferIDs.get(componentIdx);
-		if (current === void 0) {
-			this.#bufferIDs.set(componentIdx, 1n);
-			return 1n;
+function defineBufferManager() {
+	return class BufferManager {
+		#ManagedBuffer;
+		#buffers = /* @__PURE__ */ new Map();
+		#bufferIDs = /* @__PURE__ */ new Map();
+		constructor(ManagedBuffer) {
+			this.#ManagedBuffer = ManagedBuffer;
 		}
-		const next = current + 1n;
-		this.#bufferIDs.set(componentIdx, next);
-		return next;
-	}
-	getBuffer(componentIdx, bufferID) {
-		DEBUG: debugLog("[BufferManager#getBuffer()] args", {
-			componentIdx,
-			bufferID
-		});
-		return this.#buffers.get(componentIdx)?.get(bufferID);
-	}
-	createBuffer(args) {
-		DEBUG: debugLog("[BufferManager#createBuffer()] args", args);
-		if (!args || typeof args !== "object") throw new TypeError("missing/invalid argument object");
-		if (args.start === void 0 && args.data === void 0) throw new TypeError("either a starting pointer or initial values must be provided");
-		if (args.start !== void 0 && args.componentIdx === void 0) throw new TypeError("missing/invalid component idx");
-		if (args.count === void 0) throw new TypeError("missing/invalid obj count");
-		if (!args.elemMeta) throw new TypeError("missing/invalid element metadata for use with managed buffer");
-		const { componentIdx } = args;
-		if (!this.#buffers.has(componentIdx)) this.#buffers.set(componentIdx, /* @__PURE__ */ new Map());
-		const instanceBuffers = this.#buffers.get(componentIdx);
-		const nextBufID = this.getNextBufferID(componentIdx);
-		const buffer = new this.#ManagedBuffer({
-			componentIdx,
-			memory: args.memory,
-			start: args.start,
-			capacity: args.count,
-			elemMeta: args.elemMeta,
-			data: args.data,
-			target: args.target
-		});
-		if (instanceBuffers.has(nextBufID)) throw new Error(`managed buffer with ID [${nextBufID}] already exists`);
-		instanceBuffers.set(nextBufID, buffer);
-		return {
-			id: nextBufID,
-			buffer
-		};
-	}
-	deleteBuffer(componentIdx, bufferID) {
-		DEBUG: debugLog("[BufferManager#deleteBuffer()] args", {
-			componentIdx,
-			bufferID
-		});
-		return this.#buffers.get(componentIdx)?.delete(bufferID);
-	}
-};
+		getNextBufferID(componentIdx) {
+			const current = this.#bufferIDs.get(componentIdx);
+			if (current === void 0) {
+				this.#bufferIDs.set(componentIdx, 1n);
+				return 1n;
+			}
+			const next = current + 1n;
+			this.#bufferIDs.set(componentIdx, next);
+			return next;
+		}
+		getBuffer(componentIdx, bufferID) {
+			DEBUG: debugLog("[BufferManager#getBuffer()] args", {
+				componentIdx,
+				bufferID
+			});
+			return this.#buffers.get(componentIdx)?.get(bufferID);
+		}
+		createBuffer(args) {
+			DEBUG: debugLog("[BufferManager#createBuffer()] args", args);
+			if (!args || typeof args !== "object") throw new TypeError("missing/invalid argument object");
+			if (args.start === void 0 && args.data === void 0) throw new TypeError("either a starting pointer or initial values must be provided");
+			if (args.start !== void 0 && args.componentIdx === void 0) throw new TypeError("missing/invalid component idx");
+			if (args.count === void 0) throw new TypeError("missing/invalid obj count");
+			if (!args.elemMeta) throw new TypeError("missing/invalid element metadata for use with managed buffer");
+			const { componentIdx } = args;
+			if (!this.#buffers.has(componentIdx)) this.#buffers.set(componentIdx, /* @__PURE__ */ new Map());
+			const instanceBuffers = this.#buffers.get(componentIdx);
+			const nextBufID = this.getNextBufferID(componentIdx);
+			const buffer = new this.#ManagedBuffer({
+				componentIdx,
+				memory: args.memory,
+				start: args.start,
+				capacity: args.count,
+				elemMeta: args.elemMeta,
+				data: args.data,
+				target: args.target
+			});
+			if (instanceBuffers.has(nextBufID)) throw new Error(`managed buffer with ID [${nextBufID}] already exists`);
+			instanceBuffers.set(nextBufID, buffer);
+			return {
+				id: nextBufID,
+				buffer
+			};
+		}
+		deleteBuffer(componentIdx, bufferID) {
+			DEBUG: debugLog("[BufferManager#deleteBuffer()] args", {
+				componentIdx,
+				bufferID
+			});
+			return this.#buffers.get(componentIdx)?.delete(bufferID);
+		}
+	};
+}
+let sharedBufferManager;
 function initializeBufferManagerClass(ManagedBuffer) {
+	const BufferManager = sharedBufferManager ??= defineBufferManager();
 	/**
 	* Construct a manager of buffers of the given class.
 	*
@@ -3579,109 +3601,112 @@ function storeEventInComponentMemory(args) {
 
 //#endregion
 //#region runtime/intrinsics/waitable.js
-var Waitable = class {
-	#componentIdx;
-	#pendingEventFn = null;
-	#promise;
-	#resolve;
-	#reject;
-	#waitableSet = null;
-	#hasSyncWaiter = false;
-	#idx = null;
-	target;
-	constructor(args) {
-		const { componentIdx } = args;
-		this.#componentIdx = componentIdx;
-		this.target = args.target;
-		this.#resetPromise();
-	}
-	componentIdx() {
-		return this.#componentIdx;
-	}
-	isInSet() {
-		return this.#waitableSet !== null;
-	}
-	idx() {
-		return this.#idx;
-	}
-	setIdx(idx) {
-		if (idx === 0) throw new Error("waitable idx cannot be zero");
-		this.#idx = idx;
-	}
-	setTarget(tgt) {
-		this.target = tgt;
-	}
-	#resetPromise() {
-		const { promise, resolve, reject } = promiseWithResolvers();
-		this.#promise = promise;
-		this.#resolve = resolve;
-		this.#reject = reject;
-	}
-	resolve() {
-		this.#resolve();
-	}
-	reject(err) {
-		this.#reject(err);
-	}
-	promise() {
-		return this.#promise;
-	}
-	hasPendingEvent() {
-		return this.#pendingEventFn !== null;
-	}
-	setPendingEvent(fn) {
-		DEBUG: debugLog("[Waitable#setPendingEvent()] args", {
-			waitable: this,
-			inSet: this.#waitableSet
-		});
-		this.#pendingEventFn = fn;
-	}
-	getPendingEvent() {
-		DEBUG: debugLog("[Waitable#getPendingEvent()] args", {
-			waitable: this,
-			inSet: this.#waitableSet,
-			hasPendingEvent: this.#pendingEventFn !== null
-		});
-		if (this.#pendingEventFn === null) return null;
-		const eventFn = this.#pendingEventFn;
-		this.#pendingEventFn = null;
-		const e = eventFn();
-		this.#resetPromise();
-		return e;
-	}
-	join(waitableSet) {
-		DEBUG: debugLog("[Waitable#join()] args", {
-			waitable: this,
-			waitableSet,
-			isRemoval: waitableSet === null
-		});
-		if (waitableSet === void 0) throw new TypeError("waitable set must be not be undefined");
-		if (this.#waitableSet) this.#waitableSet.removeWaitable(this);
-		this.#waitableSet = waitableSet;
-		if (waitableSet) waitableSet.addWaitable(this);
-	}
-	drop() {
-		DEBUG: debugLog("[Waitable#drop()] args", {
-			componentIdx: this.#componentIdx,
-			waitable: this
-		});
-		this.join(null);
-	}
-	async waitForPendingEvent(args) {
-		const { cstate } = args;
-		if (!cstate) throw new TypeError("missing component state");
-		if (this.#waitableSet !== null || this.#hasSyncWaiter) throw new Error("waitable is already in a set/has a sync waiter");
-		this.#hasSyncWaiter = true;
-		try {
-			await cstate.waitUntil({
-				cancellable: false,
-				readyFn: () => this.hasPendingEvent()
-			});
-		} finally {
-			this.#hasSyncWaiter = false;
+function defineWaitable() {
+	return class Waitable {
+		#componentIdx;
+		#pendingEventFn = null;
+		#promise;
+		#resolve;
+		#reject;
+		#waitableSet = null;
+		#hasSyncWaiter = false;
+		#idx = null;
+		target;
+		constructor(args) {
+			const { componentIdx } = args;
+			this.#componentIdx = componentIdx;
+			this.target = args.target;
+			this.#resetPromise();
 		}
-	}
-};
+		componentIdx() {
+			return this.#componentIdx;
+		}
+		isInSet() {
+			return this.#waitableSet !== null;
+		}
+		idx() {
+			return this.#idx;
+		}
+		setIdx(idx) {
+			if (idx === 0) throw new Error("waitable idx cannot be zero");
+			this.#idx = idx;
+		}
+		setTarget(tgt) {
+			this.target = tgt;
+		}
+		#resetPromise() {
+			const { promise, resolve, reject } = promiseWithResolvers();
+			this.#promise = promise;
+			this.#resolve = resolve;
+			this.#reject = reject;
+		}
+		resolve() {
+			this.#resolve();
+		}
+		reject(err) {
+			this.#reject(err);
+		}
+		promise() {
+			return this.#promise;
+		}
+		hasPendingEvent() {
+			return this.#pendingEventFn !== null;
+		}
+		setPendingEvent(fn) {
+			DEBUG: debugLog("[Waitable#setPendingEvent()] args", {
+				waitable: this,
+				inSet: this.#waitableSet
+			});
+			this.#pendingEventFn = fn;
+		}
+		getPendingEvent() {
+			DEBUG: debugLog("[Waitable#getPendingEvent()] args", {
+				waitable: this,
+				inSet: this.#waitableSet,
+				hasPendingEvent: this.#pendingEventFn !== null
+			});
+			if (this.#pendingEventFn === null) return null;
+			const eventFn = this.#pendingEventFn;
+			this.#pendingEventFn = null;
+			const e = eventFn();
+			this.#resetPromise();
+			return e;
+		}
+		join(waitableSet) {
+			DEBUG: debugLog("[Waitable#join()] args", {
+				waitable: this,
+				waitableSet,
+				isRemoval: waitableSet === null
+			});
+			if (waitableSet === void 0) throw new TypeError("waitable set must be not be undefined");
+			if (this.#waitableSet) this.#waitableSet.removeWaitable(this);
+			this.#waitableSet = waitableSet;
+			if (waitableSet) waitableSet.addWaitable(this);
+		}
+		drop() {
+			DEBUG: debugLog("[Waitable#drop()] args", {
+				componentIdx: this.#componentIdx,
+				waitable: this
+			});
+			this.join(null);
+		}
+		async waitForPendingEvent(args) {
+			const { cstate } = args;
+			if (!cstate) throw new TypeError("missing component state");
+			if (this.#waitableSet !== null || this.#hasSyncWaiter) throw new Error("waitable is already in a set/has a sync waiter");
+			this.#hasSyncWaiter = true;
+			try {
+				await cstate.waitUntil({
+					cancellable: false,
+					readyFn: () => this.hasPendingEvent()
+				});
+			} finally {
+				this.#hasSyncWaiter = false;
+			}
+		}
+	};
+}
+let sharedWaitable;
 /**
 * Fresh class identity per store, with no state or platform capability required.
 *
@@ -3691,143 +3716,148 @@ var Waitable = class {
 * copies with private names of their own would defeat those caches.
 */
 function initializeWaitableClass() {
+	const Waitable = sharedWaitable ??= defineWaitable();
 	return class StoreWaitable extends Waitable {};
 }
-var WaitableSet = class {
-	#asyncEventCode;
-	#componentIdx;
-	#waitables = [];
-	#waiting = 0;
-	target;
-	constructor(asyncEventCode, componentIdx) {
-		this.#asyncEventCode = asyncEventCode;
-		if (componentIdx === void 0) throw new TypeError("missing/invalid component idx");
-		this.#componentIdx = componentIdx;
-		this.target = `component [${this.#componentIdx}] waitable set`;
-	}
-	componentIdx() {
-		return this.#componentIdx;
-	}
-	numWaitables() {
-		return this.#waitables.length;
-	}
-	numWaiting() {
-		return this.#waiting;
-	}
-	incrementNumWaiting(n) {
-		this.#waiting += n ?? 1;
-	}
-	decrementNumWaiting(n) {
-		this.#waiting -= n ?? 1;
-	}
-	targets() {
-		return this.#waitables.map((w) => w.target);
-	}
-	setTarget(tgt) {
-		this.target = tgt;
-	}
-	shuffleWaitables() {
-		this.#waitables = this.#waitables.map((value) => ({
-			value,
-			sort: Math.random()
-		})).sort((a, b) => a.sort - b.sort).map(({ value }) => value);
-	}
-	removeWaitable(waitable) {
-		if (!this.#waitables.find((w) => w === waitable)) return;
-		this.#waitables = this.#waitables.filter((w) => w !== waitable);
-		return waitable;
-	}
-	addWaitable(waitable) {
-		this.removeWaitable(waitable);
-		this.#waitables.push(waitable);
-	}
-	hasPendingEvent() {
-		DEBUG: debugLog("[WaitableSet#hasPendingEvent()] args", {
-			componentIdx: this.#componentIdx,
-			waitableSet: this,
-			waitableSetTargets: this.targets()
-		});
-		return this.#waitables.some((waitable) => waitable.hasPendingEvent());
-	}
-	getPendingEvent() {
-		DEBUG: debugLog("[WaitableSet#getPendingEvent()] args", {
-			componentIdx: this.#componentIdx,
-			waitableSet: this
-		});
-		for (const waitable of this.#waitables) {
-			if (!waitable.hasPendingEvent()) continue;
-			const event = waitable.getPendingEvent();
-			DEBUG: debugLog("[WaitableSet#getPendingEvent()] found pending event", {
-				waitable,
-				event
+function defineWaitableSet() {
+	return class WaitableSet {
+		#asyncEventCode;
+		#componentIdx;
+		#waitables = [];
+		#waiting = 0;
+		target;
+		constructor(asyncEventCode, componentIdx) {
+			this.#asyncEventCode = asyncEventCode;
+			if (componentIdx === void 0) throw new TypeError("missing/invalid component idx");
+			this.#componentIdx = componentIdx;
+			this.target = `component [${this.#componentIdx}] waitable set`;
+		}
+		componentIdx() {
+			return this.#componentIdx;
+		}
+		numWaitables() {
+			return this.#waitables.length;
+		}
+		numWaiting() {
+			return this.#waiting;
+		}
+		incrementNumWaiting(n) {
+			this.#waiting += n ?? 1;
+		}
+		decrementNumWaiting(n) {
+			this.#waiting -= n ?? 1;
+		}
+		targets() {
+			return this.#waitables.map((w) => w.target);
+		}
+		setTarget(tgt) {
+			this.target = tgt;
+		}
+		shuffleWaitables() {
+			this.#waitables = this.#waitables.map((value) => ({
+				value,
+				sort: Math.random()
+			})).sort((a, b) => a.sort - b.sort).map(({ value }) => value);
+		}
+		removeWaitable(waitable) {
+			if (!this.#waitables.find((w) => w === waitable)) return;
+			this.#waitables = this.#waitables.filter((w) => w !== waitable);
+			return waitable;
+		}
+		addWaitable(waitable) {
+			this.removeWaitable(waitable);
+			this.#waitables.push(waitable);
+		}
+		hasPendingEvent() {
+			DEBUG: debugLog("[WaitableSet#hasPendingEvent()] args", {
+				componentIdx: this.#componentIdx,
+				waitableSet: this,
+				waitableSetTargets: this.targets()
 			});
-			return event;
+			return this.#waitables.some((waitable) => waitable.hasPendingEvent());
 		}
-		throw new Error("no waitables had a pending event");
-	}
-	/** Read the pending event or construct a fresh cancellation event after a wait. */
-	#eventAfterWait(keepGoing) {
-		return keepGoing ? this.getPendingEvent() : {
-			code: this.#asyncEventCode.TASK_CANCELLED,
-			payload0: 0,
-			payload1: 0
-		};
-	}
-	tryWait(opts) {
-		DEBUG: debugLog("[WaitableSet#tryWait()] args", { opts });
-		const { readyFn, task, cancellable } = opts;
-		if (task.deliverPendingCancel({ cancellable })) return this.#eventAfterWait(false);
-		const hasPendingEvent = this.hasPendingEvent();
-		if (readyFn() && hasPendingEvent) return this.getPendingEvent();
-		return null;
-	}
-	waitUntil(opts) {
-		DEBUG: debugLog("[WaitableSet#waitUntil()] args", { opts });
-		const event = this.tryWait(opts);
-		if (event !== null) return event;
-		const { readyFn, task, cancellable } = opts;
-		const isReady = () => readyFn() && this.hasPendingEvent();
-		this.incrementNumWaiting();
-		return task.suspendUntil({
-			readyFn: isReady,
-			cancellable
-		}).then((keepGoing) => {
-			if (!keepGoing && task.isErrored()) {
-				this.decrementNumWaiting();
-				throw task.isErrored();
+		getPendingEvent() {
+			DEBUG: debugLog("[WaitableSet#getPendingEvent()] args", {
+				componentIdx: this.#componentIdx,
+				waitableSet: this
+			});
+			for (const waitable of this.#waitables) {
+				if (!waitable.hasPendingEvent()) continue;
+				const event = waitable.getPendingEvent();
+				DEBUG: debugLog("[WaitableSet#getPendingEvent()] found pending event", {
+					waitable,
+					event
+				});
+				return event;
 			}
-			const readyEvent = this.#eventAfterWait(keepGoing);
-			this.decrementNumWaiting();
-			return readyEvent;
-		}, (err) => {
-			this.decrementNumWaiting();
-			throw err;
-		});
-	}
-	waitUntilCallback(opts, onEvent) {
-		DEBUG: debugLog("[WaitableSet#waitUntilCallback()] args", { opts });
-		const event = this.tryWait(opts);
-		if (event !== null) {
-			onEvent(event);
-			return;
+			throw new Error("no waitables had a pending event");
 		}
-		const { readyFn, task, cancellable } = opts;
-		this.incrementNumWaiting();
-		task.suspendUntilCallback({
-			readyFn: () => readyFn() && this.hasPendingEvent(),
-			cancellable
-		}, (keepGoing) => {
-			const resumedEvent = this.#eventAfterWait(keepGoing);
-			this.decrementNumWaiting();
-			onEvent(resumedEvent);
-		});
-	}
-};
+		/** Read the pending event or construct a fresh cancellation event after a wait. */
+		#eventAfterWait(keepGoing) {
+			return keepGoing ? this.getPendingEvent() : {
+				code: this.#asyncEventCode.TASK_CANCELLED,
+				payload0: 0,
+				payload1: 0
+			};
+		}
+		tryWait(opts) {
+			DEBUG: debugLog("[WaitableSet#tryWait()] args", { opts });
+			const { readyFn, task, cancellable } = opts;
+			if (task.deliverPendingCancel({ cancellable })) return this.#eventAfterWait(false);
+			const hasPendingEvent = this.hasPendingEvent();
+			if (readyFn() && hasPendingEvent) return this.getPendingEvent();
+			return null;
+		}
+		waitUntil(opts) {
+			DEBUG: debugLog("[WaitableSet#waitUntil()] args", { opts });
+			const event = this.tryWait(opts);
+			if (event !== null) return event;
+			const { readyFn, task, cancellable } = opts;
+			const isReady = () => readyFn() && this.hasPendingEvent();
+			this.incrementNumWaiting();
+			return task.suspendUntil({
+				readyFn: isReady,
+				cancellable
+			}).then((keepGoing) => {
+				if (!keepGoing && task.isErrored()) {
+					this.decrementNumWaiting();
+					throw task.isErrored();
+				}
+				const readyEvent = this.#eventAfterWait(keepGoing);
+				this.decrementNumWaiting();
+				return readyEvent;
+			}, (err) => {
+				this.decrementNumWaiting();
+				throw err;
+			});
+		}
+		waitUntilCallback(opts, onEvent) {
+			DEBUG: debugLog("[WaitableSet#waitUntilCallback()] args", { opts });
+			const event = this.tryWait(opts);
+			if (event !== null) {
+				onEvent(event);
+				return;
+			}
+			const { readyFn, task, cancellable } = opts;
+			this.incrementNumWaiting();
+			task.suspendUntilCallback({
+				readyFn: () => readyFn() && this.hasPendingEvent(),
+				cancellable
+			}, (keepGoing) => {
+				const resumedEvent = this.#eventAfterWait(keepGoing);
+				this.decrementNumWaiting();
+				onEvent(resumedEvent);
+			});
+		}
+	};
+}
+let sharedWaitableSet;
 /**
 * Fresh class identity per store, as for `initializeWaitableClass`.
 * Only the selected, live cancellation code is captured by this constructor.
 */
 function initializeWaitableSetClass(asyncEventCode) {
+	const WaitableSet = sharedWaitableSet ??= defineWaitableSet();
 	return class StoreWaitableSet extends WaitableSet {
 		constructor(componentIdx) {
 			super(asyncEventCode, componentIdx);
@@ -4774,844 +4804,848 @@ const TASK_CANCELLED = "cancelled";
 const TASK_CANCEL_PENDING = "cancel-pending";
 const TASK_CANCEL_DELIVERED = "cancel-delivered";
 const TASK_RESOLVED = "resolved";
-var AsyncTask = class {
-	#context;
-	#store;
-	static State = {
-		INITIAL: TASK_INITIAL,
-		CANCELLED: TASK_CANCELLED,
-		CANCEL_PENDING: TASK_CANCEL_PENDING,
-		CANCEL_DELIVERED: TASK_CANCEL_DELIVERED,
-		RESOLVED: TASK_RESOLVED
-	};
-	static BlockResult = {
-		CANCELLED: "block.cancelled",
-		NOT_CANCELLED: "block.not-cancelled"
-	};
-	#id;
-	#componentIdx;
-	#state;
-	#isAsync;
-	#isManualAsync;
-	#callingWasmExport = true;
-	#lockFreeEntry = false;
-	#preserveFutureResult;
-	#entryFnName;
-	#onResolveHandlers = null;
-	#progressWaiters = null;
-	#completionPromise;
-	#resolveCompletionPromise;
-	#rejectCompletionPromise;
-	#completionSettled = false;
-	#completionValue;
-	#completionReady = false;
-	#rejected = false;
-	#exitPromise;
-	#resolveExitPromise;
-	#memoryIdx = null;
-	#memory = null;
-	#callbackFn = null;
-	#callbackFnName = null;
-	#postReturnFn = null;
-	#getCalleeParamsFn = null;
-	#calleeIsAsync = null;
-	#admissionTicket = null;
-	#funcTypeIsAsync = false;
-	#returnResultTypeIdx = null;
-	#parentSubtask = null;
-	#errHandling;
-	#returnLowerFns = null;
-	#resourceScopeId;
-	#resourceBorrowCount = 0;
-	#resourceLenders = null;
-	#resourceScopeExited = false;
-	#subtasks = null;
-	#threads = [];
-	#entered = false;
-	#exited = false;
-	#errored = null;
-	get storage() {
-		return this.defaultThread().storage;
-	}
-	cancelled = false;
-	cancelRequested = false;
-	alwaysTaskReturn = false;
-	returnCalls = 0;
-	tmpRetI64HighBits = 0;
-	constructor(context, store, opts) {
-		this.#context = context;
-		this.#store = store;
-		this.#id = ++store.id;
-		this.#resourceScopeId = ++this.#context.scopeCounter.value;
-		this.#context.scopeTasks.set(this.#resourceScopeId, this);
-		if (opts?.componentIdx === void 0) throw new TypeError("missing component id during task creation");
-		this.#componentIdx = opts.componentIdx;
-		this.#state = TASK_INITIAL;
-		this.#isAsync = opts.isAsync ?? false;
-		this.#isManualAsync = opts.isManualAsync ?? false;
-		this.#preserveFutureResult = opts.preserveFutureResult ?? false;
-		this.#entryFnName = opts.entryFnName;
-		this.#callingWasmExport = opts.callingWasmExport !== false;
-		if (this.#isAsync || this.#isManualAsync) {
-			this.#ensureCompletionPromise();
-			(this.#onResolveHandlers ??= []).push((results) => {
-				if (this.#parentSubtask !== null) return;
-				this.#completionValue = results;
-				this.#completionReady = true;
+function defineAsyncTask() {
+	return class AsyncTask {
+		#context;
+		#store;
+		static State = {
+			INITIAL: TASK_INITIAL,
+			CANCELLED: TASK_CANCELLED,
+			CANCEL_PENDING: TASK_CANCEL_PENDING,
+			CANCEL_DELIVERED: TASK_CANCEL_DELIVERED,
+			RESOLVED: TASK_RESOLVED
+		};
+		static BlockResult = {
+			CANCELLED: "block.cancelled",
+			NOT_CANCELLED: "block.not-cancelled"
+		};
+		#id;
+		#componentIdx;
+		#state;
+		#isAsync;
+		#isManualAsync;
+		#callingWasmExport = true;
+		#lockFreeEntry = false;
+		#preserveFutureResult;
+		#entryFnName;
+		#onResolveHandlers = null;
+		#progressWaiters = null;
+		#completionPromise;
+		#resolveCompletionPromise;
+		#rejectCompletionPromise;
+		#completionSettled = false;
+		#completionValue;
+		#completionReady = false;
+		#rejected = false;
+		#exitPromise;
+		#resolveExitPromise;
+		#memoryIdx = null;
+		#memory = null;
+		#callbackFn = null;
+		#callbackFnName = null;
+		#postReturnFn = null;
+		#getCalleeParamsFn = null;
+		#calleeIsAsync = null;
+		#admissionTicket = null;
+		#funcTypeIsAsync = false;
+		#returnResultTypeIdx = null;
+		#parentSubtask = null;
+		#errHandling;
+		#returnLowerFns = null;
+		#resourceScopeId;
+		#resourceBorrowCount = 0;
+		#resourceLenders = null;
+		#resourceScopeExited = false;
+		#subtasks = null;
+		#threads = [];
+		#entered = false;
+		#exited = false;
+		#errored = null;
+		get storage() {
+			return this.defaultThread().storage;
+		}
+		cancelled = false;
+		cancelRequested = false;
+		alwaysTaskReturn = false;
+		returnCalls = 0;
+		tmpRetI64HighBits = 0;
+		constructor(context, store, opts) {
+			this.#context = context;
+			this.#store = store;
+			this.#id = ++store.id;
+			this.#resourceScopeId = ++this.#context.scopeCounter.value;
+			this.#context.scopeTasks.set(this.#resourceScopeId, this);
+			if (opts?.componentIdx === void 0) throw new TypeError("missing component id during task creation");
+			this.#componentIdx = opts.componentIdx;
+			this.#state = TASK_INITIAL;
+			this.#isAsync = opts.isAsync ?? false;
+			this.#isManualAsync = opts.isManualAsync ?? false;
+			this.#preserveFutureResult = opts.preserveFutureResult ?? false;
+			this.#entryFnName = opts.entryFnName;
+			this.#callingWasmExport = opts.callingWasmExport !== false;
+			if (this.#isAsync || this.#isManualAsync) {
+				this.#ensureCompletionPromise();
+				(this.#onResolveHandlers ??= []).push((results) => {
+					if (this.#parentSubtask !== null) return;
+					this.#completionValue = results;
+					this.#completionReady = true;
+				});
+			}
+			if (opts.callbackFn) this.#callbackFn = opts.callbackFn;
+			if (opts.callbackFnName) this.#callbackFnName = opts.callbackFnName;
+			if (opts.getCalleeParamsFn) this.#getCalleeParamsFn = opts.getCalleeParamsFn;
+			if (opts.parentSubtask) this.#parentSubtask = opts.parentSubtask;
+			if (opts.errHandling) this.#errHandling = opts.errHandling;
+		}
+		taskState() {
+			return this.#state;
+		}
+		id() {
+			return this.#id;
+		}
+		componentIdx() {
+			return this.#componentIdx;
+		}
+		entryFnName() {
+			return this.#entryFnName;
+		}
+		resourceScopeId() {
+			return this.#resourceScopeId;
+		}
+		addBorrowedHandle() {
+			if (this.#resourceScopeExited) throw new Error("cannot add a borrow to an exited resource scope");
+			this.#resourceBorrowCount++;
+		}
+		removeBorrowedHandle() {
+			if (this.#resourceBorrowCount === 0) throw new Error("resource borrow count underflow");
+			this.#resourceBorrowCount--;
+		}
+		addResourceLender(table, handle) {
+			if (this.#resourceScopeExited) throw new Error("cannot add a lender to an exited resource scope");
+			(this.#resourceLenders ??= []).push({
+				table,
+				handle
 			});
 		}
-		if (opts.callbackFn) this.#callbackFn = opts.callbackFn;
-		if (opts.callbackFnName) this.#callbackFnName = opts.callbackFnName;
-		if (opts.getCalleeParamsFn) this.#getCalleeParamsFn = opts.getCalleeParamsFn;
-		if (opts.parentSubtask) this.#parentSubtask = opts.parentSubtask;
-		if (opts.errHandling) this.#errHandling = opts.errHandling;
-	}
-	taskState() {
-		return this.#state;
-	}
-	id() {
-		return this.#id;
-	}
-	componentIdx() {
-		return this.#componentIdx;
-	}
-	entryFnName() {
-		return this.#entryFnName;
-	}
-	resourceScopeId() {
-		return this.#resourceScopeId;
-	}
-	addBorrowedHandle() {
-		if (this.#resourceScopeExited) throw new Error("cannot add a borrow to an exited resource scope");
-		this.#resourceBorrowCount++;
-	}
-	removeBorrowedHandle() {
-		if (this.#resourceBorrowCount === 0) throw new Error("resource borrow count underflow");
-		this.#resourceBorrowCount--;
-	}
-	addResourceLender(table, handle) {
-		if (this.#resourceScopeExited) throw new Error("cannot add a lender to an exited resource scope");
-		(this.#resourceLenders ??= []).push({
-			table,
-			handle
-		});
-	}
-	validateResourceBorrowScope() {
-		if (this.#resourceScopeExited) return;
-		if (this.#context.storeTrap.stopped) {
+		validateResourceBorrowScope() {
+			if (this.#resourceScopeExited) return;
+			if (this.#context.storeTrap.stopped) {
+				this.#resourceLenders = null;
+				this.#resourceScopeExited = true;
+				this.#context.scopeTasks.delete(this.#resourceScopeId);
+				return;
+			}
+			if (this.#resourceBorrowCount !== 0) throw new this.#context.RuntimeError("borrow handles still remain at the end of the call");
+			for (const { table, handle } of this.#resourceLenders ?? NONE$1) {
+				const idx = handle << 1;
+				const lendCount = table[idx];
+				if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2 ** 30) throw new Error("invalid resource lender state at scope exit");
+				table[idx] = lendCount - 1;
+			}
 			this.#resourceLenders = null;
 			this.#resourceScopeExited = true;
 			this.#context.scopeTasks.delete(this.#resourceScopeId);
-			return;
 		}
-		if (this.#resourceBorrowCount !== 0) throw new this.#context.RuntimeError("borrow handles still remain at the end of the call");
-		for (const { table, handle } of this.#resourceLenders ?? NONE$1) {
-			const idx = handle << 1;
-			const lendCount = table[idx];
-			if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2 ** 30) throw new Error("invalid resource lender state at scope exit");
-			table[idx] = lendCount - 1;
-		}
-		this.#resourceLenders = null;
-		this.#resourceScopeExited = true;
-		this.#context.scopeTasks.delete(this.#resourceScopeId);
-	}
-	/**
-	* Create the completion promise if it does not exist yet.
-	*
-	* @returns the promise that settles with the outcome of the task
-	*/
-	#ensureCompletionPromise() {
-		if (this.#completionPromise === void 0) {
-			const { promise, resolve, reject } = promiseWithResolvers();
-			this.#completionPromise = promise;
-			this.#resolveCompletionPromise = resolve;
-			this.#rejectCompletionPromise = reject;
-			promise.then(emptyFunc, emptyFunc);
-		}
-		return this.#completionPromise;
-	}
-	/** Settle the completion promise, once, when the outcome of the task is known. */
-	#settleCompletionPromise() {
-		if (this.#completionSettled || !this.#completionReady) return;
-		this.#completionSettled = true;
-		this.#ensureCompletionPromise();
-		const resolve = this.#resolveCompletionPromise;
-		const reject = this.#rejectCompletionPromise;
-		if (this.#errored !== null) reject(this.#errored);
-		else if (this.#rejected) reject(this.#completionValue);
-		else if (this.#preserveFutureResult && this.#completionValue instanceof this.#context.FutureValue) this.#completionValue.resolveAsValue(resolve);
-		else resolve(this.#completionValue);
-	}
-	completionPromise() {
-		return this.#ensureCompletionPromise();
-	}
-	settleCompletion() {
-		this.#settleCompletionPromise();
-	}
-	exitPromise() {
-		if (this.#exitPromise === void 0) {
-			if (this.#exited) this.#exitPromise = Promise.resolve();
-			else {
-				const { promise, resolve } = promiseWithResolvers();
-				this.#exitPromise = promise;
-				this.#resolveExitPromise = resolve;
+		/**
+		* Create the completion promise if it does not exist yet.
+		*
+		* @returns the promise that settles with the outcome of the task
+		*/
+		#ensureCompletionPromise() {
+			if (this.#completionPromise === void 0) {
+				const { promise, resolve, reject } = promiseWithResolvers();
+				this.#completionPromise = promise;
+				this.#resolveCompletionPromise = resolve;
+				this.#rejectCompletionPromise = reject;
+				promise.then(emptyFunc, emptyFunc);
 			}
+			return this.#completionPromise;
 		}
-		return this.#exitPromise;
-	}
-	waitForProgress() {
-		const { promise, resolve } = promiseWithResolvers();
-		(this.#progressWaiters ??= []).push(resolve);
-		return promise;
-	}
-	notifyProgress() {
-		const waiters = this.#progressWaiters;
-		if (waiters === null) return;
-		this.#progressWaiters = null;
-		for (const resolve of waiters) resolve();
-	}
-	isAsync() {
-		return this.#isAsync;
-	}
-	isManualAsync() {
-		return this.#isManualAsync;
-	}
-	isSync() {
-		return !this.isAsync();
-	}
-	getErrHandling() {
-		return this.#errHandling;
-	}
-	hasCallback() {
-		return this.#callbackFn !== null;
-	}
-	getReturnMemoryIdx() {
-		return this.#memoryIdx;
-	}
-	setReturnMemoryIdx(idx) {
-		if (idx === null) return;
-		this.#memoryIdx = idx;
-	}
-	getReturnMemory() {
-		return this.#memory;
-	}
-	setReturnMemory(m) {
-		if (m === null) return;
-		this.#memory = m;
-	}
-	setReturnLowerFns(fns) {
-		this.#returnLowerFns = fns;
-	}
-	getReturnLowerFns() {
-		return this.#returnLowerFns;
-	}
-	setCalleeIsAsync(value) {
-		if (typeof value !== "boolean") throw new TypeError("callee async state must be a boolean");
-		this.#calleeIsAsync = value;
-	}
-	setParentSubtask(subtask) {
-		if (!subtask || !(subtask instanceof this.#context.AsyncSubtask)) return;
-		if (this.#parentSubtask) throw new Error("parent subtask can only be set once");
-		this.#parentSubtask = subtask;
-	}
-	getParentSubtask() {
-		return this.#parentSubtask;
-	}
-	getRootTask() {
-		let currentSubtask = this.getParentSubtask();
-		let task = this;
-		while (currentSubtask) {
-			task = currentSubtask.getParentTask();
-			currentSubtask = task.getParentSubtask();
+		/** Settle the completion promise, once, when the outcome of the task is known. */
+		#settleCompletionPromise() {
+			if (this.#completionSettled || !this.#completionReady) return;
+			this.#completionSettled = true;
+			this.#ensureCompletionPromise();
+			const resolve = this.#resolveCompletionPromise;
+			const reject = this.#rejectCompletionPromise;
+			if (this.#errored !== null) reject(this.#errored);
+			else if (this.#rejected) reject(this.#completionValue);
+			else if (this.#preserveFutureResult && this.#completionValue instanceof this.#context.FutureValue) this.#completionValue.resolveAsValue(resolve);
+			else resolve(this.#completionValue);
 		}
-		return task;
-	}
-	setPostReturnFn(f) {
-		if (!f) return;
-		if (this.#postReturnFn) throw new Error("postReturn fn can only be set once");
-		this.#postReturnFn = f;
-	}
-	setCallbackFn(f, name) {
-		if (!f) return;
-		if (this.#callbackFn) throw new Error("callback fn can only be set once");
-		this.#callbackFn = f;
-		this.#callbackFnName = name;
-	}
-	getCallbackFnName() {
-		if (!this.#callbackFnName) return;
-		return this.#callbackFnName;
-	}
-	runCallbackFn(...args) {
-		if (!this.#callbackFn) throw new Error("no callback function has been set for task");
-		if (this.#callbackFn._jcoMaySuspend === false) return withCurrentTaskMeta(this.#context.registers, {
-			taskID: this.#id,
-			threadID: this.defaultThread().id(),
-			componentIdx: this.#componentIdx,
-			fn: () => this.#callbackFn.apply(null, args)
-		});
-		return withCurrentTaskMetaAsync(this.#context.registers, {
-			taskID: this.#id,
-			threadID: this.defaultThread().id(),
-			componentIdx: this.#componentIdx,
-			fn: () => {
-				return this.#callbackFn.apply(null, args);
+		completionPromise() {
+			return this.#ensureCompletionPromise();
+		}
+		settleCompletion() {
+			this.#settleCompletionPromise();
+		}
+		exitPromise() {
+			if (this.#exitPromise === void 0) {
+				if (this.#exited) this.#exitPromise = Promise.resolve();
+				else {
+					const { promise, resolve } = promiseWithResolvers();
+					this.#exitPromise = promise;
+					this.#resolveExitPromise = resolve;
+				}
 			}
-		});
-	}
-	getCalleeParams() {
-		if (!this.#getCalleeParamsFn) throw new Error("missing/invalid getCalleeParamsFn");
-		return this.#getCalleeParamsFn();
-	}
-	mayBlock() {
-		return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync;
-	}
-	setFuncTypeIsAsync(v) {
-		this.#funcTypeIsAsync = v;
-	}
-	setReturnResultTypeIdx(v) {
-		this.#returnResultTypeIdx = v;
-	}
-	returnResultTypeIdx() {
-		return this.#returnResultTypeIdx;
-	}
-	mayEnter(task) {
-		const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		if (cstate.hasBackpressure()) {
-			DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to backpressure", { taskID: this.#id });
-			return false;
+			return this.#exitPromise;
 		}
-		if (!cstate.callingSyncImport()) {
-			DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to sync import call", { taskID: this.#id });
-			return false;
+		waitForProgress() {
+			const { promise, resolve } = promiseWithResolvers();
+			(this.#progressWaiters ??= []).push(resolve);
+			return promise;
 		}
-		if (!(Reflect.get(cstate, "callingSyncExport") && !task.isAsync)) {
-			DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to sync export w/ sync pending", { taskID: this.#id });
-			return false;
+		notifyProgress() {
+			const waiters = this.#progressWaiters;
+			if (waiters === null) return;
+			this.#progressWaiters = null;
+			for (const resolve of waiters) resolve();
 		}
-		return true;
-	}
-	enterSync() {
-		if (this.needsExclusiveLock()) {
+		isAsync() {
+			return this.#isAsync;
+		}
+		isManualAsync() {
+			return this.#isManualAsync;
+		}
+		isSync() {
+			return !this.isAsync();
+		}
+		getErrHandling() {
+			return this.#errHandling;
+		}
+		hasCallback() {
+			return this.#callbackFn !== null;
+		}
+		getReturnMemoryIdx() {
+			return this.#memoryIdx;
+		}
+		setReturnMemoryIdx(idx) {
+			if (idx === null) return;
+			this.#memoryIdx = idx;
+		}
+		getReturnMemory() {
+			return this.#memory;
+		}
+		setReturnMemory(m) {
+			if (m === null) return;
+			this.#memory = m;
+		}
+		setReturnLowerFns(fns) {
+			this.#returnLowerFns = fns;
+		}
+		getReturnLowerFns() {
+			return this.#returnLowerFns;
+		}
+		setCalleeIsAsync(value) {
+			if (typeof value !== "boolean") throw new TypeError("callee async state must be a boolean");
+			this.#calleeIsAsync = value;
+		}
+		setParentSubtask(subtask) {
+			if (!subtask || !(subtask instanceof this.#context.AsyncSubtask)) return;
+			if (this.#parentSubtask) throw new Error("parent subtask can only be set once");
+			this.#parentSubtask = subtask;
+		}
+		getParentSubtask() {
+			return this.#parentSubtask;
+		}
+		getRootTask() {
+			let currentSubtask = this.getParentSubtask();
+			let task = this;
+			while (currentSubtask) {
+				task = currentSubtask.getParentTask();
+				currentSubtask = task.getParentSubtask();
+			}
+			return task;
+		}
+		setPostReturnFn(f) {
+			if (!f) return;
+			if (this.#postReturnFn) throw new Error("postReturn fn can only be set once");
+			this.#postReturnFn = f;
+		}
+		setCallbackFn(f, name) {
+			if (!f) return;
+			if (this.#callbackFn) throw new Error("callback fn can only be set once");
+			this.#callbackFn = f;
+			this.#callbackFnName = name;
+		}
+		getCallbackFnName() {
+			if (!this.#callbackFnName) return;
+			return this.#callbackFnName;
+		}
+		runCallbackFn(...args) {
+			if (!this.#callbackFn) throw new Error("no callback function has been set for task");
+			if (this.#callbackFn._jcoMaySuspend === false) return withCurrentTaskMeta(this.#context.registers, {
+				taskID: this.#id,
+				threadID: this.defaultThread().id(),
+				componentIdx: this.#componentIdx,
+				fn: () => this.#callbackFn.apply(null, args)
+			});
+			return withCurrentTaskMetaAsync(this.#context.registers, {
+				taskID: this.#id,
+				threadID: this.defaultThread().id(),
+				componentIdx: this.#componentIdx,
+				fn: () => {
+					return this.#callbackFn.apply(null, args);
+				}
+			});
+		}
+		getCalleeParams() {
+			if (!this.#getCalleeParamsFn) throw new Error("missing/invalid getCalleeParamsFn");
+			return this.#getCalleeParamsFn();
+		}
+		mayBlock() {
+			return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync;
+		}
+		setFuncTypeIsAsync(v) {
+			this.#funcTypeIsAsync = v;
+		}
+		setReturnResultTypeIdx(v) {
+			this.#returnResultTypeIdx = v;
+		}
+		returnResultTypeIdx() {
+			return this.#returnResultTypeIdx;
+		}
+		mayEnter(task) {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-			if (!cstate.isExclusivelyLocked()) cstate.exclusiveLock(this.#id);
-			else {
-				this.#lockFreeEntry = true;
-				DEBUG: debugLog("[AsyncTask#enterSync()] entering without exclusive lock", {
-					taskID: this.#id,
-					componentIdx: this.#componentIdx
-				});
+			if (cstate.hasBackpressure()) {
+				DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to backpressure", { taskID: this.#id });
+				return false;
 			}
+			if (!cstate.callingSyncImport()) {
+				DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to sync import call", { taskID: this.#id });
+				return false;
+			}
+			if (!(Reflect.get(cstate, "callingSyncExport") && !task.isAsync)) {
+				DEBUG: debugLog("[AsyncTask#mayEnter()] disallowed due to sync export w/ sync pending", { taskID: this.#id });
+				return false;
+			}
+			return true;
 		}
-		return true;
-	}
-	tryEnter() {
-		if (this.#entered) throw new Error(`task with ID [${this.#id}] should not be entered twice`);
-		if (this.deliverPendingCancel({ cancellable: true })) {
-			this.cancel();
-			return false;
+		enterSync() {
+			if (this.needsExclusiveLock()) {
+				const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+				if (!cstate.isExclusivelyLocked()) cstate.exclusiveLock(this.#id);
+				else {
+					this.#lockFreeEntry = true;
+					DEBUG: debugLog("[AsyncTask#enterSync()] entering without exclusive lock", {
+						taskID: this.#id,
+						componentIdx: this.#componentIdx
+					});
+				}
+			}
+			return true;
 		}
-		const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		if (this.isSync()) {
+		tryEnter() {
+			if (this.#entered) throw new Error(`task with ID [${this.#id}] should not be entered twice`);
+			if (this.deliverPendingCancel({ cancellable: true })) {
+				this.cancel();
+				return false;
+			}
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			if (this.isSync()) {
+				this.#entered = true;
+				return true;
+			}
+			if (cstate.hasBackpressure()) return null;
+			if (cstate.hasPendingAdmissions()) return null;
+			if (this.needsExclusiveLock()) {
+				if (cstate.isExclusivelyLocked()) return null;
+				cstate.exclusiveLock(this.#id);
+			}
+			if (this.deliverPendingCancel({ cancellable: true })) {
+				cstate.exclusiveRelease(this.#id);
+				this.cancel();
+				return false;
+			}
 			this.#entered = true;
 			return true;
 		}
-		if (cstate.hasBackpressure()) return null;
-		if (cstate.hasPendingAdmissions()) return null;
-		if (this.needsExclusiveLock()) {
-			if (cstate.isExclusivelyLocked()) return null;
-			cstate.exclusiveLock(this.#id);
-		}
-		if (this.deliverPendingCancel({ cancellable: true })) {
-			cstate.exclusiveRelease(this.#id);
-			this.cancel();
-			return false;
-		}
-		this.#entered = true;
-		return true;
-	}
-	async enter(opts) {
-		DEBUG: debugLog("[AsyncTask#enter()] args", {
-			taskID: this.#id,
-			componentIdx: this.#componentIdx,
-			subtaskID: this.getParentSubtask()?.id(),
-			args: opts,
-			entryFnName: this.#entryFnName
-		});
-		if (opts?.isHost) return this.enterHost();
-		if (this.#entered) throw new Error(`task with ID [${this.#id}] should not be entered twice`);
-		if (this.deliverPendingCancel({ cancellable: true })) {
-			this.cancel();
-			return false;
-		}
-		const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		if (this.isSync()) {
-			this.#entered = true;
-			if (this.#isManualAsync) {
-				if (this.needsExclusiveLock()) await cstate.acquireExclusiveLock(this.#id);
+		async enter(opts) {
+			DEBUG: debugLog("[AsyncTask#enter()] args", {
+				taskID: this.#id,
+				componentIdx: this.#componentIdx,
+				subtaskID: this.getParentSubtask()?.id(),
+				args: opts,
+				entryFnName: this.#entryFnName
+			});
+			if (opts?.isHost) return this.enterHost();
+			if (this.#entered) throw new Error(`task with ID [${this.#id}] should not be entered twice`);
+			if (this.deliverPendingCancel({ cancellable: true })) {
+				this.cancel();
+				return false;
 			}
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			if (this.isSync()) {
+				this.#entered = true;
+				if (this.#isManualAsync) {
+					if (this.needsExclusiveLock()) await cstate.acquireExclusiveLock(this.#id);
+				}
+				return this.#entered;
+			}
+			const ticket = cstate.takeAdmissionTicket(this.#id);
+			this.#admissionTicket = ticket;
+			let entered = false;
+			try {
+				entered = await this.#enterQueued(cstate, ticket);
+				return entered;
+			} finally {
+				if (!entered) this.endFirstSlice();
+			}
+		}
+		endFirstSlice() {
+			const ticket = this.#admissionTicket;
+			if (ticket === null) return;
+			this.#admissionTicket = null;
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).releaseAdmissionTicket(ticket);
+		}
+		async #enterQueued(cstate, ticket) {
+			await cstate.waitForAdmissionTurn(ticket);
+			if (this.isResolvedState() || this.isCancelled()) return false;
+			while (true) {
+				if (cstate.hasBackpressure()) {
+					cstate.addBackpressureWaiter();
+					const result = await this.waitUntil({
+						readyFn: () => {
+							return !cstate.hasBackpressure();
+						},
+						cancellable: true
+					});
+					cstate.removeBackpressureWaiter();
+					if (!result || this.isCancelled()) {
+						if (!this.isResolvedState()) this.cancel();
+						return false;
+					}
+				}
+				if (this.needsExclusiveLock()) {
+					await cstate.acquireExclusiveLock(this.#id);
+					if (cstate.hasBackpressure()) {
+						cstate.exclusiveRelease(this.#id);
+						continue;
+					}
+				}
+				break;
+			}
+			try {
+				cstate.throwIfInterrupted();
+			} catch (err) {
+				cstate.exclusiveRelease(this.#id);
+				this.setErrored(err);
+				return false;
+			}
+			if (this.isResolvedState() || this.isCancelled()) {
+				cstate.exclusiveRelease(this.#id);
+				return false;
+			}
+			if (this.deliverPendingCancel({ cancellable: true })) {
+				cstate.exclusiveRelease(this.#id);
+				this.cancel();
+				return false;
+			}
+			this.#entered = true;
 			return this.#entered;
 		}
-		const ticket = cstate.takeAdmissionTicket(this.#id);
-		this.#admissionTicket = ticket;
-		let entered = false;
-		try {
-			entered = await this.#enterQueued(cstate, ticket);
-			return entered;
-		} finally {
-			if (!entered) this.endFirstSlice();
+		isRunningState() {
+			return this.#state !== TASK_RESOLVED;
 		}
-	}
-	endFirstSlice() {
-		const ticket = this.#admissionTicket;
-		if (ticket === null) return;
-		this.#admissionTicket = null;
-		getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).releaseAdmissionTicket(ticket);
-	}
-	async #enterQueued(cstate, ticket) {
-		await cstate.waitForAdmissionTurn(ticket);
-		if (this.isResolvedState() || this.isCancelled()) return false;
-		while (true) {
-			if (cstate.hasBackpressure()) {
-				cstate.addBackpressureWaiter();
-				const result = await this.waitUntil({
-					readyFn: () => {
-						return !cstate.hasBackpressure();
-					},
-					cancellable: true
-				});
-				cstate.removeBackpressureWaiter();
-				if (!result || this.isCancelled()) {
-					if (!this.isResolvedState()) this.cancel();
-					return false;
-				}
-			}
-			if (this.needsExclusiveLock()) {
-				await cstate.acquireExclusiveLock(this.#id);
-				if (cstate.hasBackpressure()) {
-					cstate.exclusiveRelease(this.#id);
-					continue;
-				}
-			}
-			break;
+		isResolvedState() {
+			return this.#state === TASK_RESOLVED;
 		}
-		try {
-			cstate.throwIfInterrupted();
-		} catch (err) {
-			cstate.exclusiveRelease(this.#id);
-			this.setErrored(err);
-			return false;
+		isResolved() {
+			return this.#state === TASK_RESOLVED;
 		}
-		if (this.isResolvedState() || this.isCancelled()) {
-			cstate.exclusiveRelease(this.#id);
-			return false;
+		isExited() {
+			return this.#exited;
 		}
-		if (this.deliverPendingCancel({ cancellable: true })) {
-			cstate.exclusiveRelease(this.#id);
-			this.cancel();
-			return false;
-		}
-		this.#entered = true;
-		return this.#entered;
-	}
-	isRunningState() {
-		return this.#state !== TASK_RESOLVED;
-	}
-	isResolvedState() {
-		return this.#state === TASK_RESOLVED;
-	}
-	isResolved() {
-		return this.#state === TASK_RESOLVED;
-	}
-	isExited() {
-		return this.#exited;
-	}
-	async waitUntil(opts) {
-		const { readyFn, cancellable } = opts;
-		DEBUG: debugLog("[AsyncTask#waitUntil()] args", {
-			taskID: this.#id,
-			args: { cancellable }
-		});
-		return await this.suspendUntil({
-			readyFn,
-			cancellable
-		});
-	}
-	async yieldUntil(opts) {
-		const { readyFn, cancellable } = opts;
-		DEBUG: debugLog("[AsyncTask#yieldUntil()]", {
-			taskID: this.#id,
-			args: { cancellable },
-			componentIdx: this.#componentIdx
-		});
-		return {
-			code: await this.immediateSuspend({
+		async waitUntil(opts) {
+			const { readyFn, cancellable } = opts;
+			DEBUG: debugLog("[AsyncTask#waitUntil()] args", {
+				taskID: this.#id,
+				args: { cancellable }
+			});
+			return await this.suspendUntil({
 				readyFn,
 				cancellable
-			}) ? this.#context.events.NONE : this.#context.events.TASK_CANCELLED,
-			payload0: 0,
-			payload1: 0
-		};
-	}
-	async suspendUntil(opts) {
-		const { cancellable, readyFn } = opts;
-		DEBUG: debugLog("[AsyncTask#suspendUntil()] args", {
-			taskID: this.#id,
-			args: { cancellable },
-			componentIdx: this.#componentIdx
-		});
-		if (this.deliverPendingCancel({ cancellable })) return false;
-		return await this.immediateSuspendUntil({
-			readyFn,
-			cancellable
-		});
-	}
-	suspendUntilCallback(opts, onResume) {
-		const { cancellable, readyFn } = opts;
-		if (this.deliverPendingCancel({ cancellable })) {
-			onResume(false);
-			return;
+			});
 		}
-		getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).suspendTask({
-			task: this,
-			cancellable: !!cancellable,
-			readyFn: () => {
-				if (cancellable && this.#state === TASK_CANCEL_PENDING) return true;
-				return readyFn();
-			},
-			onResume: (keepGoing) => {
-				if (keepGoing && this.deliverPendingCancel({ cancellable })) keepGoing = false;
-				onResume(keepGoing);
-			}
-		});
-	}
-	async immediateSuspendUntil(opts) {
-		const { cancellable, readyFn } = opts;
-		DEBUG: debugLog("[AsyncTask#immediateSuspendUntil()] args", {
-			args: {
-				cancellable,
-				readyFn
-			},
-			taskID: this.#id,
-			componentIdx: this.#componentIdx
-		});
-		if (readyFn() && this.#context.determinism === "random") {
-			if (coinFlip()) return true;
+		async yieldUntil(opts) {
+			const { readyFn, cancellable } = opts;
+			DEBUG: debugLog("[AsyncTask#yieldUntil()]", {
+				taskID: this.#id,
+				args: { cancellable },
+				componentIdx: this.#componentIdx
+			});
+			return {
+				code: await this.immediateSuspend({
+					readyFn,
+					cancellable
+				}) ? this.#context.events.NONE : this.#context.events.TASK_CANCELLED,
+				payload0: 0,
+				payload1: 0
+			};
 		}
-		return await this.immediateSuspend({
-			cancellable,
-			readyFn
-		});
-	}
-	async immediateSuspend(opts) {
-		const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		const thread = this.#entered ? cstate.threads.get(readTaskRegister(this.#context.registers, this.#componentIdx).threadID) : this.defaultThread();
-		if (!thread || thread.task() !== this) throw new Error("invalid current thread for wait");
-		return thread.suspend({
-			...opts,
-			releaseLock: false
-		});
-	}
-	deliverPendingCancel(opts) {
-		const { cancellable } = opts;
-		DEBUG: debugLog("[AsyncTask#deliverPendingCancel()]", {
-			args: { cancellable },
-			taskID: this.#id,
-			componentIdx: this.#componentIdx
-		});
-		if (cancellable && this.#state === TASK_CANCEL_PENDING) {
-			this.#state = TASK_CANCEL_DELIVERED;
-			return true;
+		async suspendUntil(opts) {
+			const { cancellable, readyFn } = opts;
+			DEBUG: debugLog("[AsyncTask#suspendUntil()] args", {
+				taskID: this.#id,
+				args: { cancellable },
+				componentIdx: this.#componentIdx
+			});
+			if (this.deliverPendingCancel({ cancellable })) return false;
+			return await this.immediateSuspendUntil({
+				readyFn,
+				cancellable
+			});
 		}
-		return false;
-	}
-	isCancelled() {
-		return this.cancelled;
-	}
-	cancellationRequested() {
-		return this.cancelRequested;
-	}
-	requestCancellation() {
-		DEBUG: debugLog("[AsyncTask#requestCancellation()] args", {
-			taskID: this.#id,
-			componentIdx: this.#componentIdx,
-			state: this.#state
-		});
-		if (this.isResolvedState() || this.cancelRequested) return;
-		this.cancelRequested = true;
-		if (this.#state === TASK_INITIAL) {
-			this.#state = TASK_CANCEL_PENDING;
-			if (!this.#entered) {
-				this.deliverPendingCancel({ cancellable: true });
-				this.cancel();
-				const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-				cstate.resumeTaskByID(this.#id);
-				cstate.cancelExclusiveLockWaiter(this.#id);
-				this.exit({ skipExclusiveLockCheck: true });
+		suspendUntilCallback(opts, onResume) {
+			const { cancellable, readyFn } = opts;
+			if (this.deliverPendingCancel({ cancellable })) {
+				onResume(false);
 				return;
 			}
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).suspendTask({
+				task: this,
+				cancellable: !!cancellable,
+				readyFn: () => {
+					if (cancellable && this.#state === TASK_CANCEL_PENDING) return true;
+					return readyFn();
+				},
+				onResume: (keepGoing) => {
+					if (keepGoing && this.deliverPendingCancel({ cancellable })) keepGoing = false;
+					onResume(keepGoing);
+				}
+			});
 		}
-		getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).runTickLoop();
-	}
-	cancel(args) {
-		DEBUG: debugLog("[AsyncTask#cancel()] args", {});
-		if (this.taskState() !== TASK_CANCEL_DELIVERED) throw new Error("`task.cancel` called by task which has not been cancelled");
-		this.validateResourceBorrowScope();
-		this.cancelled = true;
-		this.onResolve(args?.error ?? null);
-		this.#state = TASK_RESOLVED;
-		if (!this.#entered) this.notifyProgress();
-	}
-	onResolve(taskValue) {
-		const handlers = this.#onResolveHandlers ?? NONE$1;
-		this.#onResolveHandlers = null;
-		for (const f of handlers) try {
-			f(taskValue);
-		} catch (err) {
-			DEBUG: debugLog("[AsyncTask#onResolve] error during task resolve handler", err);
-			throw err;
+		async immediateSuspendUntil(opts) {
+			const { cancellable, readyFn } = opts;
+			DEBUG: debugLog("[AsyncTask#immediateSuspendUntil()] args", {
+				args: {
+					cancellable,
+					readyFn
+				},
+				taskID: this.#id,
+				componentIdx: this.#componentIdx
+			});
+			if (readyFn() && this.#context.determinism === "random") {
+				if (coinFlip()) return true;
+			}
+			return await this.immediateSuspend({
+				cancellable,
+				readyFn
+			});
 		}
-		if (this.#rejected) {
-			this.#parentSubtask?.reject(taskValue);
-			return;
+		async immediateSuspend(opts) {
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			const thread = this.#entered ? cstate.threads.get(readTaskRegister(this.#context.registers, this.#componentIdx).threadID) : this.defaultThread();
+			if (!thread || thread.task() !== this) throw new Error("invalid current thread for wait");
+			return thread.suspend({
+				...opts,
+				releaseLock: false
+			});
 		}
-		const parentSubtaskPending = this.#parentSubtask && !this.#parentSubtask.isResolved();
-		const taskReturned = !this.isCancelled();
-		if (parentSubtaskPending && taskReturned) {
-			const meta = this.#parentSubtask.getCallMetadata();
-			if (meta.returnFn && !meta.returnFnCalled) {
-				DEBUG: debugLog("[AsyncTask#onResolve()] running returnFn", {
+		deliverPendingCancel(opts) {
+			const { cancellable } = opts;
+			DEBUG: debugLog("[AsyncTask#deliverPendingCancel()]", {
+				args: { cancellable },
+				taskID: this.#id,
+				componentIdx: this.#componentIdx
+			});
+			if (cancellable && this.#state === TASK_CANCEL_PENDING) {
+				this.#state = TASK_CANCEL_DELIVERED;
+				return true;
+			}
+			return false;
+		}
+		isCancelled() {
+			return this.cancelled;
+		}
+		cancellationRequested() {
+			return this.cancelRequested;
+		}
+		requestCancellation() {
+			DEBUG: debugLog("[AsyncTask#requestCancellation()] args", {
+				taskID: this.#id,
+				componentIdx: this.#componentIdx,
+				state: this.#state
+			});
+			if (this.isResolvedState() || this.cancelRequested) return;
+			this.cancelRequested = true;
+			if (this.#state === TASK_INITIAL) {
+				this.#state = TASK_CANCEL_PENDING;
+				if (!this.#entered) {
+					this.deliverPendingCancel({ cancellable: true });
+					this.cancel();
+					const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+					cstate.resumeTaskByID(this.#id);
+					cstate.cancelExclusiveLockWaiter(this.#id);
+					this.exit({ skipExclusiveLockCheck: true });
+					return;
+				}
+			}
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).runTickLoop();
+		}
+		cancel(args) {
+			DEBUG: debugLog("[AsyncTask#cancel()] args", {});
+			if (this.taskState() !== TASK_CANCEL_DELIVERED) throw new Error("`task.cancel` called by task which has not been cancelled");
+			this.validateResourceBorrowScope();
+			this.cancelled = true;
+			this.onResolve(args?.error ?? null);
+			this.#state = TASK_RESOLVED;
+			if (!this.#entered) this.notifyProgress();
+		}
+		onResolve(taskValue) {
+			const handlers = this.#onResolveHandlers ?? NONE$1;
+			this.#onResolveHandlers = null;
+			for (const f of handlers) try {
+				f(taskValue);
+			} catch (err) {
+				DEBUG: debugLog("[AsyncTask#onResolve] error during task resolve handler", err);
+				throw err;
+			}
+			if (this.#rejected) {
+				this.#parentSubtask?.reject(taskValue);
+				return;
+			}
+			const parentSubtaskPending = this.#parentSubtask && !this.#parentSubtask.isResolved();
+			const taskReturned = !this.isCancelled();
+			if (parentSubtaskPending && taskReturned) {
+				const meta = this.#parentSubtask.getCallMetadata();
+				if (meta.returnFn && !meta.returnFnCalled) {
+					DEBUG: debugLog("[AsyncTask#onResolve()] running returnFn", {
+						componentIdx: this.#componentIdx,
+						taskID: this.#id,
+						subtaskID: this.#parentSubtask.id()
+					});
+					const callerTask = this.#parentSubtask.getParentTask();
+					meta.returnFnResult = withCurrentTaskMeta(this.#context.registers, {
+						taskID: callerTask.id(),
+						threadID: meta.callerThreadID,
+						componentIdx: callerTask.componentIdx(),
+						fn: () => meta.returnFn.apply(null, [taskValue, meta.resultPtr])
+					});
+					meta.returnFnCalled = true;
+				}
+			}
+			if (this.#postReturnFn && taskReturned) {
+				DEBUG: debugLog("[AsyncTask#onResolve()] running post return ", {
 					componentIdx: this.#componentIdx,
-					taskID: this.#id,
-					subtaskID: this.#parentSubtask.id()
+					taskID: this.#id
 				});
-				const callerTask = this.#parentSubtask.getParentTask();
-				meta.returnFnResult = withCurrentTaskMeta(this.#context.registers, {
-					taskID: callerTask.id(),
-					threadID: meta.callerThreadID,
-					componentIdx: callerTask.componentIdx(),
-					fn: () => meta.returnFn.apply(null, [taskValue, meta.resultPtr])
-				});
-				meta.returnFnCalled = true;
+				try {
+					withCurrentTaskMeta(this.#context.registers, {
+						taskID: this.#id,
+						threadID: this.defaultThread().id(),
+						componentIdx: this.#componentIdx,
+						fn: () => this.#postReturnFn(taskValue)
+					});
+				} catch (err) {
+					err = postReturnTrap(this.#context.postReturn, this.#componentIdx, err);
+					this.reject(err);
+					throw err;
+				}
+			}
+			if (parentSubtaskPending) this.#parentSubtask.onResolve(taskValue);
+		}
+		registerOnResolveHandler(f) {
+			(this.#onResolveHandlers ??= []).push(f);
+		}
+		isRejected() {
+			return this.#rejected;
+		}
+		isErrored() {
+			return this.#errored;
+		}
+		setErrored(err) {
+			if (this.#errored === null) this.#errored = err;
+		}
+		stop(err) {
+			this.reject(err);
+			this.#completionReady = true;
+			this.#settleCompletionPromise();
+		}
+		reject(taskErr) {
+			DEBUG: debugLog("[AsyncTask#reject()] args", {
+				componentIdx: this.#componentIdx,
+				taskID: this.#id,
+				parentSubtask: this.#parentSubtask,
+				parentSubtaskID: this.#parentSubtask?.id(),
+				entryFnName: this.entryFnName(),
+				callbackFnName: this.#callbackFnName,
+				errMsg: taskErr.message
+			});
+			this.setErrored(taskErr);
+			if (this.#rejected) return;
+			if (this.isResolvedState()) {
+				this.#rejected = true;
+				this.#errored = taskErr;
+				const parentTask = this.#parentSubtask?.getParentTask();
+				if (parentTask) parentTask.reject(taskErr);
+				return;
+			}
+			this.#rejected = true;
+			this.cancelRequested = true;
+			this.#state = TASK_CANCEL_PENDING;
+			this.deliverPendingCancel({ cancellable: true });
+			this.cancel({ error: taskErr });
+		}
+		resolve(results) {
+			DEBUG: debugLog("[AsyncTask#resolve()] args", {
+				componentIdx: this.#componentIdx,
+				taskID: this.#id,
+				entryFnName: this.entryFnName(),
+				callbackFnName: this.#callbackFnName
+			});
+			if (this.#state === TASK_RESOLVED) {
+				if (this.#errored !== null) throw this.#errored;
+				throw new Error(`(component [${this.#componentIdx}]) task [${this.#id}]  is already resolved (did you forget to wait for an import?)`);
+			}
+			this.validateResourceBorrowScope();
+			this.#state = TASK_RESOLVED;
+			switch (results.length) {
+				case 0:
+					this.onResolve(void 0);
+					break;
+				case 1:
+					this.onResolve(results[0]);
+					break;
+				default:
+					DEBUG: debugLog("[AsyncTask#resolve()] unexpected number of results", {
+						componentIdx: this.#componentIdx,
+						results,
+						taskID: this.#id,
+						subtaskID: this.#parentSubtask?.id(),
+						entryFnName: this.#entryFnName,
+						callbackFnName: this.#callbackFnName
+					});
+					throw new Error("unexpected number of results");
 			}
 		}
-		if (this.#postReturnFn && taskReturned) {
-			DEBUG: debugLog("[AsyncTask#onResolve()] running post return ", {
+		exit(args) {
+			DEBUG: debugLog("[AsyncTask#exit()]", {
 				componentIdx: this.#componentIdx,
 				taskID: this.#id
 			});
+			this.endFirstSlice();
+			if (this.#exited) throw new Error("task has already exited");
+			this.#checkThreadExit();
+			this.validateResourceBorrowScope();
+			const state = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			if (!state && this.#componentIdx !== -1) throw new Error("missing async state for component [" + this.#componentIdx + "]");
+			if (state && !args?.skipExclusiveLockCheck && !this.#lockFreeEntry) {
+				if (this.needsExclusiveLock() && !state.exclusivelyLockedBy(this.#id)) throw new Error(`task [${this.#id}] exit: component [${this.#componentIdx}] should have been exclusively locked by it`);
+			}
+			if (state) state.exclusiveRelease(this.#id);
+			this.notifyProgress();
 			try {
-				withCurrentTaskMeta(this.#context.registers, {
-					taskID: this.#id,
-					threadID: this.defaultThread().id(),
-					componentIdx: this.#componentIdx,
-					fn: () => this.#postReturnFn(taskValue)
-				});
+				if (this.#parentSubtask === null && (this.#isAsync || this.#isManualAsync)) this.#settleCompletionPromise();
+				this.#resolveExitPromise?.();
 			} catch (err) {
-				err = postReturnTrap(this.#context.postReturn, this.#componentIdx, err);
-				this.reject(err);
+				console.error("error during task exit handler", err);
 				throw err;
 			}
+			this.#exited = true;
+			this.removeThread(this.defaultThread());
+			if (this.#threads.length > 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id, { preserveTask: true });
 		}
-		if (parentSubtaskPending) this.#parentSubtask.onResolve(taskValue);
-	}
-	registerOnResolveHandler(f) {
-		(this.#onResolveHandlers ??= []).push(f);
-	}
-	isRejected() {
-		return this.#rejected;
-	}
-	isErrored() {
-		return this.#errored;
-	}
-	setErrored(err) {
-		if (this.#errored === null) this.#errored = err;
-	}
-	stop(err) {
-		this.reject(err);
-		this.#completionReady = true;
-		this.#settleCompletionPromise();
-	}
-	reject(taskErr) {
-		DEBUG: debugLog("[AsyncTask#reject()] args", {
-			componentIdx: this.#componentIdx,
-			taskID: this.#id,
-			parentSubtask: this.#parentSubtask,
-			parentSubtaskID: this.#parentSubtask?.id(),
-			entryFnName: this.entryFnName(),
-			callbackFnName: this.#callbackFnName,
-			errMsg: taskErr.message
-		});
-		this.setErrored(taskErr);
-		if (this.#rejected) return;
-		if (this.isResolvedState()) {
-			this.#rejected = true;
-			this.#errored = taskErr;
+		needsExclusiveLock() {
+			if (this.#componentIdx === -1) return false;
+			if (!this.#callingWasmExport) return false;
+			if (!this.#funcTypeIsAsync) return false;
+			return !this.#isAsync || this.hasCallback() || this.#calleeIsAsync === false;
+		}
+		createSubtask(args) {
+			DEBUG: debugLog("[AsyncTask#createSubtask()] args", args);
+			const { componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync } = args;
+			if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
+			const waitable = new this.#context.Waitable({
+				componentIdx: this.#componentIdx,
+				target: `subtask (internal ID [${this.#id}])`
+			});
+			const newSubtask = new this.#context.AsyncSubtask({
+				componentIdx,
+				childTask,
+				parentTask: this,
+				callMetadata,
+				isAsync,
+				isManualAsync,
+				fnName,
+				waitable
+			});
+			(this.#subtasks ??= []).push(newSubtask);
+			newSubtask.setTarget(`subtask (internal ID [${newSubtask.id()}], waitable [${waitable.idx()}], component [${componentIdx}])`);
+			return newSubtask;
+		}
+		getLatestSubtask() {
+			return this.#subtasks?.at(-1);
+		}
+		getSubtaskByWaitableRep(rep) {
+			if (rep === void 0) throw new TypeError("missing rep");
+			return this.#subtasks?.find((s) => s.waitableRep() === rep);
+		}
+		currentSubtask() {
+			DEBUG: debugLog("[AsyncTask#currentSubtask()]");
+			if (this.#subtasks === null || this.#subtasks.length === 0) return;
+			return this.#subtasks?.at(-1);
+		}
+		removeSubtask(subtask) {
+			const subtasks = this.#subtasks;
+			if (subtasks === null || subtasks.length === 0) throw new Error("cannot end current subtask: no current subtask");
+			if (subtasks[subtasks.length - 1] === subtask) subtasks.pop();
+			else this.#subtasks = subtasks.filter((t) => t !== subtask);
+			return subtask;
+		}
+		cancellationPending() {
+			return this.#state === TASK_CANCEL_PENDING;
+		}
+		enterHost() {
+			if (this.#entered) throw new Error(`task with ID [${this.#id}] should not be entered twice`);
+			if (this.deliverPendingCancel({ cancellable: true })) {
+				this.cancel();
+				return false;
+			}
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			this.#entered = true;
 			const parentTask = this.#parentSubtask?.getParentTask();
-			if (parentTask) parentTask.reject(taskErr);
-			return;
+			if (parentTask?.taskState() === TASK_CANCEL_DELIVERED || parentTask && !parentTask.hasCallback()) parentTask.notifyProgress();
+			return this.#entered;
 		}
-		this.#rejected = true;
-		this.cancelRequested = true;
-		this.#state = TASK_CANCEL_PENDING;
-		this.deliverPendingCancel({ cancellable: true });
-		this.cancel({ error: taskErr });
-	}
-	resolve(results) {
-		DEBUG: debugLog("[AsyncTask#resolve()] args", {
-			componentIdx: this.#componentIdx,
-			taskID: this.#id,
-			entryFnName: this.entryFnName(),
-			callbackFnName: this.#callbackFnName
-		});
-		if (this.#state === TASK_RESOLVED) {
-			if (this.#errored !== null) throw this.#errored;
-			throw new Error(`(component [${this.#componentIdx}]) task [${this.#id}]  is already resolved (did you forget to wait for an import?)`);
+		defaultThread() {
+			return this.#threads[0];
 		}
-		this.validateResourceBorrowScope();
-		this.#state = TASK_RESOLVED;
-		switch (results.length) {
-			case 0:
-				this.onResolve(void 0);
-				break;
-			case 1:
-				this.onResolve(results[0]);
-				break;
-			default:
-				DEBUG: debugLog("[AsyncTask#resolve()] unexpected number of results", {
-					componentIdx: this.#componentIdx,
-					results,
-					taskID: this.#id,
-					subtaskID: this.#parentSubtask?.id(),
-					entryFnName: this.#entryFnName,
-					callbackFnName: this.#callbackFnName
-				});
-				throw new Error("unexpected number of results");
+		removeThread(thread) {
+			this.#checkThreadExit();
+			this.settleCompletion();
+			if (this.#componentIdx !== -1) getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).threads.remove(thread.id());
+			if (this.#threads[this.#threads.length - 1] === thread) this.#threads.pop();
+			else this.#threads = this.#threads.filter((t) => t !== thread);
+			syncContextSlots(this.#context.registers);
+			if (this.#exited && this.#threads.length === 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
 		}
-	}
-	exit(args) {
-		DEBUG: debugLog("[AsyncTask#exit()]", {
-			componentIdx: this.#componentIdx,
-			taskID: this.#id
-		});
-		this.endFirstSlice();
-		if (this.#exited) throw new Error("task has already exited");
-		this.#checkThreadExit();
-		this.validateResourceBorrowScope();
-		const state = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		if (!state && this.#componentIdx !== -1) throw new Error("missing async state for component [" + this.#componentIdx + "]");
-		if (state && !args?.skipExclusiveLockCheck && !this.#lockFreeEntry) {
-			if (this.needsExclusiveLock() && !state.exclusivelyLockedBy(this.#id)) throw new Error(`task [${this.#id}] exit: component [${this.#componentIdx}] should have been exclusively locked by it`);
+		#checkThreadExit() {
+			if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {
+				const err = new this.#context.RuntimeError(`(component [${this.#componentIdx}]) task [${this.#id}] exited without resolution`);
+				throw this.#componentIdx === -1 ? err : recordTrap(this.#context.traps, this.#componentIdx, err);
+			}
 		}
-		if (state) state.exclusiveRelease(this.#id);
-		this.notifyProgress();
-		try {
-			if (this.#parentSubtask === null && (this.#isAsync || this.#isManualAsync)) this.#settleCompletionPromise();
-			this.#resolveExitPromise?.();
-		} catch (err) {
-			console.error("error during task exit handler", err);
-			throw err;
-		}
-		this.#exited = true;
-		this.removeThread(this.defaultThread());
-		if (this.#threads.length > 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id, { preserveTask: true });
-	}
-	needsExclusiveLock() {
-		if (this.#componentIdx === -1) return false;
-		if (!this.#callingWasmExport) return false;
-		if (!this.#funcTypeIsAsync) return false;
-		return !this.#isAsync || this.hasCallback() || this.#calleeIsAsync === false;
-	}
-	createSubtask(args) {
-		DEBUG: debugLog("[AsyncTask#createSubtask()] args", args);
-		const { componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync } = args;
-		if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
-		const waitable = new this.#context.Waitable({
-			componentIdx: this.#componentIdx,
-			target: `subtask (internal ID [${this.#id}])`
-		});
-		const newSubtask = new this.#context.AsyncSubtask({
-			componentIdx,
-			childTask,
-			parentTask: this,
-			callMetadata,
-			isAsync,
-			isManualAsync,
-			fnName,
-			waitable
-		});
-		(this.#subtasks ??= []).push(newSubtask);
-		newSubtask.setTarget(`subtask (internal ID [${newSubtask.id()}], waitable [${waitable.idx()}], component [${componentIdx}])`);
-		return newSubtask;
-	}
-	getLatestSubtask() {
-		return this.#subtasks?.at(-1);
-	}
-	getSubtaskByWaitableRep(rep) {
-		if (rep === void 0) throw new TypeError("missing rep");
-		return this.#subtasks?.find((s) => s.waitableRep() === rep);
-	}
-	currentSubtask() {
-		DEBUG: debugLog("[AsyncTask#currentSubtask()]");
-		if (this.#subtasks === null || this.#subtasks.length === 0) return;
-		return this.#subtasks?.at(-1);
-	}
-	removeSubtask(subtask) {
-		const subtasks = this.#subtasks;
-		if (subtasks === null || subtasks.length === 0) throw new Error("cannot end current subtask: no current subtask");
-		if (subtasks[subtasks.length - 1] === subtask) subtasks.pop();
-		else this.#subtasks = subtasks.filter((t) => t !== subtask);
-		return subtask;
-	}
-	cancellationPending() {
-		return this.#state === TASK_CANCEL_PENDING;
-	}
-	enterHost() {
-		if (this.#entered) throw new Error(`task with ID [${this.#id}] should not be entered twice`);
-		if (this.deliverPendingCancel({ cancellable: true })) {
-			this.cancel();
-			return false;
-		}
-		getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		this.#entered = true;
-		const parentTask = this.#parentSubtask?.getParentTask();
-		if (parentTask?.taskState() === TASK_CANCEL_DELIVERED || parentTask && !parentTask.hasCallback()) parentTask.notifyProgress();
-		return this.#entered;
-	}
-	defaultThread() {
-		return this.#threads[0];
-	}
-	removeThread(thread) {
-		this.#checkThreadExit();
-		this.settleCompletion();
-		if (this.#componentIdx !== -1) getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).threads.remove(thread.id());
-		if (this.#threads[this.#threads.length - 1] === thread) this.#threads.pop();
-		else this.#threads = this.#threads.filter((t) => t !== thread);
-		syncContextSlots(this.#context.registers);
-		if (this.#exited && this.#threads.length === 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
-	}
-	#checkThreadExit() {
-		if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {
-			const err = new this.#context.RuntimeError(`(component [${this.#componentIdx}]) task [${this.#id}] exited without resolution`);
-			throw this.#componentIdx === -1 ? err : recordTrap(this.#context.traps, this.#componentIdx, err);
-		}
-	}
-	addThread(thread) {
-		if (this.#componentIdx === -1) {
-			thread.setId(++this.#store.hostThreadID);
+		addThread(thread) {
+			if (this.#componentIdx === -1) {
+				thread.setId(++this.#store.hostThreadID);
+				this.#threads.push(thread);
+				return thread;
+			}
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			thread.setId(cstate.threads.insert(thread));
 			this.#threads.push(thread);
+			syncContextSlots(this.#context.registers);
 			return thread;
 		}
-		const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		thread.setId(cstate.threads.insert(thread));
-		this.#threads.push(thread);
-		syncContextSlots(this.#context.registers);
-		return thread;
-	}
-	calleeIsAsync() {
-		return this.#calleeIsAsync === true;
-	}
-};
+		calleeIsAsync() {
+			return this.#calleeIsAsync === true;
+		}
+	};
+}
+let sharedAsyncTask;
 function initializeAsyncTaskClass(context) {
+	const AsyncTask = sharedAsyncTask ??= defineAsyncTask();
 	const store = {
 		id: 0n,
 		hostThreadID: 0
@@ -5655,322 +5689,326 @@ const CANCELLED_BEFORE_STARTED = 3;
 const CANCELLED_BEFORE_RETURNED = 4;
 /** Stands in for a list that was never allocated. */
 const NONE = [];
-var AsyncSubtask = class {
-	#context;
-	static State = {
-		STARTING,
-		STARTED,
-		RETURNED,
-		CANCELLED_BEFORE_STARTED,
-		CANCELLED_BEFORE_RETURNED
-	};
-	#id;
-	#state = STARTING;
-	#componentIdx;
-	#parentTask;
-	#childTask = null;
-	#cancelRequested = false;
-	#lenders = null;
-	#waitable;
-	#callbackFn = null;
-	#postReturnFn = null;
-	#onProgressFn = null;
-	#callMetadata = {};
-	#resolved = false;
-	#onResolveHandlers = null;
-	#onStartHandlers = null;
-	#result = null;
-	#resultSet = false;
-	#hostPendingResult = null;
-	fnName;
-	target;
-	isAsync;
-	isManualAsync;
-	cancelProgress = null;
-	constructor(context, store, args) {
-		this.#context = context;
-		if (typeof args.componentIdx !== "number") throw new Error("invalid componentIdx for subtask creation");
-		this.#componentIdx = args.componentIdx;
-		this.#id = ++store.id;
-		this.fnName = args.fnName;
-		if (!args.parentTask) throw new Error("missing parent task during subtask creation");
-		this.#parentTask = args.parentTask;
-		if (args.childTask) this.#childTask = args.childTask;
-		if (!args.waitable) throw new Error("missing/invalid waitable");
-		this.#waitable = args.waitable;
-		if (args.callMetadata) this.#callMetadata = args.callMetadata;
-		this.#lenders = [];
-		this.target = args.target;
-		this.isAsync = args.isAsync;
-		this.isManualAsync = args.isManualAsync;
-	}
-	id() {
-		return this.#id;
-	}
-	parentTaskID() {
-		return this.#parentTask?.id();
-	}
-	childTaskID() {
-		return this.#childTask?.id();
-	}
-	state() {
-		return this.#state;
-	}
-	getWaitable() {
-		return this.#waitable;
-	}
-	waitable() {
-		return this.#waitable;
-	}
-	waitableRep() {
-		return this.#waitable.idx();
-	}
-	ensureHandle() {
-		const existing = this.#waitable.idx();
-		if (existing !== null && existing !== void 0) return existing;
-		const idx = this.#getComponentState().handles.insert(this);
-		this.#waitable.setIdx(idx);
-		this.#waitable.setTarget(`waitable for subtask (waitable id [${idx}], subtask internal ID [${this.id()}])`);
-		return idx;
-	}
-	join(set) {
-		return this.#waitable.join(set);
-	}
-	getPendingEvent() {
-		return this.#waitable.getPendingEvent();
-	}
-	hasPendingEvent() {
-		return this.#waitable.hasPendingEvent();
-	}
-	setPendingEvent(fn) {
-		return this.#waitable.setPendingEvent(fn);
-	}
-	setTarget(tgt) {
-		this.target = tgt;
-	}
-	getResult() {
-		if (!this.#resultSet) throw new Error("subtask result has not been set");
-		return this.#result;
-	}
-	setResult(v) {
-		if (this.#resultSet) throw new Error("subtask result has already been set");
-		this.#result = v;
-		this.#resultSet = true;
-	}
-	componentIdx() {
-		return this.#componentIdx;
-	}
-	setChildTask(t) {
-		if (!t) throw new Error("cannot set missing/invalid child task on subtask");
-		if (this.#childTask) throw new Error("child task is already set on subtask");
-		if (this.#parentTask === t) throw new Error("parent cannot be child");
-		this.#childTask = t;
-	}
-	getChildTask() {
-		return this.#childTask;
-	}
-	getParentTask() {
-		return this.#parentTask;
-	}
-	setCallbackFn(f, _name) {
-		if (!f) return;
-		if (this.#callbackFn) throw new Error("callback fn can only be set once");
-		this.#callbackFn = f;
-	}
-	getCallbackFnName() {
-		return this.#callbackFn?.name;
-	}
-	setPostReturnFn(f) {
-		if (!f) return;
-		if (this.#postReturnFn) throw new Error("postReturn fn can only be set once");
-		this.#postReturnFn = f;
-	}
-	setOnProgressFn(f) {
-		if (this.#onProgressFn) throw new Error("on progress fn can only be set once");
-		this.#onProgressFn = f;
-	}
-	isNotStarted() {
-		return this.#state == STARTING;
-	}
-	cancellationRequested() {
-		return this.#cancelRequested;
-	}
-	requestCancellation() {
-		DEBUG: debugLog("[AsyncSubtask#requestCancellation()] args", {
-			componentIdx: this.#componentIdx,
-			subtaskID: this.#id,
-			state: this.#state,
-			childTaskID: this.childTaskID(),
-			fnName: this.fnName
-		});
-		if (this.#cancelRequested) throw new Error("cancellation has already been requested for this subtask");
-		this.#cancelRequested = true;
-		if (this.#resolved) return;
-		if (this.#childTask) {
-			this.#childTask.requestCancellation();
-			return;
+function defineAsyncSubtask() {
+	return class AsyncSubtask {
+		#context;
+		static State = {
+			STARTING,
+			STARTED,
+			RETURNED,
+			CANCELLED_BEFORE_STARTED,
+			CANCELLED_BEFORE_RETURNED
+		};
+		#id;
+		#state = STARTING;
+		#componentIdx;
+		#parentTask;
+		#childTask = null;
+		#cancelRequested = false;
+		#lenders = null;
+		#waitable;
+		#callbackFn = null;
+		#postReturnFn = null;
+		#onProgressFn = null;
+		#callMetadata = {};
+		#resolved = false;
+		#onResolveHandlers = null;
+		#onStartHandlers = null;
+		#result = null;
+		#resultSet = false;
+		#hostPendingResult = null;
+		fnName;
+		target;
+		isAsync;
+		isManualAsync;
+		cancelProgress = null;
+		constructor(context, store, args) {
+			this.#context = context;
+			if (typeof args.componentIdx !== "number") throw new Error("invalid componentIdx for subtask creation");
+			this.#componentIdx = args.componentIdx;
+			this.#id = ++store.id;
+			this.fnName = args.fnName;
+			if (!args.parentTask) throw new Error("missing parent task during subtask creation");
+			this.#parentTask = args.parentTask;
+			if (args.childTask) this.#childTask = args.childTask;
+			if (!args.waitable) throw new Error("missing/invalid waitable");
+			this.#waitable = args.waitable;
+			if (args.callMetadata) this.#callMetadata = args.callMetadata;
+			this.#lenders = [];
+			this.target = args.target;
+			this.isAsync = args.isAsync;
+			this.isManualAsync = args.isManualAsync;
 		}
-		this.onResolve(null);
-		this.#disposeHostPendingResult();
-	}
-	setHostPendingResult(v) {
-		if (!isPromiseLike(v)) return;
-		this.#hostPendingResult = v;
-		if (this.#resolved && this.#state !== RETURNED) this.#disposeHostPendingResult();
-	}
-	#disposeHostPendingResult() {
-		const pending = this.#hostPendingResult;
-		if (!pending) return;
-		this.#hostPendingResult = null;
-		disposeHostValue(this.#context.disposeSymbol, pending);
-	}
-	registerOnStartHandler(f) {
-		(this.#onStartHandlers ??= []).push(f);
-	}
-	onStart(args) {
-		DEBUG: debugLog("[AsyncSubtask#onStart()] args", {
-			componentIdx: this.#componentIdx,
-			subtaskID: this.#id,
-			parentTaskID: this.parentTaskID(),
-			fnName: this.fnName,
-			args
-		});
-		this.#onProgressFn?.();
-		this.#parentTask.notifyProgress();
-		this.#state = STARTED;
-		let result;
-		if (this.#callMetadata.startFn) result = this.#callMetadata.startFn.apply(null, args?.startFnParams ?? []);
-		return result;
-	}
-	registerOnResolveHandler(f) {
-		(this.#onResolveHandlers ??= []).push(f);
-	}
-	reject(subtaskErr) {
-		if (this.#resolved) return;
-		this.#onProgressFn?.();
-		if (this.#state >= RETURNED) throw new Error("cannot reject a completed subtask");
-		this.#state = this.#state === STARTING ? CANCELLED_BEFORE_STARTED : CANCELLED_BEFORE_RETURNED;
-		this.#resolved = true;
-		this.#hostPendingResult = null;
-		this.#parentTask.removeSubtask(this);
-		this.#parentTask.reject(subtaskErr);
-	}
-	onResolve(subtaskValue) {
-		DEBUG: debugLog("[AsyncSubtask#onResolve()] args", {
-			componentIdx: this.#componentIdx,
-			subtaskID: this.#id,
-			isAsync: this.isAsync,
-			childTaskID: this.childTaskID(),
-			parentTaskID: this.parentTaskID(),
-			parentTaskFnName: this.#parentTask?.entryFnName(),
-			fnName: this.fnName
-		});
-		if (this.#resolved) throw new Error("subtask has already been resolved");
-		this.#onProgressFn?.();
-		if (subtaskValue === null && this.#cancelRequested) {
-			if (this.#state >= RETURNED) throw new Error("resolved subtask must have been started before cancellation");
-			this.#state = this.#state === STARTING ? CANCELLED_BEFORE_STARTED : CANCELLED_BEFORE_RETURNED;
-		} else {
-			if (this.#state !== STARTED) throw new Error("resolved subtask must have been started before completion");
-			this.#state = RETURNED;
-			this.#hostPendingResult = null;
+		id() {
+			return this.#id;
 		}
-		this.setResult(subtaskValue);
-		for (const f of this.#onResolveHandlers ?? NONE) try {
-			f(subtaskValue);
-		} catch (err) {
-			console.error("error during subtask resolve handler", err);
-			throw err;
+		parentTaskID() {
+			return this.#parentTask?.id();
 		}
-		const callMetadata = this.getCallMetadata();
-		const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? lookupMemories(this.#context.memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
-		if (this.#state === RETURNED && callMetadata && !callMetadata.returnFn && (this.isAsync || callMetadata.funcTypeIsAsync) && callMetadata.resultPtr && memory) {
-			const { resultPtr, realloc } = callMetadata;
-			const lowers = callMetadata.lowers;
-			if (lowers && lowers.length > 0) lowers[0]({
+		childTaskID() {
+			return this.#childTask?.id();
+		}
+		state() {
+			return this.#state;
+		}
+		getWaitable() {
+			return this.#waitable;
+		}
+		waitable() {
+			return this.#waitable;
+		}
+		waitableRep() {
+			return this.#waitable.idx();
+		}
+		ensureHandle() {
+			const existing = this.#waitable.idx();
+			if (existing !== null && existing !== void 0) return existing;
+			const idx = this.#getComponentState().handles.insert(this);
+			this.#waitable.setIdx(idx);
+			this.#waitable.setTarget(`waitable for subtask (waitable id [${idx}], subtask internal ID [${this.id()}])`);
+			return idx;
+		}
+		join(set) {
+			return this.#waitable.join(set);
+		}
+		getPendingEvent() {
+			return this.#waitable.getPendingEvent();
+		}
+		hasPendingEvent() {
+			return this.#waitable.hasPendingEvent();
+		}
+		setPendingEvent(fn) {
+			return this.#waitable.setPendingEvent(fn);
+		}
+		setTarget(tgt) {
+			this.target = tgt;
+		}
+		getResult() {
+			if (!this.#resultSet) throw new Error("subtask result has not been set");
+			return this.#result;
+		}
+		setResult(v) {
+			if (this.#resultSet) throw new Error("subtask result has already been set");
+			this.#result = v;
+			this.#resultSet = true;
+		}
+		componentIdx() {
+			return this.#componentIdx;
+		}
+		setChildTask(t) {
+			if (!t) throw new Error("cannot set missing/invalid child task on subtask");
+			if (this.#childTask) throw new Error("child task is already set on subtask");
+			if (this.#parentTask === t) throw new Error("parent cannot be child");
+			this.#childTask = t;
+		}
+		getChildTask() {
+			return this.#childTask;
+		}
+		getParentTask() {
+			return this.#parentTask;
+		}
+		setCallbackFn(f, _name) {
+			if (!f) return;
+			if (this.#callbackFn) throw new Error("callback fn can only be set once");
+			this.#callbackFn = f;
+		}
+		getCallbackFnName() {
+			return this.#callbackFn?.name;
+		}
+		setPostReturnFn(f) {
+			if (!f) return;
+			if (this.#postReturnFn) throw new Error("postReturn fn can only be set once");
+			this.#postReturnFn = f;
+		}
+		setOnProgressFn(f) {
+			if (this.#onProgressFn) throw new Error("on progress fn can only be set once");
+			this.#onProgressFn = f;
+		}
+		isNotStarted() {
+			return this.#state == STARTING;
+		}
+		cancellationRequested() {
+			return this.#cancelRequested;
+		}
+		requestCancellation() {
+			DEBUG: debugLog("[AsyncSubtask#requestCancellation()] args", {
 				componentIdx: this.#componentIdx,
-				memory,
-				realloc,
-				vals: [subtaskValue],
-				storagePtr: resultPtr,
-				stringEncoding: callMetadata.stringEncoding
+				subtaskID: this.#id,
+				state: this.#state,
+				childTaskID: this.childTaskID(),
+				fnName: this.fnName
 			});
+			if (this.#cancelRequested) throw new Error("cancellation has already been requested for this subtask");
+			this.#cancelRequested = true;
+			if (this.#resolved) return;
+			if (this.#childTask) {
+				this.#childTask.requestCancellation();
+				return;
+			}
+			this.onResolve(null);
+			this.#disposeHostPendingResult();
 		}
-		this.#resolved = true;
-		this.#parentTask.removeSubtask(this);
-		if (!this.isAsync) {
-			this.deliverResolve();
-			const rep = this.waitableRep();
-			if (rep) try {
-				if (this.#getComponentState().handles.remove(rep) !== this) throw new Error("unexpectedly received non-self Subtask from handle removal");
-				this.drop();
+		setHostPendingResult(v) {
+			if (!isPromiseLike(v)) return;
+			this.#hostPendingResult = v;
+			if (this.#resolved && this.#state !== RETURNED) this.#disposeHostPendingResult();
+		}
+		#disposeHostPendingResult() {
+			const pending = this.#hostPendingResult;
+			if (!pending) return;
+			this.#hostPendingResult = null;
+			disposeHostValue(this.#context.disposeSymbol, pending);
+		}
+		registerOnStartHandler(f) {
+			(this.#onStartHandlers ??= []).push(f);
+		}
+		onStart(args) {
+			DEBUG: debugLog("[AsyncSubtask#onStart()] args", {
+				componentIdx: this.#componentIdx,
+				subtaskID: this.#id,
+				parentTaskID: this.parentTaskID(),
+				fnName: this.fnName,
+				args
+			});
+			this.#onProgressFn?.();
+			this.#parentTask.notifyProgress();
+			this.#state = STARTED;
+			let result;
+			if (this.#callMetadata.startFn) result = this.#callMetadata.startFn.apply(null, args?.startFnParams ?? []);
+			return result;
+		}
+		registerOnResolveHandler(f) {
+			(this.#onResolveHandlers ??= []).push(f);
+		}
+		reject(subtaskErr) {
+			if (this.#resolved) return;
+			this.#onProgressFn?.();
+			if (this.#state >= RETURNED) throw new Error("cannot reject a completed subtask");
+			this.#state = this.#state === STARTING ? CANCELLED_BEFORE_STARTED : CANCELLED_BEFORE_RETURNED;
+			this.#resolved = true;
+			this.#hostPendingResult = null;
+			this.#parentTask.removeSubtask(this);
+			this.#parentTask.reject(subtaskErr);
+		}
+		onResolve(subtaskValue) {
+			DEBUG: debugLog("[AsyncSubtask#onResolve()] args", {
+				componentIdx: this.#componentIdx,
+				subtaskID: this.#id,
+				isAsync: this.isAsync,
+				childTaskID: this.childTaskID(),
+				parentTaskID: this.parentTaskID(),
+				parentTaskFnName: this.#parentTask?.entryFnName(),
+				fnName: this.fnName
+			});
+			if (this.#resolved) throw new Error("subtask has already been resolved");
+			this.#onProgressFn?.();
+			if (subtaskValue === null && this.#cancelRequested) {
+				if (this.#state >= RETURNED) throw new Error("resolved subtask must have been started before cancellation");
+				this.#state = this.#state === STARTING ? CANCELLED_BEFORE_STARTED : CANCELLED_BEFORE_RETURNED;
+			} else {
+				if (this.#state !== STARTED) throw new Error("resolved subtask must have been started before completion");
+				this.#state = RETURNED;
+				this.#hostPendingResult = null;
+			}
+			this.setResult(subtaskValue);
+			for (const f of this.#onResolveHandlers ?? NONE) try {
+				f(subtaskValue);
 			} catch (err) {
-				DEBUG: debugLog("[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion", err);
+				console.error("error during subtask resolve handler", err);
+				throw err;
+			}
+			const callMetadata = this.getCallMetadata();
+			const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? lookupMemories(this.#context.memories, { componentIdx: this.#parentTask.componentIdx() })[0]?.memory;
+			if (this.#state === RETURNED && callMetadata && !callMetadata.returnFn && (this.isAsync || callMetadata.funcTypeIsAsync) && callMetadata.resultPtr && memory) {
+				const { resultPtr, realloc } = callMetadata;
+				const lowers = callMetadata.lowers;
+				if (lowers && lowers.length > 0) lowers[0]({
+					componentIdx: this.#componentIdx,
+					memory,
+					realloc,
+					vals: [subtaskValue],
+					storagePtr: resultPtr,
+					stringEncoding: callMetadata.stringEncoding
+				});
+			}
+			this.#resolved = true;
+			this.#parentTask.removeSubtask(this);
+			if (!this.isAsync) {
+				this.deliverResolve();
+				const rep = this.waitableRep();
+				if (rep) try {
+					if (this.#getComponentState().handles.remove(rep) !== this) throw new Error("unexpectedly received non-self Subtask from handle removal");
+					this.drop();
+				} catch (err) {
+					DEBUG: debugLog("[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion", err);
+				}
 			}
 		}
-	}
-	getStateNumber() {
-		return this.#state;
-	}
-	isReturned() {
-		return this.#state === RETURNED;
-	}
-	getCallMetadata() {
-		return this.#callMetadata;
-	}
-	isResolved() {
-		return this.#state >= RETURNED;
-	}
-	addLender(handle) {
-		DEBUG: debugLog("[AsyncSubtask#addLender()] args", { handle });
-		if (!handle || typeof handle.lends !== "number") throw new Error("missing/invalid lender handle [" + handle + "]");
-		if (this.#lenders === null || this.isResolved()) throw new Error("subtask has no lendors or has already been resolved");
-		handle.lends++;
-		this.#lenders.push(handle);
-	}
-	deliverResolve() {
-		DEBUG: debugLog("[AsyncSubtask#deliverResolve()] args", {
-			lenders: this.#lenders,
-			parentTaskID: this.parentTaskID(),
-			subtaskID: this.#id,
-			childTaskID: this.childTaskID(),
-			resolved: this.isResolved(),
-			resolveDelivered: this.resolveDelivered()
-		});
-		if (this.resolveDelivered() || !this.isResolved()) throw new Error("subtask cannot deliver resolution twice, and the subtask must be resolved");
-		for (const lender of this.#lenders) lender.lends--;
-		this.#lenders = null;
-	}
-	resolveDelivered() {
-		DEBUG: debugLog("[AsyncSubtask#resolveDelivered()] args", {});
-		if (this.#lenders === null && !this.isResolved()) throw new Error("invalid subtask state, lenders missing and subtask has not been resolved");
-		return this.#lenders === null;
-	}
-	drop() {
-		DEBUG: debugLog("[AsyncSubtask#drop()] args", {
-			componentIdx: this.#componentIdx,
-			parentTaskID: this.#parentTask?.id(),
-			parentTaskFnName: this.#parentTask?.entryFnName(),
-			childTaskID: this.#childTask?.id(),
-			childTaskFnName: this.#childTask?.entryFnName(),
-			subtaskFnName: this.fnName
-		});
-		if (!this.#waitable) throw new Error("missing/invalid inner waitable");
-		if (!this.resolveDelivered()) throw new this.#context.RuntimeError("cannot drop a subtask which has not yet resolved");
-		if (this.#waitable) this.#waitable.drop();
-	}
-	#getComponentState() {
-		const state = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		if (!state) throw new Error("invalid/missing async state for component [" + this.#componentIdx + "]");
-		return state;
-	}
-	getWaitableHandleIdx() {
-		DEBUG: debugLog("[AsyncSubtask#getWaitableHandleIdx()] args", {});
-		if (!this.#waitable) throw new Error("missing/invalid waitable");
-		return this.waitableRep();
-	}
-};
+		getStateNumber() {
+			return this.#state;
+		}
+		isReturned() {
+			return this.#state === RETURNED;
+		}
+		getCallMetadata() {
+			return this.#callMetadata;
+		}
+		isResolved() {
+			return this.#state >= RETURNED;
+		}
+		addLender(handle) {
+			DEBUG: debugLog("[AsyncSubtask#addLender()] args", { handle });
+			if (!handle || typeof handle.lends !== "number") throw new Error("missing/invalid lender handle [" + handle + "]");
+			if (this.#lenders === null || this.isResolved()) throw new Error("subtask has no lendors or has already been resolved");
+			handle.lends++;
+			this.#lenders.push(handle);
+		}
+		deliverResolve() {
+			DEBUG: debugLog("[AsyncSubtask#deliverResolve()] args", {
+				lenders: this.#lenders,
+				parentTaskID: this.parentTaskID(),
+				subtaskID: this.#id,
+				childTaskID: this.childTaskID(),
+				resolved: this.isResolved(),
+				resolveDelivered: this.resolveDelivered()
+			});
+			if (this.resolveDelivered() || !this.isResolved()) throw new Error("subtask cannot deliver resolution twice, and the subtask must be resolved");
+			for (const lender of this.#lenders) lender.lends--;
+			this.#lenders = null;
+		}
+		resolveDelivered() {
+			DEBUG: debugLog("[AsyncSubtask#resolveDelivered()] args", {});
+			if (this.#lenders === null && !this.isResolved()) throw new Error("invalid subtask state, lenders missing and subtask has not been resolved");
+			return this.#lenders === null;
+		}
+		drop() {
+			DEBUG: debugLog("[AsyncSubtask#drop()] args", {
+				componentIdx: this.#componentIdx,
+				parentTaskID: this.#parentTask?.id(),
+				parentTaskFnName: this.#parentTask?.entryFnName(),
+				childTaskID: this.#childTask?.id(),
+				childTaskFnName: this.#childTask?.entryFnName(),
+				subtaskFnName: this.fnName
+			});
+			if (!this.#waitable) throw new Error("missing/invalid inner waitable");
+			if (!this.resolveDelivered()) throw new this.#context.RuntimeError("cannot drop a subtask which has not yet resolved");
+			if (this.#waitable) this.#waitable.drop();
+		}
+		#getComponentState() {
+			const state = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			if (!state) throw new Error("invalid/missing async state for component [" + this.#componentIdx + "]");
+			return state;
+		}
+		getWaitableHandleIdx() {
+			DEBUG: debugLog("[AsyncSubtask#getWaitableHandleIdx()] args", {});
+			if (!this.#waitable) throw new Error("missing/invalid waitable");
+			return this.waitableRep();
+		}
+	};
+}
+let sharedAsyncSubtask;
 function initializeAsyncSubtaskClass(context) {
+	const AsyncSubtask = sharedAsyncSubtask ??= defineAsyncSubtask();
 	const store = { id: 0n };
 	/**
 	* Construct a subtask that uses the context.
@@ -6489,119 +6527,123 @@ function symmetricSyncGuestCallExit(_context) {
 const THREAD_NOT_STARTED = "not-started";
 const THREAD_RUNNING = "running";
 const THREAD_COMPLETED = "completed";
-var AsyncThread = class {
-	#context;
-	static State = {
-		NOT_STARTED: THREAD_NOT_STARTED,
-		RUNNING: THREAD_RUNNING,
-		COMPLETED: THREAD_COMPLETED
-	};
-	#id = null;
-	#componentIdx;
-	#task;
-	#state;
-	#startFn = null;
-	storage = [0, 0];
-	constructor(context, opts) {
-		this.#context = context;
-		if (opts?.componentIdx === void 0) throw new TypeError("missing component id during thread creation");
-		this.#componentIdx = opts.componentIdx;
-		if (!opts?.task) throw new TypeError("missing task during thread creation");
-		this.#task = opts.task;
-		if (opts.startFn) {
-			this.#startFn = opts.startFn;
-			this.#state = THREAD_NOT_STARTED;
-		} else this.#state = THREAD_RUNNING;
-	}
-	id() {
-		return this.#id;
-	}
-	setId(id) {
-		if (this.#id !== null) throw new Error("thread id can only be assigned once");
-		this.#id = id;
-	}
-	componentIdx() {
-		return this.#componentIdx;
-	}
-	task() {
-		return this.#task;
-	}
-	taskID() {
-		return this.#task.id();
-	}
-	state() {
-		return this.#state;
-	}
-	isCancelled() {
-		return this.#task.isCancelled();
-	}
-	isRejected() {
-		return this.#task.isRejected();
-	}
-	notifyProgress() {
-		return this.#task.notifyProgress();
-	}
-	entryFnName() {
-		return this.#task.entryFnName();
-	}
-	getParentSubtask() {
-		return this.#task.getParentSubtask();
-	}
-	async suspend(opts) {
-		const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-		const task = this.#task;
-		task.endFirstSlice();
-		task.settleCompletion();
-		const { cancellable, readyFn, releaseLock = false } = opts;
-		if (task.deliverPendingCancel({ cancellable })) return false;
-		const reacquireLock = releaseLock && task.needsExclusiveLock() && cstate.exclusivelyLockedBy(task.id());
-		if (reacquireLock) cstate.exclusiveRelease(task.id());
-		try {
-			const keepGoing = await cstate.suspendThread({
-				...opts,
-				cancellable: !!cancellable,
-				thread: this,
-				readyFn: () => cancellable && task.cancellationPending() || readyFn()
-			});
-			cstate.throwIfInterrupted();
-			if (keepGoing && task.deliverPendingCancel({ cancellable })) return false;
-			return !!keepGoing;
-		} finally {
-			if (reacquireLock && !cstate.exclusivelyLockedBy(task.id())) await cstate.acquireExclusiveLock(task.id());
+function defineAsyncThread() {
+	return class AsyncThread {
+		#context;
+		static State = {
+			NOT_STARTED: THREAD_NOT_STARTED,
+			RUNNING: THREAD_RUNNING,
+			COMPLETED: THREAD_COMPLETED
+		};
+		#id = null;
+		#componentIdx;
+		#task;
+		#state;
+		#startFn = null;
+		storage = [0, 0];
+		constructor(context, opts) {
+			this.#context = context;
+			if (opts?.componentIdx === void 0) throw new TypeError("missing component id during thread creation");
+			this.#componentIdx = opts.componentIdx;
+			if (!opts?.task) throw new TypeError("missing task during thread creation");
+			this.#task = opts.task;
+			if (opts.startFn) {
+				this.#startFn = opts.startFn;
+				this.#state = THREAD_NOT_STARTED;
+			} else this.#state = THREAD_RUNNING;
 		}
-	}
-	start() {
-		if (this.#state !== THREAD_NOT_STARTED) throw new Error(`cannot start thread [${this.#id}] in state [${this.#state}]`);
-		this.#state = THREAD_RUNNING;
-		const startFn = this.#startFn;
-		this.#startFn = null;
-		withCurrentTaskMetaAsync(this.#context.registers, {
-			threadID: this.#id,
-			taskID: this.#task.id(),
-			componentIdx: this.#componentIdx,
-			fn: async () => {
-				getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).throwIfInterrupted();
-				return startFn();
+		id() {
+			return this.#id;
+		}
+		setId(id) {
+			if (this.#id !== null) throw new Error("thread id can only be assigned once");
+			this.#id = id;
+		}
+		componentIdx() {
+			return this.#componentIdx;
+		}
+		task() {
+			return this.#task;
+		}
+		taskID() {
+			return this.#task.id();
+		}
+		state() {
+			return this.#state;
+		}
+		isCancelled() {
+			return this.#task.isCancelled();
+		}
+		isRejected() {
+			return this.#task.isRejected();
+		}
+		notifyProgress() {
+			return this.#task.notifyProgress();
+		}
+		entryFnName() {
+			return this.#task.entryFnName();
+		}
+		getParentSubtask() {
+			return this.#task.getParentSubtask();
+		}
+		async suspend(opts) {
+			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			const task = this.#task;
+			task.endFirstSlice();
+			task.settleCompletion();
+			const { cancellable, readyFn, releaseLock = false } = opts;
+			if (task.deliverPendingCancel({ cancellable })) return false;
+			const reacquireLock = releaseLock && task.needsExclusiveLock() && cstate.exclusivelyLockedBy(task.id());
+			if (reacquireLock) cstate.exclusiveRelease(task.id());
+			try {
+				const keepGoing = await cstate.suspendThread({
+					...opts,
+					cancellable: !!cancellable,
+					thread: this,
+					readyFn: () => cancellable && task.cancellationPending() || readyFn()
+				});
+				cstate.throwIfInterrupted();
+				if (keepGoing && task.deliverPendingCancel({ cancellable })) return false;
+				return !!keepGoing;
+			} finally {
+				if (reacquireLock && !cstate.exclusivelyLockedBy(task.id())) await cstate.acquireExclusiveLock(task.id());
 			}
-		}).then(() => {
-			this.#state = THREAD_COMPLETED;
-			this.#task.removeThread(this);
-		}).catch((err) => {
-			err = recordTrap(this.#context.traps, this.#componentIdx, err);
-			this.#state = THREAD_COMPLETED;
-			DEBUG: debugLog("[AsyncThread#start()] spawned thread errored", {
+		}
+		start() {
+			if (this.#state !== THREAD_NOT_STARTED) throw new Error(`cannot start thread [${this.#id}] in state [${this.#state}]`);
+			this.#state = THREAD_RUNNING;
+			const startFn = this.#startFn;
+			this.#startFn = null;
+			withCurrentTaskMetaAsync(this.#context.registers, {
 				threadID: this.#id,
 				taskID: this.#task.id(),
 				componentIdx: this.#componentIdx,
-				err
+				fn: async () => {
+					getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).throwIfInterrupted();
+					return startFn();
+				}
+			}).then(() => {
+				this.#state = THREAD_COMPLETED;
+				this.#task.removeThread(this);
+			}).catch((err) => {
+				err = recordTrap(this.#context.traps, this.#componentIdx, err);
+				this.#state = THREAD_COMPLETED;
+				DEBUG: debugLog("[AsyncThread#start()] spawned thread errored", {
+					threadID: this.#id,
+					taskID: this.#task.id(),
+					componentIdx: this.#componentIdx,
+					err
+				});
+				this.#task.setErrored(err);
+				this.#task.reject(err);
+				this.#task.removeThread(this);
 			});
-			this.#task.setErrored(err);
-			this.#task.reject(err);
-			this.#task.removeThread(this);
-		});
-	}
-};
+		}
+	};
+}
+let sharedAsyncThread;
 function initializeAsyncThreadClass(context) {
+	const AsyncThread = sharedAsyncThread ??= defineAsyncThread();
 	/**
 	* Construct a thread that uses the context.
 	*
@@ -6872,8 +6914,9 @@ const decodeUtf8 = (RuntimeError, decoder, input) => {
 	}
 };
 const initializeLiftVariant = () => ({ scratch: /* @__PURE__ */ new DataView(/* @__PURE__ */ new ArrayBuffer(8)) });
-const liftFlatBool = /* @__PURE__ */ defineScalarLift(liftFlatBoolPublic, liftFlatBoolDirect, liftFlatBoolMemory);
-function liftFlatBoolPublic(ctx) {
+let registeredBool;
+function liftFlatBool(ctx) {
+	if (!registeredBool) registeredBool = registerScalarLift(liftFlatBool, liftFlatBoolDirect, liftFlatBoolMemory);
 	return [ctx.useDirectParams ? liftFlatBoolDirect(ctx) : liftFlatBoolMemory(ctx), ctx];
 }
 function liftFlatBoolDirect(ctx) {
@@ -6893,8 +6936,9 @@ function liftFlatBoolMemory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 1;
 	return val;
 }
-const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Public, liftFlatS8Direct, liftFlatS8Memory);
-function liftFlatS8Public(ctx) {
+let registeredS8;
+function liftFlatS8(ctx) {
+	if (!registeredS8) registeredS8 = registerScalarLift(liftFlatS8, liftFlatS8Direct, liftFlatS8Memory);
 	if (ctx.useDirectParams) {
 		DEBUG: debugLog("[_liftFlatS8()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
@@ -6917,8 +6961,9 @@ function liftFlatS8Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 1;
 	return val;
 }
-const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Public, liftFlatU8Direct, liftFlatU8Memory);
-function liftFlatU8Public(ctx) {
+let registeredU8;
+function liftFlatU8(ctx) {
+	if (!registeredU8) registeredU8 = registerScalarLift(liftFlatU8, liftFlatU8Direct, liftFlatU8Memory);
 	if (ctx.useDirectParams) {
 		DEBUG: debugLog("[_liftFlatU8()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
@@ -6944,8 +6989,9 @@ function liftFlatU8Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 1;
 	return val;
 }
-const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Public, liftFlatS16Direct, liftFlatS16Memory);
-function liftFlatS16Public(ctx) {
+let registeredS16;
+function liftFlatS16(ctx) {
+	if (!registeredS16) registeredS16 = registerScalarLift(liftFlatS16, liftFlatS16Direct, liftFlatS16Memory);
 	if (ctx.useDirectParams) {
 		DEBUG: debugLog("[_liftFlatS16()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
@@ -6968,8 +7014,9 @@ function liftFlatS16Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 2;
 	return val;
 }
-const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Public, liftFlatU16Direct, liftFlatU16Memory);
-function liftFlatU16Public(ctx) {
+let registeredU16;
+function liftFlatU16(ctx) {
+	if (!registeredU16) registeredU16 = registerScalarLift(liftFlatU16, liftFlatU16Direct, liftFlatU16Memory);
 	if (ctx.useDirectParams) {
 		DEBUG: debugLog("[_liftFlatU16()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
@@ -6997,8 +7044,9 @@ function liftFlatU16Memory(ctx) {
 	if (rem !== 0) ctx.storagePtr += 2 - rem;
 	return val;
 }
-const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Public, liftFlatS32Direct, liftFlatS32Memory);
-function liftFlatS32Public(ctx) {
+let registeredS32;
+function liftFlatS32(ctx) {
+	if (!registeredS32) registeredS32 = registerScalarLift(liftFlatS32, liftFlatS32Direct, liftFlatS32Memory);
 	if (ctx.useDirectParams) {
 		DEBUG: debugLog("[_liftFlatS32()] args", { ctx });
 		if (ctx.params.length === 0) throw new Error("expected at least a single i32 argument");
@@ -7021,8 +7069,9 @@ function liftFlatS32Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 4;
 	return val;
 }
-const liftFlatU32 = /* @__PURE__ */ defineScalarLift(liftFlatU32Public, liftFlatU32Direct, liftFlatU32Memory);
-function liftFlatU32Public(ctx) {
+let registeredU32;
+function liftFlatU32(ctx) {
+	if (!registeredU32) registeredU32 = registerScalarLift(liftFlatU32, liftFlatU32Direct, liftFlatU32Memory);
 	return [ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx), ctx];
 }
 function liftFlatU32Value(ctx) {
@@ -7045,8 +7094,9 @@ function liftFlatU32Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 4;
 	return val;
 }
-const liftFlatS64 = /* @__PURE__ */ defineScalarLift(liftFlatS64Public, liftFlatS64Direct, liftFlatS64Memory);
-function liftFlatS64Public(ctx) {
+let registeredS64;
+function liftFlatS64(ctx) {
+	if (!registeredS64) registeredS64 = registerScalarLift(liftFlatS64, liftFlatS64Direct, liftFlatS64Memory);
 	return [ctx.useDirectParams ? liftFlatS64Direct(ctx) : liftFlatS64Memory(ctx), ctx];
 }
 function liftFlatS64Direct(ctx) {
@@ -7067,8 +7117,9 @@ function liftFlatS64Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 8;
 	return val;
 }
-const liftFlatU64 = /* @__PURE__ */ defineScalarLift(liftFlatU64Public, liftFlatU64Direct, liftFlatU64Memory);
-function liftFlatU64Public(ctx) {
+let registeredU64;
+function liftFlatU64(ctx) {
+	if (!registeredU64) registeredU64 = registerScalarLift(liftFlatU64, liftFlatU64Direct, liftFlatU64Memory);
 	return [ctx.useDirectParams ? liftFlatU64Direct(ctx) : liftFlatU64Memory(ctx), ctx];
 }
 function liftFlatU64Direct(ctx) {
@@ -7089,8 +7140,9 @@ function liftFlatU64Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 8;
 	return val;
 }
-const liftFlatFloat32 = /* @__PURE__ */ defineScalarLift(liftFlatFloat32Public, liftFlatFloat32Direct, liftFlatFloat32Memory);
-function liftFlatFloat32Public(ctx) {
+let registeredFloat32;
+function liftFlatFloat32(ctx) {
+	if (!registeredFloat32) registeredFloat32 = registerScalarLift(liftFlatFloat32, liftFlatFloat32Direct, liftFlatFloat32Memory);
 	return [ctx.useDirectParams ? liftFlatFloat32Direct(ctx) : liftFlatFloat32Memory(ctx), ctx];
 }
 function liftFlatFloat32Direct(ctx) {
@@ -7110,8 +7162,9 @@ function liftFlatFloat32Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 4;
 	return val;
 }
-const liftFlatFloat64 = /* @__PURE__ */ defineScalarLift(liftFlatFloat64Public, liftFlatFloat64Direct, liftFlatFloat64Memory);
-function liftFlatFloat64Public(ctx) {
+let registeredFloat64;
+function liftFlatFloat64(ctx) {
+	if (!registeredFloat64) registeredFloat64 = registerScalarLift(liftFlatFloat64, liftFlatFloat64Direct, liftFlatFloat64Memory);
 	return [ctx.useDirectParams ? liftFlatFloat64Direct(ctx) : liftFlatFloat64Memory(ctx), ctx];
 }
 function liftFlatFloat64Direct(ctx) {
@@ -7131,8 +7184,9 @@ function liftFlatFloat64Memory(ctx) {
 	if (ctx.storageLen !== void 0) ctx.storageLen -= 8;
 	return val;
 }
-const liftFlatChar = /* @__PURE__ */ defineScalarLift(liftFlatCharPublic, liftFlatCharDirect, liftFlatCharMemory);
-function liftFlatCharPublic(ctx) {
+let registeredChar;
+function liftFlatChar(ctx) {
+	if (!registeredChar) registeredChar = registerScalarLift(liftFlatChar, liftFlatCharDirect, liftFlatCharMemory);
 	return [ctx.useDirectParams ? liftFlatCharDirect(ctx) : liftFlatCharMemory(ctx), ctx];
 }
 function liftFlatCharDirect(ctx) {
@@ -8680,72 +8734,76 @@ function lowerFlatErrorContext(_context, errCtxTableIdx, ctx) {
 //#region runtime/intrinsics/future/value.js
 let dropFutureValue;
 /** Everything of a future value but the method named by the dispose symbol of a store. */
-var BaseFutureValue = class {
-	static {
-		dropFutureValue = (value) => value.#drop();
-	}
-	#disposeSymbol;
-	#store;
-	#start;
-	#dropFn;
-	#dropped = false;
-	#delivered = false;
-	#settled;
-	#hideThen = 0;
-	#thenFn;
-	constructor(disposeSymbol, store, start, dropFn) {
-		this.#disposeSymbol = disposeSymbol;
-		this.#store = store;
-		if (typeof start !== "function") throw new TypeError("future start operation must be a function");
-		this.#start = start;
-		this.#dropFn = dropFn;
-		this.#thenFn = this.#then.bind(this);
-	}
-	get then() {
-		return this.#hideThen === 0 ? this.#thenFn : void 0;
-	}
-	#read() {
-		if (!this.#settled) this.#settled = Promise.resolve().then(this.#start);
-		return this.#settled;
-	}
-	resolveAsValue(resolve) {
-		this.#hideThen++;
-		try {
-			resolve(this);
-		} finally {
-			this.#hideThen--;
+function defineBaseFutureValue() {
+	return class BaseFutureValue {
+		static {
+			dropFutureValue = (value) => value.#drop();
 		}
-	}
-	#deliver(resolve, value) {
-		if (typeof value === "object" && value !== null && #store in value && value.#store === this.#store) {
-			value.resolveAsValue(resolve);
-			return;
+		#disposeSymbol;
+		#store;
+		#start;
+		#dropFn;
+		#dropped = false;
+		#delivered = false;
+		#settled;
+		#hideThen = 0;
+		#thenFn;
+		constructor(disposeSymbol, store, start, dropFn) {
+			this.#disposeSymbol = disposeSymbol;
+			this.#store = store;
+			if (typeof start !== "function") throw new TypeError("future start operation must be a function");
+			this.#start = start;
+			this.#dropFn = dropFn;
+			this.#thenFn = this.#then.bind(this);
 		}
-		resolve(value);
-	}
-	#then(resolve, reject) {
-		const droppedError = () => /* @__PURE__ */ new Error("future was dropped");
-		return (this.#dropped ? Promise.reject(droppedError()) : this.#read()).then((box) => {
-			if (this.#dropped) {
-				if (typeof reject === "function") return reject(droppedError());
-				throw droppedError();
+		get then() {
+			return this.#hideThen === 0 ? this.#thenFn : void 0;
+		}
+		#read() {
+			if (!this.#settled) this.#settled = Promise.resolve().then(this.#start);
+			return this.#settled;
+		}
+		resolveAsValue(resolve) {
+			this.#hideThen++;
+			try {
+				resolve(this);
+			} finally {
+				this.#hideThen--;
 			}
-			this.#delivered = true;
-			return this.#deliver(resolve, box.value);
-		}, reject);
-	}
-	/** Drop the readable end and dispose copied values that never reached a recipient. */
-	#drop() {
-		if (this.#dropped) return;
-		this.#dropped = true;
-		this.#dropFn?.();
-		this.#settled?.then((box) => {
-			if (!this.#delivered) disposeHostValue(this.#disposeSymbol, box.value);
-		}, () => {});
-	}
-};
+		}
+		#deliver(resolve, value) {
+			if (typeof value === "object" && value !== null && #store in value && value.#store === this.#store) {
+				value.resolveAsValue(resolve);
+				return;
+			}
+			resolve(value);
+		}
+		#then(resolve, reject) {
+			const droppedError = () => /* @__PURE__ */ new Error("future was dropped");
+			return (this.#dropped ? Promise.reject(droppedError()) : this.#read()).then((box) => {
+				if (this.#dropped) {
+					if (typeof reject === "function") return reject(droppedError());
+					throw droppedError();
+				}
+				this.#delivered = true;
+				return this.#deliver(resolve, box.value);
+			}, reject);
+		}
+		/** Drop the readable end and dispose copied values that never reached a recipient. */
+		#drop() {
+			if (this.#dropped) return;
+			this.#dropped = true;
+			this.#dropFn?.();
+			this.#settled?.then((box) => {
+				if (!this.#delivered) disposeHostValue(this.#disposeSymbol, box.value);
+			}, () => {});
+		}
+	};
+}
+let sharedBaseFutureValue;
 /** Create the future value class of a store, whose instances dispose under the given symbol. */
 function initializeFutureValueClass(disposeSymbol) {
+	const BaseFutureValue = sharedBaseFutureValue ??= defineBaseFutureValue();
 	const store = {};
 	return class FutureValue extends BaseFutureValue {
 		constructor(start, dropFn) {
@@ -9300,66 +9358,70 @@ function initializeFutureWritableEndClass(_context) {
 
 //#endregion
 //#region runtime/intrinsics/future/internal.js
-var InternalFuture = class {
-	#globalFutureMapRep;
-	#pendingBufferMeta = {};
-	#elemMeta;
-	#readEnd;
-	#writeEnd;
-	constructor(context, args) {
-		DEBUG: debugLog("[InternalFuture#constructor()] args", args);
-		if (!args.elemMeta) throw new Error("missing/invalid future element metadata");
-		if (args.tableIdx === void 0) throw new Error("missing/invalid future table idx");
-		if (!args.readWaitable) throw new Error("missing/invalid read waitable");
-		if (!args.writeWaitable) throw new Error("missing/invalid write waitable");
-		const { tableIdx, elemMeta, readWaitable, writeWaitable } = args;
-		this.#elemMeta = args.elemMeta;
-		this.#readEnd = new context.FutureReadableEnd({
-			tableIdx,
-			elemMeta: this.#elemMeta,
-			pendingBufferMeta: this.#pendingBufferMeta,
-			target: "future read end (@ init)",
-			waitable: readWaitable,
-			hostInjectFn: args.hostInjectFn,
-			isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
-			notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped()
-		});
-		this.#writeEnd = new context.FutureWritableEnd({
-			tableIdx,
-			elemMeta: this.#elemMeta,
-			pendingBufferMeta: this.#pendingBufferMeta,
-			target: "future write end (@ init)",
-			waitable: writeWaitable,
-			hostOwned: true,
-			isPeerDroppedFn: () => this.#readEnd.isDropped(),
-			notifyPeerDroppedFn: () => this.#readEnd.notifyDropped()
-		});
-	}
-	/** Stop both endpoints so pending host and guest operations are released. */
-	onInstanceStop() {
-		this.#readEnd.onInstanceStop();
-		this.#writeEnd.onInstanceStop();
-	}
-	elemMeta() {
-		return this.#elemMeta;
-	}
-	readEnd() {
-		return this.#readEnd;
-	}
-	writeEnd() {
-		return this.#writeEnd;
-	}
-	globalFutureMapRep() {
-		return this.#globalFutureMapRep;
-	}
-	setGlobalFutureMapRep(rep) {
-		this.#globalFutureMapRep = rep;
-		this.#readEnd.setGlobalFutureMapRep(rep);
-		this.#writeEnd.setGlobalFutureMapRep(rep);
-	}
-};
+function defineInternalFuture() {
+	return class InternalFuture {
+		#globalFutureMapRep;
+		#pendingBufferMeta = {};
+		#elemMeta;
+		#readEnd;
+		#writeEnd;
+		constructor(context, args) {
+			DEBUG: debugLog("[InternalFuture#constructor()] args", args);
+			if (!args.elemMeta) throw new Error("missing/invalid future element metadata");
+			if (args.tableIdx === void 0) throw new Error("missing/invalid future table idx");
+			if (!args.readWaitable) throw new Error("missing/invalid read waitable");
+			if (!args.writeWaitable) throw new Error("missing/invalid write waitable");
+			const { tableIdx, elemMeta, readWaitable, writeWaitable } = args;
+			this.#elemMeta = args.elemMeta;
+			this.#readEnd = new context.FutureReadableEnd({
+				tableIdx,
+				elemMeta: this.#elemMeta,
+				pendingBufferMeta: this.#pendingBufferMeta,
+				target: "future read end (@ init)",
+				waitable: readWaitable,
+				hostInjectFn: args.hostInjectFn,
+				isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
+				notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped()
+			});
+			this.#writeEnd = new context.FutureWritableEnd({
+				tableIdx,
+				elemMeta: this.#elemMeta,
+				pendingBufferMeta: this.#pendingBufferMeta,
+				target: "future write end (@ init)",
+				waitable: writeWaitable,
+				hostOwned: true,
+				isPeerDroppedFn: () => this.#readEnd.isDropped(),
+				notifyPeerDroppedFn: () => this.#readEnd.notifyDropped()
+			});
+		}
+		/** Stop both endpoints so pending host and guest operations are released. */
+		onInstanceStop() {
+			this.#readEnd.onInstanceStop();
+			this.#writeEnd.onInstanceStop();
+		}
+		elemMeta() {
+			return this.#elemMeta;
+		}
+		readEnd() {
+			return this.#readEnd;
+		}
+		writeEnd() {
+			return this.#writeEnd;
+		}
+		globalFutureMapRep() {
+			return this.#globalFutureMapRep;
+		}
+		setGlobalFutureMapRep(rep) {
+			this.#globalFutureMapRep = rep;
+			this.#readEnd.setGlobalFutureMapRep(rep);
+			this.#writeEnd.setGlobalFutureMapRep(rep);
+		}
+	};
+}
+let sharedInternalFuture;
 /** Create future pairs using the selected readable and writable constructors. */
 function initializeInternalFutureClass(_context) {
+	const InternalFuture = sharedInternalFuture ??= defineInternalFuture();
 	/**
 	* Construct a future whose ends are of the classes in the context.
 	*
@@ -9376,51 +9438,55 @@ function initializeInternalFutureClass(_context) {
 
 //#endregion
 //#region runtime/intrinsics/future/host.js
-var HostFuture = class {
-	#context;
-	#componentIdx;
-	#futureEndWaitableIdx;
-	#futureTableIdx;
-	#payloadLiftFn;
-	#payloadLowerFn;
-	#userFuture;
-	#rep = null;
-	constructor(context, args) {
-		DEBUG: debugLog("[HostFuture#constructor()] args", args);
-		this.#context = context;
-		if (args.componentIdx === void 0) throw new TypeError("missing component idx");
-		this.#componentIdx = args.componentIdx;
-		if (!args.payloadLiftFn) throw new TypeError("missing payload lift fn");
-		this.#payloadLiftFn = args.payloadLiftFn;
-		if (!args.payloadLowerFn) throw new TypeError("missing payload lower fn");
-		this.#payloadLowerFn = args.payloadLowerFn;
-		if (args.futureEndWaitableIdx === void 0) throw new Error("missing future idx");
-		if (args.futureTableIdx === void 0) throw new Error("missing future table idx");
-		this.#futureEndWaitableIdx = args.futureEndWaitableIdx;
-		this.#futureTableIdx = args.futureTableIdx;
-	}
-	setRep(rep) {
-		this.#rep = rep;
-	}
-	getFutureEndWaitableIdx() {
-		return this.#futureEndWaitableIdx;
-	}
-	createUserFuture() {
-		if (this.#userFuture) return this.#userFuture;
-		if (this.#rep === null) throw new Error("unexpectedly missing rep for host future");
-		if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`missing async state for component [${this.#componentIdx}]`);
-		const futureEnd = getFutureEnd(this.#context.ends, {
-			tableIdx: this.#futureTableIdx,
-			futureEndWaitableIdx: this.#futureEndWaitableIdx
-		});
-		if (!futureEnd) throw new Error(`missing future [${this.#futureEndWaitableIdx}] (table [${this.#futureTableIdx}], component [${this.#componentIdx}]`);
-		if (futureEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift future after previous read succeeded");
-		if (futureEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift future while it's in a waitable set");
-		return futureEnd.promise();
-	}
-};
+function defineHostFuture() {
+	return class HostFuture {
+		#context;
+		#componentIdx;
+		#futureEndWaitableIdx;
+		#futureTableIdx;
+		#payloadLiftFn;
+		#payloadLowerFn;
+		#userFuture;
+		#rep = null;
+		constructor(context, args) {
+			DEBUG: debugLog("[HostFuture#constructor()] args", args);
+			this.#context = context;
+			if (args.componentIdx === void 0) throw new TypeError("missing component idx");
+			this.#componentIdx = args.componentIdx;
+			if (!args.payloadLiftFn) throw new TypeError("missing payload lift fn");
+			this.#payloadLiftFn = args.payloadLiftFn;
+			if (!args.payloadLowerFn) throw new TypeError("missing payload lower fn");
+			this.#payloadLowerFn = args.payloadLowerFn;
+			if (args.futureEndWaitableIdx === void 0) throw new Error("missing future idx");
+			if (args.futureTableIdx === void 0) throw new Error("missing future table idx");
+			this.#futureEndWaitableIdx = args.futureEndWaitableIdx;
+			this.#futureTableIdx = args.futureTableIdx;
+		}
+		setRep(rep) {
+			this.#rep = rep;
+		}
+		getFutureEndWaitableIdx() {
+			return this.#futureEndWaitableIdx;
+		}
+		createUserFuture() {
+			if (this.#userFuture) return this.#userFuture;
+			if (this.#rep === null) throw new Error("unexpectedly missing rep for host future");
+			if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`missing async state for component [${this.#componentIdx}]`);
+			const futureEnd = getFutureEnd(this.#context.ends, {
+				tableIdx: this.#futureTableIdx,
+				futureEndWaitableIdx: this.#futureEndWaitableIdx
+			});
+			if (!futureEnd) throw new Error(`missing future [${this.#futureEndWaitableIdx}] (table [${this.#futureTableIdx}], component [${this.#componentIdx}]`);
+			if (futureEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift future after previous read succeeded");
+			if (futureEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift future while it's in a waitable set");
+			return futureEnd.promise();
+		}
+	};
+}
+let sharedHostFuture;
 /** Create host wrappers that look up endpoints in the selected future tables. */
 function initializeHostFutureClass(_context) {
+	const HostFuture = sharedHostFuture ??= defineHostFuture();
 	/**
 	* Construct a host future that uses the context.
 	*
@@ -9866,55 +9932,59 @@ function initializeStreamEndClass(_context) {
 //#region runtime/intrinsics/stream/external.js
 let dropStream;
 /** Everything of a stream but the methods named by the symbols of a context. */
-var BaseStream = class {
-	static {
-		dropStream = (stream) => {
-			stream.#dropFn?.();
-		};
-	}
-	#context;
-	#isReadable;
-	#isWritable;
-	#writeFn;
-	#readFn;
-	#dropFn;
-	constructor(context, args) {
-		DEBUG: debugLog("[Stream#constructor()] args", args);
-		this.#context = context;
-		if (args.globalRep === void 0) throw new TypeError("missing host stream rep");
-		this[context.resourceRep] = args.globalRep;
-		if (args.isReadable === void 0) throw new TypeError("missing readable setting");
-		this.#isReadable = args.isReadable;
-		if (args.isWritable === void 0) throw new TypeError("missing writable setting");
-		this.#isWritable = args.isWritable;
-		if (this.#isWritable && args.writeFn === void 0) throw new TypeError("missing write fn");
-		this.#writeFn = args.writeFn;
-		if (this.#isReadable && args.readFn === void 0) throw new TypeError("missing read fn");
-		this.#readFn = args.readFn;
-		this.#dropFn = args.dropFn;
-	}
-	async return() {
-		this[this.#context.disposeSymbol]();
-		return { done: true };
-	}
-	async next() {
-		DEBUG: debugLog("[Stream#next()]");
-		return this.read();
-	}
-	async read(opts) {
-		DEBUG: debugLog("[Stream#read()]", { opts });
-		if (!this.#isReadable) throw new Error("stream is not marked as readable and cannot be read from");
-		return this.#readFn(opts);
-	}
-	async write(...objects) {
-		DEBUG: debugLog("[Stream#write()]");
-		if (!this.#isWritable) throw new Error("stream is not marked as writable and cannot be written to");
-		if (objects.length !== 1) throw new Error("only single object writes are currently supported");
-		const obj = objects[0];
-		await this.#writeFn(obj);
-	}
-};
+function defineBaseStream() {
+	return class BaseStream {
+		static {
+			dropStream = (stream) => {
+				stream.#dropFn?.();
+			};
+		}
+		#context;
+		#isReadable;
+		#isWritable;
+		#writeFn;
+		#readFn;
+		#dropFn;
+		constructor(context, args) {
+			DEBUG: debugLog("[Stream#constructor()] args", args);
+			this.#context = context;
+			if (args.globalRep === void 0) throw new TypeError("missing host stream rep");
+			this[context.resourceRep] = args.globalRep;
+			if (args.isReadable === void 0) throw new TypeError("missing readable setting");
+			this.#isReadable = args.isReadable;
+			if (args.isWritable === void 0) throw new TypeError("missing writable setting");
+			this.#isWritable = args.isWritable;
+			if (this.#isWritable && args.writeFn === void 0) throw new TypeError("missing write fn");
+			this.#writeFn = args.writeFn;
+			if (this.#isReadable && args.readFn === void 0) throw new TypeError("missing read fn");
+			this.#readFn = args.readFn;
+			this.#dropFn = args.dropFn;
+		}
+		async return() {
+			this[this.#context.disposeSymbol]();
+			return { done: true };
+		}
+		async next() {
+			DEBUG: debugLog("[Stream#next()]");
+			return this.read();
+		}
+		async read(opts) {
+			DEBUG: debugLog("[Stream#read()]", { opts });
+			if (!this.#isReadable) throw new Error("stream is not marked as readable and cannot be read from");
+			return this.#readFn(opts);
+		}
+		async write(...objects) {
+			DEBUG: debugLog("[Stream#write()]");
+			if (!this.#isWritable) throw new Error("stream is not marked as writable and cannot be written to");
+			if (objects.length !== 1) throw new Error("only single object writes are currently supported");
+			const obj = objects[0];
+			await this.#writeFn(obj);
+		}
+	};
+}
+let sharedBaseStream;
 function initializeExternalStreamClass(_context) {
+	const BaseStream = sharedBaseStream ??= defineBaseStream();
 	return class Stream extends BaseStream {
 		constructor(args) {
 			super(_context, args);
@@ -9930,57 +10000,61 @@ function initializeExternalStreamClass(_context) {
 
 //#endregion
 //#region runtime/intrinsics/stream/host.js
-var HostStream = class {
-	#context;
-	#componentIdx;
-	#streamEndWaitableIdx;
-	#streamTableIdx;
-	#payloadLiftFn;
-	#payloadLowerFn;
-	#rep = null;
-	constructor(context, args) {
-		this.#context = context;
-		DEBUG: debugLog("[HostStream#constructor()] args", args);
-		if (args.componentIdx === void 0) throw new TypeError("missing component idx");
-		this.#componentIdx = args.componentIdx;
-		if (!args.payloadLiftFn) throw new TypeError("missing payload lift fn");
-		this.#payloadLiftFn = args.payloadLiftFn;
-		if (!args.payloadLowerFn) throw new TypeError("missing payload lower fn");
-		this.#payloadLowerFn = args.payloadLowerFn;
-		if (args.streamEndWaitableIdx === void 0) throw new Error("missing stream idx");
-		if (args.streamTableIdx === void 0) throw new Error("missing stream table idx");
-		this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
-		this.#streamTableIdx = args.streamTableIdx;
-	}
-	setRep(rep) {
-		this.#rep = rep;
-	}
-	getStreamEndWaitableIdx() {
-		return this.#streamEndWaitableIdx;
-	}
-	createUserStream() {
-		if (this.#rep === null) throw new Error("unexpectedly missing rep for host stream");
-		const streamEnd = getStreamEnd(this.#context.ends, {
-			tableIdx: this.#streamTableIdx,
-			streamEndWaitableIdx: this.#streamEndWaitableIdx
-		});
-		if (streamEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift stream after being notified that the writable end dropped");
-		if (streamEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
-		return new this.#context.Stream({
-			isReadable: streamEnd.isReadable(),
-			isWritable: streamEnd.isWritable(),
-			globalRep: this.#rep,
-			readFn: async (opts) => {
-				return await streamEnd.read(opts);
-			},
-			writeFn: async (v) => {
-				await streamEnd.write(v);
-			},
-			dropFn: () => streamEnd.drop({ allowPendingEvent: true })
-		});
-	}
-};
+function defineHostStream() {
+	return class HostStream {
+		#context;
+		#componentIdx;
+		#streamEndWaitableIdx;
+		#streamTableIdx;
+		#payloadLiftFn;
+		#payloadLowerFn;
+		#rep = null;
+		constructor(context, args) {
+			this.#context = context;
+			DEBUG: debugLog("[HostStream#constructor()] args", args);
+			if (args.componentIdx === void 0) throw new TypeError("missing component idx");
+			this.#componentIdx = args.componentIdx;
+			if (!args.payloadLiftFn) throw new TypeError("missing payload lift fn");
+			this.#payloadLiftFn = args.payloadLiftFn;
+			if (!args.payloadLowerFn) throw new TypeError("missing payload lower fn");
+			this.#payloadLowerFn = args.payloadLowerFn;
+			if (args.streamEndWaitableIdx === void 0) throw new Error("missing stream idx");
+			if (args.streamTableIdx === void 0) throw new Error("missing stream table idx");
+			this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
+			this.#streamTableIdx = args.streamTableIdx;
+		}
+		setRep(rep) {
+			this.#rep = rep;
+		}
+		getStreamEndWaitableIdx() {
+			return this.#streamEndWaitableIdx;
+		}
+		createUserStream() {
+			if (this.#rep === null) throw new Error("unexpectedly missing rep for host stream");
+			const streamEnd = getStreamEnd(this.#context.ends, {
+				tableIdx: this.#streamTableIdx,
+				streamEndWaitableIdx: this.#streamEndWaitableIdx
+			});
+			if (streamEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift stream after being notified that the writable end dropped");
+			if (streamEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
+			return new this.#context.Stream({
+				isReadable: streamEnd.isReadable(),
+				isWritable: streamEnd.isWritable(),
+				globalRep: this.#rep,
+				readFn: async (opts) => {
+					return await streamEnd.read(opts);
+				},
+				writeFn: async (v) => {
+					await streamEnd.write(v);
+				},
+				dropFn: () => streamEnd.drop({ allowPendingEvent: true })
+			});
+		}
+	};
+}
+let sharedHostStream;
 function initializeHostStreamClass(_context) {
+	const HostStream = sharedHostStream ??= defineHostStream();
 	/**
 	* Construct a host stream that uses the context.
 	*
@@ -9997,62 +10071,66 @@ function initializeHostStreamClass(_context) {
 
 //#endregion
 //#region runtime/intrinsics/stream/internal.js
-var InternalStream = class {
-	#pendingBufferMeta = {};
-	#elemMeta;
-	#globalStreamMapRep;
-	#readEnd;
-	#writeEnd;
-	constructor(context, args) {
-		DEBUG: debugLog("[InternalStream#constructor()] args", args);
-		if (!args.elemMeta) throw new Error("missing/invalid stream element metadata");
-		if (args.tableIdx === void 0) throw new Error("missing/invalid stream table idx");
-		if (!args.readWaitable) throw new Error("missing/invalid read waitable");
-		if (!args.writeWaitable) throw new Error("missing/invalid write waitable");
-		const { tableIdx, elemMeta, readWaitable, writeWaitable } = args;
-		this.#elemMeta = elemMeta;
-		this.#readEnd = new context.StreamReadableEnd({
-			tableIdx,
-			elemMeta: this.#elemMeta,
-			pendingBufferMeta: this.#pendingBufferMeta,
-			target: "stream read end (@ init)",
-			waitable: readWaitable,
-			isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
-			notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped()
-		});
-		this.#writeEnd = new context.StreamWritableEnd({
-			tableIdx,
-			elemMeta: this.#elemMeta,
-			pendingBufferMeta: this.#pendingBufferMeta,
-			target: "stream write end (@ init)",
-			waitable: writeWaitable,
-			isPeerDroppedFn: () => this.#readEnd.isDropped(),
-			notifyPeerDroppedFn: () => this.#readEnd.notifyDropped()
-		});
-	}
-	elemMeta() {
-		return this.#elemMeta;
-	}
-	globalStreamMapRep() {
-		return this.#globalStreamMapRep;
-	}
-	setGlobalStreamMapRep(rep) {
-		this.#globalStreamMapRep = rep;
-		this.#readEnd.setGlobalStreamMapRep(rep);
-		this.#writeEnd.setGlobalStreamMapRep(rep);
-	}
-	readEnd() {
-		return this.#readEnd;
-	}
-	writeEnd() {
-		return this.#writeEnd;
-	}
-	onInstanceStop() {
-		this.#readEnd.onInstanceStop();
-		this.#writeEnd.drop({ allowPendingEvent: true });
-	}
-};
+function defineInternalStream() {
+	return class InternalStream {
+		#pendingBufferMeta = {};
+		#elemMeta;
+		#globalStreamMapRep;
+		#readEnd;
+		#writeEnd;
+		constructor(context, args) {
+			DEBUG: debugLog("[InternalStream#constructor()] args", args);
+			if (!args.elemMeta) throw new Error("missing/invalid stream element metadata");
+			if (args.tableIdx === void 0) throw new Error("missing/invalid stream table idx");
+			if (!args.readWaitable) throw new Error("missing/invalid read waitable");
+			if (!args.writeWaitable) throw new Error("missing/invalid write waitable");
+			const { tableIdx, elemMeta, readWaitable, writeWaitable } = args;
+			this.#elemMeta = elemMeta;
+			this.#readEnd = new context.StreamReadableEnd({
+				tableIdx,
+				elemMeta: this.#elemMeta,
+				pendingBufferMeta: this.#pendingBufferMeta,
+				target: "stream read end (@ init)",
+				waitable: readWaitable,
+				isPeerDroppedFn: () => this.#writeEnd?.isDropped() ?? false,
+				notifyPeerDroppedFn: () => this.#writeEnd?.notifyDropped()
+			});
+			this.#writeEnd = new context.StreamWritableEnd({
+				tableIdx,
+				elemMeta: this.#elemMeta,
+				pendingBufferMeta: this.#pendingBufferMeta,
+				target: "stream write end (@ init)",
+				waitable: writeWaitable,
+				isPeerDroppedFn: () => this.#readEnd.isDropped(),
+				notifyPeerDroppedFn: () => this.#readEnd.notifyDropped()
+			});
+		}
+		elemMeta() {
+			return this.#elemMeta;
+		}
+		globalStreamMapRep() {
+			return this.#globalStreamMapRep;
+		}
+		setGlobalStreamMapRep(rep) {
+			this.#globalStreamMapRep = rep;
+			this.#readEnd.setGlobalStreamMapRep(rep);
+			this.#writeEnd.setGlobalStreamMapRep(rep);
+		}
+		readEnd() {
+			return this.#readEnd;
+		}
+		writeEnd() {
+			return this.#writeEnd;
+		}
+		onInstanceStop() {
+			this.#readEnd.onInstanceStop();
+			this.#writeEnd.drop({ allowPendingEvent: true });
+		}
+	};
+}
+let sharedInternalStream;
 function initializeInternalStreamClass(_context) {
+	const InternalStream = sharedInternalStream ??= defineInternalStream();
 	/**
 	* Construct a stream whose ends are of the classes in the context.
 	*
@@ -10073,150 +10151,154 @@ function initializeInternalStreamClass(_context) {
 * Buffer values from a host stream and transfer them to readers in source order.
 * Source reads and cooperative batch yields share the store's host-operation tracking.
 */
-var PendingValueQueue = class {
-	#tracking;
-	#readFn;
-	#elemMeta;
-	#done = false;
-	#sourceReadPromise = null;
-	#synchronousReads = 0;
-	#chunks = [];
-	#head = 0;
-	#prepended = [];
-	#length = 0;
-	constructor(tracking, readFn, elemMeta) {
-		this.#tracking = tracking;
-		this.#readFn = readFn;
-		this.#elemMeta = elemMeta;
-	}
-	get length() {
-		return this.#length;
-	}
-	get done() {
-		return this.#done;
-	}
-	get sourceIsSync() {
-		return !!this.#readFn.sourceIsSync;
-	}
-	push(source) {
-		if (source.length === 0) return 0;
-		this.#chunks.push({
-			data: source,
-			offset: 0
-		});
-		this.#length += source.length;
-		return source.length;
-	}
-	appendReadValue(value) {
-		if (value === void 0) return 0;
-		if (this.#elemMeta.isNumeric) {
-			if (value instanceof ArrayBuffer) value = new Uint8Array(value);
-			if (Array.isArray(value) || ArrayBuffer.isView(value) && "length" in value && typeof value.length === "number") return this.push(value);
+function definePendingValueQueue() {
+	return class PendingValueQueue {
+		#tracking;
+		#readFn;
+		#elemMeta;
+		#done = false;
+		#sourceReadPromise = null;
+		#synchronousReads = 0;
+		#chunks = [];
+		#head = 0;
+		#prepended = [];
+		#length = 0;
+		constructor(tracking, readFn, elemMeta) {
+			this.#tracking = tracking;
+			this.#readFn = readFn;
+			this.#elemMeta = elemMeta;
 		}
-		return this.push([value]);
-	}
-	/** Preserve the promise-returning API and coalesce concurrent public reads. */
-	readSource() {
-		if (this.#sourceReadPromise) return this.#sourceReadPromise;
-		try {
-			const result = this.readSourceOrPromise();
-			if (typeof result !== "number") return result;
-			return this.#sourceReadPromise = Promise.resolve(result).finally(() => {
-				this.#sourceReadPromise = null;
-			});
-		} catch (error) {
-			return this.#sourceReadPromise = Promise.reject(error).finally(() => {
-				this.#sourceReadPromise = null;
-			});
+		get length() {
+			return this.#length;
 		}
-	}
-	/** Keep ready reads synchronous until a bounded batch must yield to the host. */
-	readSourceOrPromise() {
-		if (this.#sourceReadPromise) return this.#sourceReadPromise;
-		let hostRead;
-		try {
-			const result = trackHostOperation(this.#tracking, () => {
-				if (this.#synchronousReads < 64) return hostRead = this.#readFn();
-				return hostRead = yieldToHost().then(() => {
-					if (this.#tracking.storeTrap.stopped) throw this.#tracking.storeTrap.error;
-					return this.#readFn.dropped ? {
-						done: true,
-						value: void 0
-					} : this.#readFn();
-				});
+		get done() {
+			return this.#done;
+		}
+		get sourceIsSync() {
+			return !!this.#readFn.sourceIsSync;
+		}
+		push(source) {
+			if (source.length === 0) return 0;
+			this.#chunks.push({
+				data: source,
+				offset: 0
 			});
-			if (!isPromiseLike(result)) {
-				this.#synchronousReads++;
-				return this.#acceptRead(result);
+			this.#length += source.length;
+			return source.length;
+		}
+		appendReadValue(value) {
+			if (value === void 0) return 0;
+			if (this.#elemMeta.isNumeric) {
+				if (value instanceof ArrayBuffer) value = new Uint8Array(value);
+				if (Array.isArray(value) || ArrayBuffer.isView(value) && "length" in value && typeof value.length === "number") return this.push(value);
 			}
-			this.#synchronousReads = 0;
-			return this.#sourceReadPromise = Promise.resolve(result).then((value) => this.#acceptRead(value), (error) => this.#failedRead(error, hostRead)).finally(() => {
-				this.#sourceReadPromise = null;
-			});
-		} catch (error) {
-			return this.#failedRead(error, hostRead);
+			return this.push([value]);
 		}
-	}
-	#acceptRead(result) {
-		if (this.#readFn.dropped) {
-			disposeHostValue(this.#tracking.symbolDispose, result.value);
+		/** Preserve the promise-returning API and coalesce concurrent public reads. */
+		readSource() {
+			if (this.#sourceReadPromise) return this.#sourceReadPromise;
+			try {
+				const result = this.readSourceOrPromise();
+				if (typeof result !== "number") return result;
+				return this.#sourceReadPromise = Promise.resolve(result).finally(() => {
+					this.#sourceReadPromise = null;
+				});
+			} catch (error) {
+				return this.#sourceReadPromise = Promise.reject(error).finally(() => {
+					this.#sourceReadPromise = null;
+				});
+			}
+		}
+		/** Keep ready reads synchronous until a bounded batch must yield to the host. */
+		readSourceOrPromise() {
+			if (this.#sourceReadPromise) return this.#sourceReadPromise;
+			let hostRead;
+			try {
+				const result = trackHostOperation(this.#tracking, () => {
+					if (this.#synchronousReads < 64) return hostRead = this.#readFn();
+					return hostRead = yieldToHost().then(() => {
+						if (this.#tracking.storeTrap.stopped) throw this.#tracking.storeTrap.error;
+						return this.#readFn.dropped ? {
+							done: true,
+							value: void 0
+						} : this.#readFn();
+					});
+				});
+				if (!isPromiseLike(result)) {
+					this.#synchronousReads++;
+					return this.#acceptRead(result);
+				}
+				this.#synchronousReads = 0;
+				return this.#sourceReadPromise = Promise.resolve(result).then((value) => this.#acceptRead(value), (error) => this.#failedRead(error, hostRead)).finally(() => {
+					this.#sourceReadPromise = null;
+				});
+			} catch (error) {
+				return this.#failedRead(error, hostRead);
+			}
+		}
+		#acceptRead(result) {
+			if (this.#readFn.dropped) {
+				disposeHostValue(this.#tracking.symbolDispose, result.value);
+				this.#done = true;
+				return 0;
+			}
+			const appended = this.appendReadValue(result.value);
+			this.#done = !!result.done;
+			return appended;
+		}
+		#failedRead(error, hostRead) {
+			if (!this.#tracking.storeTrap.stopped) throw error;
+			Promise.resolve(hostRead).then((late) => disposeHostValue(this.#tracking.symbolDispose, late?.value), () => {});
 			this.#done = true;
 			return 0;
 		}
-		const appended = this.appendReadValue(result.value);
-		this.#done = !!result.done;
-		return appended;
-	}
-	#failedRead(error, hostRead) {
-		if (!this.#tracking.storeTrap.stopped) throw error;
-		Promise.resolve(hostRead).then((late) => disposeHostValue(this.#tracking.symbolDispose, late?.value), () => {});
-		this.#done = true;
-		return 0;
-	}
-	prepend(source) {
-		if (source.length === 0) return;
-		const current = this.#prepended.length > 0 ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
-		if (current && current.offset !== 0) {
-			current.data = current.data.slice(current.offset);
-			current.offset = 0;
+		prepend(source) {
+			if (source.length === 0) return;
+			const current = this.#prepended.length > 0 ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+			if (current && current.offset !== 0) {
+				current.data = current.data.slice(current.offset);
+				current.offset = 0;
+			}
+			this.#prepended.push({
+				data: source,
+				offset: 0
+			});
+			this.#length += source.length;
 		}
-		this.#prepended.push({
-			data: source,
-			offset: 0
-		});
-		this.#length += source.length;
-	}
-	drainInto(target, maxCount) {
-		let transferred = 0;
-		let remaining = Math.min(maxCount, this.#length);
-		while (remaining > 0) {
-			const front = this.#prepended.length > 0;
-			const cursor = front ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
-			const chunk = cursor.data;
-			const transfer = Math.min(remaining, chunk.length - cursor.offset);
-			for (let i = 0; i < transfer; i++) target.push(chunk[cursor.offset + i]);
-			cursor.offset += transfer;
-			this.#length -= transfer;
-			transferred += transfer;
-			remaining -= transfer;
-			if (cursor.offset === chunk.length) {
-				if (front) this.#prepended.pop();
-				else {
-					this.#chunks[this.#head++] = void 0;
-					if (this.#head === this.#chunks.length) {
-						this.#chunks = [];
-						this.#head = 0;
-					} else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
-						this.#chunks = this.#chunks.slice(this.#head);
-						this.#head = 0;
+		drainInto(target, maxCount) {
+			let transferred = 0;
+			let remaining = Math.min(maxCount, this.#length);
+			while (remaining > 0) {
+				const front = this.#prepended.length > 0;
+				const cursor = front ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+				const chunk = cursor.data;
+				const transfer = Math.min(remaining, chunk.length - cursor.offset);
+				for (let i = 0; i < transfer; i++) target.push(chunk[cursor.offset + i]);
+				cursor.offset += transfer;
+				this.#length -= transfer;
+				transferred += transfer;
+				remaining -= transfer;
+				if (cursor.offset === chunk.length) {
+					if (front) this.#prepended.pop();
+					else {
+						this.#chunks[this.#head++] = void 0;
+						if (this.#head === this.#chunks.length) {
+							this.#chunks = [];
+							this.#head = 0;
+						} else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
+							this.#chunks = this.#chunks.slice(this.#head);
+							this.#head = 0;
+						}
 					}
 				}
 			}
+			return transferred;
 		}
-		return transferred;
-	}
-};
+	};
+}
+let sharedPendingValueQueue;
 function initializePendingValueQueueClass(tracking) {
+	const PendingValueQueue = sharedPendingValueQueue ??= definePendingValueQueue();
 	/**
 	* Construct a queue that tracks its host reads in the context.
 	*
