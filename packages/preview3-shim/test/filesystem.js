@@ -371,7 +371,7 @@ describe("Descriptor with os.tmpdir()", () => {
     dirDesc[Symbol.dispose]?.();
   });
 
-  test("normalizes paths before checking symlink confinement", async () => {
+  test("resolves .. beneath the directory, as the host does", async () => {
     const dirDesc = await rootDescriptor.openAt(
       {},
       relBase,
@@ -384,7 +384,8 @@ describe("Descriptor with os.tmpdir()", () => {
       await fs.writeFile(path.join(outside, "secret.txt"), "outside");
       await dirDesc.symlinkAt(`../${path.basename(outside)}`, "escape.cleanup");
 
-      const escapedPath = "missing/../escape.cleanup/secret.txt";
+      await dirDesc.createDirectoryAt("inside");
+      const escapedPath = "inside/../escape.cleanup/secret.txt";
       await expect(
         dirDesc.openAt({ symlinkFollow: true }, escapedPath, {}, { read: true }),
       ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
@@ -392,18 +393,22 @@ describe("Descriptor with os.tmpdir()", () => {
         payload: { tag: "not-permitted" },
       });
       await expect(
-        dirDesc.createDirectoryAt("missing/../escape.cleanup/created"),
+        dirDesc.createDirectoryAt("inside/../escape.cleanup/created"),
       ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
       await expect(fs.stat(path.join(outside, "created"))).rejects.toMatchObject({
         code: "ENOENT",
       });
 
-      await dirDesc.createDirectoryAt("inside");
+      // A component that does not exist cannot be stepped back out of
+      await expect(
+        dirDesc.statAt({ symlinkFollow: true }, "missing/../escape.cleanup/secret.txt"),
+      ).rejects.toMatchObject({ payload: { tag: "no-entry" } });
+
       await fs.writeFile(path.join(tmpDir, "inside", "allowed.txt"), "inside");
       await dirDesc.symlinkAt("inside", "inside.cleanup");
       const allowed = await dirDesc.openAt(
         { symlinkFollow: true },
-        "missing/../inside.cleanup/allowed.txt",
+        "inside/../inside.cleanup/allowed.txt",
         {},
         { read: true },
       );
@@ -516,13 +521,23 @@ describe("Descriptor with os.tmpdir()", () => {
     const realPath = path.join(tmpDir, "statat-file.txt");
     const linkSub = `${relBase}/statat-link.txt`;
     const linkPath = path.join(tmpDir, "statat-link.txt");
-    await fs.symlink(realPath, linkPath);
+    await fs.symlink(path.basename(realPath), linkPath);
 
     const stats2 = await rootDescriptor.statAt({ symlinkFollow: false }, linkSub);
     expect(stats2.type).toEqual({ tag: "symbolic-link" });
 
     const stats3 = await rootDescriptor.statAt({ symlinkFollow: true }, linkSub);
     expect(stats3.type).toEqual({ tag: "regular-file" });
+
+    // An absolute target is a host path, which is never followed
+    const absoluteSub = `${relBase}/statat-absolute-link.txt`;
+    await fs.symlink(realPath, path.join(tmpDir, "statat-absolute-link.txt"));
+    await expect(rootDescriptor.statAt({ symlinkFollow: true }, absoluteSub)).rejects.toMatchObject(
+      { payload: { tag: "not-permitted" } },
+    );
+    expect((await rootDescriptor.statAt({ symlinkFollow: false }, absoluteSub)).type).toEqual({
+      tag: "symbolic-link",
+    });
   });
 });
 
@@ -1114,7 +1129,7 @@ describe("Descriptor stream operations", () => {
   preopenTest.concurrent.for(READER_RELEASES)(
     "dropping a readDirectory stream ends the listing when %s",
     async ([_name, iterate], { tmpDir, preopen }) => {
-      // Enough entries that the worker is still listing when the stream is dropped
+      // Enough entries that the listing is unfinished when the stream is dropped
       const listingPath = path.join(tmpDir, "dropped-listing");
       await fs.mkdir(listingPath);
       for (let i = 0; i < 32; i++) {

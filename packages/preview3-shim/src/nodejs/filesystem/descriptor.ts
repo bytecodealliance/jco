@@ -1,7 +1,11 @@
-import fs from "node:fs/promises";
+import fs from "node:fs";
+import { createRequire } from "node:module";
 import nodePath from "node:path";
 import process from "node:process";
+import { promisify } from "node:util";
 import { Worker } from "node:worker_threads";
+
+import type { Dir, NewTime, Stat } from "@bytecodealliance/jco-node-fs";
 
 import { StreamReader, readableByteStreamFromReader } from "../stream.js";
 import { FutureReader } from "../future.js";
@@ -13,6 +17,96 @@ import { wasiTypeFromDirent } from "./utils.js";
 
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
+const closeAsync = promisify(fs.close);
+const fdatasyncAsync = promisify(fs.fdatasync);
+const fstatAsync = promisify(fs.fstat) as (
+  fd: number,
+  options: { bigint: true },
+) => Promise<fs.BigIntStats>;
+const fsyncAsync = promisify(fs.fsync);
+const ftruncateAsync = promisify(fs.ftruncate);
+const futimesAsync = promisify(fs.futimes);
+
+const require = createRequire(import.meta.url);
+let nativeFs: typeof import("@bytecodealliance/jco-node-fs") | undefined;
+
+/**
+ * Load the native filesystem helper
+ *
+ * Directory descriptors are handles opened by the helper, which is what
+ * confines a guest to its preopened directories. There is no path-based
+ * fallback, since that would silently drop the confinement: without the helper
+ * every filesystem operation fails
+ *
+ * @returns {typeof import("@bytecodealliance/jco-node-fs")} The helper
+ * @throws {Error} If the helper has no build for this host or cannot be loaded
+ */
+function native() {
+  if (!nativeFs) {
+    try {
+      nativeFs = require("@bytecodealliance/jco-node-fs");
+    } catch (cause) {
+      throw new Error(
+        "WASI filesystem access requires the native helper @bytecodealliance/jco-node-fs, " +
+          "which could not be loaded on this host",
+        { cause },
+      );
+    }
+  }
+  return nativeFs;
+}
+
+/**
+ * An open file, with the subset of the Node.js `FileHandle` interface that
+ * descriptors use
+ *
+ * Files are opened through a directory handle, which yields a file descriptor
+ * rather than a `FileHandle`
+ */
+class OpenFile {
+  /**
+   * @param {number} fd The file descriptor, owned by this object
+   */
+  constructor(readonly fd: number) {}
+
+  /** @returns {Promise<import("node:fs").BigIntStats>} The file's attributes */
+  stat() {
+    return fstatAsync(this.fd, { bigint: true });
+  }
+
+  /** @returns {Promise<void>} Settles once the file's data is flushed */
+  datasync() {
+    return fdatasyncAsync(this.fd);
+  }
+
+  /** @returns {Promise<void>} Settles once the file's data and metadata are flushed */
+  sync() {
+    return fsyncAsync(this.fd);
+  }
+
+  /**
+   * @param {number} size The new size in bytes
+   * @returns {Promise<void>}
+   */
+  truncate(size: number) {
+    return ftruncateAsync(this.fd, size);
+  }
+
+  /**
+   * @param {number} atime The access time in seconds
+   * @param {number} mtime The modification time in seconds
+   * @returns {Promise<void>}
+   */
+  utimes(atime: number, mtime: number) {
+    return futimesAsync(this.fd, atime, mtime);
+  }
+
+  /** @returns {Promise<void>} Settles once the file descriptor is closed */
+  close() {
+    return closeAsync(this.fd);
+  }
+}
+
 let WORKER = null;
 function worker() {
   return (WORKER ??= new ResourceWorker(
@@ -23,7 +117,7 @@ function worker() {
 /**
  * Write a byte stream to a file in the filesystem worker
  *
- * @param {import("node:fs/promises").FileHandle} handle The open file
+ * @param {OpenFile} handle The open file
  * @param {object} data A readable byte stream
  * @param {{ offset: bigint | number } | { append: true }} position Where to write, either
  *   at an offset within the file or at its end, wherever that is when each chunk is written
@@ -105,8 +199,7 @@ function streamFromWorker(start) {
 }
 
 /**
- * Owns a Node.js `FileHandle` on behalf of a descriptor and the operations
- * started from it
+ * Owns an open file on behalf of a descriptor and the operations started from it
  *
  * Stream operations run in the filesystem worker with the raw fd, and the
  * guest can drop the descriptor while one is still running, ex: by
@@ -119,7 +212,7 @@ function streamFromWorker(start) {
  * left holding a handle, or its fd, that has since been closed
  */
 class SharedFileHandle {
-  /** The Node.js file handle, or null once closed */
+  /** The open file, or null once closed */
   #handle;
   /** Number of operations that are using the handle */
   #operations = 0;
@@ -127,7 +220,7 @@ class SharedFileHandle {
   #closeRequested = false;
 
   /**
-   * @param {import("node:fs/promises").FileHandle} handle The handle to own
+   * @param {OpenFile} handle The handle to own
    */
   constructor(handle) {
     this.#handle = handle;
@@ -137,7 +230,7 @@ class SharedFileHandle {
    * Run an operation, keeping the handle open until the operation settles
    *
    * @template T
-   * @param {(handle: import("node:fs/promises").FileHandle) => Promise<T>} operation
+   * @param {(handle: OpenFile) => Promise<T>} operation
    *   The operation to run with the open handle
    * @returns {Promise<T>} The operation's result
    */
@@ -170,23 +263,34 @@ class SharedFileHandle {
 
 class Descriptor {
   /**
-   * Owner of the Node.js file handle for file operations (FileHandle from
-   * fs.promises.open), which keeps it open for in-flight operations. Null
-   * for preopens and once the descriptor is disposed
+   * Owner of the open file for file operations, which keeps it open for
+   * in-flight operations. Null for directories and once the descriptor is
+   * disposed
    */
   #sharedHandle;
   /** Descriptor flags */
   #mode;
-  /** Absolute filesystem path to the file or directory */
-  #fullPath;
   /** Cleanup finalizer */
   #finalizer;
   /** Host filesystem path for preopened directories */
   #hostPreopen;
+  /**
+   * Handle of the directory this descriptor refers to, which every path
+   * operation is relative to. Undefined for files, and for a preopen until
+   * its first use
+   */
+  #dir: Dir | undefined;
   /** Whether this descriptor refers to a directory. */
   #isDirectory = false;
 
-  static _create(handle, mode, fullPath, isDirectory = false) {
+  /**
+   * Create a descriptor for an open file or directory
+   *
+   * @param {OpenFile | Dir} opened The open file, or the directory's handle
+   * @param {object} mode Descriptor flags
+   * @returns {Descriptor}
+   */
+  static _create(opened, mode) {
     const {
       read = false,
       write = false,
@@ -206,13 +310,17 @@ class Descriptor {
     };
 
     const desc = new Descriptor();
-    desc.#sharedHandle = new SharedFileHandle(handle);
-    desc.#fullPath = fullPath;
-    desc.#isDirectory = isDirectory;
     desc.#mode = merged;
-    desc.#finalizer = registerDispose(desc, null, desc.#sharedHandle, (sharedHandle) =>
-      sharedHandle.close(),
-    );
+    if (opened instanceof OpenFile) {
+      desc.#sharedHandle = new SharedFileHandle(opened);
+      desc.#finalizer = registerDispose(desc, null, desc.#sharedHandle, (sharedHandle) =>
+        sharedHandle.close(),
+      );
+    } else {
+      // A directory handle that is never closed is released with the descriptor
+      desc.#dir = opened;
+      desc.#isDirectory = true;
+    }
 
     return desc;
   }
@@ -251,6 +359,11 @@ class Descriptor {
       this.#finalizer = null;
     }
     this.#sharedHandle = null;
+
+    // A preopen is handed out again by `get-directories`, so it stays usable
+    if (!this.#hostPreopen) {
+      this.#dir?.close();
+    }
   }
 
   /**
@@ -350,6 +463,9 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async syncData() {
+    if (this.#isDirectory) {
+      return this.#syncDir();
+    }
     this.#ensureHandle();
     try {
       await this.#sharedHandle.use((handle) => handle.datasync());
@@ -390,7 +506,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async getType() {
-    if (this.#hostPreopen) {
+    if (this.#isDirectory) {
       return { tag: "directory" };
     }
     try {
@@ -445,6 +561,17 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async setTimes(atimeDesc, mtimeDesc) {
+    if (this.#isDirectory) {
+      const dir = this.#directory();
+      const [atime, mtime] = [newTime(atimeDesc), newTime(mtimeDesc)];
+      try {
+        dir.setTimes(atime, mtime);
+      } catch (e) {
+        throw FSError.from(e);
+      }
+      return;
+    }
+
     this.#ensureHandle();
     const sharedHandle = this.#sharedHandle;
 
@@ -469,16 +596,19 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   readDirectory() {
-    const fullPath = this.#fullPath ?? this.#hostPreopen;
-    if (!fullPath) {
-      throw new FSError("invalid");
+    // The listing is taken from the directory's handle, so it is of the
+    // directory that was opened, whatever its path refers to by now
+    let entries = [];
+    let result = Promise.resolve();
+    try {
+      entries = this.#directory()
+        .readDir()
+        .map(({ name, type }) => ({ name, type: descriptorType(type) }));
+    } catch (e) {
+      result = Promise.reject(FSError.from(e));
     }
 
-    const preopens = preopenEntries.map(([desc, _virtualPath]) => desc.#hostPreopen);
-
-    return streamFromWorker((stream) =>
-      worker().run({ op: "readDir", fullPath, stream, preopens }, [stream]),
-    );
+    return [new StreamReader(iteratorOf(entries)), new FutureReader(result)];
   }
 
   /**
@@ -493,7 +623,7 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async sync() {
-    return this.#hostPreopen ? this.#syncDir() : this.#syncFile();
+    return this.#isDirectory ? this.#syncDir() : this.#syncFile();
   }
 
   /**
@@ -509,10 +639,9 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async createDirectoryAt(path) {
-    await this.#ensureSandboxedPath(path, false);
-    const full = this.#getFullPath(path, false);
+    const dir = this.#directory(path);
     try {
-      await fs.mkdir(full);
+      dir.createDirAt(path);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -531,14 +660,12 @@ class Descriptor {
    */
   async stat() {
     try {
-      let s;
-      if (this.#hostPreopen) {
-        s = await fs.stat(this.#hostPreopen, { bigint: true });
-      } else {
-        this.#ensureHandle();
-        s = await this.#sharedHandle.use((handle) => handle.stat({ bigint: true }));
+      if (this.#isDirectory) {
+        return descriptorStatFromHandle(this.#directory().stat());
       }
 
+      this.#ensureHandle();
+      const s = await this.#sharedHandle.use((handle) => handle.stat());
       return descriptorStat(s);
     } catch (e) {
       throw FSError.from(e);
@@ -566,9 +693,12 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async statAt(flags, path) {
-    await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
-    const full = this.#getFullPath(path, flags.symlinkFollow);
-    return this.#statPath(full, Boolean(flags.symlinkFollow));
+    const dir = this.#directory(path);
+    try {
+      return descriptorStatFromHandle(dir.statAt(path, Boolean(flags.symlinkFollow)));
+    } catch (e) {
+      throw FSError.from(e);
+    }
   }
 
   /**
@@ -592,23 +722,10 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async setTimesAt(flags, path, atimeDesc, mtimeDesc) {
-    await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
-    const full = this.#getFullPath(path, flags.symlinkFollow);
-
-    // The path was checked above, so it is not checked again for the lookup of
-    // the current timestamps. Without symlink-follow, an unchanged timestamp
-    // is the symlink's own
-    const { atime, mtime } = await this.#computeTimestamps(atimeDesc, mtimeDesc, () =>
-      this.#statPath(full, Boolean(flags.symlinkFollow)),
-    );
-
-    if (!flags.symlinkFollow && !fs.lutimes) {
-      throw new FSError("unsupported");
-    }
-
+    const dir = this.#directory(path);
+    const [atime, mtime] = [newTime(atimeDesc), newTime(mtimeDesc)];
     try {
-      const utimesFn = flags.symlinkFollow ? fs.utimes : fs.lutimes;
-      await utimesFn(full, atime, mtime);
+      dir.setTimesAt(path, atime, mtime, Boolean(flags.symlinkFollow));
     } catch (e) {
       throw FSError.from(e);
     }
@@ -635,23 +752,18 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async linkAt(oldFlags, oldPath, newDesc, newPath) {
-    // `fs.link` follows a symlink in `oldPath` on some platforms, such as
-    // macOS, regardless of `oldFlags`, so that symlink's target is checked.
-    // Linux links the symlink itself unless asked to follow it
-    const followsOldPath = Boolean(oldFlags.symlinkFollow) || process.platform !== "linux";
-    await this.#ensureSandboxedPath(oldPath, followsOldPath);
-    await newDesc.#ensureSandboxedPath(newPath, false);
-    const src = this.#getFullPath(oldPath, oldFlags.symlinkFollow);
-    const dst = newDesc.#getFullPath(newPath, false);
+    const dir = this.#directory(oldPath);
+    const newDir = newDesc.#directory(newPath);
 
     // On Windows, a trailing '/' means the path is treated as a
     // directory and hard links to directory are not supported
-    if (process.platform === "win32" && dst.endsWith("/")) {
+    if (process.platform === "win32" && /[\\/]$/.test(newPath)) {
       throw new FSError("no-entry");
     }
 
     try {
-      await fs.link(src, dst);
+      // A symlink at `oldPath` is linked itself, whatever `oldFlags` says
+      dir.linkAt(oldPath, newDir, newPath);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -682,100 +794,31 @@ class Descriptor {
       throw new FSError("access");
     }
 
-    // Windows has no `O_NOFOLLOW`, so opening can follow a symlink in the final
-    // component even without `symlinkFollow`, and that symlink's target is checked.
-    // Elsewhere `O_NOFOLLOW` makes the open itself fail on a final symlink
-    const followsFinal = Boolean(pf.symlinkFollow) || process.platform === "win32";
-    await this.#ensureSandboxedPath(path, followsFinal);
-    const fullPath = this.#getFullPath(path, pf.symlinkFollow);
-    const target = stripTrailingSlash(fullPath);
-
+    const dir = this.#directory(path);
     const mode = {
       ...df,
       read: df.read || !df.write,
       write: df.write || of.create || of.truncate,
     };
 
-    const makeFsFlags = () => {
-      let fsFlags = 0;
-      if (of.create) {
-        fsFlags |= fs.constants.O_CREAT;
-      }
-      if (of.directory) {
-        fsFlags |= fs.constants.O_DIRECTORY;
-      }
-      if (of.exclusive) {
-        fsFlags |= fs.constants.O_EXCL;
-      }
-      if (of.truncate) {
-        fsFlags |= fs.constants.O_TRUNC;
-      }
-      if (mode.read && mode.write) {
-        fsFlags |= fs.constants.O_RDWR;
-      } else if (mode.write) {
-        fsFlags |= fs.constants.O_WRONLY;
-      } else if (mode.read) {
-        fsFlags |= fs.constants.O_RDONLY;
-      }
-      if (df.fileIntegritySync) {
-        fsFlags |= fs.constants.O_SYNC;
-      }
-      if (df.requestedWriteSync) {
-        fsFlags |= fs.constants.O_SYNC;
-      }
-      if (df.dataIntegritySync) {
-        fsFlags |= fs.constants.O_DSYNC;
-      }
-      if (!pf.symlinkFollow) {
-        fsFlags |= fs.constants.O_NOFOLLOW;
-      }
-      return fsFlags;
-    };
-
-    const fsFlags = makeFsFlags();
-
-    if (process.platform === "win32") {
-      if (!pf.symlinkFollow && !of.create) {
-        const isSymlink = await fs
-          .lstat(fullPath)
-          .then((p) => p.isSymbolicLink())
-          .catch(() => false);
-
-        if (isSymlink) {
-          const tag = of.directory ? "not-directory" : "loop";
-          throw new FSError(tag);
-        }
-      }
-
-      if (pf.symlinkFollow && of.directory) {
-        const isFile = await fs
-          .stat(fullPath)
-          .then((p) => !p.isDirectory())
-          .catch(() => false);
-
-        if (isFile) {
-          throw new FSError("not-directory");
-        }
-      }
-    }
-
+    let opened;
     try {
-      const handle = await fs.open(target, fsFlags);
-      const stats = await handle.stat();
-      const isDir = stats.isDirectory();
-      const desc = descriptorCreate(handle, mode, fullPath, isDir);
-
-      if (fullPath.endsWith("/") && !isDir) {
-        desc[symbolDispose]();
-        throw new FSError("not-directory");
-      }
-      return desc;
+      opened = dir.openAt(path, {
+        read: Boolean(mode.read),
+        write: Boolean(mode.write),
+        create: Boolean(of.create),
+        exclusive: Boolean(of.exclusive),
+        truncate: Boolean(of.truncate),
+        directory: Boolean(of.directory),
+        follow: Boolean(pf.symlinkFollow),
+        sync: Boolean(df.fileIntegritySync || df.requestedWriteSync),
+        dsync: Boolean(df.dataIntegritySync),
+      });
     } catch (err) {
-      if (err.code === "ERR_INVALID_ARG_VALUE") {
-        throw new FSError(process.platform === "win32" ? "no-entry" : "invalid");
-      }
       throw FSError.from(err);
     }
+
+    return descriptorCreate(typeof opened === "number" ? new OpenFile(opened) : opened, mode);
   }
 
   /**
@@ -791,11 +834,10 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async readlinkAt(path) {
-    await this.#ensureSandboxedPath(path, false);
-    const full = this.#getFullPath(path, false);
+    const dir = this.#directory(path);
     let target;
     try {
-      target = await fs.readlink(full);
+      target = dir.readlinkAt(path);
     } catch (e) {
       throw FSError.from(e);
     }
@@ -823,10 +865,9 @@ class Descriptor {
     if (path === ".") {
       throw new FSError("invalid");
     }
-    await this.#ensureSandboxedPath(path, false);
-    const full = this.#getFullPath(path, false);
+    const dir = this.#directory(path);
     try {
-      await fs.rmdir(full);
+      dir.removeDirAt(path);
     } catch (e) {
       if (process.platform === "win32" && e.code === "ENOENT") {
         throw new FSError("not-directory");
@@ -850,16 +891,11 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async renameAt(oldPath, newDesc, newPath) {
-    await this.#ensureSandboxedPath(oldPath, false);
-    await newDesc.#ensureSandboxedPath(newPath, false);
-    const src = this.#getFullPath(oldPath, false);
-    const dst = newDesc.#getFullPath(newPath, false);
+    const dir = this.#directory(oldPath);
+    const newDir = newDesc.#directory(newPath);
     try {
-      await fs.rename(src, dst);
+      dir.renameAt(oldPath, newDir, newPath);
     } catch (e) {
-      if (process.platform === "win32" && e.code === "EPERM") {
-        throw new FSError("access");
-      }
       throw FSError.from(e);
     }
   }
@@ -881,22 +917,25 @@ class Descriptor {
     if (target.startsWith("/")) {
       throw new FSError("not-permitted");
     }
-    await this.#ensureSandboxedPath(path, false);
-    const full = this.#getFullPath(path, false);
+    const dir = this.#directory(target, path);
 
     try {
-      await fs.symlink(target, full);
+      dir.symlinkAt(target, path);
     } catch (e) {
-      if (full.endsWith("/") && e.code === "EEXIST") {
-        const isDir = (await fs.stat(full)).isDirectory();
-        const isWin = process.platform === "win32";
+      const isWin = process.platform === "win32";
+      if (path.endsWith("/") && e.code === "EEXIST") {
+        let isDir = false;
+        try {
+          isDir = dir.statAt(path, true).type === "directory";
+        } catch {
+          // Not a directory, as far as the guest can tell
+        }
         if (!isDir) {
-          const tag = isWin ? "no-entry" : "not-directory";
-          throw new FSError(tag);
+          throw new FSError(isWin ? "no-entry" : "not-directory");
         }
       }
 
-      if (process.platform === "win32" && ["EPERM", "EEXIST"].includes(e.code)) {
+      if (isWin && e.code === "EEXIST") {
         throw new FSError("no-entry");
       }
 
@@ -917,29 +956,11 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async unlinkFileAt(path) {
-    await this.#ensureSandboxedPath(path, false);
-    const full = this.#getFullPath(path, false);
-    if (full.endsWith("/")) {
-      const isDir = (await fs.stat(full)).isDirectory();
-      if (isDir) {
-        if (process.platform === "win32") {
-          throw new FSError("access");
-        } else if (process.platform === "darwin") {
-          throw new FSError("not-permitted");
-        } else {
-          throw new FSError("is-directory");
-        }
-      }
-    }
-
+    const dir = this.#directory(path);
     try {
-      await fs.unlink(full);
+      dir.unlinkAt(path);
     } catch (err) {
-      if (process.platform === "win32" && err.code === "EPERM") {
-        throw new FSError("access");
-      } else {
-        throw FSError.from(err);
-      }
+      throw FSError.from(err);
     }
   }
 
@@ -993,11 +1014,9 @@ class Descriptor {
    * @throws {FSError} `payload.tag` contains mapped WASI error code.
    */
   async metadataHashAt(flags, path) {
-    await this.#ensureSandboxedPath(path, Boolean(flags.symlinkFollow));
-    const full = this.#getFullPath(path, false);
+    const dir = this.#directory(path);
     try {
-      const statFn = flags.symlinkFollow ? fs.stat : fs.lstat;
-      const s = await statFn(full, { bigint: true });
+      const s = dir.statAt(path, Boolean(flags.symlinkFollow));
       return { upper: s.mtimeNs, lower: s.ino };
     } catch (e) {
       throw FSError.from(e);
@@ -1006,12 +1025,7 @@ class Descriptor {
 
   async #syncDir() {
     try {
-      const handle = await fs.open(this.#hostPreopen, fs.constants.O_RDONLY);
-      try {
-        await handle.sync();
-      } finally {
-        await handle.close();
-      }
+      this.#directory().sync();
     } catch (e) {
       throw FSError.from(e);
     }
@@ -1066,155 +1080,49 @@ class Descriptor {
   }
 
   /**
-   * Return attributes of the object at a path that has passed the sandbox check
+   * Return the handle that paths given to this descriptor are relative to
    *
-   * @param {string} full Absolute host path
-   * @param {boolean} followSymlinks Whether to stat a final symlink's target or the symlink
-   * @returns {Promise<object>} The `descriptor-stat`
+   * WASI paths are always relative to a directory descriptor. The handle
+   * resolves them beneath its directory, so that neither `..` nor symlinks
+   * lead outside of it, whatever happens to the directory's own path
+   *
+   * @param {...string} paths The paths the operation is given
+   * @returns {Dir} The directory handle
    * @throws {FSError} `payload.tag` contains mapped WASI error code
    */
-  async #statPath(full, followSymlinks) {
-    try {
-      const statFn = followSymlinks ? fs.stat : fs.lstat;
-      return descriptorStat(await statFn(full, { bigint: true }));
-    } catch (e) {
-      throw FSError.from(e);
-    }
-  }
-
-  /**
-   * Resolve a relative subpath against this descriptor.
-   */
-  #getFullPath(subpath, _followSymlinks) {
-    const segments = this.#normalizeSubpath(subpath);
-    const base = this.#hostPreopen ?? this.#fullPath;
-    if (segments.length === 0) {
-      return base;
-    }
-
-    const baseNormalized = stripTrailingSlash(base);
-    return `${baseNormalized}/${segments.join("/")}`;
-  }
-
-  #normalizeSubpath(subpath) {
-    subpath = subpath.replaceAll("\\", "/").replace(/\/\/+/g, "/");
-
-    if (subpath === "") {
-      throw new FSError("no-entry");
-    }
-
-    if (subpath.startsWith("/")) {
-      throw new FSError("not-permitted");
-    }
-
-    const segments = [];
-    for (const seg of subpath.split("/")) {
-      if (seg === "" || seg === ".") {
-        continue;
-      }
-      if (seg === "..") {
-        if (segments.length === 0) {
-          throw new FSError("not-permitted");
-        }
-        segments.pop();
-      } else {
-        segments.push(seg);
-      }
-    }
-
-    return segments;
-  }
-
-  async #statForIdentity() {
-    if (this.#hostPreopen) {
-      return fs.stat(this.#hostPreopen, { bigint: true });
-    }
-    this.#ensureHandle();
-    return this.#sharedHandle.use((handle) => handle.stat({ bigint: true }));
-  }
-
-  // WASI paths are always relative to a directory descriptor. During path
-  // resolution, both `..` and symlinks must not escape that descriptor's base.
-  //
-  // `followFinal` says whether the operation follows a symlink in the final
-  // path component. An operation that does not, such as `lstat` or `unlink`,
-  // acts on the symlink itself, so the symlink's target is not checked
-  async #ensureSandboxedPath(subpath, followFinal: boolean) {
+  #directory(...paths: string[]): Dir {
     if (!this.#isDirectory) {
       throw new FSError("not-directory");
     }
 
-    const base = this.#hostPreopen ?? this.#fullPath;
-    const baseResolved = nodePath.resolve(base);
-    // Validate the same normalized path that the filesystem operation will use.
-    // Otherwise an ENOENT segment followed by `..` can stop validation before a
-    // surviving symlink that #getFullPath later exposes.
-    const segments = this.#normalizeSubpath(subpath);
-    const checkedSegments = followFinal ? segments : segments.slice(0, -1);
-
-    // Walk the path one component at a time, as the kernel does. `current` is
-    // always a path below the base that contains no symlinks. A symlink is not
-    // stepped into, its target's components are queued and walked in turn, so
-    // a symlink that points at another symlink is checked at every level.
-    let current = baseResolved;
-    const pending = [...checkedSegments];
-    let symlinksFollowed = 0;
-
-    while (pending.length > 0) {
-      const seg = pending.shift();
-      if (seg === "" || seg === ".") {
-        continue;
+    for (const path of paths) {
+      if (path.includes("\0")) {
+        throw new FSError(process.platform === "win32" ? "no-entry" : "invalid");
       }
-
-      // Only a symlink's target can contribute `..`, since the subpath is normalized
-      if (seg === "..") {
-        current = nodePath.dirname(current);
-        if (!isWithinPath(baseResolved, current)) {
-          throw new FSError("not-permitted");
-        }
-        continue;
-      }
-
-      const next = nodePath.join(current, seg);
-      let stat;
-      try {
-        stat = await fs.lstat(next);
-      } catch (err) {
-        if (err.code === "ENOENT") {
-          return;
-        }
-        throw FSError.from(err);
-      }
-
-      if (!stat.isSymbolicLink()) {
-        current = next;
-        continue;
-      }
-
-      symlinksFollowed += 1;
-      if (symlinksFollowed > MAX_SYMLINKS_FOLLOWED) {
-        throw new FSError("loop");
-      }
-
-      let target;
-      try {
-        target = await fs.readlink(next);
-      } catch (err) {
-        throw FSError.from(err);
-      }
-
-      // A relative target continues from the symlink's directory. An absolute
-      // target is only allowed below the base, and is walked again from there
-      if (nodePath.isAbsolute(target)) {
-        const targetResolved = nodePath.resolve(target);
-        if (!isWithinPath(baseResolved, targetResolved)) {
-          throw new FSError("not-permitted");
-        }
-        current = baseResolved;
-        target = nodePath.relative(baseResolved, targetResolved);
-      }
-      pending.unshift(...target.split(PATH_SEPARATORS));
     }
+
+    // A preopen is opened on its first use, as it is configured by path and
+    // may not exist yet when it is configured. From then on it refers to the
+    // directory that was found there
+    if (!this.#dir) {
+      const { Dir } = native();
+      // The Windows preopen for every path is the root of the current drive
+      const hostPath = this.#hostPreopen === "//" ? "/" : this.#hostPreopen;
+      try {
+        this.#dir = Dir.open(hostPath);
+      } catch (e) {
+        throw FSError.from(e);
+      }
+    }
+    return this.#dir;
+  }
+
+  async #statForIdentity() {
+    if (this.#isDirectory) {
+      return this.#directory().stat();
+    }
+    this.#ensureHandle();
+    return this.#sharedHandle.use((handle) => handle.stat());
   }
 
   #ensureHandle() {
@@ -1238,6 +1146,79 @@ delete Descriptor._createPreopen;
 
 const descriptorCreate = Descriptor._create;
 delete Descriptor._create;
+
+/**
+ * Convert a `new-timestamp` to the time a directory handle sets
+ *
+ * @param {object} timestamp The `new-timestamp`
+ * @returns {NewTime} Nanoseconds since the epoch, or null for no change
+ * @throws {FSError} If the timestamp's tag is unknown
+ */
+function newTime(timestamp): NewTime {
+  switch (timestamp.tag) {
+    case "now":
+      // The JavaScript clock, so that "now" is the same instant everywhere in the host
+      return BigInt(Date.now()) * 1_000_000n;
+    case "no-change":
+      return null;
+    case "timestamp":
+      return BigInt(timestamp.val.seconds) * NS_PER_SEC + BigInt(timestamp.val.nanoseconds);
+    default:
+      throw new FSError("invalid", `Unknown new-timestamp tag: ${timestamp.tag}`);
+  }
+}
+
+/**
+ * Convert a file type reported by a directory handle to a WASI `descriptor-type`
+ *
+ * @param {string} type The file type
+ * @returns {object} The `descriptor-type`
+ */
+function descriptorType(type) {
+  return type === "unknown" ? { tag: "other", val: undefined } : { tag: type };
+}
+
+/**
+ * Build a WASI `descriptor-stat` from attributes reported by a directory handle
+ *
+ * @param {Stat} s The attributes
+ * @returns {object} The `descriptor-stat`
+ */
+function descriptorStatFromHandle(s: Stat) {
+  return {
+    type: descriptorType(s.type),
+    linkCount: s.nlink,
+    size: s.size,
+    dataAccessTimestamp: nsToDateTime(s.atimeNs),
+    dataModificationTimestamp: nsToDateTime(s.mtimeNs),
+    statusChangeTimestamp: nsToDateTime(s.ctimeNs),
+  };
+}
+
+/**
+ * Build an async iterator over values that are already available
+ *
+ * @template T
+ * @param {T[]} values The values to yield
+ * @returns {AsyncIterableIterator<T>} The iterator
+ */
+function iteratorOf(values) {
+  let index = 0;
+  return {
+    async next() {
+      return index < values.length
+        ? { done: false, value: values[index++] }
+        : { done: true, value: undefined };
+    },
+    async return(value) {
+      index = values.length;
+      return { done: true, value };
+    },
+    [Symbol.asyncIterator]() {
+      return this;
+    },
+  };
+}
 
 /**
  * Build a WASI `descriptor-stat` from Node.js file attributes
@@ -1265,27 +1246,6 @@ function nsToDateTime(ns) {
 
 function timestampToSec({ seconds, nanoseconds }) {
   return Number(seconds) + nanoseconds / 1e9;
-}
-
-function stripTrailingSlash(path) {
-  if (path === "/") {
-    return "/";
-  }
-  return path.replace(/\/+$/, "");
-}
-
-/**
- * Symlinks followed while checking one path before it is reported as a loop,
- * the same limit Linux applies during path resolution
- */
-const MAX_SYMLINKS_FOLLOWED = 40;
-
-/** Separators between the components of a symlink's target */
-const PATH_SEPARATORS = process.platform === "win32" ? /[\\/]+/ : /\/+/;
-
-function isWithinPath(base, candidate) {
-  const relative = nodePath.relative(base, candidate);
-  return relative === "" || (!relative.startsWith("..") && !nodePath.isAbsolute(relative));
 }
 
 const preopenEntries = [];
