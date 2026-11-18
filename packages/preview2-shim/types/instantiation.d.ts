@@ -149,6 +149,26 @@ export interface WASIShimConfig {
     stderr?: object;
     /** Sandbox configuration for restricting guest capabilities */
     sandbox?: SandboxConfig;
+    /**
+     * Node.js only: opt-in trade-offs of behavior for speed, for the preopens
+     * of `sandbox.preopens`. The shared preopens, which an instance uses when
+     * it has none of its own, take theirs from `filesystem._setPreopens` or
+     * `filesystem._setPerformance`.
+     */
+    performance?: PerformanceConfig;
+}
+
+/**
+ * Opt-in trade-offs of behavior for speed in the Node.js shim.
+ * Every member defaults to false.
+ */
+export interface PerformanceConfig {
+    /**
+     * Operate on regular files and directories with synchronous `node:fs`
+     * calls on the main thread instead of in the I/O worker. FIFOs, devices
+     * and sockets stay in the worker.
+     */
+    mainThreadFilesystem?: boolean;
 }
 
 /**

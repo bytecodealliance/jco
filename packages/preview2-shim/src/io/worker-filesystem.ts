@@ -1,11 +1,14 @@
 import fs, { type BigIntStats } from "node:fs";
-import { createRequire } from "node:module";
-import { boundedReadLength, UNCHECKED_READ_LENGTH } from "./file-common.js";
 import { promisify } from "node:util";
-import type { Advice, fadvise as Fadvise } from "@bytecodealliance/jco-node-fs";
-
-const require = createRequire(import.meta.url);
-let nativeFadvise: typeof Fadvise | undefined;
+import type { Advice } from "@bytecodealliance/jco-node-fs";
+import {
+    boundedReadLength,
+    fadvise,
+    lookupType,
+    toFileStats,
+    toMetadataHash,
+    UNCHECKED_READ_LENGTH,
+} from "./file-common.js";
 
 const closeAsync = promisify(fs.close);
 const fdatasyncAsync = promisify(fs.fdatasync);
@@ -27,31 +30,6 @@ interface FileResource {
 
 let nextFileResourceId = 0;
 const fileResources = new Map<number, FileResource>();
-
-function lookupType(obj) {
-    if (obj.isFile()) {
-        return "regular-file";
-    }
-    if (obj.isSocket()) {
-        return "socket";
-    }
-    if (obj.isSymbolicLink()) {
-        return "symbolic-link";
-    }
-    if (obj.isFIFO()) {
-        return "fifo";
-    }
-    if (obj.isDirectory()) {
-        return "directory";
-    }
-    if (obj.isCharacterDevice()) {
-        return "character-device";
-    }
-    if (obj.isBlockDevice()) {
-        return "block-device";
-    }
-    return "unknown";
-}
 
 function getFileResource(id: number) {
     const resource = fileResources.get(id);
@@ -95,16 +73,11 @@ export function fileResourceFd(id: number) {
 }
 
 export function adviseFileResource(id: number, offset: bigint, length: bigint, advice: Advice) {
-    const fadvise = (nativeFadvise ??= require("@bytecodealliance/jco-node-fs").fadvise);
     fadvise(fileResourceFd(id), offset, length, advice);
 }
 
 export async function syncFileResourceData(id: number) {
     await fdatasyncAsync(fileResourceFd(id));
-}
-
-export async function getFileResourceType(id: number) {
-    return lookupType(await fstatAsync(fileResourceFd(id), { bigint: true }));
 }
 
 export async function setFileResourceSize(id: number, size: number) {
@@ -141,18 +114,9 @@ export async function syncFileResource(id: number) {
 }
 
 export async function statFileResource(id: number) {
-    const stats = await fstatAsync(fileResourceFd(id), { bigint: true });
-    return {
-        type: lookupType(stats),
-        nlink: stats.nlink,
-        size: stats.size,
-        atimeNs: stats.atimeNs,
-        mtimeNs: stats.mtimeNs,
-        ctimeNs: stats.ctimeNs,
-    };
+    return toFileStats(await fstatAsync(fileResourceFd(id), { bigint: true }));
 }
 
 export async function metadataHashFileResource(id: number) {
-    const stats = await fstatAsync(fileResourceFd(id), { bigint: true });
-    return { upper: stats.mtimeNs, lower: stats.ino };
+    return toMetadataHash(await fstatAsync(fileResourceFd(id), { bigint: true }));
 }

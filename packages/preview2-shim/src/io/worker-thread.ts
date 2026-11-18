@@ -4,6 +4,7 @@ import { createReadStream, createWriteStream, PathLike } from "node:fs";
 import { hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
+import { checkWorkerPollId } from "./ready-pollables.js";
 import {
     clearOutgoingResponse,
     createHttpRequest,
@@ -23,7 +24,6 @@ import {
     FILE,
     FILESYSTEM_DESCRIPTOR_ADVISE,
     FILESYSTEM_DESCRIPTOR_CLOSE,
-    FILESYSTEM_DESCRIPTOR_GET_TYPE,
     FILESYSTEM_DESCRIPTOR_METADATA_HASH,
     FILESYSTEM_DESCRIPTOR_OPEN,
     FILESYSTEM_DESCRIPTOR_READ,
@@ -68,6 +68,7 @@ import {
     POLL_POLLABLE_DISPOSE,
     POLL_POLLABLE_READY,
     POLL_POLL_LIST,
+    POLL_POLL_LIST_READY,
     SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
     SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
     SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
@@ -117,7 +118,6 @@ import {
 import {
     adviseFileResource,
     fileResourceFd,
-    getFileResourceType,
     metadataHashFileResource,
     openFileResource,
     readFileResource,
@@ -671,8 +671,6 @@ function handle(call, id, payload) {
             return adviseFileResource(id, payload.offset, payload.length, payload.advice);
         case FILESYSTEM_DESCRIPTOR_SYNC_DATA:
             return syncFileResourceData(id);
-        case FILESYSTEM_DESCRIPTOR_GET_TYPE:
-            return getFileResourceType(id);
         case FILESYSTEM_DESCRIPTOR_SET_SIZE:
             return setFileResourceSize(id, payload);
         case FILESYSTEM_DESCRIPTOR_SET_TIMES:
@@ -970,6 +968,17 @@ function handle(call, id, payload) {
 
         case POLL_POLLABLE_READY:
             return polls.get(id).ready;
+        case POLL_POLL_LIST_READY: {
+            const readyList: number[] = [];
+            for (const [idx, pollId] of payload.entries()) {
+                const pollState = polls.get(pollId);
+                pollStateCheck(pollState);
+                if (pollState.ready) {
+                    readyList.push(idx);
+                }
+            }
+            return new Uint32Array(readyList);
+        }
         case POLL_POLLABLE_BLOCK:
             payload = [id];
         // [intentional case fall-through]
@@ -1030,7 +1039,7 @@ function handle(call, id, payload) {
  * @param {PollState} pollState
  */
 function createPoll(pollState) {
-    const pollId = ++pollCnt;
+    const pollId = checkWorkerPollId(++pollCnt);
     pollState.polls.push(pollId);
     polls.set(pollId, pollState);
     return pollId;
