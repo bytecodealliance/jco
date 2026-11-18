@@ -128,7 +128,13 @@ export interface TranspilationOptions {
     /** Output directory */
     outDir?: string;
 
-    /** Whether to use multi memory support */
+    /**
+     * Whether to emit the adapters between composed components with Wasm multi-memory
+     *
+     * Calls between components are several times faster with it, and the output only
+     * runs on engines that support multi-memory. Adapters are rewritten to use a single
+     * memory by default.
+     */
     multiMemory?: boolean;
 
     /** Whether bindgen may emit Wasm exception references (`exnref`) */
