@@ -7,6 +7,7 @@ import type {
 } from '../runtime.js';
 
 interface NativeBuffer {
+    byteLength(value: string, encoding: 'utf8'): number;
     from(
         buffer: ArrayBufferLike,
         offset: number,
@@ -22,13 +23,21 @@ const nativeEncoders = /* @__PURE__ */ new WeakMap<
         encodeInto: StringEncodeInto['encodeInto'];
     }
 >();
-const nonAscii = /[^\x00-\x7f]/;
+
+/** Shortest string that a native call sizes faster than the loop over its code units does. */
+const NATIVE_SIZE_MIN_LENGTH = 32;
+/** Shortest ASCII string that Node's `Buffer` writes faster than `encodeInto` does. */
+const NATIVE_WRITE_MIN_LENGTH = 256;
+/**
+ * A string whose size differs between hosts that count an unpaired surrogate as the three
+ * bytes of the replacement character, as `TextEncoder` encodes it, and hosts that do not.
+ * It is long enough to reach the code that sizes long strings a block at a time.
+ */
+const SURROGATE_PROBE = /* @__PURE__ */ '\ud800a\udc00é中😀\udbff'.repeat(16);
+const SURROGATE_PROBE_SIZE = 16 * 19;
 
 /** Use Node's byte primitives only for the selected, unmodified default encoder. */
-function nativeEncoder(encoder: StringEncodeInto, value: string): NativeBuffer | undefined {
-    if (value.length < 256 || nonAscii.test(value)) {
-        return undefined;
-    }
+function nativeBuffer(encoder: StringEncodeInto): NativeBuffer | undefined {
     const native = nativeEncoders.get(encoder);
     return native && native.encodeInto === encoder.encodeInto ? native.buffer : undefined;
 }
@@ -45,10 +54,13 @@ function requireString(value: unknown): string {
  * of the replacement character that encodes it.
  */
 function utf8Size(s: string, encoder: StringEncodeInto): number {
-    const native = nativeEncoder(encoder, s);
-    if (native) {
-        return s.length;
+    if (s.length >= NATIVE_SIZE_MIN_LENGTH) {
+        const native = nativeBuffer(encoder);
+        if (native) {
+            return native.byteLength(s, 'utf8');
+        }
     }
+
     let len = 0;
     for (let i = 0; i < s.length; i++) {
         const ch = s.charCodeAt(i);
@@ -76,7 +88,12 @@ export const initializeUtf8Encoder: StringModule['initializeUtf8Encoder'] = () =
         process?: { versions?: { node?: string } };
         Buffer?: NativeBuffer;
     };
-    if (host.process?.versions?.node && typeof host.Buffer?.from === 'function') {
+    if (
+        host.process?.versions?.node &&
+        typeof host.Buffer?.from === 'function' &&
+        typeof host.Buffer.byteLength === 'function' &&
+        host.Buffer.byteLength(SURROGATE_PROBE, 'utf8') === SURROGATE_PROBE_SIZE
+    ) {
         nativeEncoders.set(encoder, { buffer: host.Buffer, encodeInto: encoder.encodeInto });
     }
     return encoder;
@@ -120,7 +137,8 @@ function writeUtf8(
     len: number,
     memory: StringMemory,
 ): StringAllocation {
-    const native = nativeEncoder(encoder, s);
+    // `len` is the UTF-8 size of `s`, so `s` is ASCII exactly when the two lengths agree.
+    const native = len === s.length && len >= NATIVE_WRITE_MIN_LENGTH ? nativeBuffer(encoder) : undefined;
     if (native) {
         const written = native.from(memory.buffer, ptr, len).write(s, 0, len, 'utf8');
         if (written !== len) {
