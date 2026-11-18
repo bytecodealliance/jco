@@ -26,6 +26,7 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::names::js_string_literal;
+use crate::transpile_bindgen::js_typed_array_ctor;
 use crate::{ManagesIntrinsics, get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
@@ -3998,6 +3999,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     ),
                 };
 
+                // A host read of the stream returns numeric elements in the typed array
+                // that a read of a guest's stream of the same type returns them in.
+                let payload_typed_array_js = elem_ty
+                    .as_ref()
+                    .and_then(|payload| js_typed_array_ctor(&payload.iface_ty))
+                    .unwrap_or("undefined");
+
                 // Set task memory index and memory object
                 let (component_idx_expr, get_realloc_fn_expr) =
                     if let Some(state) = &self.component_state {
@@ -4036,6 +4044,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 isNumeric: {payload_is_numeric},
                                 isBorrowed: {payload_is_borrow},
                                 isAsyncValue: {payload_is_async_value},
+                                typedArray: {payload_typed_array_js},
                                 flatCount: {payload_flat_count_js},
                                 align32: {payload_align32_js},
                                 size32: {payload_size32_js},
