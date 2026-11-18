@@ -31,9 +31,11 @@ export const wallClock: typeof WallClockNamespace = {
         return { seconds: 0n, nanoseconds: 1e6 };
     },
     now() {
-        const seconds = BigInt(Math.floor(Date.now() / 1e3));
-        const nanoseconds = (Date.now() % 1e3) * 1e6;
-        return { seconds, nanoseconds };
+        // Read the clock once: two readings can straddle a second boundary
+        // and pair the earlier second with the later sub-second part.
+        const milliseconds = Date.now();
+        const seconds = Math.floor(milliseconds / 1e3);
+        return { seconds: BigInt(seconds), nanoseconds: (milliseconds - seconds * 1e3) * 1e6 };
     },
 };
 
@@ -65,7 +67,9 @@ wallClock.now[symbolCabiLower] = ({ memory }: any) => {
         if (retptr % 4) {
             throw new Error("wasi-io trap: retptr not aligned");
         }
-        buf64[(retptr >> 2) + 0] = BigInt(Math.floor(Date.now() / 1e3));
-        buf32[(retptr >> 2) + 8] = (Date.now() % 1e3) * 1e6;
+        const milliseconds = Date.now();
+        const seconds = Math.floor(milliseconds / 1e3);
+        buf64[(retptr >> 2) + 0] = BigInt(seconds);
+        buf32[(retptr >> 2) + 8] = (milliseconds - seconds * 1e3) * 1e6;
     };
 };

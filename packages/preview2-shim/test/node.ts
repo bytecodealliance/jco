@@ -43,6 +43,22 @@ suite("Node.js Preview2", () => {
             }
         });
 
+        test("Wall clock takes seconds and nanoseconds from one reading", async () => {
+            const {
+                clocks: { wallClock },
+            } = await import("@bytecodealliance/preview2-shim");
+
+            // Consecutive readings straddle a second boundary.
+            const dateNow = Date.now;
+            const readings = [1_999, 2_000];
+            Date.now = () => readings.shift() ?? 2_000;
+            try {
+                assert.deepStrictEqual(wallClock.now(), { seconds: 1n, nanoseconds: 999e6 });
+            } finally {
+                Date.now = dateNow;
+            }
+        });
+
         test("Monotonic clock now", async () => {
             const {
                 clocks: { monotonicClock },
