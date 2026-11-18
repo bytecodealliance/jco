@@ -1051,8 +1051,10 @@ impl LiftIntrinsic {
                             let val;
                             if (typedArray !== undefined && ({is_le} || elemSize32 === 1)) {{
                                 // A list of numbers is its elements' bytes as they are in memory.
+                                // Slicing a view copies short lists faster than slicing the buffer,
+                                // and the copy is unshared even when the memory is shared.
                                 ctx.storagePtr = dataPtr + len * elemSize32;
-                                val = new typedArray(ctx.memory.buffer.slice(dataPtr, ctx.storagePtr));
+                                val = new typedArray(ctx.memory.buffer, dataPtr, len).slice();
                             }} else {{
                                 val = [];
                                 for (var i = 0; i < len; i++) {{
