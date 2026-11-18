@@ -1,4 +1,8 @@
-import { yieldToHost } from '../core/scheduling.js';
+/**
+ * Feed queued host stream values into a pending component read.
+ * Preserve source order across cancellation and finish or rebuffer each injected write.
+ */
+
 import type {
     StreamHostInjectContext,
     StreamHostInjectOptions,
@@ -129,16 +133,9 @@ export function genStreamHostInjectFn(
         // Values already buffered from an asynchronous source complete the read at
         // once: waiting on the source for more would hold them until it produces
         // again, and a read cancelled meanwhile would strand them
-        let synchronousReads = 0;
         while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {
             const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
             const appended = typeof result === 'number' ? result : await result;
-            if (typeof result === 'number' && ++synchronousReads >= 64) {
-                synchronousReads = 0;
-                await yieldToHost();
-            } else if (typeof result !== 'number') {
-                synchronousReads = 0;
-            }
             if (readEnd.hasPendingEvent()) {
                 return bail();
             }

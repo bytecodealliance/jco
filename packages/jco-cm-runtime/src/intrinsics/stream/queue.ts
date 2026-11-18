@@ -1,4 +1,8 @@
-import { isPromiseLike } from '../core/promises.js';
+/**
+ * Buffer values from a host stream and transfer them to readers in source order.
+ * Source reads and cooperative batch yields share the store's host-operation tracking.
+ */
+
 import type {
     PendingValueQueueConstructor,
     ComponentHostOperationContext,
@@ -8,6 +12,8 @@ import type {
 } from '../../runtime.js';
 import { trackHostOperation } from '../component.js';
 import { disposeHostValue } from '../core.js';
+import { isPromiseLike } from '../core/promises.js';
+import { yieldToHost } from '../core/scheduling.js';
 
 class PendingValueQueue {
     #tracking: ComponentHostOperationContext;
@@ -16,6 +22,7 @@ class PendingValueQueue {
     #elemMeta: StreamElementMetadata;
     #done = false;
     #sourceReadPromise: Promise<number> | null = null;
+    #synchronousReads = 0;
     #chunks: ({ data: StreamChunk; offset: number } | undefined)[] = [];
     #head = 0;
     #prepended: { data: StreamChunk; offset: number }[] = [];
@@ -84,17 +91,32 @@ class PendingValueQueue {
         }
     }
 
-    /** Avoid a promise and a microtask when the source actually completes synchronously. */
+    /** Keep ready reads synchronous until a bounded batch must yield to the host. */
     readSourceOrPromise(): number | Promise<number> {
         if (this.#sourceReadPromise) {
             return this.#sourceReadPromise;
         }
         let hostRead: ReturnType<StreamReadFn> | undefined;
         try {
-            const result = trackHostOperation(this.#tracking, () => (hostRead = this.#readFn()));
+            // A batch yield is pending host work just like an asynchronous source read.
+            // Track it before suspending so a waiting guest cannot be declared deadlocked.
+            const result = trackHostOperation(this.#tracking, () => {
+                if (this.#synchronousReads < 64) {
+                    return (hostRead = this.#readFn());
+                }
+                return (hostRead = yieldToHost().then(() => {
+                    // Shutdown or disposal can happen while the next read is deferred.
+                    if (this.#tracking.storeTrap.stopped) {
+                        throw this.#tracking.storeTrap.error;
+                    }
+                    return this.#readFn.dropped ? { done: true, value: undefined } : this.#readFn();
+                }));
+            });
             if (!isPromiseLike(result)) {
+                this.#synchronousReads++;
                 return this.#acceptRead(result);
             }
+            this.#synchronousReads = 0;
             return (this.#sourceReadPromise = Promise.resolve(result)
                 .then(
                     (value) => this.#acceptRead(value),
