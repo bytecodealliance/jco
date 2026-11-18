@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
+import { rolldown } from 'rolldown';
+import { fileURLToPath } from 'node:url';
 
-const requireTranspile = createRequire(new URL('../../../jco-transpile/package.json', import.meta.url));
-const { rolldown } = await import(pathToFileURL(requireTranspile.resolve('rolldown')).href);
 const source = `
 import { liftFlatOwn } from '../../src/intrinsics/lift.ts';
 import { initializeRepTableClass } from '../../src/intrinsics/rep-table.ts';
@@ -42,7 +40,7 @@ try {
                     name: 'label-verification',
                     resolveId(id) {
                         if (id === 'label-verification') {
-                            return new URL('./verification.ts', import.meta.url).pathname;
+                            return fileURLToPath(new URL('./verification.ts', import.meta.url));
                         }
                     },
                     load(id) {

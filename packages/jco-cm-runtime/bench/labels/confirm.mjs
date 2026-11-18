@@ -1,36 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { cpus } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const here = dirname(fileURLToPath(import.meta.url));
-const comparisons = [
-    ['retained', 'optimized', 'context-wasm'],
-    ...[
-        'record-flat-16-reused',
-        'record-flat-16-fresh',
-        'record-flat-16-owned',
-        'record-flat-128-owned',
-        'context-js',
-        'context-wasm',
-        'rep-get',
-        'rep-recycle',
-        'lift-flat-16',
-        'lift-memory-16',
-        'utf16-1280-units',
-        'utf8-ascii-4096',
-        'utf8-mixed-4096',
-        'queue-4096-chunks',
-        'bulk-bytes-4096',
-    ].map((name) => ['baseline', 'optimized', name]),
-];
+import { median } from './statistics.mjs';
 
-/** Median of measured durations or ratios. */
-function median(values) {
-    const ordered = [...values].sort((left, right) => left - right);
-    return ordered[Math.floor(ordered.length / 2)];
-}
+const here = dirname(fileURLToPath(import.meta.url));
 
 /** Measure one hot loop, checking its result outside the timed interval. */
 function measure(item, iterations) {
@@ -42,7 +20,7 @@ function measure(item, iterations) {
 }
 
 /** Compare the same workload in two bundles with alternating sample order. */
-async function worker(output, reverse) {
+async function worker(output, comparisons, reverse) {
     const rows = [];
     const order = reverse ? [...comparisons].reverse() : comparisons;
     // Construct each module's classes once so the baseline does not see more
@@ -94,21 +72,34 @@ async function worker(output, reverse) {
 /** Reuse existing bundles and preserve raw paired observations beside them. */
 async function main() {
     const output = resolve(process.argv[2] ?? resolve(here, '../output/labels'));
+    const original = JSON.parse(await readFile(resolve(output, 'results.json'), 'utf8'));
+    const comparisons = original.summary.flatMap(({ workload, baseline }) => [
+        ['debug', 'checked', workload],
+        ...(baseline ? [['baseline', 'checked', workload]] : []),
+    ]);
     if (process.argv[3] === '--worker') {
-        await worker(output, process.argv[4] === 'reverse');
+        await worker(output, comparisons, process.argv[4] === 'reverse');
         return;
+    }
+    for (const { file, sha256 } of original.builds) {
+        const code = await readFile(resolve(output, file));
+        assert.equal(
+            createHash('sha256').update(code).digest('hex'),
+            sha256,
+            'bundle differs from results.json: ' + file,
+        );
     }
     const env = { ...process.env };
     delete env.JCO_DEBUG;
     const rounds = [];
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < original.processes; round++) {
         const stdout = execFileSync(
             process.execPath,
             [fileURLToPath(import.meta.url), output, '--worker', round % 2 ? 'reverse' : 'forward'],
             { env, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 },
         );
         rounds.push(JSON.parse(stdout));
-        console.log(`Paired round ${round + 1}/5`);
+        console.log(`Paired round ${round + 1}/${original.processes}`);
     }
     const summary = comparisons.map(([baseline, variant, name]) => {
         const rows = rounds.map((round) =>
@@ -125,18 +116,16 @@ async function main() {
             maxSpeedup: Math.max(...rows.map((row) => row.speedup)),
         };
     });
-    const original = JSON.parse(await readFile(resolve(output, 'results.json'), 'utf8'));
     const report = {
         node: process.version,
         v8: process.versions.v8,
-        cpu: original.cpu,
+        cpu: cpus()[0].model,
         builds: original.builds,
         measuredAt: new Date().toISOString(),
         rounds,
         summary,
     };
     await writeFile(resolve(output, 'paired.json'), JSON.stringify(report, null, 2) + '\n');
-    await writeFile(resolve(output, 'confirm.mjs.txt'), await readFile(fileURLToPath(import.meta.url)));
     console.table(summary);
 }
 
