@@ -178,7 +178,7 @@ impl StringIntrinsic {
                               }}
                               put(i, ch);
                           }}
-                          return {{ ptr, len, codepoints: [...str].length }};
+                          return {{ ptr, len }};
                       }}
                     "#
                 );
@@ -227,10 +227,8 @@ impl StringIntrinsic {
                           // Compute the exact allocation size up front. Some older preview1
                           // adapters only support an initial allocation, not a subsequent shrink.
                           let len = 0;
-                          let codepoints = 0;
                           for (let i = 0; i < s.length; i++) {{
                               const ch = s.charCodeAt(i);
-                              codepoints++;
                               if (ch < 0x80) {{ len += 1; }}
                               else if (ch < 0x800) {{ len += 2; }}
                               else if (ch >= 0xd800 && ch <= 0xdbff &&
@@ -296,8 +294,7 @@ impl StringIntrinsic {
                               }}
                               if (written !== len) {{ throw new Error(failure); }}
                           }}
-                          const res = {{ ptr, len, codepoints }};
-                          return res;
+                          return {{ ptr, len }};
                       }}
                     "#
                 );
