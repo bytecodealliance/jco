@@ -1024,4 +1024,69 @@ mod tests {
         assert!(!source.contains("unused-runtime"));
         assert!(!source.contains("_jcoResourceTableGetContext"));
     }
+
+    /// A caller that passes a `list<u32>` to a callee with a memory of its own,
+    /// and returns the list that comes back.
+    #[cfg(feature = "transpile-bindgen")]
+    const TWO_MEMORIES: &str = r#"
+        (component
+            (component $callee
+                (core module $m
+                    (memory (export "memory") 1)
+                    (func (export "realloc") (param i32 i32 i32 i32) (result i32)
+                        i32.const 1024)
+                    (func (export "echo") (param i32 i32) (result i32)
+                        (i32.store (i32.const 8) (local.get 0))
+                        (i32.store (i32.const 12) (local.get 1))
+                        (i32.const 8)))
+                (core instance $i (instantiate $m))
+                (func (export "echo") (param "values" (list u32)) (result (list u32))
+                    (canon lift (core func $i "echo")
+                        (memory (core memory $i "memory"))
+                        (realloc (core func $i "realloc")))))
+            (component $caller
+                (import "echo" (func $echo (param "values" (list u32)) (result (list u32))))
+                (core module $libc
+                    (memory (export "memory") 1)
+                    (func (export "realloc") (param i32 i32 i32 i32) (result i32)
+                        i32.const 1024))
+                (core instance $libc (instantiate $libc))
+                (core func $echo_lowered
+                    (canon lower (func $echo)
+                        (memory (core memory $libc "memory"))
+                        (realloc (core func $libc "realloc"))))
+                (core module $m
+                    (import "host" "echo" (func $echo (param i32 i32 i32)))
+                    (func (export "run") (param i32 i32) (result i32)
+                        (call $echo (local.get 0) (local.get 1) (i32.const 16))
+                        (i32.const 16)))
+                (core instance $i (instantiate $m
+                    (with "host" (instance (export "echo" (func $echo_lowered))))))
+                (func (export "run") (param "values" (list u32)) (result (list u32))
+                    (canon lift (core func $i "run")
+                        (memory (core memory $libc "memory"))
+                        (realloc (core func $libc "realloc")))))
+            (instance $callee_instance (instantiate $callee))
+            (instance $caller_instance (instantiate $caller
+                (with "echo" (func $callee_instance "echo"))))
+            (export "run" (func $caller_instance "run")))
+    "#;
+
+    #[cfg(feature = "transpile-bindgen")]
+    #[test]
+    fn typed_list_is_lifted_by_slicing_a_view_of_memory() {
+        let component = wat::parse_str(TWO_MEMORIES).unwrap();
+        let transpiled = transpile(
+            &component,
+            TranspileOpts::builder().name("lists".into()).build(),
+        )
+        .unwrap();
+        let source = generated_javascript(&transpiled);
+
+        // The view spans the list alone, and its copy does not alias guest memory.
+        let lift = source.find("new Uint32Array(memory0.buffer, ptr").unwrap();
+        let statement = source[lift..].lines().next().unwrap();
+        assert!(statement.trim_end().ends_with(").slice();"), "{statement}");
+        assert!(!source.contains("new Uint32Array(memory0.buffer.slice("));
+    }
 }
