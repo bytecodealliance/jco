@@ -100,7 +100,9 @@ and any work performed while evaluating it.
 Only the `debug` profile logs: when `JCO_DEBUG` is set,
 or for bundled runtimes when an instance is created with the `debug` option.
 The `checked` profile omits runtime log calls even when `JCO_DEBUG` is set.
-The explicitly exported `debugLog` utility remains callable in both profiles.
+The exported `debugLog` is an empty function in the checked profile. When a
+bundler includes the checked runtime, it can remove calls to that function
+from the generated bindings as well.
 
 ### Bindings that bundle the runtime
 

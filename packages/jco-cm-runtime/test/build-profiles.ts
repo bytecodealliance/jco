@@ -1,4 +1,5 @@
 import { expect, test } from 'vitest';
+import { rolldown } from 'rolldown';
 import { mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
@@ -41,6 +42,22 @@ test('each profile retains contracts and eliminates only its selected labels', a
             expect(code.includes('[RepTable#insert()] args')).toBe(profile === 'debug');
             expect(code).toContain('corrupt rep table freelist');
             expect(await readFile(join(output, 'runtime.d.ts'), 'utf8')).toContain('CM_RUNTIME_API_VERSION');
+            // Generated bindings import the logger from the public module. Check
+            // that a downstream bundle can eliminate a diagnostic at that call site.
+            const entry = join(directory, 'binding.mjs');
+            await writeFile(
+                entry,
+                `import { debugLog } from './${profile}/intrinsics/core.js'; debugLog('binding diagnostic');`,
+            );
+            const bundle = await rolldown({ input: entry, platform: 'neutral' });
+            try {
+                const {
+                    output: [chunk],
+                } = await bundle.generate({ format: 'esm', minify: true });
+                expect(chunk.code.includes('binding diagnostic')).toBe(profile === 'debug');
+            } finally {
+                await bundle.close();
+            }
             const result = await exec(process.execPath, [conformance, '--runtime-base', output], { cwd: root });
             expect(result.stdout).toContain('CM runtime conformance passed');
         }

@@ -11,90 +11,94 @@ import type {
 import { debugLog } from '../core/debug.js';
 import { getStreamEnd } from './state.js';
 
-class HostStream {
-    #context: HostStreamClassContext;
+function defineHostStream() {
+    return class HostStream {
+        #context: HostStreamClassContext;
 
-    #componentIdx: number;
-    #streamEndWaitableIdx: number;
-    #streamTableIdx: number;
+        #componentIdx: number;
+        #streamEndWaitableIdx: number;
+        #streamTableIdx: number;
 
-    #payloadLiftFn: TaskLiftFn;
-    #payloadLowerFn: TaskLowerFn;
+        #payloadLiftFn: TaskLiftFn;
+        #payloadLowerFn: TaskLowerFn;
 
-    #rep: number | null = null;
+        #rep: number | null = null;
 
-    constructor(context: HostStreamClassContext, args: HostStreamOptions) {
-        this.#context = context;
-        DEBUG: debugLog('[HostStream#constructor()] args', args);
-        if (args.componentIdx === undefined) {
-            throw new TypeError('missing component idx');
-        }
-        this.#componentIdx = args.componentIdx;
+        constructor(context: HostStreamClassContext, args: HostStreamOptions) {
+            this.#context = context;
+            DEBUG: debugLog('[HostStream#constructor()] args', args);
+            if (args.componentIdx === undefined) {
+                throw new TypeError('missing component idx');
+            }
+            this.#componentIdx = args.componentIdx;
 
-        if (!args.payloadLiftFn) {
-            throw new TypeError('missing payload lift fn');
-        }
-        this.#payloadLiftFn = args.payloadLiftFn;
+            if (!args.payloadLiftFn) {
+                throw new TypeError('missing payload lift fn');
+            }
+            this.#payloadLiftFn = args.payloadLiftFn;
 
-        if (!args.payloadLowerFn) {
-            throw new TypeError('missing payload lower fn');
-        }
-        this.#payloadLowerFn = args.payloadLowerFn;
+            if (!args.payloadLowerFn) {
+                throw new TypeError('missing payload lower fn');
+            }
+            this.#payloadLowerFn = args.payloadLowerFn;
 
-        if (args.streamEndWaitableIdx === undefined) {
-            throw new Error('missing stream idx');
-        }
-        if (args.streamTableIdx === undefined) {
-            throw new Error('missing stream table idx');
-        }
-        this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
-        this.#streamTableIdx = args.streamTableIdx;
-    }
-
-    setRep(rep: number) {
-        this.#rep = rep;
-    }
-    getStreamEndWaitableIdx() {
-        return this.#streamEndWaitableIdx;
-    }
-
-    createUserStream() {
-        if (this.#rep === null) {
-            throw new Error('unexpectedly missing rep for host stream');
+            if (args.streamEndWaitableIdx === undefined) {
+                throw new Error('missing stream idx');
+            }
+            if (args.streamTableIdx === undefined) {
+                throw new Error('missing stream table idx');
+            }
+            this.#streamEndWaitableIdx = args.streamEndWaitableIdx;
+            this.#streamTableIdx = args.streamTableIdx;
         }
 
-        const streamEnd = getStreamEnd(this.#context.ends, {
-            tableIdx: this.#streamTableIdx,
-            streamEndWaitableIdx: this.#streamEndWaitableIdx,
-        });
-        if (streamEnd.isDoneState()) {
-            throw new this.#context.RuntimeError(
-                'cannot lift stream after being notified that the writable end dropped',
-            );
+        setRep(rep: number) {
+            this.#rep = rep;
         }
-        if (streamEnd.isInSet()) {
-            throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
+        getStreamEndWaitableIdx() {
+            return this.#streamEndWaitableIdx;
         }
 
-        return new this.#context.Stream({
-            isReadable: streamEnd.isReadable(),
-            isWritable: streamEnd.isWritable(),
-            globalRep: this.#rep,
-            readFn: async (opts?: number | StreamReadOptions) => {
-                return await (streamEnd as StreamReadableEnd).read(opts);
-            },
-            writeFn: async (v: unknown) => {
-                await (streamEnd as StreamWritableEnd).write(v);
-            },
-            // The host may dispose while an already-completed read is
-            // between event publication and its polling continuation.
-            // Preserve that event for the in-flight host promise.
-            dropFn: () => streamEnd.drop({ allowPendingEvent: true }),
-        });
-    }
+        createUserStream() {
+            if (this.#rep === null) {
+                throw new Error('unexpectedly missing rep for host stream');
+            }
+
+            const streamEnd = getStreamEnd(this.#context.ends, {
+                tableIdx: this.#streamTableIdx,
+                streamEndWaitableIdx: this.#streamEndWaitableIdx,
+            });
+            if (streamEnd.isDoneState()) {
+                throw new this.#context.RuntimeError(
+                    'cannot lift stream after being notified that the writable end dropped',
+                );
+            }
+            if (streamEnd.isInSet()) {
+                throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
+            }
+
+            return new this.#context.Stream({
+                isReadable: streamEnd.isReadable(),
+                isWritable: streamEnd.isWritable(),
+                globalRep: this.#rep,
+                readFn: async (opts?: number | StreamReadOptions) => {
+                    return await (streamEnd as StreamReadableEnd).read(opts);
+                },
+                writeFn: async (v: unknown) => {
+                    await (streamEnd as StreamWritableEnd).write(v);
+                },
+                // The host may dispose while an already-completed read is
+                // between event publication and its polling continuation.
+                // Preserve that event for the in-flight host promise.
+                dropFn: () => streamEnd.drop({ allowPendingEvent: true }),
+            });
+        }
+    };
 }
+let sharedHostStream: ReturnType<typeof defineHostStream>;
 
 export function initializeHostStreamClass(_context: HostStreamClassContext): HostStreamConstructor {
+    const HostStream = (sharedHostStream ??= defineHostStream());
     /**
      * Construct a host stream that uses the context.
      *
