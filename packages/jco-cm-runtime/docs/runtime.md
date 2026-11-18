@@ -203,8 +203,10 @@ const { ptr, len, codepoints } = utf8Encode(encoder, 'A😀', realloc, memory);
 ```
 
 A provider can supply its own `encodeInto(input, destination)` to instrument
-writes or integrate an existing UTF-8 codec. It must fill the supplied buffer
-and report the UTF-16 units read and bytes written.
+writes or integrate an existing UTF-8 codec. It reports the UTF-16 units read
+and bytes written. It may stop before the end of the string, on a scalar
+boundary. The runtime then encodes the rest into the same allocation, as some
+Node.js releases stop early although the buffer has room.
 
 ### Transferring byte buffers
 

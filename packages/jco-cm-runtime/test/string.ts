@@ -332,3 +332,150 @@ test.concurrent.each(['ascii', 'é', '😀', '\ud800x\udc00', '\ufeff'])(
         expect(new Uint8Array(memory.buffer, changed.ptr, changed.len)).toEqual(expected);
     },
 );
+
+/** Strings whose exact-size `encodeInto` stops one character early on Node.js 26.13. */
+const shortWrites = [
+    'aaaa\udfff' + 'a'.repeat(19) + '😀' + 'a'.repeat(13) + '߿',
+    '\udfff' + 'a'.repeat(19) + '😀' + 'a'.repeat(13) + '߿',
+    'a'.repeat(60) + 'я',
+    'a'.repeat(52) + 'Ѐ',
+];
+
+/** Byte that surrounds an allocation under test, to show writes stay inside it. */
+const GUARD = 0xa5;
+
+/**
+ * Lower a string into a guarded allocation of exactly its UTF-8 length.
+ *
+ * @param encoder - encoder to lower with
+ * @param value - string to lower
+ * @returns the sizes allocated, the bytes written, and whether the bytes around them are untouched
+ */
+function lowerGuarded(encoder: Parameters<typeof string.utf8Encode>[0], value: string) {
+    const memory = { buffer: new ArrayBuffer(1024) };
+    const bytes = new Uint8Array(memory.buffer).fill(GUARD);
+    const sizes: number[] = [];
+    const { ptr, len } = string.utf8Encode(
+        encoder,
+        value,
+        (_ptr, _oldSize, _alignment, size) => {
+            sizes.push(size);
+            return 8;
+        },
+        memory,
+    );
+    const guarded = bytes.every((byte, i) => (i >= ptr && i < ptr + len) || byte === GUARD);
+    return { sizes, written: bytes.slice(ptr, ptr + len), guarded };
+}
+
+test.concurrent.each(shortWrites)('UTF-8 encoding fills its exact allocation: %j', async (value) => {
+    const expected = new TextEncoder().encode(value);
+    const lowered = lowerGuarded(string.initializeUtf8Encoder(), value);
+    expect(lowered).toEqual({ sizes: [expected.length], written: expected, guarded: true });
+
+    const memory = { buffer: new ArrayBuffer(1024) };
+    const encoded = await string.utf8EncodeAsync(string.initializeUtf8Encoder(), value, async () => 8, memory);
+    expect(encoded).toEqual({ ptr: 8, len: expected.length, codepoints: [...value].length });
+    expect(new Uint8Array(memory.buffer, encoded.ptr, encoded.len)).toEqual(expected);
+});
+
+/**
+ * Create a seeded generator of uniform numbers in [0, 1).
+ *
+ * @param seed - 32-bit state to start from
+ * @returns the generator
+ */
+function random(seed: number): () => number {
+    return () => {
+        seed = (seed + 0x6d2b79f5) | 0;
+        let mixed = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+        mixed = (mixed + Math.imul(mixed ^ (mixed >>> 7), 61 | mixed)) ^ mixed;
+        return ((mixed ^ (mixed >>> 14)) >>> 0) / 0x100000000;
+    };
+}
+
+/**
+ * Build a string of 1 to 200 characters of every UTF-8 length, with lone surrogates.
+ *
+ * @param next - source of uniform numbers in [0, 1)
+ * @returns the string
+ */
+function randomString(next: () => number): string {
+    const between = (low: number, high: number) => low + Math.floor(next() * (high - low));
+    const characters = [
+        () => String.fromCharCode(between(0x20, 0x7f)),
+        () => String.fromCharCode(between(0x80, 0x800)),
+        () => String.fromCharCode(between(0x800, 0xd800)),
+        () => String.fromCodePoint(between(0x10000, 0x110000)),
+        () => String.fromCharCode(between(0xd800, 0xe000)),
+    ];
+
+    // Mostly ASCII, as much text is, with every other kind of character equally likely.
+    let value = '';
+    for (let remaining = between(1, 201); remaining > 0; remaining--) {
+        value += characters[next() < 0.6 ? 0 : between(1, characters.length)]();
+    }
+    return value;
+}
+
+test.concurrent('UTF-8 encoding of arbitrary strings agrees with TextEncoder', () => {
+    const next = random(0x5eed);
+    const reference = new TextEncoder();
+    const encoder = string.initializeUtf8Encoder();
+
+    // Stops at an arbitrary scalar boundary, as an encoder short of room would.
+    let limit = 0;
+    const truncating = {
+        encodeInto: (input: string, destination: Uint8Array) =>
+            reference.encodeInto(input, destination.subarray(0, limit)),
+    };
+
+    // One allocation at 8 holds any generated string, between guard bytes.
+    const memory = { buffer: new ArrayBuffer(8 + 200 * 4 + 8) };
+    const bytes = new Uint8Array(memory.buffer);
+    let expected = new Uint8Array();
+    const lowersExactly = (candidate: typeof truncating, value: string) => {
+        bytes.fill(GUARD);
+        const { ptr, len } = string.utf8Encode(candidate, value, () => 8, memory);
+        return (
+            ptr === 8 &&
+            len === expected.length &&
+            expected.every((byte, i) => bytes[ptr + i] === byte) &&
+            bytes[ptr - 1] === GUARD &&
+            bytes[ptr + len] === GUARD
+        );
+    };
+
+    const failures: string[] = [];
+    for (let i = 0; i < 30_000; i++) {
+        const value = randomString(next);
+        expected = reference.encode(value);
+        limit = Math.floor(next() * (expected.length + 1));
+        try {
+            if (!lowersExactly(encoder, value) || !lowersExactly(truncating, value)) {
+                failures.push(JSON.stringify(value));
+            }
+        } catch (error) {
+            failures.push(`${JSON.stringify(value)}: ${String(error)}`);
+        }
+    }
+    expect(failures.slice(0, 5)).toEqual([]);
+});
+
+test.concurrent.each([
+    ['half of a surrogate pair read', '😀', { read: 1, written: 0 }],
+    ['more read than the string holds', 'é', { read: 2, written: 2 }],
+    ['fewer bytes than the characters read', 'éa', { read: 2, written: 2 }],
+    ['more bytes than the characters read', 'aé', { read: 1, written: 2 }],
+    ['more bytes than the allocation holds', 'é', { read: 1, written: 3 }],
+    ['a negative count', 'é', { read: -1, written: 0 }],
+    ['a fractional count', 'é', { read: 0, written: 0.5 }],
+])('UTF-8 encoding rejects an encoder reporting %s', (_name, value, result) => {
+    const memory = { buffer: new ArrayBuffer(16) };
+    const bytes = new Uint8Array(memory.buffer).fill(GUARD);
+    const { length } = new TextEncoder().encode(value);
+    expect(() => string.utf8Encode({ encodeInto: () => result }, value, () => 4, memory)).toThrow(
+        'failed to encode whole string',
+    );
+    expect(bytes.every((byte, i) => (i >= 4 && i < 4 + length) || byte === GUARD)).toBe(true);
+});

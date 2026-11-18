@@ -87,11 +87,83 @@ function writeUtf8(
     codepoints: number,
     memory: StringMemory,
 ): StringAllocation {
-    const { read, written } = encoder.encodeInto(s, new Uint8Array(memory.buffer, ptr, len));
+    const out = new Uint8Array(memory.buffer, ptr, len);
+    const { read, written } = encoder.encodeInto(s, out);
     if (read !== s.length || written !== len) {
-        throw new Error('failed to encode whole string');
+        finishUtf8(s, read, out, written);
     }
     return { ptr, len, codepoints };
+}
+
+/**
+ * Encode the rest of a string whose encoder stopped before its end.
+ *
+ * An encoder may leave a tail unwritten although the destination has room for it.
+ * Node.js 26.13 stops before a final character in U+0400 to U+07FF when exactly
+ * its two bytes remain, in strings of more than 32 code units. The destination
+ * was sized by `utf8Size`, which measures scalars the same way as this function,
+ * so the tail fills it exactly.
+ *
+ * @param s - string being encoded
+ * @param read - UTF-16 code units of `s` that the encoder consumed
+ * @param out - destination of exactly the UTF-8 length of `s`
+ * @param written - bytes of `out` that the encoder filled
+ * @throws {Error} when the encoder's progress is not a scalar boundary inside
+ *   `s` and `out`, or the tail does not end exactly at the end of `out`
+ */
+function finishUtf8(s: string, read: number, out: Uint8Array, written: number): void {
+    const failure = 'failed to encode whole string';
+    if (read >>> 0 !== read || read > s.length || written >>> 0 !== written || written > out.length) {
+        throw new Error(failure);
+    }
+    // Resuming inside a surrogate pair would encode its second half as a lone surrogate.
+    if (read > 0 && (s.charCodeAt(read - 1) & 0xfc00) === 0xd800 && (s.charCodeAt(read) & 0xfc00) === 0xdc00) {
+        throw new Error(failure);
+    }
+
+    for (let i = read; i < s.length; i++) {
+        let scalar = s.charCodeAt(i);
+        let size = 3;
+        if (scalar < 0x80) {
+            size = 1;
+        } else if (scalar < 0x800) {
+            size = 2;
+        } else if ((scalar & 0xf800) === 0xd800) {
+            const next = s.charCodeAt(i + 1);
+            if (scalar < 0xdc00 && (next & 0xfc00) === 0xdc00) {
+                scalar = 0x10000 + ((scalar - 0xd800) << 10) + (next - 0xdc00);
+                size = 4;
+                i++;
+            } else {
+                // A lone surrogate encodes as U+FFFD, as TextEncoder does.
+                scalar = 0xfffd;
+            }
+        }
+        if (written + size > out.length) {
+            throw new Error(failure);
+        }
+
+        // Write the lead byte, then six bits of the scalar in each continuation byte.
+        if (size === 1) {
+            out[written++] = scalar;
+            continue;
+        }
+        if (size === 2) {
+            out[written++] = 0xc0 | (scalar >> 6);
+        } else if (size === 3) {
+            out[written++] = 0xe0 | (scalar >> 12);
+        } else {
+            out[written++] = 0xf0 | (scalar >> 18);
+            out[written++] = 0x80 | ((scalar >> 12) & 0x3f);
+        }
+        if (size > 2) {
+            out[written++] = 0x80 | ((scalar >> 6) & 0x3f);
+        }
+        out[written++] = 0x80 | (scalar & 0x3f);
+    }
+    if (written !== out.length) {
+        throw new Error(failure);
+    }
 }
 
 export const utf16Encode: StringModule['utf16Encode'] = (context, value, realloc, memory) => {
