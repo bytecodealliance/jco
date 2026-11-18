@@ -41,7 +41,7 @@ export function initializeFutureEndClass(
         #notifyPeerDroppedFn: () => void;
 
         constructor(args: FutureEndOptions) {
-            debugLog('[FutureEnd#constructor()] args', args);
+            DEBUG: debugLog('[FutureEnd#constructor()] args', args);
 
             if (!args.pendingBufferMeta) {
                 throw new Error('missing pending buffer');
@@ -131,7 +131,7 @@ export function initializeFutureEndClass(
             if (!this.#waitable) {
                 throw new Error('missing/invalid waitable');
             }
-            debugLog('[FutureEnd#setPendingEvent()]', {
+            DEBUG: debugLog('[FutureEnd#setPendingEvent()]', {
                 waitable: this.#waitable,
                 waitableinSet: this.#waitable.isInSet(),
                 componentIdx: this.#waitable.componentIdx(),
@@ -157,7 +157,7 @@ export function initializeFutureEndClass(
             if (!this.#waitable) {
                 throw new Error('missing/invalid waitable');
             }
-            debugLog('[FutureEnd#getPendingEvent()]', {
+            DEBUG: debugLog('[FutureEnd#getPendingEvent()]', {
                 waitable: this.#waitable,
                 waitableinSet: this.#waitable.isInSet(),
                 componentIdx: this.#waitable.componentIdx(),

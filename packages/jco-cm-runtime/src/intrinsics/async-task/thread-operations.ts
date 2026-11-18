@@ -7,7 +7,7 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
-import { getCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister } from '../task-context.js';
 
 export function getCurrentThread(
     context: ThreadLookupContext,
@@ -26,7 +26,7 @@ export function getCurrentThread(
     return { id: threadID, componentIdx, taskID: thread.taskID(), task: thread.task(), thread };
 }
 export function currentThreadOrThrow(context: ThreadLookupContext, componentIdx: number): AsyncThreadMeta {
-    const meta = getCurrentTaskMeta(context.registers, componentIdx);
+    const meta = readTaskRegister(context.registers, componentIdx);
     if (!meta) {
         throw new Error(`missing/incomplete global current thread meta for component idx [${componentIdx}]`);
     }
@@ -39,7 +39,7 @@ export function currentThreadOrThrow(context: ThreadLookupContext, componentIdx:
 
 /** Implements `canon thread.yield`. */
 export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationOptions) {
-    debugLog('[asyncYield()] args', { ctx });
+    DEBUG: debugLog('[asyncYield()] args', { ctx });
     const { componentIdx, isCancellable } = ctx;
     const { thread, task } = currentThreadOrThrow(_context, componentIdx);
 
@@ -67,7 +67,7 @@ export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationO
 
 /** Implements `canon thread.index`. */
 export function threadIndex(_context: ThreadLookupContext, componentIdx: number) {
-    const meta = getCurrentTaskMeta(_context.registers, componentIdx);
+    const meta = readTaskRegister(_context.registers, componentIdx);
     if (!meta) {
         throw new Error('missing/incomplete global current thread meta for component idx [' + componentIdx + ']');
     }
@@ -76,7 +76,7 @@ export function threadIndex(_context: ThreadLookupContext, componentIdx: number)
 
 /** Implements `canon thread.suspend`. */
 export async function threadSuspend(_context: ThreadControlContext, ctx: ThreadOperationOptions) {
-    debugLog('[threadSuspend()] args', { ctx });
+    DEBUG: debugLog('[threadSuspend()] args', { ctx });
     const { componentIdx, isCancellable } = ctx;
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
@@ -96,7 +96,7 @@ export function threadNewIndirect(
     context: number,
 ) {
     const { componentIdx, getStartFuncTableFn } = ctx;
-    debugLog('[threadNewIndirect()] args', { componentIdx, startFuncIdx, context });
+    DEBUG: debugLog('[threadNewIndirect()] args', { componentIdx, startFuncIdx, context });
 
     const table = getStartFuncTableFn();
     if (!table) {
@@ -151,7 +151,7 @@ export function threadNewIndirect(
 /** Implements `canon thread.resume-later`. */
 export function threadResumeLater(_context: ThreadControlContext, ctx: { componentIdx: number }, threadHandle: number) {
     const { componentIdx } = ctx;
-    debugLog('[threadResumeLater()] args', { componentIdx, threadHandle });
+    DEBUG: debugLog('[threadResumeLater()] args', { componentIdx, threadHandle });
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!cstate) {
@@ -174,7 +174,7 @@ export function threadSuspendThenResume(
     threadIdx: number,
 ) {
     const { componentIdx, isCancellable } = ctx;
-    debugLog('[threadSuspendThenResume()] args', { componentIdx, isCancellable, threadIdx });
+    DEBUG: debugLog('[threadSuspendThenResume()] args', { componentIdx, isCancellable, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -196,7 +196,7 @@ export function threadSuspendThenResume(
 /** Implements `canon thread.yield-then-resume`. */
 export function threadYieldThenResume(_context: ThreadControlContext, ctx: ThreadOperationOptions, threadIdx: number) {
     const { componentIdx, isCancellable } = ctx;
-    debugLog('[threadYieldThenResume()] args', { componentIdx, isCancellable, threadIdx });
+    DEBUG: debugLog('[threadYieldThenResume()] args', { componentIdx, isCancellable, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -222,7 +222,7 @@ export function threadSuspendThenPromote(
     threadIdx: number,
 ) {
     const { componentIdx, isCancellable } = ctx;
-    debugLog('[threadSuspendThenPromote()] args', { componentIdx, isCancellable, threadIdx });
+    DEBUG: debugLog('[threadSuspendThenPromote()] args', { componentIdx, isCancellable, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -252,7 +252,7 @@ export function threadSuspendThenPromote(
 /** Implements `canon thread.yield-then-promote`. */
 export function threadYieldThenPromote(_context: ThreadControlContext, ctx: ThreadOperationOptions, threadIdx: number) {
     const { componentIdx, isCancellable } = ctx;
-    debugLog('[threadYieldThenPromote()] args', { componentIdx, isCancellable, threadIdx });
+    DEBUG: debugLog('[threadYieldThenPromote()] args', { componentIdx, isCancellable, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);

@@ -166,6 +166,7 @@ export interface TranspileOpts extends TypegenOptions {
     multiMemory?: boolean;
     perfStringsSkipCopyUtf8Validation?: boolean;
     perfStringsSkipCopyUtf16Validation?: boolean;
+    perfSyncFastPath?: boolean;
     bindgenEnableWasmExnref?: boolean;
     experimentalIdlImports?: boolean;
     optArgs?: string[];
@@ -175,6 +176,8 @@ export interface TranspileOpts extends TypegenOptions {
     wasiShim?: boolean;
     /** Optional module specifier imported by generated bindings, never loaded during transpilation. */
     cmRuntimeEsModule?: string;
+    /** Whether the bundled Component Model runtime keeps its diagnostics. */
+    runtimeProfile?: "checked" | "debug";
     flagsAsBigInt?: boolean;
     variantsInlineCases?: boolean;
     useNamespaceObjects?: boolean;

@@ -47,7 +47,8 @@ use bindings::exports::local::js_component_bindgen::scripts::{
 };
 use bindings::{
     AsyncImportsExports, AsyncMode, BindingsMode, EnabledFeatureSet, ExportType, GenerateOptions,
-    InstantiationMode, PackageMismatch, Transpiled, TypeGenerationOptions, UnpackError, Wit,
+    InstantiationMode, PackageMismatch, RuntimeProfile, Transpiled, TypeGenerationOptions,
+    UnpackError, Wit,
 };
 
 /// Implementation of the `js-component-bindgen` world
@@ -121,6 +122,8 @@ impl bindings::Guest for JsComponentBindgenComponent {
                         .build(),
                 )
                 .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
+                .runtime_profile(options.runtime_profile.map(Into::into).unwrap_or_default())
+                .perf_sync_fast_path(options.perf_sync_fast_path.unwrap_or(false))
                 .build(),
         )
         .map_err(|e| format!("{e:?}"))
@@ -350,6 +353,15 @@ fn parse_package_spec(spec: &str) -> Option<String> {
     UnresolvedPackageGroup::parse("package-spec.wit", &source)
         .ok()
         .map(|group| group.main.name.to_string())
+}
+
+impl From<RuntimeProfile> for js_component_bindgen::RuntimeProfile {
+    fn from(value: RuntimeProfile) -> Self {
+        match value {
+            RuntimeProfile::Checked => js_component_bindgen::RuntimeProfile::Checked,
+            RuntimeProfile::Debug => js_component_bindgen::RuntimeProfile::Debug,
+        }
+    }
 }
 
 impl From<InstantiationMode> for js_component_bindgen::InstantiationMode {

@@ -115,6 +115,35 @@ impl TypeGenerationConfig {
 
 // TODO(breaking): merge TranspileOpts into this non-exhaustive configuration at
 // the next major release, so new options no longer need a separate type.
+/// Which removable statements of the Component Model runtime generated bindings keep.
+///
+/// The runtime labels its diagnostic statements `DEBUG`. Assertions, canonical ABI
+/// traps and validation of what a guest or host passes are kept by every profile.
+///
+/// A profile applies where the runtime is bundled into the bindings. Bindings that
+/// import a runtime take what that runtime was built with.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RuntimeProfile {
+    /// Remove diagnostics.
+    #[default]
+    Checked,
+    /// Keep diagnostics. They are logged when `JCO_DEBUG` is
+    /// set, or when an instance is created with the `debug` option.
+    Debug,
+}
+
+impl RuntimeProfile {
+    /// The statement labels that this profile removes.
+    #[cfg(feature = "embedded-cm-runtime")]
+    pub(crate) fn dropped_labels(self) -> &'static [&'static str] {
+        match self {
+            Self::Checked => &["DEBUG"],
+            Self::Debug => &[],
+        }
+    }
+}
+
 /// Extensible configuration for `transpile_with_config`.
 ///
 /// `TranspileOpts` keeps its published fields so existing struct literals remain
@@ -136,6 +165,20 @@ pub struct TranspileConfig {
     /// Controls declaration contracts independently of the embedding tool defaults.
     #[builder(default)]
     pub type_generation: TypeGenerationConfig,
+    /// Which diagnostics and assertions the bundled runtime keeps.
+    #[builder(default)]
+    pub runtime_profile: RuntimeProfile,
+    /// Call synchronous exports and imports without creating a task, thread or
+    /// subtask for each call, in components where doing so cannot be observed.
+    ///
+    /// Takes effect only for a component in which nothing can observe that
+    /// state: one component instance, with no asynchronous function, lift or
+    /// lower, no stream, future or error context, no JSPI import or export, no
+    /// built-in other than those of resources, and neither call tracking,
+    /// asm.js output nor optimized import bindings. Any other component is
+    /// generated as without the option.
+    #[builder(default)]
+    pub perf_sync_fast_path: bool,
     /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     /// Intrinsics are generated inline when this is `None` (the default),
@@ -245,9 +288,14 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         call_tracking,
         optional_result_payloads,
         type_generation,
+        runtime_profile,
+        perf_sync_fast_path,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
     } = config;
+    // Only the bundled runtime is reduced to a profile.
+    #[cfg(not(feature = "embedded-cm-runtime"))]
+    let _ = runtime_profile;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
     let external_runtime = cm_runtime_es_module.is_some();
@@ -361,6 +409,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         cm_runtime_es_module.as_deref(),
         call_tracking,
         type_generation.typed_error_classes,
+        perf_sync_fast_path,
         &mut files,
     );
 
@@ -389,8 +438,9 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         if bundle_runtime && name.ends_with(".js") {
             let source = std::str::from_utf8(source)
                 .with_context(|| format!("generated module {name} is not UTF-8"))?;
-            if let Some(linked) = embedded_runtime::link(source, opts.instantiation_mode.is_some())
-                .with_context(|| format!("failed to bundle the runtime into {name}"))?
+            if let Some(linked) =
+                embedded_runtime::link(source, opts.instantiation_mode.is_some(), runtime_profile)
+                    .with_context(|| format!("failed to bundle the runtime into {name}"))?
             {
                 files_out.push((name.to_string(), linked.into_bytes()));
                 continue;
@@ -731,18 +781,19 @@ mod tests {
         // once as it is instantiated.
         let (per_instance, inside_instantiate) = logger(Some(InstantiationMode::Sync));
         assert!(per_instance.contains("?? ") && per_instance.contains("JCO_DEBUG"));
-        assert!(per_instance.contains("console.debug(message, ...args) : () => {}"));
         #[cfg(not(feature = "embedded-cm-runtime"))]
         {
             // Inline intrinsics are defined in `instantiate`, where `options` is.
+            assert!(per_instance.contains("console.debug(message, ...args) : () => {}"));
             assert!(
                 per_instance
                     .contains("(options?.debug ?? !!globalThis?.process?.env?.JCO_DEBUG) ?")
             );
             assert_eq!(inside_instantiate, Some(true));
         }
-        // The bundled runtime of an instance is created outside `instantiate`,
-        // which passes its choice in.
+        // The bundled runtime of an instance is found outside `instantiate`, which
+        // passes its choice in. Instances that choose alike share a runtime, whose
+        // logger follows the choice already resolved against the environment.
         #[cfg(feature = "embedded-cm-runtime")]
         {
             assert_eq!(inside_instantiate, Some(false));
@@ -754,7 +805,11 @@ mod tests {
                     .build(),
             )
             .unwrap();
-            assert!(generated_javascript(&source).contains("$instance(options?.debug);"));
+            let source = generated_javascript(&source);
+            assert!(source.contains("$runtime(options?.debug);"));
+            assert!(source.contains(
+                "$debug ? (message, ...args) => console.debug(message, ...args) : () => {}"
+            ));
         }
 
         // Neither calls a global that a local name of the bindings could capture.

@@ -346,6 +346,8 @@ export interface TaskMeta {
 }
 export interface TaskRegisters {
     [componentIdx: number]: TaskMeta | null | undefined;
+    /** Register of host tasks, whose component index of -1 is not an array index. */
+    host?: TaskMeta | null;
     current?: TaskMeta | null;
     /**
      * Context slots in force in place of those of any thread. Set while a guest function wrapped
@@ -411,6 +413,7 @@ export interface RepTableConstructor {
 }
 /** Context passed to the generated element lift/lower functions. */
 export interface BufferElementContext {
+    memoryView?: DataView;
     storagePtr: number;
     memory: RuntimeMemory;
     componentIdx: number;
@@ -454,6 +457,10 @@ export interface ManagedBufferOptions {
     target?: unknown;
 }
 export interface ManagedBuffer {
+    /** Optional bulk byte capability; false falls back to resource-aware read/write. */
+    readonly copyTo?: (target: ManagedBuffer, count: number) => boolean;
+    /** An owned byte chunk, or undefined when the provider requires generic reads. */
+    readonly readBytes?: (count: number) => Uint8Array | undefined;
     capacity: number;
     processed: number;
     target: unknown;
@@ -820,6 +827,8 @@ export interface ComponentAsyncStateConstructor {
     };
 }
 export interface ComponentStoreAsyncState {
+    /** Host completions in one microtask checkpoint share a scheduler wakeup. */
+    hostWakeupScheduled?: boolean;
     readonly idleWaiters: Set<() => void>;
     // Opaque host timer handle, kept portable between Node and browsers.
     deadlockCheck: unknown | null;
@@ -1234,6 +1243,8 @@ export type TaskCallback = ((...args: number[]) => number | Promise<number>) & {
 export type TaskPostReturn = (value: unknown) => unknown;
 
 export interface TaskLiftContext {
+    /** Cached view; runtime operations refresh it when the memory buffer changes. */
+    memoryView?: DataView;
     componentIdx: number;
     params: unknown[];
     memory?: RuntimeMemory | null;
@@ -1249,6 +1260,8 @@ export interface TaskLiftContext {
 export type TaskLiftFn = (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
 
 export interface TaskLowerContext {
+    /** Cached view; runtime operations refresh it when the memory buffer changes. */
+    memoryView?: DataView;
     componentIdx: number;
     params?: unknown[];
     useDirectParams?: boolean;
@@ -2585,6 +2598,12 @@ export interface StreamElementMetadata extends FutureElementMetadata {
 }
 export type StreamCleanup = () => void;
 export type StreamHostInjectFn = (args: { count: number }) => Promise<StreamCleanup>;
+/** The host values behind a lowered stream, which a host read takes without a copy through the guest. */
+export interface StreamHostSource {
+    readonly values: PendingValueQueue;
+    /** Drops the writable end, once the source is exhausted. */
+    readonly close: () => void;
+}
 export interface StreamEndOptions {
     readonly tableIdx: number;
     readonly waitable: ComponentWaitable;
@@ -2682,6 +2701,8 @@ export interface StreamPayloadEnd {
 }
 export interface StreamReadableEnd extends StreamPayloadEnd {
     readonly read: (options?: number | StreamReadOptions) => Promise<StreamReadResult>;
+    /** Names the host values the end reads, for a stream lowered from the host. */
+    readonly setHostSource: (source: StreamHostSource) => void;
     /** Drops the end once the instance stopped; an interrupted host read then fails instead of ending. */
     readonly onInstanceStop: () => void;
 }
@@ -2793,8 +2814,16 @@ export interface PendingValueQueue {
     readonly push: (source: StreamChunk) => number;
     readonly appendReadValue: (value: unknown) => number;
     readonly readSource: () => Promise<number>;
+    /** Optional synchronous completion capability for ready sources. */
+    readonly readSourceOrPromise?: () => number | Promise<number>;
     readonly prepend: (source: StreamChunk) => void;
     readonly drainInto: (target: unknown[], maxCount: number) => number;
+    /**
+     * Optional capability to remove up to `maxCount` bytes of the first queued chunk, as a copy.
+     * Returns nothing unless that chunk is a `Uint8Array`, and one that holds `maxCount` bytes
+     * unless `allowShort`.
+     */
+    readonly takeBytes?: (maxCount: number, allowShort: boolean) => Uint8Array | undefined;
 }
 export interface PendingValueQueueConstructor {
     new (readFn: StreamReadFn, elemMeta: StreamElementMetadata): PendingValueQueue;

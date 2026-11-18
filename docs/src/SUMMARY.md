@@ -13,6 +13,7 @@
         - [Filesystem helpers](./wasi/preview2-shim/helpers/filesystem.md)
     - [Preview 3 shim](./wasi/preview3-shim.md)
 - [Performance](./performance/index.md)
+    - [Sync fast path](./performance/sync-fast-path.md)
     - [Benchmarks](./performance/benchmarks/index.md)
         - [Development-use `jco serve`](./performance/benchmarks/development-use-jco-serve.md)
 - [JavaScript ecosystem interoperability](./interop/index.md)

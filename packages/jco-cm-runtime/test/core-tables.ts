@@ -147,3 +147,21 @@ test.concurrent('guest buffers validate alignment and bounds even for zero-lengt
     ).not.toThrow();
     expect(() => core.ManagedBuffer.validateGuestBuffer(memory, 3, 10, { ...elemMeta, isNone: true })).not.toThrow();
 });
+
+test.concurrent('bulk bytes copy overlapping memory and return owned host chunks', () => {
+    const { core } = create();
+    const memory = new WebAssembly.Memory({ initial: 1, maximum: 2 });
+    new Uint8Array(memory.buffer).set([1, 2, 3, 4]);
+    const elemMeta = { align32: 1, payloadTypeName: 'U8', isNumeric: true };
+    const source = new core.ManagedBuffer({ componentIdx: 0, capacity: 4, start: 0, memory, elemMeta });
+    const target = new core.ManagedBuffer({ componentIdx: 1, capacity: 4, start: 1, memory, elemMeta });
+    expect(source.copyTo!(target, 4)).toBe(true);
+    expect([...new Uint8Array(memory.buffer, 1, 4)]).toEqual([1, 2, 3, 4]);
+    const reader = new core.ManagedBuffer({ componentIdx: 1, capacity: 4, start: 1, memory, elemMeta });
+    const host = new core.ManagedBuffer({ componentIdx: -1, capacity: 4, data: [], elemMeta });
+    expect(reader.copyTo!(host, 4)).toBe(true);
+    const bytes = host.readBytes!(4)!;
+    new Uint8Array(memory.buffer).fill(99);
+    memory.grow(1);
+    expect([...bytes]).toEqual([1, 2, 3, 4]);
+});

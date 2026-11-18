@@ -1,8 +1,10 @@
+import { transferBuffer } from '../buffers.js';
 import type {
     StreamReadableEndConstructor,
     StreamEndpointClassContext,
     StreamElementMetadata,
     StreamEndOptions,
+    StreamHostSource,
     StreamInnerCopyOptions,
     StreamReadOptions,
     StreamReadResult,
@@ -11,6 +13,7 @@ import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { asyncBlockedCode } from '../async-task.js';
 import { promiseWithResolvers } from '../core/promises.js';
+import { yieldToHost } from '../core/scheduling.js';
 import type { StreamEndSuperclass } from './inheritance.js';
 export function initializeStreamReadableEndClass(_context: StreamEndpointClassContext): StreamReadableEndConstructor {
     const StreamEnd: StreamEndSuperclass = _context.StreamEnd;
@@ -23,8 +26,13 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         #endOfStream = false;
         #stopError: Error | null = null;
 
+        // only populated for a stream lowered from the host
+        #hostSource: StreamHostSource | null = null;
+        // settles the wait of a host read on the host source, while there is one
+        #wakeHostSourceRead: (() => void) | null = null;
+
         constructor(args: StreamEndOptions) {
-            debugLog('[StreamReadableEnd#constructor()] args', args);
+            DEBUG: debugLog('[StreamReadableEnd#constructor()] args', args);
             super(args);
             this.#elemMeta = args.elemMeta;
         }
@@ -34,6 +42,19 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         }
         isWritable() {
             return false;
+        }
+
+        setHostSource(source: StreamHostSource) {
+            if (this.#hostSource) {
+                throw new Error('host source is already set');
+            }
+            this.#hostSource = source;
+        }
+
+        drop(opts?: { allowPendingEvent?: boolean }) {
+            super.drop(opts);
+            // A source that never produces again must not hold a host read past the drop.
+            this.#wakeHostSourceRead?.();
         }
 
         onInstanceStop() {
@@ -47,7 +68,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         }
 
         async read(opts: number | StreamReadOptions = 1): Promise<StreamReadResult> {
-            debugLog('[StreamReadableEnd#read()]');
+            DEBUG: debugLog('[StreamReadableEnd#read()]');
 
             if (this.#endOfStream) {
                 return { value: undefined, done: true };
@@ -71,7 +92,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     this.#result = newResult;
                     await p;
                 } catch (err) {
-                    debugLog('[StreamReadableEnd#read()] error waiting for previous read', err);
+                    DEBUG: debugLog('[StreamReadableEnd#read()] error waiting for previous read', err);
                     // If the previous write we were waiting on errors for any reason,
                     // we can ignore it and attempt to continue with this read
                     // which may also fail for a similar reason
@@ -86,6 +107,26 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
 
             count = Math.min(count, _context.ManagedBuffer.MAX_LENGTH);
             try {
+                // Both ends of a stream lowered from the host are the host's once it is lifted
+                // again. With nothing pending for a guest, the values need not pass through
+                // the buffers and events of a copy.
+                const hostSource = this.#hostSource;
+                if (
+                    hostSource &&
+                    this.isIdleState() &&
+                    !this.hasPendingEvent() &&
+                    !this.hasPendingBuffer() &&
+                    !this.isDropped() &&
+                    !this.isPeerDropped()
+                ) {
+                    const result = await this.#readHostSource(hostSource, count, rejectLength, dropAfterCopy);
+                    if (this.#result === newResult) {
+                        this.#result = null;
+                    }
+                    resolve(result);
+                    return result;
+                }
+
                 const { id: bufferID, buffer } = _context.buffers.createBuffer({
                     componentIdx: -1, // componentIdx of -1 indicates the host
                     count,
@@ -167,17 +208,19 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     this.#result = null;
                 }
                 if (transferred > 0) {
-                    const values = buffer.read(transferred);
                     const { typedArray } = this.#elemMeta;
+                    const bytes = typedArray === Uint8Array ? buffer.readBytes?.(transferred) : undefined;
+                    const values = bytes ? undefined : buffer.read(transferred);
                     const value =
-                        typedArray === undefined ? (count === 1 ? values[0] : values) : new typedArray(values);
+                        bytes ??
+                        (typedArray === undefined ? (count === 1 ? values![0] : values!) : new typedArray(values!));
                     // An option's none value is undefined, but still an item.
                     resolve({ value, done: false });
                 } else {
                     resolve({ value: undefined, done: true });
                 }
             } catch (err) {
-                debugLog('[StreamReadableEnd#read()] error', err);
+                DEBUG: debugLog('[StreamReadableEnd#read()] error', err);
                 reject(err);
             }
 
@@ -187,6 +230,126 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                 result.rejectedLength = rejectedLength;
             }
             return result;
+        }
+
+        /**
+         * Reads from the host source of the stream, with the results that a copy through
+         * the guest's end gives, taking the values from where the injected writes take them.
+         *
+         * @param source - the host values behind the stream
+         * @param count - the most values to read
+         * @param rejectLength - the length above which the read is rejected and ends the stream
+         * @param dropAfterCopy - whether the read is the last one of the stream
+         * @returns the result of the read
+         */
+        async #readHostSource(
+            source: StreamHostSource,
+            count: number,
+            rejectLength: number | undefined,
+            dropAfterCopy: boolean,
+        ): Promise<StreamReadResult> {
+            DEBUG: debugLog('[StreamReadableEnd#readHostSource()] args', { count, rejectLength, dropAfterCopy });
+            const queue = source.values;
+            const { typedArray, isNone, payloadTypeName } = this.#elemMeta;
+            // Bytes the source produced as a `Uint8Array` are read as one, also from a stream whose
+            // metadata names no typed array. Its other values are then read as they were given.
+            const keepsByteChunks = typedArray === undefined && payloadTypeName === 'U8';
+            const values: unknown[] = [];
+            let bytes: Uint8Array | undefined;
+            let remaining = count;
+            let synchronousReads = 0;
+
+            // A guest that still holds the handle finds the end busy, as during a copy.
+            this.setCopyState(StreamEnd.CopyState.ASYNC_COPYING);
+            try {
+                for (;;) {
+                    if (count === 0) {
+                        // A zero-length read only waits until there is something to read.
+                        if (queue.length > 0) {
+                            return { value: undefined, done: true };
+                        }
+                    } else {
+                        // Bytes that one chunk can serve are copied at once, not value by value.
+                        if ((typedArray === Uint8Array || keepsByteChunks) && values.length === 0) {
+                            // A read that keeps byte chunks ends with the chunk, so as not to
+                            // return its bytes as values along with those of the next one.
+                            const allowShort = keepsByteChunks || !queue.sourceIsSync || queue.done;
+                            bytes = queue.takeBytes?.(remaining, allowShort);
+                            if (bytes) {
+                                break;
+                            }
+                        }
+                        remaining -= queue.drainInto(values, remaining);
+                        // Deliver what an asynchronous source has produced so far:
+                        // only a synchronous one can fill the count without waiting.
+                        if (remaining === 0 || (values.length > 0 && !queue.sourceIsSync)) {
+                            break;
+                        }
+                    }
+                    if (queue.done) {
+                        break;
+                    }
+
+                    const appended = queue.readSourceOrPromise?.() ?? queue.readSource();
+                    if (typeof appended === 'number') {
+                        // A synchronous source must not keep the host from running.
+                        if (++synchronousReads >= 64) {
+                            synchronousReads = 0;
+                            await yieldToHost();
+                        }
+                    } else {
+                        synchronousReads = 0;
+                        await new Promise<unknown>((resolve, reject) => {
+                            this.#wakeHostSourceRead = () => resolve(undefined);
+                            appended.then(resolve, reject);
+                        }).finally(() => {
+                            this.#wakeHostSourceRead = null;
+                        });
+                    }
+
+                    // The source was dropped along with the end: what it produced has no reader.
+                    if (this.isDropped()) {
+                        if (this.#stopError) {
+                            throw this.#stopError;
+                        }
+                        return this.#endHostSourceRead();
+                    }
+                }
+
+                const transferred = bytes ? bytes.length : values.length;
+                if (rejectLength !== undefined && transferred > rejectLength) {
+                    return { ...this.#endHostSourceRead(), rejectedLength: transferred };
+                }
+                // The end is done before the writable end drops, which then has no one to notify.
+                const exhausted = queue.done && queue.length === 0;
+                const ended = exhausted || dropAfterCopy ? this.#endHostSourceRead() : undefined;
+                if (exhausted) {
+                    source.close();
+                }
+                if (transferred === 0) {
+                    return ended!;
+                }
+
+                if (bytes) {
+                    return { value: bytes, done: false };
+                }
+                if (isNone) {
+                    values.fill(null);
+                }
+                const value = typedArray === undefined ? (count === 1 ? values[0] : values) : new typedArray(values);
+                return { value, done: false };
+            } finally {
+                if (this.getCopyState() === StreamEnd.CopyState.ASYNC_COPYING) {
+                    this.setCopyState(StreamEnd.CopyState.IDLE);
+                }
+            }
+        }
+
+        /** Ends the stream for the host reads that follow, as a copy that reports the dropped writer does. */
+        #endHostSourceRead(): StreamReadResult {
+            this.#endOfStream = true;
+            this.setCopyState(StreamEnd.CopyState.DONE);
+            return { value: undefined, done: true };
         }
 
         #readOpts(opts?: number | StreamReadOptions) {
@@ -274,9 +437,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                 if (bufferRemaining > 0) {
                     const count = Math.min(pendingRemaining, bufferRemaining);
                     const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-                    buffer.write(pending.buffer.read(count, { transferResources }), {
-                        transferResources,
-                    });
+                    transferBuffer(pending.buffer, buffer, count, { transferResources });
                     pending.onCopyFn!(
                         () => this.resetPendingBufferMeta(),
                         shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,

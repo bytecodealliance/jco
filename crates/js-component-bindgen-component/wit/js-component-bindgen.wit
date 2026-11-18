@@ -79,6 +79,14 @@ world js-component-bindgen {
     print-error(error-message),
   }
 
+  /// Which removable statements a runtime bundled into the bindings keeps.
+  enum runtime-profile {
+    /// Remove diagnostics.
+    checked,
+    /// Keep diagnostics.
+    debug,
+  }
+
   variant instantiation-mode {
     %async,
     sync,
@@ -166,9 +174,24 @@ world js-component-bindgen {
     /// both use utf16 (they are validated by default)
     perf-strings-skip-copy-utf16-validation: option<bool>,
 
+    /// Call synchronous exports and imports without creating a task for each
+    /// call (they create one by default).
+    ///
+    /// Applies only to a component in which that cannot be observed: one
+    /// component instance, with no asynchronous function, lift or lower, no
+    /// stream, future or error context, no JSPI import or export, no built-in
+    /// other than those of resources, and neither call tracking, asm.js
+    /// output nor optimized import bindings. Other components are generated
+    /// as without the option.
+    perf-sync-fast-path: option<bool>,
+
     /// Experimental Component Model runtime package or directory base.
     /// Imports named runtime and intrinsics/* subpaths; directory/URL bases use .js files.
     cm-runtime-es-module: option<string>,
+
+    /// Which diagnostics and assertions the bundled Component Model runtime keeps
+    /// (defaults to `checked`).
+    runtime-profile: option<runtime-profile>,
 
     /// Represent WIT flags as bigint values instead of objects of booleans.
     flags-as-bigint: option<bool>,
