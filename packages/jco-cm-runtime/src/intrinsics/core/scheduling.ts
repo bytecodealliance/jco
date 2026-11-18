@@ -1,3 +1,5 @@
+let idleChannel: MessageChannel | undefined;
+
 /**
  * Run `callback` on the next macrotask, after the current microtasks have drained, as
  * `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
@@ -6,18 +8,30 @@
  */
 export function onNextMacrotask(callback: () => void): () => void {
     if (typeof MessageChannel === 'function') {
-        const channel = new MessageChannel();
-        let cancelled = false;
+        const channel = idleChannel ?? new MessageChannel();
+        idleChannel = undefined;
+        let pending = true;
         channel.port1.onmessage = () => {
-            channel.port1.close();
-            if (!cancelled) {
-                callback();
+            pending = false;
+            channel.port1.onmessage = null;
+            // Keep one idle channel across turns. Detaching the listener also lets the host exit.
+            if (idleChannel) {
+                channel.port1.close();
+                channel.port2.close();
+            } else {
+                idleChannel = channel;
             }
+            callback();
         };
         channel.port2.postMessage(null);
         return () => {
-            cancelled = true;
+            if (!pending) {
+                return;
+            }
+            pending = false;
+            channel.port1.onmessage = null;
             channel.port1.close();
+            channel.port2.close();
         };
     }
     const handle = setTimeout(callback, 0);
