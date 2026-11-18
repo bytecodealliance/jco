@@ -123,6 +123,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
                 )
                 .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
                 .runtime_profile(options.runtime_profile.map(Into::into).unwrap_or_default())
+                .perf_sync_fast_path(options.perf_sync_fast_path.unwrap_or(false))
                 .build(),
         )
         .map_err(|e| format!("{e:?}"))

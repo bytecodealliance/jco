@@ -174,6 +174,17 @@ world js-component-bindgen {
     /// both use utf16 (they are validated by default)
     perf-strings-skip-copy-utf16-validation: option<bool>,
 
+    /// Call synchronous exports and imports without creating a task for each
+    /// call (they create one by default).
+    ///
+    /// Applies only to a component in which that cannot be observed: one
+    /// component instance, with no asynchronous function, lift or lower, no
+    /// stream, future or error context, no JSPI import or export, no built-in
+    /// other than those of resources, and neither call tracking, asm.js
+    /// output nor optimized import bindings. Other components are generated
+    /// as without the option.
+    perf-sync-fast-path: option<bool>,
+
     /// Experimental Component Model runtime package or directory base.
     /// Imports named runtime and intrinsics/* subpaths; directory/URL bases use .js files.
     cm-runtime-es-module: option<string>,
