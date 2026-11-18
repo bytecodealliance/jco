@@ -5,10 +5,6 @@
  * Returns a function that cancels the callback.
  */
 export function onNextMacrotask(callback: () => void): () => void {
-    if (typeof setImmediate === 'function') {
-        const handle = setImmediate(callback);
-        return () => clearImmediate(handle);
-    }
     if (typeof MessageChannel === 'function') {
         const channel = new MessageChannel();
         let cancelled = false;
