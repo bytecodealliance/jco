@@ -2620,6 +2620,31 @@ mod tests {
     }
 
     #[test]
+    fn stream_copy_rejects_busy_ends_before_taking_a_pending_event() {
+        for intrinsic in [
+            AsyncStreamIntrinsic::StreamReadableEndClass,
+            AsyncStreamIntrinsic::StreamWritableEndClass,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncStream(intrinsic));
+            let copy = source
+                .find("copy(args) {")
+                .expect("stream ends should define copy");
+            let copy_source = &source[copy..];
+            let busy_check = copy_source
+                .find("if (this.isCopying()) {")
+                .expect("stream copy should reject an active copy");
+            let pending_event = copy_source
+                .find("if (this.hasPendingEvent()) {")
+                .expect("stream copy should report the pending event of an idle end");
+
+            assert!(busy_check < pending_event);
+            assert!(copy_source[busy_check..pending_event].contains(
+                "throw new WebAssemblyRuntimeError(\"cannot have concurrent operations active on a future/stream\");"
+            ));
+        }
+    }
+
+    #[test]
     fn future_and_stream_terminal_states_use_canonical_traps() {
         for (intrinsic, message) in [
             (
