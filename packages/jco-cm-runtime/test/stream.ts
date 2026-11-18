@@ -137,6 +137,73 @@ suite.concurrent('canonical stream operations', () => {
         dropPair(s.pair);
     });
 
+    test.each([false, true])(
+        'a copy traps while the event of the previous one is undelivered, reader first=%s',
+        (readerFirst) => {
+            const s = createPair(),
+                ops = s.operations(),
+                memory = { buffer: new ArrayBuffer(64) },
+                opts = guestOptions(memory);
+            const data = new DataView(memory.buffer);
+            data.setUint32(0, 101, true);
+            const read = (ptr = 32) => stream.streamRead(ops.readable, opts, s.readIdx, ptr, 1),
+                write = (ptr = 0) => stream.streamWrite(ops.writable, opts, s.writeIdx, ptr, 1);
+            const [blocked, peer] = readerFirst ? [read, write] : [write, read];
+            const blockedEnd = readerFirst ? s.read : s.write;
+
+            expect(blocked()).toBe(0xffffffff);
+            expect(peer()).toBe(16);
+
+            // The peer completed the blocked copy, but its event is only pending: the end is still busy.
+            expect(blockedEnd.hasPendingEvent()).toBe(true);
+            expect(blockedEnd.isIdleState()).toBe(false);
+            data.setUint32(48, 0xdeadbeef, true);
+            expect(() => blocked(48)).toThrow(s.core.RuntimeError);
+            expect(() => blocked(48)).toThrow('cannot have concurrent operations active on a future/stream');
+
+            // The rejected copy neither consumed the event nor touched its own buffer.
+            expect(data.getUint32(48, true)).toBe(0xdeadbeef);
+            expect(blockedEnd.getPendingEvent()!.payload1).toBe(16);
+            expect(data.getUint32(32, true)).toBe(101);
+
+            // Once the event is delivered the end is idle and copies again.
+            expect(blockedEnd.isIdleState()).toBe(true);
+            expect(blocked()).toBe(0xffffffff);
+            expect(peer()).toBe(16);
+            expect(blockedEnd.getPendingEvent()!.payload1).toBe(16);
+            dropPair(s.pair);
+        },
+    );
+
+    test('cancelling delivers the undelivered event of a completed copy', () => {
+        const s = createPair(),
+            ops = s.operations(),
+            memory = { buffer: new ArrayBuffer(64) },
+            opts = guestOptions(memory);
+        expect(stream.streamRead(ops.readable, opts, s.readIdx, 32, 1)).toBe(0xffffffff);
+        expect(stream.streamWrite(ops.writable, opts, s.writeIdx, 0, 1)).toBe(16);
+        expect(stream.streamCancelRead(ops.readable, opts, s.readIdx)).toBe(16 | s.StreamEnd.CopyResult.CANCELLED);
+        expect(s.read.isIdleState()).toBe(true);
+        expect(stream.streamRead(ops.readable, opts, s.readIdx, 32, 1)).toBe(0xffffffff);
+        expect(stream.streamCancelRead(ops.readable, opts, s.readIdx)).toBe(s.StreamEnd.CopyResult.CANCELLED);
+        dropPair(s.pair);
+    });
+
+    test.each([false, true])('an idle end reports a peer that dropped, reader dropped=%s', (readerDropped) => {
+        const s = createPair(),
+            ops = s.operations(),
+            opts = guestOptions({ buffer: new ArrayBuffer(16) });
+        if (readerDropped) {
+            s.read.drop();
+            expect(stream.streamWrite(ops.writable, opts, s.writeIdx, 0, 1)).toBe(s.StreamEnd.CopyResult.DROPPED);
+            s.write.drop();
+        } else {
+            s.write.drop();
+            expect(stream.streamRead(ops.readable, opts, s.readIdx, 0, 1)).toBe(s.StreamEnd.CopyResult.DROPPED);
+            s.read.drop();
+        }
+    });
+
     test('cancellation completes the pending read and consumes the cancellation event', () => {
         const s = createPair(),
             ops = s.operations(),
