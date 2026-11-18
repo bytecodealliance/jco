@@ -6,8 +6,11 @@ import { promisify } from 'node:util';
 
 import { rolldown } from 'rolldown';
 
-/** Built output of the Component Model runtime package. */
-const RUNTIME_DIST = new URL('../../jco-cm-runtime/dist/', import.meta.url);
+/**
+ * Built output of the Component Model runtime package with every labeled statement
+ * kept. The profile that bindings are generated with decides which labels they keep.
+ */
+const RUNTIME_DIST = new URL('../../jco-cm-runtime/dist/debug/', import.meta.url);
 
 /** Where js-component-bindgen keeps the runtime it bundles into generated bindings. */
 const DESTINATION = new URL('../../../crates/js-component-bindgen/runtime/', import.meta.url);
@@ -146,7 +149,7 @@ async function main() {
     const advisory = process.argv.includes('--advisory');
     const resultIndex = process.argv.indexOf('--result');
     const resultPath = resultIndex === -1 ? undefined : process.argv[resultIndex + 1];
-    const manifest = JSON.parse(await readFile(new URL('../package.json', RUNTIME_DIST), 'utf8'));
+    const manifest = JSON.parse(await readFile(new URL('package.json', RUNTIME_PACKAGE), 'utf8'));
     const modules = await readRuntimeModules();
 
     // Alias every export of every public subpath, so that names shared between
@@ -154,7 +157,8 @@ async function main() {
     const exportMap = [];
     const reexports = [];
     for (const [subpath, conditions] of Object.entries(manifest.exports)) {
-        if (subpath === '.') {
+        // Subpaths below `debug` select the debug profile of the same modules.
+        if (subpath === '.' || /^\.\/debug(\/|$)/.test(subpath)) {
             continue;
         }
         const id = `runtime/${conditions.default.slice('./dist/'.length)}`;
