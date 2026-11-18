@@ -120,7 +120,10 @@ export async function readFileResource(id: number, length: number, offset: numbe
     // Deno v1 returns the byte count directly, while Node returns an object
     // containing the byte count and buffer through util.promisify's custom args.
     const bytesRead = typeof result === "number" ? result : result.bytesRead;
-    return { bytes: buffer.subarray(0, bytesRead), eof: bytesRead === 0 };
+    // Posting a view to the main thread clones the whole buffer behind it, so
+    // a short read is copied out of the requested length first.
+    const bytes = bytesRead === length ? buffer : buffer.slice(0, bytesRead);
+    return { bytes, eof: bytesRead === 0 };
 }
 
 export async function writeFileResource(id: number, buffer: Uint8Array, offset: number) {

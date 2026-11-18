@@ -342,6 +342,22 @@ export function closeStream(streamId: number): void {
     pollStateReady(stream.pollState);
 }
 
+/**
+ * Return bytes whose backing store holds nothing else.
+ *
+ * Posting a typed array to the main thread clones its whole `ArrayBuffer`, so
+ * a short read that is a view of a larger chunk would copy the chunk with it.
+ *
+ * @param bytes - a chunk read from a Node stream
+ * @returns `bytes`, or a copy of it when it is a view of a larger buffer
+ */
+function detachFromBackingStore(bytes: Uint8Array): Uint8Array {
+    if (!bytes.buffer || bytes.byteLength === bytes.buffer.byteLength) {
+        return bytes;
+    }
+    return new Uint8Array(bytes);
+}
+
 const extensions = new Map<string, Promise<WorkerExtension>>();
 async function callExtension(module: string, operation: string, args: unknown[]): Promise<unknown> {
     let extension = extensions.get(module);
@@ -709,7 +725,7 @@ function handle(call, id, payload) {
             }
             const res = stream.stream.read(Math.min(stream.stream.readableLength, Number(payload)));
             if (res) {
-                return res;
+                return detachFromBackingStore(res);
             }
             if (stream.stream.readableEnded) {
                 throw { tag: "closed" };
