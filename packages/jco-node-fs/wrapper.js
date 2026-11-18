@@ -246,17 +246,18 @@ class Dir {
     }
 
     /**
-     * Create a hard link beneath another directory. A symlink is linked, not its target.
+     * Create a hard link beneath another directory.
      *
      * @param {string} oldPath - path relative to this directory
      * @param {Dir} newDir - directory the new path is relative to
      * @param {string} newPath - path relative to `newDir`
+     * @param {boolean} [follow] - link the target of a symlink at `oldPath`, not the symlink
      */
-    linkAt(oldPath, newDir, newPath) {
+    linkAt(oldPath, newDir, newPath, follow = false) {
         validatePath(oldPath, 'oldPath');
         validatePath(newPath, 'newPath');
         const newHandle = Dir.#handleOf(newDir);
-        call('link', oldPath, newPath, () => this.#handle.linkAt(oldPath, newHandle, newPath));
+        call('link', oldPath, newPath, () => this.#handle.linkAt(oldPath, newHandle, newPath, Boolean(follow)));
     }
 
     /**

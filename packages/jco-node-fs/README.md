@@ -57,21 +57,21 @@ try {
 }
 ```
 
-| Method                                   | Result                                                       |
-| ---------------------------------------- | ------------------------------------------------------------ |
-| `Dir.open(hostPath)`                     | `Dir` for a host directory                                   |
-| `openAt(path, options?)`                 | `Dir` for a directory, otherwise a file descriptor           |
-| `stat()`, `statAt(path, follow)`         | `{ type, dev, ino, nlink, size, atimeNs, mtimeNs, ctimeNs }` |
-| `readDir()`                              | `[{ name, type }]`, without `.` and `..`                     |
-| `readlinkAt(path)`                       | the symlink's target, exactly as stored                      |
-| `createDirAt(path)`, `removeDirAt(path)` |                                                              |
-| `unlinkAt(path)`                         | removes a file, or a symlink rather than its target          |
-| `renameAt(oldPath, newDir, newPath)`     |                                                              |
-| `linkAt(oldPath, newDir, newPath)`       | links a symlink rather than its target                       |
-| `symlinkAt(target, path)`                |                                                              |
-| `setTimes(atime, mtime)`                 | sets the directory's own times                               |
-| `setTimesAt(path, atime, mtime, follow)` |                                                              |
-| `sync()`, `close()`                      |                                                              |
+| Method                                      | Result                                                       |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| `Dir.open(hostPath)`                        | `Dir` for a host directory                                   |
+| `openAt(path, options?)`                    | `Dir` for a directory, otherwise a file descriptor           |
+| `stat()`, `statAt(path, follow)`            | `{ type, dev, ino, nlink, size, atimeNs, mtimeNs, ctimeNs }` |
+| `readDir()`                                 | `[{ name, type }]`, without `.` and `..`                     |
+| `readlinkAt(path)`                          | the symlink's target, exactly as stored                      |
+| `createDirAt(path)`, `removeDirAt(path)`    |                                                              |
+| `unlinkAt(path)`                            | removes a file, or a symlink rather than its target          |
+| `renameAt(oldPath, newDir, newPath)`        |                                                              |
+| `linkAt(oldPath, newDir, newPath, follow?)` | links a symlink, or its target with `follow`                 |
+| `symlinkAt(target, path)`                   |                                                              |
+| `setTimes(atime, mtime)`                    | sets the directory's own times                               |
+| `setTimesAt(path, atime, mtime, follow)`    |                                                              |
+| `sync()`, `close()`                         |                                                              |
 
 `openAt` options are the booleans `read`, `write`, `create`, `exclusive`,
 `truncate`, `directory`, `follow`, `sync` and `dsync`, all false by default.

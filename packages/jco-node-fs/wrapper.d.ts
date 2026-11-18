@@ -128,8 +128,11 @@ export class Dir {
     /** Rename a path beneath this directory to a path beneath `newDir`. */
     renameAt(oldPath: string, newDir: Dir, newPath: string): void;
 
-    /** Create a hard link beneath `newDir`. A symlink is linked, not its target. */
-    linkAt(oldPath: string, newDir: Dir, newPath: string): void;
+    /**
+     * Create a hard link beneath `newDir`. A symlink at `oldPath` is linked
+     * itself, or with `follow` resolved beneath this directory and its target linked.
+     */
+    linkAt(oldPath: string, newDir: Dir, newPath: string, follow?: boolean): void;
 
     /** Create a symlink at `path`. An absolute `target` is refused with `EPERM`. */
     symlinkAt(target: string, path: string): void;

@@ -207,11 +207,26 @@ impl DirHandle {
             .map_err(io_error)
     }
 
-    /// Create a hard link beneath `new_dir`. A symlink is linked, not its target.
+    /// Create a hard link beneath `new_dir`.
+    ///
+    /// A symlink at `old_path` is linked itself unless `follow` is set. The host
+    /// cannot follow it while linking, so with `follow` the path is resolved
+    /// beneath this directory first and the result is linked.
     #[napi]
-    pub fn link_at(&self, old_path: String, new_dir: &DirHandle, new_path: String) -> Result<()> {
-        self.dir()?
-            .hard_link(old_path, new_dir.dir()?, new_path)
+    pub fn link_at(
+        &self,
+        old_path: String,
+        new_dir: &DirHandle,
+        new_path: String,
+        follow: Option<bool>,
+    ) -> Result<()> {
+        let dir = self.dir()?;
+        let old_path = if follow.unwrap_or(false) {
+            dir.canonicalize(old_path).map_err(io_error)?
+        } else {
+            old_path.into()
+        };
+        dir.hard_link(old_path, new_dir.dir()?, new_path)
             .map_err(io_error)
     }
 
