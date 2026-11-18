@@ -1092,6 +1092,12 @@ impl AsyncStreamIntrinsic {
                                  copyElemMeta.getReallocFn = args.getReallocFn;
                              }}
 
+                             // An end stays busy until the event of its previous copy is delivered,
+                             // so that event is never handed to another copy.
+                             if (this.isCopying()) {{
+                                 throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
+                             }}
+
                              if (this.hasPendingEvent()) {{
                                  const event = this.getPendingEvent();
                                  if (event.code !== eventCode || event.payload0 !== this.waitableIdx()) {{
