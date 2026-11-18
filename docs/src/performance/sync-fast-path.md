@@ -33,14 +33,22 @@ observe:
 - an instance that trapped or was stopped cannot be entered, and a trap is recorded and reported
   to `onTrap` wherever it happens: in the guest, in post-return, or thrown by a host function;
 - stopping the instance from a host function or from the destructor of a resource fails the call
-  that is running, and the guest does not continue after the host function returns;
+  that is running, and no host function is called for the guest afterwards;
+- a host function that throws fails the export that called it with what it threw first, even if
+  the guest catches the exception and returns normally;
 - a guest may not call an import while it may not leave its instance, for example from `realloc`;
-- borrowed handles are scoped to their call, and post-return functions run once per call;
-- a promise returned by a host function is tracked until it settles, so that `whenIdle` waits for
-  it.
+- borrowed handles are released at the end of their call, and a post-return function runs after
+  each call that returned a value, including an error value of a `result`;
+- a promise that a host function returns from a synchronous import is counted as a pending host
+  operation until it settles or the instance is stopped. As by default, the guest receives the
+  promise object itself, not its value, and `whenIdle` does not wait for it.
 
 The tests of the option run the same sequences of calls with and without it and compare every
 return value, thrown error, reported trap and host callback.
+
+One difference is known. When a host function throws `null` or `undefined` and the guest catches
+it, the export fails by default with an internal error that says its task is already resolved;
+on the fast path it fails with the thrown value.
 
 ## Measured effect
 
@@ -48,14 +56,14 @@ Nanoseconds per call, bindings with the runtime bundled in, Node.js 26.13 on Lin
 
 | case | default | `--perf-sync-fast-path` | speedup |
 | --- | ---: | ---: | ---: |
-| export `u32 -> u32` | 844 | 21 | 40x |
-| export `f64 -> f64` | 830 | 32 | 26x |
-| export `tuple` swap | 1012 | 131 | 7.7x |
-| export `record -> record` | 1166 | 211 | 5.5x |
-| export `string -> string` | 2313 | 1453 | 1.6x |
-| export `list<u8> -> list<u8>` | 3839 | 2819 | 1.4x |
-| one export that calls 39 numeric imports | 87993 | 6819 | 13x |
-| one export that calls 2 string imports | 6198 | 1337 | 4.6x |
+| export `u32 -> u32` | 711 | 18 | 40x |
+| export `f64 -> f64` | 735 | 33 | 22x |
+| export `tuple` swap | 905 | 131 | 6.9x |
+| export `record -> record` | 1037 | 187 | 5.5x |
+| export `string -> string` | 2074 | 1296 | 1.6x |
+| export `list<u8> -> list<u8>` | 2967 | 2541 | 1.2x |
+| one export that calls 39 numeric imports | 71063 | 5884 | 12x |
+| one export that calls 2 string imports | 5435 | 944 | 5.8x |
 
 The fixed cost of a call is what is removed, so the gain shrinks as lifting and lowering of the
 values comes to dominate. Components that use asynchronous functions, streams or futures are
