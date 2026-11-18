@@ -11,6 +11,11 @@ pnpm --filter @bytecodealliance/jco-transpile test
 
 All test commands accept Vitest filters and options.
 
+Set `JCO_TEST_PERF_SYNC_FAST_PATH=1` to transpile with `perfSyncFastPath`
+wherever a test does not set the option itself.
+The option must not change behavior,
+so only tests that assert on the text of generated bindings may differ.
+
 ## Testing the external runtime
 
 Build the local Component Model runtime and run the same tests against it:
