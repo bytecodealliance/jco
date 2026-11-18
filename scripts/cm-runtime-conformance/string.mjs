@@ -14,12 +14,12 @@ export async function testStringIntrinsics({ load }) {
     const stringMemory = { buffer: new ArrayBuffer(16) };
     assert.deepEqual(
         utf8Encode(initializeUtf8Encoder(), 'é', () => 0, stringMemory),
-        { ptr: 0, len: 2, codepoints: 1 },
+        { ptr: 0, len: 2 },
     );
     assert.equal(initializeUtf8Decoder().decode(new Uint8Array(stringMemory.buffer, 0, 2)), 'é');
     assert.deepEqual(
         utf16Encode(initializeUtf16Encoding(), '🚀', () => 0, stringMemory),
-        { ptr: 0, len: 2, codepoints: 1 },
+        { ptr: 0, len: 2 },
     );
     assert.equal(initializeUtf16Decoder().decode(new Uint16Array(stringMemory.buffer, 0, 2)), '🚀');
     for (const value of ['\u0080\u009fé', '\ufeff🚀']) {
