@@ -82,14 +82,14 @@ Every load or store on the other memory becomes a call to a JavaScript function,
 one per number copied.
 Lists of numbers and of records pay the most; strings are copied as a whole and are hardly affected.
 
-`--multi-memory` emits the adapters unchanged.
-In the benchmark of this repository (`packages/jco-transpile/bench/perf-experiments/composed.mjs`, under Node.js 26),
-passing a `list<u32>` of 4096 elements to another component and back was about seven times faster with the flag,
-and a list of 256 elements about three times faster.
+`--multi-memory` emits the adapters unchanged, which makes passing a list of numbers between components several times faster,
+and more so the longer the list.
+To measure the difference for an engine, run `packages/jco-transpile/bench/perf-experiments/composed.mjs`,
+which that directory's README describes.
 
 Use the flag when every engine that runs the output supports multi-memory.
-The [WebAssembly feature table](https://webassembly.org/features/) lists it for Chrome 120, Firefox 125, Node.js 22 and Deno 1.38,
-and, at the time of writing, not for Safari.
+According to the [WebAssembly feature table](https://webassembly.org/features/) at the time of writing,
+Chrome 120, Firefox 125, Node.js 22 and Deno 1.38 do, and Safari is not listed.
 Output transpiled with the flag fails to compile on an engine without the feature.
 Components that are not composed of others have no adapter, and the flag changes nothing for them.
 
