@@ -25,6 +25,11 @@ that is skipped:
 Any other component is generated exactly as without the option, with no warning. To find out
 whether the option applied, compare the output with and without it.
 
+The `js-component-bindgen` crate also says whether it used the fast path, and if not which of the
+rules above ruled it out, in a debug message of the Rust `log` crate. A Rust program that calls
+the crate sees it once it installs a logger. `jco` and `@bytecodealliance/jco-transpile` run the
+crate as a WebAssembly component that installs none, so the message does not appear there.
+
 ## What stays the same
 
 A call on the fast path still does everything that a caller, a host function or a guest can
