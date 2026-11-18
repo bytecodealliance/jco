@@ -1,5 +1,25 @@
 import { expect, test, vi } from 'vitest';
-import { create } from './stream-helpers.js';
+import * as stream from '../src/intrinsics/stream.js';
+import { create, guestOptions } from './stream-helpers.js';
+import type { createPair } from './stream-helpers.js';
+
+/**
+ * Reads `u32` elements the way a guest does, with a canonical `stream.read`,
+ * waiting for the event of a read that blocks.
+ *
+ * @param s - a store whose stream has its ends in table 2 of component 0
+ * @param count - the most elements to read
+ * @returns the elements the read copied into the guest's memory
+ */
+async function guestRead(s: ReturnType<typeof createPair>, count: number): Promise<number[]> {
+    const memory = { buffer: new ArrayBuffer(count * 4) };
+    let packed = stream.streamRead(s.operations().readable, guestOptions(memory), s.readIdx, 0, count) as number;
+    if (packed === 0xffffffff) {
+        await s.read.waitForPendingEvent();
+        packed = s.read.getPendingEvent()!.payload1;
+    }
+    return Array.from({ length: packed >> 4 }, (_, i) => new DataView(memory.buffer).getUint32(i * 4, true));
+}
 
 test.concurrent('queued chunks survive partial reads and repeated prepends without copying tails', () => {
     const s = create();
@@ -65,15 +85,63 @@ test.concurrent('large synchronous streams yield between bounded batches', async
         }),
     );
     try {
+        const pending = guestRead(s, 256);
+        const observed = await new Promise<number>((resolve) => setImmediate(() => resolve(calls)));
+        expect(observed).toBeGreaterThan(0);
+        expect(observed).toBeLessThan(256);
+        expect(await pending).toEqual(Array.from({ length: 256 }, (_, i) => i + 1));
+    } finally {
+        dropPair(s.pair);
+    }
+});
+
+test.concurrent('a host read of a large synchronous stream yields between bounded batches', async () => {
+    const { createPair, dropPair } = await import('./stream-helpers.js');
+    const { genStreamHostInjectFn } = await import('../src/intrinsics/stream/injection.js');
+    const s = createPair();
+    let calls = 0;
+    const readFn = Object.assign(() => ({ value: ++calls, done: false }), { sourceIsSync: true });
+    s.read.setHostInjectFn(
+        genStreamHostInjectFn(s.lower.injection, {
+            readFn,
+            hostWriteEnd: s.write,
+            readEnd: s.read,
+        }),
+    );
+    try {
         const pending = s.read.read(256);
         const observed = await new Promise<number>((resolve) => setImmediate(() => resolve(calls)));
         expect(observed).toBeGreaterThan(0);
         expect(observed).toBeLessThan(256);
-        const result = await pending;
-        expect(Array.from(result.value as ArrayLike<number>)).toEqual(Array.from({ length: 256 }, (_, i) => i + 1));
+        expect((await pending).value).toEqual(Array.from({ length: 256 }, (_, i) => i + 1));
     } finally {
         dropPair(s.pair);
     }
+});
+
+test.concurrent('bytes are taken from a chunk that can serve the read alone', () => {
+    const s = create();
+    const queue = new s.PendingValueQueue(() => ({ done: true, value: undefined }), { isNumeric: true, align32: 1 });
+    const source = new Uint8Array([1, 2, 3, 4, 5]);
+    queue.push(source);
+    queue.push([6, 7]);
+    queue.push(new Uint8Array([8]));
+
+    const head = queue.takeBytes!(2, false)!;
+    expect(head).toEqual(new Uint8Array([1, 2]));
+    expect(head.buffer).not.toBe(source.buffer);
+    // The rest of the chunk is short of the count, and more is queued behind it.
+    expect(queue.takeBytes!(4, false)).toBeUndefined();
+    expect(queue.takeBytes!(4, true)).toBeUndefined();
+    expect(queue.takeBytes!(3, false)).toEqual(new Uint8Array([3, 4, 5]));
+    // A chunk of values is not taken as bytes.
+    expect(queue.takeBytes!(1, true)).toBeUndefined();
+    queue.drainInto([], 2);
+    // The last chunk may serve a longer read, if a short one is allowed.
+    expect(queue.takeBytes!(4, false)).toBeUndefined();
+    expect(queue.takeBytes!(4, true)).toEqual(new Uint8Array([8]));
+    expect(queue.length).toBe(0);
+    expect(queue.takeBytes!(1, true)).toBeUndefined();
 });
 
 test.concurrent('cancelling at a batch boundary delivers buffered values in source order', async () => {
@@ -104,12 +172,10 @@ test.concurrent('cancelling at a batch boundary delivers buffered values in sour
         }),
     );
     try {
-        const result = await s.read.read(256);
-        expect(Array.from(result.value as ArrayLike<number>)).toEqual(Array.from({ length: 64 }, (_, i) => i + 1));
+        expect(await guestRead(s, 256)).toEqual(Array.from({ length: 64 }, (_, i) => i + 1));
         // Let the interrupted injection finish before starting another read.
         await new Promise<void>((resolve) => setImmediate(resolve));
-        const next = await s.read.read(4);
-        expect(Array.from(next.value as ArrayLike<number>)).toEqual([65, 66, 67, 68]);
+        expect(await guestRead(s, 4)).toEqual([65, 66, 67, 68]);
     } finally {
         dropPair(s.pair);
     }

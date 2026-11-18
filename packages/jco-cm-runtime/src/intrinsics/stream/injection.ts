@@ -27,6 +27,15 @@ export function genStreamHostInjectFn(
 
     const pendingValues = new _context.PendingValueQueue(readFn, elemMeta);
     hostWriteEnd.setSourceRebufferFn((items) => pendingValues.prepend(items));
+    // A host read of the stream takes from the same queue as the writes injected for the guest,
+    // so values the guest left behind still come first.
+    readEnd.setHostSource?.({
+        values: pendingValues,
+        close: () => {
+            hostWriteEnd.getPendingEvent();
+            hostWriteEnd.drop();
+        },
+    });
 
     return async function generatedStreamHostInject(args: { count: number }) {
         let { count } = args;

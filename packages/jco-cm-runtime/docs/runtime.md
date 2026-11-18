@@ -165,3 +165,13 @@ Ready stream sources may expose `readSourceOrPromise`; `readSource` retains its
 promise API. Synchronous sources yield after 64 reads, and host completions share
 scheduler wakeups within a microtask checkpoint. The scheduler still resumes one
 thread per tick to preserve thread-register restoration.
+
+A stream lowered from a host source keeps that source on its readable end. When
+a guest hands the end back to the host, for example by returning the stream it
+was given, both ends belong to the host: a host read then takes its values from
+the source's queue, where a write injected for a guest read takes them, without
+the buffers and events of a copy. Values a guest read left queued come first,
+and a queue that exposes `takeBytes` has byte chunks copied whole. The read
+still marks the end as copying, ends with a drop or an instance stop, and honors
+`rejectLength` and `dropAfterCopy`. An end that is not idle, such as one with an
+event the guest has yet to take, is read through a copy as before.

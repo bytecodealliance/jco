@@ -172,33 +172,59 @@ class PendingValueQueue {
         let transferred = 0;
         let remaining = Math.min(maxCount, this.#length);
         while (remaining > 0) {
-            const front = this.#prepended.length > 0;
-            const cursor = front ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head]!;
+            const cursor = this.#front()!;
             const chunk = cursor.data;
             const transfer = Math.min(remaining, chunk.length - cursor.offset);
             for (let i = 0; i < transfer; i++) {
                 target.push(chunk[cursor.offset + i]);
             }
-            cursor.offset += transfer;
-            this.#length -= transfer;
+            this.#advance(cursor, transfer);
             transferred += transfer;
             remaining -= transfer;
-            if (cursor.offset === chunk.length) {
-                if (front) {
-                    this.#prepended.pop();
-                } else {
-                    this.#chunks[this.#head++] = undefined;
-                    if (this.#head === this.#chunks.length) {
-                        this.#chunks = [];
-                        this.#head = 0;
-                    } else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
-                        this.#chunks = this.#chunks.slice(this.#head);
-                        this.#head = 0;
-                    }
-                }
-            }
         }
         return transferred;
+    }
+
+    takeBytes(maxCount: number, allowShort: boolean): Uint8Array | undefined {
+        const cursor = this.#front();
+        if (!cursor || !(cursor.data instanceof Uint8Array)) {
+            return undefined;
+        }
+        const available = cursor.data.length - cursor.offset;
+        if (available < maxCount && !(allowShort && available === this.#length)) {
+            return undefined;
+        }
+        const transfer = Math.min(available, maxCount);
+        // The source keeps its chunk, and slicing a `Buffer` would only give a view of it.
+        const bytes = new Uint8Array(cursor.data.subarray(cursor.offset, cursor.offset + transfer));
+        this.#advance(cursor, transfer);
+        return bytes;
+    }
+
+    /** The chunk the next value is taken from: the last one prepended, or else the oldest one read. */
+    #front() {
+        return this.#prepended.length > 0 ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+    }
+
+    /** Moves the cursor of the front chunk past `count` values, releasing the chunk once it is used up. */
+    #advance(cursor: { data: StreamChunk; offset: number }, count: number) {
+        cursor.offset += count;
+        this.#length -= count;
+        if (cursor.offset !== cursor.data.length) {
+            return;
+        }
+        if (this.#prepended.length > 0) {
+            this.#prepended.pop();
+            return;
+        }
+        this.#chunks[this.#head++] = undefined;
+        if (this.#head === this.#chunks.length) {
+            this.#chunks = [];
+            this.#head = 0;
+        } else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
+            this.#chunks = this.#chunks.slice(this.#head);
+            this.#head = 0;
+        }
     }
 }
 

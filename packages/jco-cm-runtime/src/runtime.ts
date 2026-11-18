@@ -2598,6 +2598,12 @@ export interface StreamElementMetadata extends FutureElementMetadata {
 }
 export type StreamCleanup = () => void;
 export type StreamHostInjectFn = (args: { count: number }) => Promise<StreamCleanup>;
+/** The host values behind a lowered stream, which a host read takes without a copy through the guest. */
+export interface StreamHostSource {
+    readonly values: PendingValueQueue;
+    /** Drops the writable end, once the source is exhausted. */
+    readonly close: () => void;
+}
 export interface StreamEndOptions {
     readonly tableIdx: number;
     readonly waitable: ComponentWaitable;
@@ -2695,6 +2701,8 @@ export interface StreamPayloadEnd {
 }
 export interface StreamReadableEnd extends StreamPayloadEnd {
     readonly read: (options?: number | StreamReadOptions) => Promise<StreamReadResult>;
+    /** Names the host values the end reads, for a stream lowered from the host. */
+    readonly setHostSource: (source: StreamHostSource) => void;
     /** Drops the end once the instance stopped; an interrupted host read then fails instead of ending. */
     readonly onInstanceStop: () => void;
 }
@@ -2810,6 +2818,12 @@ export interface PendingValueQueue {
     readonly readSourceOrPromise?: () => number | Promise<number>;
     readonly prepend: (source: StreamChunk) => void;
     readonly drainInto: (target: unknown[], maxCount: number) => number;
+    /**
+     * Optional capability to remove up to `maxCount` bytes of the first queued chunk, as a copy.
+     * Returns nothing unless that chunk is a `Uint8Array` holding `maxCount` bytes,
+     * or, if `allowShort`, everything queued.
+     */
+    readonly takeBytes?: (maxCount: number, allowShort: boolean) => Uint8Array | undefined;
 }
 export interface PendingValueQueueConstructor {
     new (readFn: StreamReadFn, elemMeta: StreamElementMetadata): PendingValueQueue;
