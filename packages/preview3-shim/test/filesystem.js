@@ -1331,3 +1331,297 @@ describe("Descriptor path operations on a symlink that leads outside the directo
     });
   });
 });
+
+describe("Directory descriptors whose path is rearranged after they are opened", () => {
+  const DENIED = { payload: { tag: "not-permitted" } };
+
+  // Each test gets a preopen for `pre`, which contains `target.txt`, and a sibling
+  // directory `outside` that no descriptor may reach
+  const rearrangeTest = preopenTest.extend({
+    preopen: async ({ tmpDir }, use) => {
+      const { filesystem } = await import("@bytecodealliance/preview3-shim");
+      await fs.mkdir(path.join(tmpDir, "pre"));
+      await fs.writeFile(path.join(tmpDir, "pre/target.txt"), "target contents");
+      await populate(path.join(tmpDir, "outside"));
+
+      const virtualPath = `/${path.basename(tmpDir)}-pre`;
+      filesystem._addPreopen(virtualPath, path.join(tmpDir, "pre"));
+      const preopenEntries = filesystem.preopens.getDirectories();
+      const entry = preopenEntries.find(([_desc, preopenPath]) => preopenPath === virtualPath);
+
+      await use(entry[0]);
+
+      preopenEntries.splice(preopenEntries.indexOf(entry), 1);
+    },
+  });
+
+  /**
+   * Create a directory with the entries the denied operations aim at
+   *
+   * @param {string} dir Host path of the directory to create
+   * @returns {Promise<void>}
+   */
+  async function populate(dir) {
+    await fs.mkdir(path.join(dir, "empty"), { recursive: true });
+    await fs.writeFile(path.join(dir, "secret.txt"), "outside contents");
+  }
+
+  /**
+   * Open a directory below a descriptor
+   *
+   * @param {object} desc The descriptor to open from
+   * @param {string} subpath Path of the directory, relative to the descriptor
+   * @param {object} [pathFlags] Path flags
+   * @returns {Promise<object>} The directory's descriptor
+   */
+  function openDirectory(desc, subpath, pathFlags = {}) {
+    return desc.openAt(
+      pathFlags,
+      subpath,
+      { directory: true },
+      { read: true, mutateDirectory: true },
+    );
+  }
+
+  /**
+   * Read the names of a directory's entries
+   *
+   * @param {object} desc The directory's descriptor
+   * @returns {Promise<string[]>} The sorted entry names
+   * @throws {FSError} If the directory cannot be read
+   */
+  async function entryNames(desc) {
+    const [stream, future] = desc.readDirectory();
+    const names = [];
+    try {
+      let entry;
+      while ((entry = await stream.read()) !== null) {
+        names.push(entry.name);
+      }
+    } catch {
+      // The reason is reported by the future
+    }
+    await future.read();
+    return names.sort();
+  }
+
+  /**
+   * Assert that no path operation on a descriptor reaches the host filesystem
+   *
+   * @param {object} desc The descriptor whose path was rearranged
+   * @param {object} preopen A working descriptor that contains `target.txt`
+   * @returns {Promise<void>}
+   */
+  async function expectEveryPathOperationDenied(desc, preopen) {
+    const denied = (operation) => expect(operation).rejects.toMatchObject(DENIED);
+    const now = { tag: "now" };
+
+    await denied(desc.openAt({}, "secret.txt", {}, { read: true }));
+    await denied(desc.openAt({ symlinkFollow: true }, "secret.txt", {}, { read: true }));
+    await denied(desc.openAt({}, "created.txt", { create: true }, { write: true }));
+    await denied(openDirectory(desc, "."));
+    await denied(entryNames(desc));
+    await denied(desc.statAt({}, "secret.txt"));
+    await denied(desc.metadataHashAt({}, "secret.txt"));
+    await denied(desc.readlinkAt("secret.txt"));
+    await denied(desc.createDirectoryAt("created-dir"));
+    await denied(desc.setTimesAt({ symlinkFollow: true }, "secret.txt", now, now));
+    await denied(desc.linkAt({}, "secret.txt", preopen, "linked.txt"));
+    await denied(preopen.linkAt({}, "target.txt", desc, "linked.txt"));
+    await denied(desc.renameAt("secret.txt", preopen, "renamed.txt"));
+    await denied(preopen.renameAt("target.txt", desc, "renamed.txt"));
+    await denied(desc.symlinkAt("secret.txt", "new-link.txt"));
+    await denied(desc.unlinkFileAt("secret.txt"));
+    await denied(desc.removeDirectoryAt("empty"));
+  }
+
+  /**
+   * Assert that the denied operations changed neither their target nor the preopen
+   *
+   * @param {string} dir Host path of the directory the operations were aimed at
+   * @param {string} preDir Host path of the preopen
+   * @returns {Promise<void>}
+   */
+  async function expectUntouched(dir, preDir) {
+    expect((await fs.readdir(dir)).sort()).toEqual(["empty", "secret.txt"]);
+    expect(await fs.readFile(path.join(dir, "secret.txt"), "utf8")).toBe("outside contents");
+    expect(await fs.readFile(path.join(preDir, "target.txt"), "utf8")).toBe("target contents");
+    const preEntries = await fs.readdir(preDir);
+    expect(preEntries).not.toContain("linked.txt");
+    expect(preEntries).not.toContain("renamed.txt");
+  }
+
+  rearrangeTest.concurrent(
+    "a directory replaced by a symlink that leads outside the preopen is rejected",
+    async ({ tmpDir, preopen }) => {
+      await preopen.createDirectoryAt("held");
+      const held = await openDirectory(preopen, "held");
+
+      await preopen.removeDirectoryAt("held");
+      await preopen.symlinkAt("../outside", "held");
+
+      await expectEveryPathOperationDenied(held, preopen);
+      await expectUntouched(path.join(tmpDir, "outside"), path.join(tmpDir, "pre"));
+      held[Symbol.dispose]();
+    },
+  );
+
+  rearrangeTest.concurrent(
+    "a directory below a parent replaced by a symlink that leads outside is rejected",
+    async ({ tmpDir, preopen }) => {
+      await populate(path.join(tmpDir, "outside/inner"));
+      await fs.mkdir(path.join(tmpDir, "pre/outer/inner"), { recursive: true });
+      const inner = await openDirectory(preopen, "outer/inner");
+
+      await preopen.renameAt("outer", preopen, "moved");
+      await preopen.symlinkAt("../outside", "outer");
+
+      await expectEveryPathOperationDenied(inner, preopen);
+      await expectUntouched(path.join(tmpDir, "outside/inner"), path.join(tmpDir, "pre"));
+      inner[Symbol.dispose]();
+    },
+  );
+
+  rearrangeTest.concurrent(
+    "a directory replaced by a symlink to a sibling inside the preopen is rejected",
+    async ({ tmpDir, preopen }) => {
+      await populate(path.join(tmpDir, "pre/sibling"));
+      await preopen.createDirectoryAt("held");
+      const held = await openDirectory(preopen, "held");
+
+      await preopen.removeDirectoryAt("held");
+      await preopen.symlinkAt("sibling", "held");
+
+      await expectEveryPathOperationDenied(held, preopen);
+      await expectUntouched(path.join(tmpDir, "pre/sibling"), path.join(tmpDir, "pre"));
+      held[Symbol.dispose]();
+    },
+  );
+
+  rearrangeTest.concurrent(
+    "a directory replaced by another directory is rejected",
+    async ({ tmpDir, preopen }) => {
+      await populate(path.join(tmpDir, "pre/sibling"));
+      await preopen.createDirectoryAt("held");
+      const held = await openDirectory(preopen, "held");
+
+      await preopen.removeDirectoryAt("held");
+      await preopen.renameAt("sibling", preopen, "held");
+
+      await expectEveryPathOperationDenied(held, preopen);
+      await expectUntouched(path.join(tmpDir, "pre/held"), path.join(tmpDir, "pre"));
+      held[Symbol.dispose]();
+    },
+  );
+
+  rearrangeTest.concurrent(
+    "a directory opened through a symlink is rejected once the symlink leads elsewhere",
+    async ({ tmpDir, preopen }) => {
+      await preopen.createDirectoryAt("nested");
+      await preopen.symlinkAt("nested", "alias");
+      const viaAlias = await openDirectory(preopen, "alias", { symlinkFollow: true });
+      await viaAlias.createDirectoryAt("before-change");
+
+      await preopen.unlinkFileAt("alias");
+      await preopen.symlinkAt("../outside", "alias");
+
+      await expectEveryPathOperationDenied(viaAlias, preopen);
+      await expectUntouched(path.join(tmpDir, "outside"), path.join(tmpDir, "pre"));
+      viaAlias[Symbol.dispose]();
+    },
+  );
+
+  rearrangeTest.concurrent(
+    "a descriptor works again once its path leads back to its directory",
+    async ({ tmpDir, preopen }) => {
+      await preopen.createDirectoryAt("held");
+      const held = await openDirectory(preopen, "held");
+
+      await preopen.renameAt("held", preopen, "moved");
+      await preopen.symlinkAt("../outside", "held");
+      await expect(held.statAt({}, "secret.txt")).rejects.toMatchObject(DENIED);
+
+      await preopen.unlinkFileAt("held");
+      await preopen.renameAt("moved", preopen, "held");
+      await held.createDirectoryAt("created-dir");
+      expect((await fs.stat(path.join(tmpDir, "pre/held/created-dir"))).isDirectory()).toBe(true);
+      held[Symbol.dispose]();
+    },
+  );
+
+  rearrangeTest.concurrent(
+    "descriptors opened through symlinks inside the preopen keep working",
+    async ({ tmpDir, preopen }) => {
+      await fs.mkdir(path.join(tmpDir, "pre/nested/deeper"), { recursive: true });
+      await fs.writeFile(path.join(tmpDir, "pre/nested/child.txt"), "child contents");
+      await fs.symlink("nested", path.join(tmpDir, "pre/alias"));
+      await fs.symlink("../target.txt", path.join(tmpDir, "pre/nested/up.txt"));
+
+      const viaAlias = await openDirectory(preopen, "alias", { symlinkFollow: true });
+      const deeper = await openDirectory(preopen, "alias/deeper");
+
+      // Unrelated changes elsewhere in the tree do not affect open descriptors
+      await preopen.createDirectoryAt("unrelated");
+      await preopen.symlinkAt("target.txt", "unrelated-link.txt");
+
+      expect((await viaAlias.statAt({}, "child.txt")).type).toEqual({ tag: "regular-file" });
+      expect((await viaAlias.statAt({}, "deeper")).type).toEqual({ tag: "directory" });
+      expect(await viaAlias.readlinkAt("up.txt")).toBe("../target.txt");
+      // A symlink's target may not climb above the descriptor it is resolved from
+      await expect(viaAlias.statAt({ symlinkFollow: true }, "up.txt")).rejects.toMatchObject(
+        DENIED,
+      );
+      expect(await entryNames(viaAlias)).toEqual(["child.txt", "deeper", "up.txt"]);
+      expect(await entryNames(deeper)).toEqual([]);
+
+      const child = await viaAlias.openAt({}, "child.txt", {}, { read: true });
+      const [contents, done] = child.readViaStream(0n);
+      expect(new TextDecoder().decode(await contents.readAll())).toBe("child contents");
+      await done.read();
+      child[Symbol.dispose]();
+
+      await deeper.createDirectoryAt("created-dir");
+      const created = await deeper.openAt({}, "created.txt", { create: true }, { write: true });
+      created[Symbol.dispose]();
+      expect((await fs.readdir(path.join(tmpDir, "pre/nested/deeper"))).sort()).toEqual([
+        "created-dir",
+        "created.txt",
+      ]);
+
+      viaAlias[Symbol.dispose]();
+      deeper[Symbol.dispose]();
+    },
+  );
+
+  rearrangeTest.concurrent(
+    "descriptors below a preopen reached through a host symlink keep working",
+    async ({ tmpDir }) => {
+      const { filesystem } = await import("@bytecodealliance/preview3-shim");
+      await fs.mkdir(path.join(tmpDir, "real/nested"), { recursive: true });
+      await fs.writeFile(path.join(tmpDir, "real/nested/child.txt"), "child contents");
+      await fs.symlink("real", path.join(tmpDir, "preopen-alias"));
+
+      const virtualPath = `/${path.basename(tmpDir)}-alias`;
+      filesystem._addPreopen(virtualPath, path.join(tmpDir, "preopen-alias"));
+      const preopenEntries = filesystem.preopens.getDirectories();
+      const entry = preopenEntries.find(([_desc, preopenPath]) => preopenPath === virtualPath);
+      const aliasRoot = entry[0];
+
+      try {
+        expect(await entryNames(aliasRoot)).toEqual(["nested"]);
+        expect((await aliasRoot.stat()).type).toEqual({ tag: "directory" });
+
+        const nested = await openDirectory(aliasRoot, "nested");
+        expect(await entryNames(nested)).toEqual(["child.txt"]);
+        expect((await nested.statAt({}, "child.txt")).type).toEqual({ tag: "regular-file" });
+        await nested.createDirectoryAt("created-dir");
+        expect((await fs.stat(path.join(tmpDir, "real/nested/created-dir"))).isDirectory()).toBe(
+          true,
+        );
+        nested[Symbol.dispose]();
+      } finally {
+        preopenEntries.splice(preopenEntries.indexOf(entry), 1);
+      }
+    },
+  );
+});
