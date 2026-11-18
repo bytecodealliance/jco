@@ -823,6 +823,28 @@ suite("Node.js Preview2", () => {
 });
 
 suite("HTTPServer", () => {
+    test("importing the shim leaves node:http unloaded until a header is validated", async () => {
+        const { execFile } = await import("node:child_process");
+        const { promisify } = await import("node:util");
+        const shimUrl = import.meta.resolve("@bytecodealliance/preview2-shim");
+
+        // Run in a process of its own, because the test runner loads node:http itself.
+        const script = `
+            const { http } = await import(${JSON.stringify(shimUrl)});
+            const loaded = () => process.moduleLoadList.includes("NativeModule http");
+            const before = loaded();
+            new http.types.Fields().set("x-test", [new TextEncoder().encode("value")]);
+            console.log(JSON.stringify({ before, after: loaded() }));
+            process.exit(0);
+        `;
+        const { stdout } = await promisify(execFile)(process.execPath, [
+            "--input-type=module",
+            "-e",
+            script,
+        ]);
+        assert.deepStrictEqual(JSON.parse(stdout), { before: false, after: true });
+    });
+
     test(
         "HTTPServer: can retrieve randomized server address",
         testWithGCWrap(async () => {

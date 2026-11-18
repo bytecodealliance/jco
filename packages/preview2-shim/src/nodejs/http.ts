@@ -26,9 +26,33 @@ import {
 } from "../io/worker-io.js";
 import { CLOCKS_DURATION_SUBSCRIBE, HTTP } from "../io/calls.js";
 
-import * as http from "node:http";
+import { createRequire } from "node:module";
 import { InputStream, OutputStream, Pollable } from "../../types/interfaces/wasi-io-streams.js";
-const { validateHeaderName = () => {}, validateHeaderValue = () => {} } = http;
+
+type HeaderValidators = Pick<
+    typeof import("node:http"),
+    "validateHeaderName" | "validateHeaderValue"
+>;
+let headerValidators: HeaderValidators | undefined;
+
+/**
+ * The header validators of `node:http`, loaded when a header is first set.
+ *
+ * Only headers need the module here, and importing `node:http` as an ES
+ * module reads every export, including lazy ones that load the WebSocket
+ * client bundled with Node.js. A `require` on first use loads neither.
+ *
+ * @returns functions that throw for an invalid header name or value
+ */
+function getHeaderValidators(): HeaderValidators {
+    if (!headerValidators) {
+        const { validateHeaderName = () => {}, validateHeaderValue = () => {} } = createRequire(
+            import.meta.url,
+        )("node:http") as Partial<HeaderValidators>;
+        headerValidators = { validateHeaderName, validateHeaderValue };
+    }
+    return headerValidators;
+}
 
 type Result<T, E> = TypesNamespace.Result<T, E>;
 
@@ -539,13 +563,13 @@ class Fields {
             throw { tag: "immutable" };
         }
         try {
-            validateHeaderName(name);
+            getHeaderValidators().validateHeaderName(name);
         } catch {
             throw { tag: "invalid-syntax" };
         }
         for (const value of values) {
             try {
-                validateHeaderValue(name, new TextDecoder().decode(value));
+                getHeaderValidators().validateHeaderValue(name, new TextDecoder().decode(value));
             } catch {
                 throw { tag: "invalid-syntax" };
             }
@@ -587,12 +611,12 @@ class Fields {
             throw { tag: "immutable" };
         }
         try {
-            validateHeaderName(name);
+            getHeaderValidators().validateHeaderName(name);
         } catch {
             throw { tag: "invalid-syntax" };
         }
         try {
-            validateHeaderValue(name, new TextDecoder().decode(value));
+            getHeaderValidators().validateHeaderValue(name, new TextDecoder().decode(value));
         } catch {
             throw { tag: "invalid-syntax" };
         }
