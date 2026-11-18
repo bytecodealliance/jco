@@ -250,7 +250,10 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         ): Promise<StreamReadResult> {
             DEBUG: debugLog('[StreamReadableEnd#readHostSource()] args', { count, rejectLength, dropAfterCopy });
             const queue = source.values;
-            const { typedArray, isNone } = this.#elemMeta;
+            const { typedArray, isNone, payloadTypeName } = this.#elemMeta;
+            // Bytes the source produced as a `Uint8Array` are read as one, also from a stream whose
+            // metadata names no typed array. Its other values are then read as they were given.
+            const keepsByteChunks = typedArray === undefined && payloadTypeName === 'U8';
             const values: unknown[] = [];
             let bytes: Uint8Array | undefined;
             let remaining = count;
@@ -267,8 +270,11 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                         }
                     } else {
                         // Bytes that one chunk can serve are copied at once, not value by value.
-                        if (typedArray === Uint8Array && values.length === 0) {
-                            bytes = queue.takeBytes?.(remaining, !queue.sourceIsSync || queue.done);
+                        if ((typedArray === Uint8Array || keepsByteChunks) && values.length === 0) {
+                            // A read that keeps byte chunks ends with the chunk, so as not to
+                            // return its bytes as values along with those of the next one.
+                            const allowShort = keepsByteChunks || !queue.sourceIsSync || queue.done;
+                            bytes = queue.takeBytes?.(remaining, allowShort);
                             if (bytes) {
                                 break;
                             }

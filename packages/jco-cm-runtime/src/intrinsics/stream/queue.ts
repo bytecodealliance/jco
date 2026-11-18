@@ -194,7 +194,7 @@ function definePendingValueQueue() {
                 return undefined;
             }
             const available = cursor.data.length - cursor.offset;
-            if (available < maxCount && !(allowShort && available === this.#length)) {
+            if (available < maxCount && !allowShort) {
                 return undefined;
             }
             const transfer = Math.min(available, maxCount);
