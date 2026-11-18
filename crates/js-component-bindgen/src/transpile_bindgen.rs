@@ -200,6 +200,154 @@ pub enum InstantiationMode {
     Sync,
 }
 
+/// The first reason found for a component to keep the task machinery in its
+/// synchronous calls although [`TranspileConfig::perf_sync_fast_path`] was set.
+///
+/// For each call the task machinery creates a task and a thread (and for an
+/// import a subtask and a host task), installs them in the current-task
+/// registers, and retires them. A component is taken off that path as a whole,
+/// and only if every reader of that state is absent from it:
+///
+/// - other tasks: with no asynchronous lift, lower or function type, no JSPI
+///   import or export and no task, thread, waitable, subtask or backpressure
+///   built-in, every call runs to completion within one JavaScript job. No
+///   other task exists to be scheduled around it, to wait for the exclusive
+///   lock (which synchronous function types never take) or for backpressure,
+///   and no promise reaction (such as one of `whenIdle`) runs while a call is
+///   on the stack;
+/// - the current thread: nothing reads `context.get`/`context.set`, whose
+///   slots belong to a thread;
+/// - the current component instance: when one instance owns every core module
+///   and every lift and lower, there is no fused adapter that enters another
+///   instance on behalf of the current task, no borrow whose scope is the
+///   callee's task, and a trap of a built-in that names no instance still
+///   reaches the wrapper of the export that is running, which records it
+///   against that one instance;
+/// - the task of a call itself: neither call tracking nor asm.js `i64`
+///   returns, which keep data on it, are in use.
+///
+/// What a call on the fast path still does, because it is observable: an
+/// export refuses to enter an instance that trapped or was stopped, records a
+/// trap of its core function and of its post-return, and fails if the store
+/// was stopped while it ran; an import checks `may_leave`, runs the host
+/// function as a tracked host operation, records a trap the host function
+/// throws, and does not return to the guest once the instance trapped or
+/// stopped.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SyncFastPathBlocker {
+    /// Core modules, lifts or lowers of more than one component instance, or a
+    /// fused adapter between instances, which runs on behalf of the calling task.
+    MultipleComponentInstances,
+    /// JSPI imports or exports were requested.
+    AsyncMode,
+    /// asm.js output keeps the high bits of an `i64` result on the task.
+    AsmJs,
+    /// Call tracking attaches each invocation to its task.
+    CallTracking,
+    /// Optimized and hybrid import bindings replace the lowered import.
+    ImportBindings,
+    /// A canonical built-in other than a synchronous `lower`, `resource.new`,
+    /// `resource.rep`, `resource.drop` or a trap stub.
+    Builtin,
+    /// A core module imports `context.get` or `context.set`.
+    ContextSlots,
+    /// An asynchronous lift or lower, or one with a callback.
+    AsyncCanonicalOptions,
+    /// A function whose component-level type is `async`.
+    AsyncFunctionType,
+    /// A stream, future or error-context type.
+    AsyncValueType,
+}
+
+/// Find out whether the synchronous calls of a component may skip the task
+/// machinery, returning the first reason why not (see [`SyncFastPathBlocker`]).
+pub(crate) fn sync_fast_path_blocker(
+    component: &Component,
+    trampolines: &PrimaryMap<TrampolineIndex, Trampoline>,
+    types: &ComponentTypes,
+    opts: &TranspileOpts,
+    call_tracking: bool,
+) -> Option<SyncFastPathBlocker> {
+    // (a core module without an owner is a fused adapter, and component
+    // instances that only define types or re-export functions own nothing)
+    let mut owners = component
+        .options
+        .values()
+        .map(|options| Some(options.instance))
+        .chain(
+            component
+                .initializers
+                .iter()
+                .filter_map(|initializer| match initializer {
+                    GlobalInitializer::InstantiateModule(_, owner) => Some(*owner),
+                    _ => None,
+                }),
+        );
+    let owner = owners.next().flatten();
+    if owner.is_none() || owners.any(|other| other != owner) {
+        return Some(SyncFastPathBlocker::MultipleComponentInstances);
+    }
+    if let Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) = &opts.async_mode
+        && !(imports.is_empty() && exports.is_empty())
+    {
+        return Some(SyncFastPathBlocker::AsyncMode);
+    }
+    if opts.asmjs {
+        return Some(SyncFastPathBlocker::AsmJs);
+    }
+    if call_tracking {
+        return Some(SyncFastPathBlocker::CallTracking);
+    }
+    if !matches!(opts.import_bindings, None | Some(BindingsMode::Js)) {
+        return Some(SyncFastPathBlocker::ImportBindings);
+    }
+    if component.num_stream_tables != 0
+        || component.num_future_tables != 0
+        || component.num_error_context_tables != 0
+    {
+        return Some(SyncFastPathBlocker::AsyncValueType);
+    }
+    if component
+        .options
+        .values()
+        .any(|options| options.async_ || options.callback.is_some())
+    {
+        return Some(SyncFastPathBlocker::AsyncCanonicalOptions);
+    }
+    for trampoline in trampolines.values() {
+        match trampoline {
+            Trampoline::LowerImport { lower_ty, .. } => {
+                if types[*lower_ty].async_ {
+                    return Some(SyncFastPathBlocker::AsyncFunctionType);
+                }
+            }
+            Trampoline::ResourceNew { .. }
+            | Trampoline::ResourceRep { .. }
+            | Trampoline::ResourceDrop { .. }
+            | Trampoline::Trap(_) => {}
+            _ => return Some(SyncFastPathBlocker::Builtin),
+        }
+    }
+    if component
+        .export_items
+        .values()
+        .any(|export| matches!(export, Export::LiftedFunction { ty, .. } if types[*ty].async_))
+    {
+        return Some(SyncFastPathBlocker::AsyncFunctionType);
+    }
+    let imports_context_slots = component.initializers.iter().any(|initializer| {
+        matches!(
+            initializer,
+            GlobalInitializer::InstantiateModule(InstantiateModule::Static(_, args), _)
+                if args.iter().any(|def| matches!(def, CoreDef::UnsafeIntrinsic(_)))
+        )
+    });
+    if imports_context_slots {
+        return Some(SyncFastPathBlocker::ContextSlots);
+    }
+    None
+}
+
 /// Internal Bindgen calling convention
 enum CallType {
     /// Standard calls - inner function is called directly with parameters
@@ -341,6 +489,7 @@ pub fn transpile_bindgen(
     cm_runtime_es_module: Option<&str>,
     call_tracking: bool,
     typed_error_classes: bool,
+    perf_sync_fast_path: bool,
     files: &mut Files,
 ) -> TranspileBindgenResult {
     let (async_imports, async_exports) = match opts.async_mode.clone() {
@@ -395,6 +544,21 @@ pub fn transpile_bindgen(
         err_ctx_tables.insert(err_ctx_table_idx, err_ctx_table_ty.instance);
     }
 
+    let sync_fast_path = perf_sync_fast_path
+        && match sync_fast_path_blocker(
+            &component.component,
+            &component.trampolines,
+            types,
+            &opts,
+            call_tracking,
+        ) {
+            None => true,
+            Some(blocker) => {
+                log::debug!("component [{name}] keeps the task machinery: {blocker:?}");
+                false
+            }
+        };
+
     // Bindings are generated when the `instantiate` method is called on the
     // Instantiator structure created below
     let mut instantiator = Instantiator {
@@ -448,6 +612,7 @@ pub fn transpile_bindgen(
         init_current_module: None,
         context_components: Default::default(),
         async_analysis: Default::default(),
+        sync_fast_path,
     };
     instantiator
         .sizes
@@ -1155,6 +1320,10 @@ pub(crate) struct Instantiator<'a, 'b> {
     context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
 
     async_analysis: AsyncAnalysis,
+
+    /// Whether synchronous calls are generated without the task machinery
+    /// (see [`SyncFastPathBlocker`]).
+    sync_fast_path: bool,
 }
 
 impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
@@ -3102,6 +3271,13 @@ impl<'a> Instantiator<'a, '_> {
                 // TODO(fix): promising for the run (*as well as exports*)
                 // TODO(fix): delete all asyncImports/exports
                 // TODO(opt): opt-in sync import
+
+                // On the sync fast path the function generated for the import is
+                // what the core module imports: there is no subtask to create for it.
+                if self.sync_fast_path {
+                    uwriteln!(self.src.js, "const trampoline{i} = _trampoline{i};");
+                    return;
+                }
 
                 let component_idx = canon_opts.instance.as_u32();
                 let is_async = canon_opts.async_;
@@ -5675,6 +5851,19 @@ impl<'a> Instantiator<'a, '_> {
                 "const _trackedCall = {tracking}.capture({export_id});"
             );
         }
+        // An import on the sync fast path is the function its core module imports,
+        // so it does itself what lowering the import and guarding the trampoline
+        // otherwise do around it: a guest may only call out while it may leave its
+        // instance, and a trap thrown anywhere in the import is recorded against
+        // that instance.
+        let sync_fast_path_import = for_import && self.sync_fast_path;
+        if sync_fast_path_import {
+            let check_may_leave = self.bindgen.intrinsic_call(
+                Intrinsic::Component(ComponentIntrinsic::CheckMayLeave),
+                &opts.instance.as_u32().to_string(),
+            );
+            uwriteln!(self.src.js, "try {{\n{check_may_leave};");
+        }
         if wrap_async_future_result {
             let future_value = self.bindgen.intrinsic(Intrinsic::AsyncFuture(
                 AsyncFutureIntrinsic::FutureValueClass,
@@ -5732,6 +5921,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             guest_resource_class_names: None,
             skip_fn_call_task_management: false,
+            sync_fast_path: self.sync_fast_path,
             track_call: tracked_export.is_some(),
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
@@ -5868,6 +6058,13 @@ impl<'a> Instantiator<'a, '_> {
         }
         if wrap_async_constructor {
             self.src.js("})();");
+        }
+        if sync_fast_path_import {
+            let record_trap = self.bindgen.intrinsic_call(
+                Intrinsic::Component(ComponentIntrinsic::RecordTrap),
+                &format!("{}, err, false", opts.instance.as_u32()),
+            );
+            uwriteln!(self.src.js, "}} catch (err) {{\nthrow {record_trap};\n}}");
         }
 
         // Close function body
@@ -6015,6 +6212,10 @@ impl<'a> Instantiator<'a, '_> {
                     return guard_trap(self, name);
                 };
                 self.used_instance_flags.borrow_mut().insert(instance);
+                // (an import on the sync fast path records its traps itself)
+                if self.sync_fast_path && matches!(trampoline, Trampoline::LowerImport { .. }) {
+                    return name;
+                }
                 if Self::trampoline_checks_may_leave_internally(trampoline) {
                     guard_trap(self, name)
                 } else {

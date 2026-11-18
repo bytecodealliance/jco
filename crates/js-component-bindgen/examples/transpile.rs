@@ -36,6 +36,7 @@ fn main() -> Result<()> {
     let mut map = HashMap::new();
     let mut runtime_profile = RuntimeProfile::default();
     let mut jspi = false;
+    let mut perf_sync_fast_path = false;
     let mut async_imports = Vec::new();
     let mut async_exports = Vec::new();
     #[cfg(feature = "external-runtime")]
@@ -55,6 +56,7 @@ fn main() -> Result<()> {
             Some(("--async-import", name)) => async_imports.push(name.to_string()),
             Some(("--async-export", name)) => async_exports.push(name.to_string()),
             None if arg == "--tla-compat" => opts.tla_compat = true,
+            None if arg == "--perf-sync-fast-path" => perf_sync_fast_path = true,
             Some(("--profile", "checked")) => runtime_profile = RuntimeProfile::Checked,
             Some(("--profile", "debug")) => runtime_profile = RuntimeProfile::Debug,
             Some(("--map", mapping)) => {
@@ -80,7 +82,8 @@ fn main() -> Result<()> {
         .with_context(|| format!("reading [{}]", component_path.display()))?;
     let config = TranspileConfig::builder()
         .opts(opts)
-        .runtime_profile(runtime_profile);
+        .runtime_profile(runtime_profile)
+        .perf_sync_fast_path(perf_sync_fast_path);
     #[cfg(feature = "external-runtime")]
     let config = config.maybe_cm_runtime_es_module(cm_runtime_es_module);
     let transpiled = transpile_with_config(&component, config.build())?;

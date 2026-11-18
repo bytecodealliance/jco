@@ -169,6 +169,17 @@ pub struct TranspileConfig {
     /// Which diagnostics and assertions the bundled runtime keeps.
     #[builder(default)]
     pub runtime_profile: RuntimeProfile,
+    /// Call synchronous exports and imports without creating a task, thread or
+    /// subtask for each call, in components where doing so cannot be observed.
+    ///
+    /// Takes effect only for a component in which nothing can observe that
+    /// state: one component instance, with no asynchronous function, lift or
+    /// lower, no stream, future or error context, no JSPI import or export, no
+    /// built-in other than those of resources, and neither call tracking,
+    /// asm.js output nor optimized import bindings. Any other component is
+    /// generated as without the option.
+    #[builder(default)]
+    pub perf_sync_fast_path: bool,
     /// Package or directory base for the experimental Component Model runtime.
     /// Generated bindings import named exports from runtime and intrinsics/* subpaths.
     /// Intrinsics are generated inline when this is `None` (the default),
@@ -279,6 +290,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         optional_result_payloads,
         type_generation,
         runtime_profile,
+        perf_sync_fast_path,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
     } = config;
@@ -398,6 +410,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         cm_runtime_es_module.as_deref(),
         call_tracking,
         type_generation.typed_error_classes,
+        perf_sync_fast_path,
         &mut files,
     );
 
