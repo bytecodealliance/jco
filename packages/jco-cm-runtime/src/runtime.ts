@@ -2027,7 +2027,7 @@ export interface LiftListMeta {
     readonly knownLen?: number;
     readonly typedArray?: {
         new (values: never[]): unknown;
-        new (buffer: ArrayBufferLike): unknown;
+        new (buffer: ArrayBufferLike, byteOffset: number, length: number): { slice(): unknown };
     };
 }
 export interface LiftMapMeta {

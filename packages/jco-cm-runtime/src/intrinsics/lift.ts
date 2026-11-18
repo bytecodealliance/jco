@@ -929,8 +929,10 @@ export function liftFlatList(
         let val: unknown;
         if (typedArray !== undefined && (_context.littleEndian || elemSize32 === 1)) {
             // Copy numeric elements together while keeping the result independent of guest memory.
+            // Slicing a view copies short lists faster than slicing the buffer,
+            // and the copy is unshared even when the memory is shared.
             ctx.storagePtr = dataPtr + len * elemSize32;
-            val = new typedArray(ctx.memory!.buffer.slice(dataPtr, ctx.storagePtr));
+            val = new typedArray(ctx.memory!.buffer, dataPtr, len).slice();
         } else {
             const values = [];
             // A scalar lift keeps the context it is given, so one lookup serves every element.
