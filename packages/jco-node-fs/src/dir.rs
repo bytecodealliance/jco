@@ -4,9 +4,13 @@
 //! `cap-std`, which resolves paths beneath that directory: `..`, absolute paths
 //! and symlinks that lead outside of it fail instead of being followed. This
 //! mirrors how Wasmtime's WASI implementation performs filesystem calls.
+//!
+//! Each operation has a synchronous binding, which runs on the calling thread,
+//! and an asynchronous one, which runs on libuv's thread pool.
 
 use std::io;
-use std::path::{Component, Path};
+use std::path::{Component, Path, PathBuf};
+use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, SystemTime};
 
 use cap_fs_ext::{
@@ -15,10 +19,11 @@ use cap_fs_ext::{
 };
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, File, FileType, Metadata, OpenOptions};
-use napi::bindgen_prelude::{BigInt, Either};
+use napi::bindgen_prelude::{AsyncTask, BigInt, Either, ToNapiValue, TypeName};
+use napi::{Env, Task};
 use napi_derive::napi;
 
-use crate::error::{Result, code_error, io_error};
+use crate::error::{Result, code_error, error_code, io_error};
 
 const NANOSECONDS_PER_SECOND: i128 = 1_000_000_000;
 
@@ -71,20 +76,92 @@ pub struct DirEntryRaw {
     pub kind: String,
 }
 
+/// Why an asynchronous operation failed.
+///
+/// An asynchronous binding resolves with this instead of rejecting, as a
+/// rejection could not carry the error code. The JavaScript wrapper turns it
+/// into the same error that the synchronous binding throws.
+#[napi(object)]
+pub struct FailureRaw {
+    /// Node.js-style error code, such as `ENOENT`.
+    pub failure_code: String,
+    pub failure_message: String,
+}
+
+/// A directory operation that runs on libuv's thread pool.
+///
+/// The operation owns what it needs, in particular a reference to its
+/// directory, which therefore stays open until the operation has finished.
+pub struct DirTask<T> {
+    /// `None` once run.
+    operation: Option<Box<dyn FnOnce() -> io::Result<T> + Send>>,
+}
+
+impl<T> DirTask<T>
+where
+    T: Send + ToNapiValue + TypeName + 'static,
+{
+    fn spawn(operation: impl FnOnce() -> io::Result<T> + Send + 'static) -> AsyncTask<Self> {
+        AsyncTask::new(Self {
+            operation: Some(Box::new(operation)),
+        })
+    }
+}
+
+impl<T> Task for DirTask<T>
+where
+    T: Send + ToNapiValue + TypeName + 'static,
+{
+    type Output = std::result::Result<T, FailureRaw>;
+    type JsValue = Either<T, FailureRaw>;
+
+    fn compute(&mut self) -> napi::Result<Self::Output> {
+        let operation = self
+            .operation
+            .take()
+            .ok_or_else(|| napi::Error::from_reason("directory operation ran twice"))?;
+        Ok(operation().map_err(|error| FailureRaw {
+            failure_code: error_code(&error).to_owned(),
+            failure_message: error.to_string(),
+        }))
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> napi::Result<Self::JsValue> {
+        Ok(match output {
+            Ok(value) => Either::A(value),
+            Err(failure) => Either::B(failure),
+        })
+    }
+}
+
 /// An open directory.
 ///
-/// This is an internal binding. The JavaScript wrapper validates arguments and
-/// adds `syscall` and `path` to errors.
+/// This is an internal binding. The JavaScript wrapper validates arguments,
+/// adds `syscall` and `path` to errors, and rejects with the failure that an
+/// asynchronous binding resolves with.
 #[napi]
 pub struct DirHandle {
-    /// `None` once closed.
-    dir: Option<Dir>,
+    /// `None` once closed. Shared with the asynchronous operations in flight,
+    /// which keep the directory open until they finish.
+    ///
+    /// Closing must work while such an operation is in flight, during which the
+    /// handle cannot be borrowed mutably, hence the interior mutability.
+    dir: Mutex<Option<Arc<Dir>>>,
 }
 
 impl DirHandle {
-    fn dir(&self) -> Result<&Dir> {
+    fn new(dir: Dir) -> Self {
+        Self {
+            dir: Mutex::new(Some(Arc::new(dir))),
+        }
+    }
+
+    /// The directory, which stays open for as long as the returned reference lives.
+    fn dir(&self) -> Result<Arc<Dir>> {
         self.dir
-            .as_ref()
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
             .ok_or_else(|| code_error("EBADF", "directory handle is closed"))
     }
 }
@@ -93,17 +170,23 @@ impl DirHandle {
 impl DirHandle {
     /// Open a host directory by path, with the authority of the process.
     ///
-    /// This is the only binding that is not confined to a directory handle.
+    /// This and its asynchronous form are the only bindings that are not
+    /// confined to a directory handle.
     #[napi(factory)]
     pub fn open_ambient(path: String) -> Result<Self> {
-        let dir = Dir::open_ambient_dir(path, ambient_authority()).map_err(io_error)?;
-        Ok(Self { dir: Some(dir) })
+        open_ambient(path).map_err(io_error)
     }
 
-    /// Release the directory. Later calls fail with `EBADF`.
+    #[napi(ts_return_type = "Promise<DirHandle | FailureRaw>")]
+    pub fn open_ambient_async(path: String) -> AsyncTask<DirTask<DirHandle>> {
+        DirTask::spawn(move || open_ambient(path))
+    }
+
+    /// Release the directory. Later calls fail with `EBADF`, while asynchronous
+    /// operations that are in flight finish on the directory.
     #[napi]
-    pub fn close(&mut self) {
-        self.dir = None;
+    pub fn close(&self) {
+        *self.dir.lock().unwrap_or_else(PoisonError::into_inner) = None;
     }
 
     /// Open a file or directory beneath this directory.
@@ -112,73 +195,55 @@ impl DirHandle {
     /// file descriptor that Node.js can use, which the caller must close.
     #[napi]
     pub fn open_at(&self, path: String, options: OpenAtOptions) -> Result<Either<DirHandle, i32>> {
-        if options.directory && (options.create || options.exclusive || options.truncate) {
-            return Err(code_error(
-                "EINVAL",
-                "cannot create or truncate a directory",
-            ));
-        }
+        open_at(self.dir()?.as_ref(), path.as_ref(), &options).map_err(io_error)
+    }
 
-        let mut open_options = OpenOptions::new();
-        // A file that is not opened for writing is opened for reading, as an
-        // open file must have some access mode.
-        open_options.read(options.read || !options.write);
-        open_options.write(options.write || options.create || options.truncate);
-        if options.create && options.exclusive {
-            open_options.create_new(true);
-        } else {
-            open_options.create(options.create);
-        }
-        open_options.truncate(options.truncate);
-        open_options.follow(follow_symlinks(options.follow));
-        open_options.maybe_dir(true);
-        if options.sync {
-            open_options.sync(true);
-        }
-        if options.dsync {
-            open_options.dsync(true);
-        }
-        if options.directory {
-            sys::require_directory(&mut open_options);
-        }
-
-        let file = self
-            .dir()?
-            .open_with(&path, &open_options)
-            .map_err(io_error)?;
-        if file.metadata().map_err(io_error)?.is_dir() {
-            let dir = Dir::from_std_file(file.into_std());
-            return Ok(Either::A(DirHandle { dir: Some(dir) }));
-        }
-        if options.directory {
-            return Err(code_error("ENOTDIR", "not a directory"));
-        }
-        sys::into_node_fd(file).map(Either::B).map_err(io_error)
+    #[napi(ts_return_type = "Promise<DirHandle | number | FailureRaw>")]
+    pub fn open_at_async(
+        &self,
+        path: String,
+        options: OpenAtOptions,
+    ) -> Result<AsyncTask<DirTask<Either<DirHandle, i32>>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || {
+            open_at(&dir, path.as_ref(), &options)
+        }))
     }
 
     /// Return the attributes of this directory.
     #[napi]
     pub fn stat(&self) -> Result<StatRaw> {
-        let metadata = self.dir()?.dir_metadata().map_err(io_error)?;
-        Ok(stat_raw(&metadata))
+        stat(self.dir()?.as_ref()).map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<StatRaw | FailureRaw>")]
+    pub fn stat_async(&self) -> Result<AsyncTask<DirTask<StatRaw>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || stat(&dir)))
     }
 
     /// Return the attributes of a path beneath this directory.
     #[napi]
     pub fn stat_at(&self, path: String, follow: bool) -> Result<StatRaw> {
-        let metadata = sys::stat_at(self.dir()?, path.as_ref(), follow).map_err(io_error)?;
-        Ok(stat_raw(&metadata))
+        stat_at(self.dir()?.as_ref(), path.as_ref(), follow).map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<StatRaw | FailureRaw>")]
+    pub fn stat_at_async(&self, path: String, follow: bool) -> Result<AsyncTask<DirTask<StatRaw>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || stat_at(&dir, path.as_ref(), follow)))
     }
 
     /// Return the target of a symlink, exactly as stored.
     #[napi]
     pub fn readlink_at(&self, path: String) -> Result<String> {
-        self.dir()?
-            .read_link_contents(path)
-            .map_err(io_error)?
-            .into_os_string()
-            .into_string()
-            .map_err(|_| code_error("EILSEQ", "symlink target is not valid Unicode"))
+        readlink_at(self.dir()?.as_ref(), path.as_ref()).map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<string | FailureRaw>")]
+    pub fn readlink_at_async(&self, path: String) -> Result<AsyncTask<DirTask<String>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || readlink_at(&dir, path.as_ref())))
     }
 
     /// Create a directory.
@@ -187,10 +252,22 @@ impl DirHandle {
         self.dir()?.create_dir(path).map_err(io_error)
     }
 
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn create_dir_at_async(&self, path: String) -> Result<AsyncTask<DirTask<()>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || dir.create_dir(path)))
+    }
+
     /// Remove an empty directory.
     #[napi]
     pub fn remove_dir_at(&self, path: String) -> Result<()> {
         self.dir()?.remove_dir(path).map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn remove_dir_at_async(&self, path: String) -> Result<AsyncTask<DirTask<()>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || dir.remove_dir(path)))
     }
 
     /// Remove a file or symlink. A symlink is removed, not its target.
@@ -199,12 +276,31 @@ impl DirHandle {
         self.dir()?.remove_file_or_symlink(path).map_err(io_error)
     }
 
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn unlink_at_async(&self, path: String) -> Result<AsyncTask<DirTask<()>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || dir.remove_file_or_symlink(path)))
+    }
+
     /// Rename a path beneath this directory to a path beneath `new_dir`.
     #[napi]
     pub fn rename_at(&self, old_path: String, new_dir: &DirHandle, new_path: String) -> Result<()> {
         self.dir()?
-            .rename(old_path, new_dir.dir()?, new_path)
+            .rename(old_path, new_dir.dir()?.as_ref(), new_path)
             .map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn rename_at_async(
+        &self,
+        old_path: String,
+        new_dir: &DirHandle,
+        new_path: String,
+    ) -> Result<AsyncTask<DirTask<()>>> {
+        let (dir, new_dir) = (self.dir()?, new_dir.dir()?);
+        Ok(DirTask::spawn(move || {
+            dir.rename(old_path, &new_dir, new_path)
+        }))
     }
 
     /// Create a hard link beneath `new_dir`.
@@ -220,14 +316,30 @@ impl DirHandle {
         new_path: String,
         follow: Option<bool>,
     ) -> Result<()> {
-        let dir = self.dir()?;
-        let old_path = if follow.unwrap_or(false) {
-            dir.canonicalize(old_path).map_err(io_error)?
-        } else {
-            old_path.into()
-        };
-        dir.hard_link(old_path, new_dir.dir()?, new_path)
-            .map_err(io_error)
+        let follow = follow.unwrap_or(false);
+        link_at(
+            self.dir()?.as_ref(),
+            old_path,
+            new_dir.dir()?.as_ref(),
+            new_path,
+            follow,
+        )
+        .map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn link_at_async(
+        &self,
+        old_path: String,
+        new_dir: &DirHandle,
+        new_path: String,
+        follow: Option<bool>,
+    ) -> Result<AsyncTask<DirTask<()>>> {
+        let (dir, new_dir) = (self.dir()?, new_dir.dir()?);
+        let follow = follow.unwrap_or(false);
+        Ok(DirTask::spawn(move || {
+            link_at(&dir, old_path, &new_dir, new_path, follow)
+        }))
     }
 
     /// Create a symlink at `path` that refers to `target`.
@@ -235,7 +347,15 @@ impl DirHandle {
     /// An absolute `target` is refused, as it could not be followed.
     #[napi]
     pub fn symlink_at(&self, target: String, path: String) -> Result<()> {
-        DirExt::symlink(self.dir()?, target, path).map_err(io_error)
+        DirExt::symlink(self.dir()?.as_ref(), target, path).map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn symlink_at_async(&self, target: String, path: String) -> Result<AsyncTask<DirTask<()>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || {
+            DirExt::symlink(dir.as_ref(), target, path)
+        }))
     }
 
     /// Set the access and modification times of this directory.
@@ -246,7 +366,27 @@ impl DirHandle {
         mtime: Option<Either<BigInt, String>>,
     ) -> Result<()> {
         let (atime, mtime) = (time_spec(atime)?, time_spec(mtime)?);
-        DirExt::set_times(self.dir()?, Component::CurDir, atime, mtime).map_err(io_error)
+        set_times_at(
+            self.dir()?.as_ref(),
+            Component::CurDir.as_ref(),
+            atime,
+            mtime,
+            true,
+        )
+        .map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn set_times_async(
+        &self,
+        atime: Option<Either<BigInt, String>>,
+        mtime: Option<Either<BigInt, String>>,
+    ) -> Result<AsyncTask<DirTask<()>>> {
+        let (atime, mtime) = (time_spec(atime)?, time_spec(mtime)?);
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || {
+            set_times_at(&dir, Component::CurDir.as_ref(), atime, mtime, true)
+        }))
     }
 
     /// Set the access and modification times of a path beneath this directory.
@@ -259,40 +399,163 @@ impl DirHandle {
         follow: bool,
     ) -> Result<()> {
         let (atime, mtime) = (time_spec(atime)?, time_spec(mtime)?);
+        set_times_at(self.dir()?.as_ref(), path.as_ref(), atime, mtime, follow).map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn set_times_at_async(
+        &self,
+        path: String,
+        atime: Option<Either<BigInt, String>>,
+        mtime: Option<Either<BigInt, String>>,
+        follow: bool,
+    ) -> Result<AsyncTask<DirTask<()>>> {
+        let (atime, mtime) = (time_spec(atime)?, time_spec(mtime)?);
         let dir = self.dir()?;
-        if follow {
-            DirExt::set_times(dir, path, atime, mtime)
-        } else {
-            dir.set_symlink_times(path, atime, mtime)
-        }
-        .map_err(io_error)
+        Ok(DirTask::spawn(move || {
+            set_times_at(&dir, path.as_ref(), atime, mtime, follow)
+        }))
     }
 
     /// Flush this directory to its device.
     #[napi]
     pub fn sync(&self) -> Result<()> {
-        // The handle itself may lack the access rights that a flush needs.
-        self.dir()?
-            .open(Component::CurDir)
-            .and_then(|directory| directory.sync_all())
-            .map_err(io_error)
+        sync(self.dir()?.as_ref()).map_err(io_error)
+    }
+
+    #[napi(ts_return_type = "Promise<void | FailureRaw>")]
+    pub fn sync_async(&self) -> Result<AsyncTask<DirTask<()>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || sync(&dir)))
     }
 
     /// List this directory, without `.` and `..`.
     #[napi]
     pub fn read_dir(&self) -> Result<Vec<DirEntryRaw>> {
-        let mut entries = Vec::new();
-        for entry in self.dir()?.entries().map_err(io_error)? {
-            let entry = entry.map_err(io_error)?;
-            let kind = entry.file_type().map(type_name).map_err(io_error)?;
-            let name = entry.file_name().to_string_lossy().into_owned();
-            entries.push(DirEntryRaw {
-                name,
-                kind: kind.to_owned(),
-            });
-        }
-        Ok(entries)
+        read_dir(self.dir()?.as_ref()).map_err(io_error)
     }
+
+    #[napi(ts_return_type = "Promise<Array<DirEntryRaw> | FailureRaw>")]
+    pub fn read_dir_async(&self) -> Result<AsyncTask<DirTask<Vec<DirEntryRaw>>>> {
+        let dir = self.dir()?;
+        Ok(DirTask::spawn(move || read_dir(&dir)))
+    }
+}
+
+fn open_ambient(path: String) -> io::Result<DirHandle> {
+    Dir::open_ambient_dir(path, ambient_authority()).map(DirHandle::new)
+}
+
+fn open_at(dir: &Dir, path: &Path, options: &OpenAtOptions) -> io::Result<Either<DirHandle, i32>> {
+    if options.directory && (options.create || options.exclusive || options.truncate) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "cannot create or truncate a directory",
+        ));
+    }
+
+    let mut open_options = OpenOptions::new();
+    // A file that is not opened for writing is opened for reading, as an
+    // open file must have some access mode.
+    open_options.read(options.read || !options.write);
+    open_options.write(options.write || options.create || options.truncate);
+    if options.create && options.exclusive {
+        open_options.create_new(true);
+    } else {
+        open_options.create(options.create);
+    }
+    open_options.truncate(options.truncate);
+    open_options.follow(follow_symlinks(options.follow));
+    open_options.maybe_dir(true);
+    if options.sync {
+        open_options.sync(true);
+    }
+    if options.dsync {
+        open_options.dsync(true);
+    }
+    if options.directory {
+        sys::require_directory(&mut open_options);
+    }
+
+    let file = dir.open_with(path, &open_options)?;
+    if file.metadata()?.is_dir() {
+        let dir = Dir::from_std_file(file.into_std());
+        return Ok(Either::A(DirHandle::new(dir)));
+    }
+    if options.directory {
+        return Err(io::Error::new(
+            io::ErrorKind::NotADirectory,
+            "not a directory",
+        ));
+    }
+    sys::into_node_fd(file).map(Either::B)
+}
+
+fn stat(dir: &Dir) -> io::Result<StatRaw> {
+    dir.dir_metadata().map(|metadata| stat_raw(&metadata))
+}
+
+fn stat_at(dir: &Dir, path: &Path, follow: bool) -> io::Result<StatRaw> {
+    sys::stat_at(dir, path, follow).map(|metadata| stat_raw(&metadata))
+}
+
+fn readlink_at(dir: &Dir, path: &Path) -> io::Result<String> {
+    dir.read_link_contents(path)?
+        .into_os_string()
+        .into_string()
+        .map_err(|_| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "symlink target is not valid Unicode",
+            )
+        })
+}
+
+fn link_at(
+    dir: &Dir,
+    old_path: String,
+    new_dir: &Dir,
+    new_path: String,
+    follow: bool,
+) -> io::Result<()> {
+    let old_path = if follow {
+        dir.canonicalize(old_path)?
+    } else {
+        PathBuf::from(old_path)
+    };
+    dir.hard_link(old_path, new_dir, new_path)
+}
+
+/// Set the times of a path, or of a final symlink itself without `follow`.
+fn set_times_at(
+    dir: &Dir,
+    path: &Path,
+    atime: Option<SystemTimeSpec>,
+    mtime: Option<SystemTimeSpec>,
+    follow: bool,
+) -> io::Result<()> {
+    if follow {
+        DirExt::set_times(dir, path, atime, mtime)
+    } else {
+        dir.set_symlink_times(path, atime, mtime)
+    }
+}
+
+fn sync(dir: &Dir) -> io::Result<()> {
+    // The handle itself may lack the access rights that a flush needs.
+    dir.open(Component::CurDir)?.sync_all()
+}
+
+fn read_dir(dir: &Dir) -> io::Result<Vec<DirEntryRaw>> {
+    let mut entries = Vec::new();
+    for entry in dir.entries()? {
+        let entry = entry?;
+        entries.push(DirEntryRaw {
+            name: entry.file_name().to_string_lossy().into_owned(),
+            kind: type_name(entry.file_type()?).to_owned(),
+        });
+    }
+    Ok(entries)
 }
 
 /// Convert a time to set: nanoseconds since the Unix epoch, or `"now"`. `None`
@@ -454,10 +717,7 @@ mod sys {
         let fd = unsafe { open_os_handle(handle.cast()) };
         if fd < 0 {
             drop(unsafe { OwnedHandle::from_raw_handle(handle) });
-            return Err(io::Error::new(
-                io::ErrorKind::Other,
-                "could not create a file descriptor",
-            ));
+            return Err(io::Error::other("could not create a file descriptor"));
         }
         Ok(fd)
     }

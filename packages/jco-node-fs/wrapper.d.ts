@@ -83,12 +83,23 @@ export type NewTime = bigint | 'now' | null;
  * the directory itself rather than to its path, so it is unaffected by the
  * directory being renamed or its path being replaced.
  *
- * Every method is synchronous. Errors expose `code` and `syscall`, and `path`
- * and `dest` where the operation takes them. A handle belongs to the thread
- * that opened it and cannot be passed to another thread.
+ * The methods of a `Dir` are synchronous and run on the calling thread, while
+ * `promises` has them as promises that run on the libuv thread pool. Errors
+ * are the same in both forms: they expose `code` and `syscall`, and `path` and
+ * `dest` where the operation takes them. A handle belongs to the thread that
+ * opened it and cannot be passed to another thread.
  */
 export class Dir {
     private constructor();
+
+    /** Asynchronous counterparts of the static operations. */
+    static readonly promises: {
+        /** Open a host directory with the authority of the process. */
+        open(path: string): Promise<Dir>;
+    };
+
+    /** The operations of this directory as promises. */
+    readonly promises: DirPromises;
 
     /**
      * Open a host directory with the authority of the process. This is the only
@@ -96,7 +107,10 @@ export class Dir {
      */
     static open(path: string): Dir;
 
-    /** Release the directory. Later operations fail with `EBADF`. */
+    /**
+     * Release the directory. Later operations fail with `EBADF`, while
+     * asynchronous operations in flight finish on the directory.
+     */
     close(): void;
 
     /**
@@ -148,4 +162,29 @@ export class Dir {
 
     /** List this directory, without `.` and `..`. */
     readDir(): DirEntry[];
+}
+
+/**
+ * The operations of a `Dir` as promises, run on the libuv thread pool.
+ *
+ * Each behaves like the synchronous method of the same name and rejects with
+ * the error that one throws, including for invalid arguments. An operation
+ * keeps its directory open until it settles, also when the `Dir` is closed
+ * meanwhile.
+ */
+export interface DirPromises {
+    openAt(path: string, options?: OpenAtOptions): Promise<Dir | number>;
+    stat(): Promise<Stat>;
+    statAt(path: string, follow: boolean): Promise<Stat>;
+    readlinkAt(path: string): Promise<string>;
+    createDirAt(path: string): Promise<void>;
+    removeDirAt(path: string): Promise<void>;
+    unlinkAt(path: string): Promise<void>;
+    renameAt(oldPath: string, newDir: Dir, newPath: string): Promise<void>;
+    linkAt(oldPath: string, newDir: Dir, newPath: string, follow?: boolean): Promise<void>;
+    symlinkAt(target: string, path: string): Promise<void>;
+    setTimes(atime: NewTime, mtime: NewTime): Promise<void>;
+    setTimesAt(path: string, atime: NewTime, mtime: NewTime, follow: boolean): Promise<void>;
+    sync(): Promise<void>;
+    readDir(): Promise<DirEntry[]>;
 }

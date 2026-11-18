@@ -78,8 +78,22 @@ try {
 `follow` says whether a symlink in the final path component is followed.
 Sizes, identifiers and times are `bigint`s, and times are nanoseconds since the
 Unix epoch. A time to set is such a `bigint`, `'now'`, or `null` to keep it.
-Methods are synchronous, and errors include `code` and `syscall`, plus `path`
-and `dest` where they apply.
+Errors include `code` and `syscall`, plus `path` and `dest` where they apply.
+
+These methods are synchronous and run on the calling thread. Each one except
+`close()` also exists as a promise that runs on the libuv thread pool, under
+`dir.promises`, and `Dir.promises.open(hostPath)` opens a host directory the
+same way, as `node:fs` does with `fs.promises`:
+
+```js
+const root = await Dir.promises.open('/srv/data');
+const stat = await root.promises.statAt('config/settings.json', true);
+```
+
+A promise rejects with the error that the synchronous method throws. An
+operation keeps its directory open until it settles: `close()` makes later
+calls fail with `EBADF` and lets operations in flight finish. Operations on one
+handle may run concurrently, in no particular order.
 
 ### Security model
 

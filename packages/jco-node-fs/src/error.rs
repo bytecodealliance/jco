@@ -16,7 +16,12 @@ pub fn code_error(code: &str, message: impl Into<String>) -> napi::Error<String>
 /// `PermissionDenied` error without an OS error code. That case maps to `EPERM`,
 /// which distinguishes it from a host permission failure (`EACCES`).
 pub fn io_error(error: io::Error) -> napi::Error<String> {
-    let code = error
+    code_error(error_code(&error), error.to_string())
+}
+
+/// Name an I/O error as a Node.js-style error code, see `io_error`.
+pub fn error_code(error: &io::Error) -> &'static str {
+    error
         .raw_os_error()
         .and_then(os_error_code)
         .unwrap_or_else(|| match error.kind() {
@@ -34,9 +39,9 @@ pub fn io_error(error: io::Error) -> napi::Error<String> {
             io::ErrorKind::Interrupted => "EINTR",
             io::ErrorKind::Unsupported => "ENOTSUP",
             io::ErrorKind::OutOfMemory => "ENOMEM",
+            io::ErrorKind::InvalidData => "EILSEQ",
             _ => "EIO",
-        });
-    code_error(code, error.to_string())
+        })
 }
 
 /// Name the POSIX error number `raw`, if it is one that filesystem calls report.

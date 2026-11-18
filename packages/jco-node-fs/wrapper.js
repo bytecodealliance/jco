@@ -115,9 +115,253 @@ function call(syscall, path, dest, operation) {
 /**
  * An open directory whose path operations cannot resolve outside of it.
  */
+/**
+ * Check the options of `openAt` and give every option a value.
+ *
+ * @param {Record<string, boolean>} options - how to open the path
+ * @returns {Record<string, boolean>} the options the native binding takes
+ */
+function openOptions(options) {
+    const nativeOptions = {};
+    for (const name of OPEN_OPTIONS) {
+        const value = options[name] ?? false;
+        if (typeof value !== 'boolean') {
+            throw new TypeError(`options.${name} must be a boolean`);
+        }
+        nativeOptions[name] = value;
+    }
+    return nativeOptions;
+}
+
+/**
+ * Run an asynchronous native directory operation, which resolves with a
+ * description of its failure rather than rejecting, and reject with the error
+ * that the synchronous operation would throw.
+ *
+ * @template T
+ * @param {string} syscall - the operation's name
+ * @param {string | undefined} path - the path the operation acts on
+ * @param {string | undefined} dest - the operation's destination path
+ * @param {() => Promise<T | { failureCode: string, failureMessage: string }>} operation - the native call
+ * @returns {Promise<T>} the result of the native call
+ */
+async function callAsync(syscall, path, dest, operation) {
+    const result = await call(syscall, path, dest, operation);
+    if (result !== null && typeof result === 'object' && 'failureCode' in result) {
+        const error = new Error(result.failureMessage);
+        error.code = result.failureCode;
+        call(syscall, path, dest, () => {
+            throw error;
+        });
+    }
+    return result;
+}
+
+/**
+ * The operations of a `Dir` as promises, run on the libuv thread pool.
+ *
+ * An operation keeps its directory open until it settles, also when the `Dir`
+ * is closed meanwhile. Arguments are checked like those of the synchronous
+ * operations, and a failed check rejects the promise.
+ */
+class DirPromises {
+    /** The native handle of the directory. */
+    #handle;
+    /** Wraps the native handle of a directory that an operation opened. */
+    #wrap;
+    /** Returns the native handle of a `Dir` passed as an argument. */
+    #handleOf;
+
+    /**
+     * @param {InstanceType<typeof DirHandle>} handle - the native handle
+     * @param {(handle: InstanceType<typeof DirHandle>) => Dir} wrap - wraps a native handle
+     * @param {(dir: unknown) => InstanceType<typeof DirHandle>} handleOf - unwraps a `Dir`
+     */
+    constructor(handle, wrap, handleOf) {
+        this.#handle = handle;
+        this.#wrap = wrap;
+        this.#handleOf = handleOf;
+    }
+
+    /**
+     * @param {string} path - path relative to this directory
+     * @param {Record<string, boolean>} [options] - how to open the path
+     * @returns {Promise<Dir | number>} a directory, or a file descriptor the caller must close
+     */
+    async openAt(path, options = {}) {
+        validatePath(path, 'path');
+        const nativeOptions = openOptions(options);
+        const opened = await callAsync('open', path, undefined, () => this.#handle.openAtAsync(path, nativeOptions));
+        return typeof opened === 'number' ? opened : this.#wrap(opened);
+    }
+
+    /**
+     * @returns {Promise<object>} the attributes of this directory
+     */
+    async stat() {
+        return callAsync('fstat', undefined, undefined, () => this.#handle.statAsync());
+    }
+
+    /**
+     * @param {string} path - path relative to this directory
+     * @param {boolean} follow - whether to follow a symlink in the final component
+     * @returns {Promise<object>} the attributes
+     */
+    async statAt(path, follow) {
+        validatePath(path, 'path');
+        return callAsync(follow ? 'stat' : 'lstat', path, undefined, () =>
+            this.#handle.statAtAsync(path, Boolean(follow)),
+        );
+    }
+
+    /**
+     * @param {string} path - path relative to this directory
+     * @returns {Promise<string>} the symlink's target
+     */
+    async readlinkAt(path) {
+        validatePath(path, 'path');
+        return callAsync('readlink', path, undefined, () => this.#handle.readlinkAtAsync(path));
+    }
+
+    /**
+     * @param {string} path - path relative to this directory
+     * @returns {Promise<void>}
+     */
+    async createDirAt(path) {
+        validatePath(path, 'path');
+        await callAsync('mkdir', path, undefined, () => this.#handle.createDirAtAsync(path));
+    }
+
+    /**
+     * @param {string} path - path relative to this directory
+     * @returns {Promise<void>}
+     */
+    async removeDirAt(path) {
+        validatePath(path, 'path');
+        await callAsync('rmdir', path, undefined, () => this.#handle.removeDirAtAsync(path));
+    }
+
+    /**
+     * @param {string} path - path relative to this directory
+     * @returns {Promise<void>}
+     */
+    async unlinkAt(path) {
+        validatePath(path, 'path');
+        await callAsync('unlink', path, undefined, () => this.#handle.unlinkAtAsync(path));
+    }
+
+    /**
+     * @param {string} oldPath - path relative to this directory
+     * @param {Dir} newDir - directory the new path is relative to
+     * @param {string} newPath - path relative to `newDir`
+     * @returns {Promise<void>}
+     */
+    async renameAt(oldPath, newDir, newPath) {
+        validatePath(oldPath, 'oldPath');
+        validatePath(newPath, 'newPath');
+        const newHandle = this.#handleOf(newDir);
+        await callAsync('rename', oldPath, newPath, () => this.#handle.renameAtAsync(oldPath, newHandle, newPath));
+    }
+
+    /**
+     * @param {string} oldPath - path relative to this directory
+     * @param {Dir} newDir - directory the new path is relative to
+     * @param {string} newPath - path relative to `newDir`
+     * @param {boolean} [follow] - link the target of a symlink at `oldPath`, not the symlink
+     * @returns {Promise<void>}
+     */
+    async linkAt(oldPath, newDir, newPath, follow = false) {
+        validatePath(oldPath, 'oldPath');
+        validatePath(newPath, 'newPath');
+        const newHandle = this.#handleOf(newDir);
+        await callAsync('link', oldPath, newPath, () =>
+            this.#handle.linkAtAsync(oldPath, newHandle, newPath, Boolean(follow)),
+        );
+    }
+
+    /**
+     * @param {string} target - what the symlink refers to
+     * @param {string} path - path of the symlink, relative to this directory
+     * @returns {Promise<void>}
+     */
+    async symlinkAt(target, path) {
+        validatePath(target, 'target');
+        validatePath(path, 'path');
+        await callAsync('symlink', target, path, () => this.#handle.symlinkAtAsync(target, path));
+    }
+
+    /**
+     * @param {bigint | 'now' | null} atime - new access time, null to keep it
+     * @param {bigint | 'now' | null} mtime - new modification time, null to keep it
+     * @returns {Promise<void>}
+     */
+    async setTimes(atime, mtime) {
+        validateTime(atime, 'atime');
+        validateTime(mtime, 'mtime');
+        await callAsync('futimes', undefined, undefined, () => this.#handle.setTimesAsync(atime, mtime));
+    }
+
+    /**
+     * @param {string} path - path relative to this directory
+     * @param {bigint | 'now' | null} atime - new access time, null to keep it
+     * @param {bigint | 'now' | null} mtime - new modification time, null to keep it
+     * @param {boolean} follow - whether to follow a symlink in the final component
+     * @returns {Promise<void>}
+     */
+    async setTimesAt(path, atime, mtime, follow) {
+        validatePath(path, 'path');
+        validateTime(atime, 'atime');
+        validateTime(mtime, 'mtime');
+        await callAsync(follow ? 'utimes' : 'lutimes', path, undefined, () =>
+            this.#handle.setTimesAtAsync(path, atime, mtime, Boolean(follow)),
+        );
+    }
+
+    /**
+     * @returns {Promise<void>} settles once this directory is flushed to its device
+     */
+    async sync() {
+        await callAsync('fsync', undefined, undefined, () => this.#handle.syncAsync());
+    }
+
+    /**
+     * @returns {Promise<Array<{ name: string, type: string }>>} the entries, without `.` and `..`
+     */
+    async readDir() {
+        return callAsync('scandir', undefined, undefined, () => this.#handle.readDirAsync());
+    }
+}
+
 class Dir {
     /** The native handle. */
     #handle;
+    /** The asynchronous operations, created on first use. */
+    #promises;
+
+    /**
+     * Asynchronous counterparts of the static operations.
+     */
+    static promises = Object.freeze({
+        /**
+         * Open a host directory with the authority of the process.
+         *
+         * @param {string} path - host path of the directory
+         * @returns {Promise<Dir>} the open directory
+         */
+        async open(path) {
+            validatePath(path, 'path');
+            return new Dir(await callAsync('open', path, undefined, () => DirHandle.openAmbientAsync(path)));
+        },
+    });
+
+    /**
+     * The operations of this directory as promises, see `DirPromises`.
+     *
+     * @returns {DirPromises} the asynchronous operations
+     */
+    get promises() {
+        return (this.#promises ??= new DirPromises(this.#handle, (handle) => new Dir(handle), Dir.#handleOf));
+    }
 
     /**
      * @param {InstanceType<typeof DirHandle>} handle - the native handle to wrap
@@ -156,14 +400,7 @@ class Dir {
      */
     openAt(path, options = {}) {
         validatePath(path, 'path');
-        const nativeOptions = {};
-        for (const name of OPEN_OPTIONS) {
-            const value = options[name] ?? false;
-            if (typeof value !== 'boolean') {
-                throw new TypeError(`options.${name} must be a boolean`);
-            }
-            nativeOptions[name] = value;
-        }
+        const nativeOptions = openOptions(options);
 
         const opened = call('open', path, undefined, () => this.#handle.openAt(path, nativeOptions));
         return typeof opened === 'number' ? opened : new Dir(opened);
