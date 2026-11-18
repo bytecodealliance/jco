@@ -254,3 +254,9 @@ and a queue that exposes `takeBytes` has byte chunks copied whole. The read
 still marks the end as copying, ends with a drop or an instance stop, and honors
 `rejectLength` and `dropAfterCopy`. An end that is not idle, such as one with an
 event the guest has yet to take, is read through a copy as before.
+
+Such a read of a `u8` stream whose metadata names no typed array returns bytes
+as the source gave them. A chunk the source produced as a `Uint8Array` or an
+`ArrayBuffer` is read as `Uint8Array` copies of its bytes, and the read ends
+with the chunk. Numbers and arrays of numbers are read as values, as they are
+through a copy.

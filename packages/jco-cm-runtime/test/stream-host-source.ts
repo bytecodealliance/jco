@@ -123,6 +123,53 @@ suite.concurrent('host reads of a stream lowered from the host', () => {
         expect(await s.read.read(64)).toEqual(done);
     });
 
+    test('of a stream that names no typed array return bytes as the source gave them', async () => {
+        const untyped: StreamElementMetadata = { ...bytes, typedArray: undefined };
+        const first = new Uint8Array([1, 2, 3]);
+        const source = asyncSource(
+            chunk(first),
+            chunk([4, 5]),
+            chunk(6),
+            chunk(new Uint8Array([7, 8]).buffer),
+            chunk(Buffer.from([9])),
+        );
+        const s = createLowered(source, untyped);
+
+        // A byte array is read as copies of its bytes, whatever the count.
+        const head = await s.read.read();
+        expect(head).toEqual({ value: new Uint8Array([1]), done: false });
+        (head.value as Uint8Array)[0] = 99;
+        expect(Array.from(first)).toEqual([1, 2, 3]);
+        expect(await s.read.read(64)).toEqual({ value: new Uint8Array([2, 3]), done: false });
+
+        // Values are read as values: one for a count of one, and a list of them otherwise.
+        expect(await s.read.read()).toEqual({ value: 4, done: false });
+        expect(await s.read.read(64)).toEqual({ value: [5], done: false });
+        expect(await s.read.read(64)).toEqual({ value: [6], done: false });
+
+        const fromBuffer = await s.read.read(64);
+        expect(fromBuffer).toEqual({ value: new Uint8Array([7, 8]), done: false });
+        const fromNodeBuffer = await s.read.read(64);
+        expect(fromNodeBuffer).toEqual({ value: new Uint8Array([9]), done: false });
+        expect(Object.getPrototypeOf(fromNodeBuffer.value)).toBe(Uint8Array.prototype);
+        expect(await s.read.read(64)).toEqual(done);
+
+        // A byte array given for elements that are not bytes holds values.
+        expect(await readBack(asyncSource(chunk(new Uint8Array([1, 2]))), [8])).toEqual([
+            { value: [1, 2], done: false },
+        ]);
+    });
+
+    test('of a stream that names no typed array end with a byte chunk of a synchronous source', async () => {
+        const untyped: StreamElementMetadata = { ...bytes, typedArray: undefined };
+        expect(await readBack([new Uint8Array([1, 2]), new Uint8Array([3]), [4, 5]], [8, 8, 8, 8], untyped)).toEqual([
+            { value: new Uint8Array([1, 2]), done: false },
+            { value: new Uint8Array([3]), done: false },
+            { value: [4, 5], done: false },
+            done,
+        ]);
+    });
+
     test('deliver all of a final chunk, and wait past empty ones', async () => {
         expect(await readBack(asyncSource(chunk([1, 2, 3], true)), [2, 2, 2])).toEqual([
             { value: [1, 2], done: false },
