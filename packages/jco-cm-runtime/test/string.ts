@@ -75,15 +75,14 @@ function strings() {
 }
 
 const CASES = [
-    { value: '', utf8: [], utf16: [], codepoints: 0 },
-    { value: 'aé中', utf8: [0x61, 0xc3, 0xa9, 0xe4, 0xb8, 0xad], utf16: [0x61, 0, 0xe9, 0, 0x2d, 0x4e], codepoints: 3 },
-    { value: '🚀', utf8: [0xf0, 0x9f, 0x9a, 0x80], utf16: [0x3d, 0xd8, 0x80, 0xde], codepoints: 1 },
-    { value: '\ufeff', utf8: [0xef, 0xbb, 0xbf], utf16: [0xff, 0xfe], codepoints: 1 },
+    { value: '', utf8: [], utf16: [] },
+    { value: 'aé中', utf8: [0x61, 0xc3, 0xa9, 0xe4, 0xb8, 0xad], utf16: [0x61, 0, 0xe9, 0, 0x2d, 0x4e] },
+    { value: '🚀', utf8: [0xf0, 0x9f, 0x9a, 0x80], utf16: [0x3d, 0xd8, 0x80, 0xde] },
+    { value: '\ufeff', utf8: [0xef, 0xbb, 0xbf], utf16: [0xff, 0xfe] },
     {
         value: '\ud800x\udc00',
         utf8: [0xef, 0xbf, 0xbd, 0x78, 0xef, 0xbf, 0xbd],
         utf16: [0xfd, 0xff, 0x78, 0, 0xfd, 0xff],
-        codepoints: 3,
     },
 ];
 
@@ -117,7 +116,6 @@ for (const encoding of ['utf8', 'utf16'] as const) {
                 expect(result).toEqual({
                     ptr: 65536,
                     len: encoding === 'utf8' ? bytes.length : bytes.length / 2,
-                    codepoints: entry.codepoints,
                 });
                 expect([...new Uint8Array(memory.buffer, result.ptr, bytes.length)]).toEqual(bytes);
             }
@@ -273,11 +271,11 @@ test.concurrent('UTF8 allocation calls the supplied encoder with its own receive
         },
     };
     const memory = { buffer: new ArrayBuffer(8) };
-    expect(string.utf8Encode(encoder, 'é', () => 0, memory)).toEqual({ ptr: 0, len: 2, codepoints: 1 });
+    expect(string.utf8Encode(encoder, 'é', () => 0, memory)).toEqual({ ptr: 0, len: 2 });
 });
 
 test.concurrent.each(['', 'ascii', '😀𝄞', '\ud800x\udc00', 'a😀\ud800é'.repeat(256)])(
-    'UTF-16 encoding counts scalars without changing surrogate repair: %j',
+    'UTF-16 encoding repairs surrogates and returns only where it wrote: %j',
     async (value) => {
         const memory = new WebAssembly.Memory({ initial: 1, maximum: 3 });
         const context = string.initializeUtf16Encoding();
@@ -286,7 +284,7 @@ test.concurrent.each(['', 'ascii', '😀𝄞', '\ud800x\udc00', 'a😀\ud800é'.
             return 65536;
         };
         const encoded = string.utf16Encode(context, value, realloc, memory);
-        expect(encoded.codepoints).toBe([...value].length);
+        expect(encoded).toEqual({ ptr: 65536, len: value.length });
         expect(new TextDecoder('utf-16le').decode(new Uint8Array(memory.buffer, encoded.ptr, encoded.len * 2))).toBe(
             value.toWellFormed(),
         );
@@ -309,7 +307,7 @@ test.concurrent.each(['ascii', 'é', '😀', '\ud800x\udc00', '\ufeff'])(
             return 65536;
         };
         const encoded = string.utf8Encode(encoder, value, realloc, memory);
-        expect(encoded.codepoints).toBe([...value].length);
+        expect(encoded).toEqual({ ptr: 65536, len: expected.length });
         expect(new Uint8Array(memory.buffer, encoded.ptr, encoded.len)).toEqual(expected);
         let calls = 0;
         const original = encoder.encodeInto.bind(encoder);

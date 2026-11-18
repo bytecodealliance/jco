@@ -40,16 +40,18 @@ function requireString(value: unknown): string {
     return value;
 }
 
-function utf8Size(s: string, encoder: StringEncodeInto): { len: number; codepoints: number } {
+/**
+ * The exact UTF-8 size of a string, where an unpaired surrogate counts as the three bytes
+ * of the replacement character that encodes it.
+ */
+function utf8Size(s: string, encoder: StringEncodeInto): number {
     const native = nativeEncoder(encoder, s);
     if (native) {
-        return { len: s.length, codepoints: s.length };
+        return s.length;
     }
     let len = 0;
-    let codepoints = 0;
     for (let i = 0; i < s.length; i++) {
         const ch = s.charCodeAt(i);
-        codepoints++;
         if (ch < 0x80) {
             len += 1;
         } else if (ch < 0x800) {
@@ -61,7 +63,7 @@ function utf8Size(s: string, encoder: StringEncodeInto): { len: number; codepoin
             len += 3;
         }
     }
-    return { len, codepoints };
+    return len;
 }
 
 export const initializeUtf8Decoder: StringModule['initializeUtf8Decoder'] = () =>
@@ -88,15 +90,13 @@ function writeUtf16(context: Utf16EncodingContext, str: string, ptr: number, mem
     const out = new Uint16Array(memory.buffer, ptr, len);
 
     // Write the code units in the byte order of this platform, replacing each
-    // lone surrogate. A surrogate pair is one code point in two code units.
-    let codepoints = len;
+    // lone surrogate.
     for (let i = 0; i < len; i++) {
         let ch = str.charCodeAt(i);
         if ((ch & 0xf800) === 0xd800) {
             if (ch < 0xdc00 && i + 1 < len && (str.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
                 out[i++] = ch;
                 ch = str.charCodeAt(i);
-                codepoints--;
             } else {
                 ch = 0xfffd;
             }
@@ -110,7 +110,7 @@ function writeUtf16(context: Utf16EncodingContext, str: string, ptr: number, mem
             out[i] = ((out[i] & 0xff) << 8) | (out[i] >>> 8);
         }
     }
-    return { ptr, len, codepoints };
+    return { ptr, len };
 }
 
 function writeUtf8(
@@ -118,7 +118,6 @@ function writeUtf8(
     s: string,
     ptr: number,
     len: number,
-    codepoints: number,
     memory: StringMemory,
 ): StringAllocation {
     const native = nativeEncoder(encoder, s);
@@ -127,13 +126,13 @@ function writeUtf8(
         if (written !== len) {
             throw new Error('failed to encode whole string');
         }
-        return { ptr, len, codepoints };
+        return { ptr, len };
     }
     const { read, written } = encoder.encodeInto(s, new Uint8Array(memory.buffer, ptr, len));
     if (read !== s.length || written !== len) {
         throw new Error('failed to encode whole string');
     }
-    return { ptr, len, codepoints };
+    return { ptr, len };
 }
 
 export const utf16Encode: StringModule['utf16Encode'] = (context, value, realloc, memory) => {
@@ -174,9 +173,9 @@ export const utf8Encode: StringModule['utf8Encode'] = (encoder, value, realloc, 
         return { ptr: 1, len: 0 };
     }
     // Some preview1 allocators cannot shrink, so allocate exactly once.
-    const { len, codepoints } = utf8Size(s, encoder);
+    const len = utf8Size(s, encoder);
     const ptr = realloc(0, 0, 1, len);
-    return writeUtf8(encoder, s, ptr, len, codepoints, memory);
+    return writeUtf8(encoder, s, ptr, len, memory);
 };
 
 export const utf8EncodeAsync: StringModule['utf8EncodeAsync'] = async (encoder, value, realloc, memory) => {
@@ -184,9 +183,9 @@ export const utf8EncodeAsync: StringModule['utf8EncodeAsync'] = async (encoder, 
     if (s.length === 0) {
         return { ptr: 1, len: 0 };
     }
-    const { len, codepoints } = utf8Size(s, encoder);
+    const len = utf8Size(s, encoder);
     const ptr = await realloc(0, 0, 1, len);
-    return writeUtf8(encoder, s, ptr, len, codepoints, memory);
+    return writeUtf8(encoder, s, ptr, len, memory);
 };
 
 export const validateGuestChar: StringModule['validateGuestChar'] = (value) => {

@@ -44,15 +44,5 @@ export function prototype(source, id, variant) {
         }
         return source.slice(0, start) + fn + source.slice(end);
     }
-    if (variant === 'utf16-count' && id.endsWith('/intrinsics/string.ts')) {
-        const start = source.indexOf('function writeUtf16(');
-        const end = source.indexOf('function writeUtf8(', start);
-        const fn = source
-            .slice(start, end)
-            .replace('const len = str.length;', 'const len = str.length;\n    let codepoints = 0;')
-            .replace('let ch = str.charCodeAt(i);', 'codepoints++;\n        let ch = str.charCodeAt(i);')
-            .replace('codepoints: [...str].length', 'codepoints');
-        return source.slice(0, start) + fn + source.slice(end);
-    }
     return source;
 }

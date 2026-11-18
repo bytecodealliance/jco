@@ -102,7 +102,6 @@ export function workloads() {
     const text = 'a😀\ud800é'.repeat(256);
     const realloc = () => 1024;
     const encoded = utf16Encode(encoding, text, realloc, memory);
-    assert.equal(encoded.codepoints, [...text].length);
     assert.equal(
         new TextDecoder('utf-16le').decode(new Uint8Array(memory.buffer, encoded.ptr, encoded.len * 2)),
         text.toWellFormed(),
@@ -167,11 +166,11 @@ export function workloads() {
         ...['a'.repeat(4096), 'aé😀'.repeat(1024)].map((value, index) => ({
             name: index ? 'utf8-mixed-4096' : 'utf8-ascii-4096',
             units: 1,
-            expected: [...value].length,
+            expected: new TextEncoder().encode(value).length,
             run(n) {
                 let sum = 0;
                 for (let i = 0; i < n; i++) {
-                    sum += utf8Encode(encoder, value, realloc, memory).codepoints;
+                    sum += utf8Encode(encoder, value, realloc, memory).len;
                 }
                 return sum;
             },
@@ -297,11 +296,11 @@ export function workloads() {
         {
             name: 'utf16-1280-units',
             units: 1,
-            expected: encoded.codepoints,
+            expected: encoded.len,
             run(n) {
                 let sum = 0;
                 for (let i = 0; i < n; i++) {
-                    sum += utf16Encode(encoding, text, realloc, memory).codepoints;
+                    sum += utf16Encode(encoding, text, realloc, memory).len;
                 }
                 return sum;
             },
