@@ -1,5 +1,5 @@
 /**
- * Time calls through generated bindings of one variant built by `gen.sh`.
+ * Time calls through generated bindings of one variant built by `gen.mjs`.
  *
  * usage: node bench.mjs <variant-name> [case-filter]
  *
@@ -37,6 +37,7 @@ const [numbers, strings, lists, records, roundTrip, closedStreams, readiness, tr
 );
 
 const bytes = new Uint8Array(64).map((_, index) => index);
+const byteList = Array.from(bytes);
 const record = { a: 8, b: { a: true, b: false } };
 const text = 'hello world, this is a string';
 
@@ -98,6 +99,7 @@ const cases = {
     'export f64 -> f64': [() => numbers.test.roundtripF64(1.5), 100_000],
     'export string -> string': [() => strings.roundtrip(text), 30_000],
     'export list<u8> -> list<u8>': [() => lists.test.listRoundtrip(bytes), 20_000],
+    'export array -> list<u8>': [() => lists.test.listRoundtrip(byteList), 20_000],
     'export record -> record': [() => records.test.roundtripRecord1(record), 20_000],
     'export tuple swap': [() => records.test.swapTuple([1, 2]), 20_000],
     'guest calls 39 numeric imports': [() => numbers.testImports(), 1_000],
@@ -117,6 +119,7 @@ const expected = {
     'export f64 -> f64': 1.5,
     'export string -> string': text,
     'export list<u8> -> list<u8>': bytes,
+    'export array -> list<u8>': bytes,
     'export record -> record': record,
     'export tuple swap': [2, 1],
     'guest calls 39 numeric imports': undefined,
@@ -162,4 +165,5 @@ for (const [name, [fn, iterations]] of Object.entries(cases)) {
     assert.deepStrictEqual(await fn(), expected[name], name);
     results[name] = { ...summarize(rounds), samples: rounds };
 }
+assert.ok(Object.keys(results).length, 'no benchmark case matches ' + filter);
 console.log(JSON.stringify(results));
