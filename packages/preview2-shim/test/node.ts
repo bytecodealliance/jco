@@ -161,6 +161,36 @@ suite("Node.js Preview2", () => {
         }
     });
 
+    test("FS read of more bytes than a file holds returns what is there", async () => {
+        const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+        const { tmpdir } = await import("node:os");
+        const { join } = await import("node:path");
+        const { filesystem } = await import("@bytecodealliance/preview2-shim");
+        const directory = mkdtempSync(join(tmpdir(), "jco-p2-read-"));
+        try {
+            writeFileSync(join(directory, "small.txt"), "hello world");
+            writeFileSync(join(directory, "large.bin"), new Uint8Array(100_000).fill(7));
+            const root = (filesystem as any)._createPreopenDescriptor(directory);
+
+            const small = root.openAt({}, "small.txt", {}, { read: true });
+            for (const length of [2n ** 31n, 2n ** 40n, 2n ** 64n - 1n]) {
+                const [bytes, eof] = small.read(length, 6n);
+                assert.strictEqual(new TextDecoder().decode(bytes), "world");
+                assert.strictEqual(eof, false);
+            }
+            assert.deepStrictEqual(small.read(2n ** 40n, 11n), [new Uint8Array(), true]);
+            small[symbolDispose]();
+
+            const large = root.openAt({}, "large.bin", {}, { read: true });
+            const [bytes] = large.read(2n ** 40n, 1n);
+            assert.strictEqual(bytes.byteLength, 99_999);
+            assert.ok(bytes.every((byte: number) => byte === 7));
+            large[symbolDispose]();
+        } finally {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
     test("FS advise", async () => {
         const { filesystem } = await import("@bytecodealliance/preview2-shim");
         const testFile = fileURLToPath(import.meta.url);
