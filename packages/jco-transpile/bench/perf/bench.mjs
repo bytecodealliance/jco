@@ -23,18 +23,20 @@ if (!variant) {
  */
 const load = (name) => import(new URL(`../output/perf/${variant}/${name}/${name}.js`, import.meta.url).href);
 
-const [numbers, strings, lists, records, roundTrip, closedStreams, readiness, transmit] = await Promise.all(
-    [
-        'numbers',
-        'strings',
-        'lists',
-        'records',
-        'async-round-trip-stackless',
-        'async-closed-streams',
-        'async-readiness',
-        'async-synchronous-transmit',
-    ].map(load),
-);
+const [numbers, strings, lists, records, roundTrip, closedStreams, readiness, transmit, passThrough] =
+    await Promise.all(
+        [
+            'numbers',
+            'strings',
+            'lists',
+            'records',
+            'async-round-trip-stackless',
+            'async-closed-streams',
+            'async-readiness',
+            'async-synchronous-transmit',
+            'stream-pass-through',
+        ].map(load),
+    );
 
 const bytes = new Uint8Array(64).map((_, index) => index);
 const byteList = Array.from(bytes);
@@ -90,6 +92,23 @@ async function streamAndFutureThroughGuest() {
     return Promise.all([outputStream.read({ count: expected.length, dropAfterCopy: true }), outputFuture]);
 }
 
+const largeChunk = new Uint8Array(65_536).fill(7);
+
+/**
+ * Pass a stream of one chunk to a guest that returns it unread, and read the chunk back.
+ *
+ * @param {Uint8Array} bytes - the chunk the stream yields
+ * @returns {Promise<unknown>} the chunk read from the returned stream
+ */
+async function streamReturnedUnread(bytes) {
+    const output = await passThrough.passBytes(
+        (async function* () {
+            yield bytes;
+        })(),
+    );
+    return output.read({ count: bytes.length, dropAfterCopy: true });
+}
+
 /**
  * Benchmark cases: the function to time and how many calls make one round.
  * A function that returns a promise is awaited before the next call.
@@ -112,6 +131,8 @@ const cases = {
     'async export reading a stream<u8>': [() => closedStreams.closed.readStream(byteStream(), chunk), 2_000],
     'stream<u8> through the guest': [streamThroughGuest, 1_000],
     'stream<u8> and future<u8> through the guest': [streamAndFutureThroughGuest, 1_000],
+    'stream<u8> returned unread by the guest': [() => streamReturnedUnread(chunk), 1_000],
+    '64 KiB stream<u8> returned unread by the guest': [() => streamReturnedUnread(largeChunk), 200],
 };
 
 const expected = {
@@ -129,7 +150,17 @@ const expected = {
     'async export reading a stream<u8>': undefined,
     'stream<u8> through the guest': { value: new Uint8Array([1, 3, 5, 7, 11]), done: false },
     'stream<u8> and future<u8> through the guest': [{ value: new Uint8Array([1, 3, 5, 7, 11]), done: false }, 13],
+    'stream<u8> returned unread by the guest': { value: chunk, done: false },
+    '64 KiB stream<u8> returned unread by the guest': { value: largeChunk, done: false },
 };
+
+/** Compare each returned chunk by value across runtime versions with different byte representations. */
+function checkResult(name, result) {
+    if (name.endsWith('returned unread by the guest') && Array.isArray(result.value)) {
+        result = { ...result, value: Uint8Array.from(result.value) };
+    }
+    assert.deepStrictEqual(result, expected[name], name);
+}
 
 const results = {};
 for (const [name, [fn, iterations]] of Object.entries(cases)) {
@@ -141,7 +172,7 @@ for (const [name, [fn, iterations]] of Object.entries(cases)) {
     // not a promise would add a microtask to every synchronous call.
     const first = fn();
     const isAsync = first instanceof Promise;
-    assert.deepStrictEqual(await first, expected[name], name);
+    checkResult(name, await first);
     const round = isAsync
         ? async () => {
               for (let index = 0; index < iterations; index++) {
@@ -162,7 +193,7 @@ for (const [name, [fn, iterations]] of Object.entries(cases)) {
         rounds.push(((performance.now() - start) * 1e6) / iterations);
     }
     // Check the last state after repeated use as well as before warm-up.
-    assert.deepStrictEqual(await fn(), expected[name], name);
+    checkResult(name, await fn());
     results[name] = { ...summarize(rounds), samples: rounds };
 }
 assert.ok(Object.keys(results).length, 'no benchmark case matches ' + filter);

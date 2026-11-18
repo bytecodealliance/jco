@@ -26,14 +26,14 @@ const staging = await mkdtemp(join(output, '.generate-'));
 
 /** Write one fixture's bindings, forwarding each transpiler flag as a separate argument. */
 function generate(fixture, name, fixtureFlags) {
-    execFileSync(transpiler, [join(fixtures, fixture), join(staging, name), ...flags, ...fixtureFlags, ...extra], {
+    execFileSync(transpiler, [fixture, join(staging, name), ...flags, ...fixtureFlags, ...extra], {
         stdio: 'inherit',
     });
 }
 
 try {
     for (const name of ['numbers', 'strings', 'lists', 'records']) {
-        generate(`runtime/${name}.component.wasm`, name, [`--map=test:${name}/*=${hosts}#${name}`]);
+        generate(join(fixtures, `runtime/${name}.component.wasm`), name, [`--map=test:${name}/*=${hosts}#${name}`]);
     }
     for (const fixture of [
         'round-trip/async-round-trip-stackless',
@@ -41,8 +41,16 @@ try {
         'general/async-readiness',
         'general/async-synchronous-transmit',
     ]) {
-        generate(`p3/${fixture}.wasm`, basename(fixture), ['--jspi', `--map=local:local/*=${hosts}#p3`]);
+        generate(join(fixtures, `p3/${fixture}.wasm`), basename(fixture), [
+            '--jspi',
+            `--map=local:local/*=${hosts}#p3`,
+        ]);
     }
+    const component = join(staging, 'stream-pass-through.wasm');
+    execFileSync('wasm-tools', ['parse', join(fixtures, 'p3/streams/stream-pass-through.wat'), '-o', component]);
+    generate(component, 'stream-pass-through', ['--jspi']);
+    await rm(component);
+
     const destination = join(output, variant);
     await rm(destination, { recursive: true, force: true });
     await rename(staging, destination);
