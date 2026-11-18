@@ -3,9 +3,9 @@
 //!
 //! Wasmtime's implementation of adapter modules between components requires the
 //! usage of multi-memory for copying data back and forth between two
-//! components. The multi-memory proposal is, at this time, not stable in any JS
-//! engine. This module is an attempt to polyfill this until at such a time that
-//! multi-memory can be used natively.
+//! components. The multi-memory proposal is not available in every JS engine
+//! that runs transpiled components. This module polyfills it for those engines;
+//! the `multi_memory` option leaves the adapter modules as they are for the rest.
 //!
 //! The purpose of this module is to identify core wasms which require
 //! multi-memory coming out of Wasmtime. These wasms are rewritten to not
