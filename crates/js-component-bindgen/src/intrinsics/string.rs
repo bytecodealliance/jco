@@ -241,12 +241,60 @@ impl StringIntrinsic {
                               }} else {{ len += 3; }}
                           }}
                           const ptr = {realloc_call}(0, 0, 1, len);
-                          const {{ read, written }} = {encoder}.encodeInto(
-                              s,
-                              new Uint8Array(memory.buffer, ptr, len),
-                          );
+                          const out = new Uint8Array(memory.buffer, ptr, len);
+                          let {{ read, written }} = {encoder}.encodeInto(s, out);
                           if (read !== s.length || written !== len) {{
-                              throw new Error('failed to encode whole string');
+                              // An encoder may stop before the end although the allocation has
+                              // room: Node.js 26.13 leaves out a final character in U+0400 to
+                              // U+07FF of a string longer than 32 code units. Encode the rest
+                              // here, measuring scalars the same way as the sizing loop above.
+                              const failure = 'failed to encode whole string';
+                              if (read >>> 0 !== read || read > s.length ||
+                                  written >>> 0 !== written || written > len) {{
+                                  throw new Error(failure);
+                              }}
+                              // Resuming inside a surrogate pair would encode its second half
+                              // as a lone surrogate.
+                              if (read > 0 && (s.charCodeAt(read - 1) & 0xfc00) === 0xd800 &&
+                                  (s.charCodeAt(read) & 0xfc00) === 0xdc00) {{
+                                  throw new Error(failure);
+                              }}
+                              for (let i = read; i < s.length; i++) {{
+                                  let scalar = s.charCodeAt(i);
+                                  let size = 3;
+                                  if (scalar < 0x80) {{ size = 1; }}
+                                  else if (scalar < 0x800) {{ size = 2; }}
+                                  else if ((scalar & 0xf800) === 0xd800) {{
+                                      const next = s.charCodeAt(i + 1);
+                                      if (scalar < 0xdc00 && (next & 0xfc00) === 0xdc00) {{
+                                          scalar = 0x10000 + ((scalar - 0xd800) << 10) + (next - 0xdc00);
+                                          size = 4;
+                                          i++;
+                                      }} else {{
+                                          // A lone surrogate encodes as U+FFFD, as TextEncoder does.
+                                          scalar = 0xfffd;
+                                      }}
+                                  }}
+                                  if (written + size > len) {{ throw new Error(failure); }}
+
+                                  // Write the lead byte, then six bits of the scalar in each
+                                  // continuation byte.
+                                  if (size === 1) {{
+                                      out[written++] = scalar;
+                                      continue;
+                                  }}
+                                  if (size === 2) {{
+                                      out[written++] = 0xc0 | (scalar >> 6);
+                                  }} else if (size === 3) {{
+                                      out[written++] = 0xe0 | (scalar >> 12);
+                                  }} else {{
+                                      out[written++] = 0xf0 | (scalar >> 18);
+                                      out[written++] = 0x80 | ((scalar >> 12) & 0x3f);
+                                  }}
+                                  if (size > 2) {{ out[written++] = 0x80 | ((scalar >> 6) & 0x3f); }}
+                                  out[written++] = 0x80 | (scalar & 0x3f);
+                              }}
+                              if (written !== len) {{ throw new Error(failure); }}
                           }}
                           const res = {{ ptr, len, codepoints }};
                           return res;
