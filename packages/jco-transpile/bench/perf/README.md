@@ -40,3 +40,10 @@ node bench.mjs embedded 'export tuple swap'
 Each process checks the fixture results, warms the selected calls, then measures
 five samples. Async calls settle before the next call starts. The list cases
 measure both a typed byte array and an ordinary JavaScript array.
+
+Two scripts cover what `bench.mjs` does not:
+
+- `composed.mjs` times calls between two components with a memory each (`echo-composed.wat`),
+  for example `node gen.mjs multi-memory embedded --multi-memory` against a variant built without the flag.
+- `string-lower.mjs` times lowering strings of several lengths and kinds as UTF-8,
+  given runtime builds instead of variants: `node string-lower.mjs <dist-copy> ../../../jco-cm-runtime/dist`.
