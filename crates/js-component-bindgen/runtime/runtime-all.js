@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit ddcba288e4804fe33f2ed932a5ffafc9082d178e
+// generated from commit 6fc38b97490e098c593042ca68075eb70d2ab49e
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -7768,6 +7768,13 @@ function genStreamHostInjectFn(_context, genArgs) {
 	const elemMeta = hostWriteEnd.getElemMeta();
 	const pendingValues = new _context.PendingValueQueue(readFn, elemMeta);
 	hostWriteEnd.setSourceRebufferFn((items) => pendingValues.prepend(items));
+	readEnd.setHostSource?.({
+		values: pendingValues,
+		close: () => {
+			hostWriteEnd.getPendingEvent();
+			hostWriteEnd.drop();
+		}
+	});
 	return async function generatedStreamHostInject(args) {
 		let { count } = args;
 		if (count < 0) throw new Error("invalid count");
@@ -10270,30 +10277,47 @@ function definePendingValueQueue() {
 			let transferred = 0;
 			let remaining = Math.min(maxCount, this.#length);
 			while (remaining > 0) {
-				const front = this.#prepended.length > 0;
-				const cursor = front ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+				const cursor = this.#front();
 				const chunk = cursor.data;
 				const transfer = Math.min(remaining, chunk.length - cursor.offset);
 				for (let i = 0; i < transfer; i++) target.push(chunk[cursor.offset + i]);
-				cursor.offset += transfer;
-				this.#length -= transfer;
+				this.#advance(cursor, transfer);
 				transferred += transfer;
 				remaining -= transfer;
-				if (cursor.offset === chunk.length) {
-					if (front) this.#prepended.pop();
-					else {
-						this.#chunks[this.#head++] = void 0;
-						if (this.#head === this.#chunks.length) {
-							this.#chunks = [];
-							this.#head = 0;
-						} else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
-							this.#chunks = this.#chunks.slice(this.#head);
-							this.#head = 0;
-						}
-					}
-				}
 			}
 			return transferred;
+		}
+		takeBytes(maxCount, allowShort) {
+			const cursor = this.#front();
+			if (!cursor || !(cursor.data instanceof Uint8Array)) return;
+			const available = cursor.data.length - cursor.offset;
+			if (available < maxCount && !allowShort) return;
+			const transfer = Math.min(available, maxCount);
+			const bytes = new Uint8Array(cursor.data.subarray(cursor.offset, cursor.offset + transfer));
+			this.#advance(cursor, transfer);
+			return bytes;
+		}
+		/** The chunk the next value is taken from: the last one prepended, or else the oldest one read. */
+		#front() {
+			return this.#prepended.length > 0 ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+		}
+		/** Moves the cursor of the front chunk past `count` values, releasing the chunk once it is used up. */
+		#advance(cursor, count) {
+			cursor.offset += count;
+			this.#length -= count;
+			if (cursor.offset !== cursor.data.length) return;
+			if (this.#prepended.length > 0) {
+				this.#prepended.pop();
+				return;
+			}
+			this.#chunks[this.#head++] = void 0;
+			if (this.#head === this.#chunks.length) {
+				this.#chunks = [];
+				this.#head = 0;
+			} else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
+				this.#chunks = this.#chunks.slice(this.#head);
+				this.#head = 0;
+			}
 		}
 	};
 }
@@ -10324,6 +10348,8 @@ function initializeStreamReadableEndClass(_context) {
 		#result = null;
 		#endOfStream = false;
 		#stopError = null;
+		#hostSource = null;
+		#wakeHostSourceRead = null;
 		constructor(args) {
 			DEBUG: debugLog("[StreamReadableEnd#constructor()] args", args);
 			super(args);
@@ -10334,6 +10360,14 @@ function initializeStreamReadableEndClass(_context) {
 		}
 		isWritable() {
 			return false;
+		}
+		setHostSource(source) {
+			if (this.#hostSource) throw new Error("host source is already set");
+			this.#hostSource = source;
+		}
+		drop(opts) {
+			super.drop(opts);
+			this.#wakeHostSourceRead?.();
 		}
 		onInstanceStop() {
 			if (!this.isDropped() && !this.isPeerDropped() && !this.isDoneState()) this.#stopError = Object.assign(/* @__PURE__ */ new Error("component instance has been stopped"), { code: "ERR_COMPONENT_STOPPED" });
@@ -10359,6 +10393,13 @@ function initializeStreamReadableEndClass(_context) {
 			const { promise, resolve, reject } = newResult;
 			count = Math.min(count, _context.ManagedBuffer.MAX_LENGTH);
 			try {
+				const hostSource = this.#hostSource;
+				if (hostSource && this.isIdleState() && !this.hasPendingEvent() && !this.hasPendingBuffer() && !this.isDropped() && !this.isPeerDropped()) {
+					const result = await this.#readHostSource(hostSource, count, rejectLength, dropAfterCopy);
+					if (this.#result === newResult) this.#result = null;
+					resolve(result);
+					return result;
+				}
 				const { id: bufferID, buffer } = _context.buffers.createBuffer({
 					componentIdx: -1,
 					count,
@@ -10419,6 +10460,98 @@ function initializeStreamReadableEndClass(_context) {
 			const rejectedLength = this.takeRejectedLength();
 			if (rejectedLength !== null) result.rejectedLength = rejectedLength;
 			return result;
+		}
+		/**
+		* Reads from the host source of the stream, with the results that a copy through
+		* the guest's end gives, taking the values from where the injected writes take them.
+		*
+		* @param source - the host values behind the stream
+		* @param count - the most values to read
+		* @param rejectLength - the length above which the read is rejected and ends the stream
+		* @param dropAfterCopy - whether the read is the last one of the stream
+		* @returns the result of the read
+		*/
+		async #readHostSource(source, count, rejectLength, dropAfterCopy) {
+			DEBUG: debugLog("[StreamReadableEnd#readHostSource()] args", {
+				count,
+				rejectLength,
+				dropAfterCopy
+			});
+			const queue = source.values;
+			const { typedArray, isNone, payloadTypeName } = this.#elemMeta;
+			const keepsByteChunks = typedArray === void 0 && payloadTypeName === "U8";
+			const values = [];
+			let bytes;
+			let remaining = count;
+			let synchronousReads = 0;
+			this.setCopyState(StreamEnd.CopyState.ASYNC_COPYING);
+			try {
+				for (;;) {
+					if (count === 0) {
+						if (queue.length > 0) return {
+							value: void 0,
+							done: true
+						};
+					} else {
+						if ((typedArray === Uint8Array || keepsByteChunks) && values.length === 0) {
+							const allowShort = keepsByteChunks || !queue.sourceIsSync || queue.done;
+							bytes = queue.takeBytes?.(remaining, allowShort);
+							if (bytes) break;
+						}
+						remaining -= queue.drainInto(values, remaining);
+						if (remaining === 0 || values.length > 0 && !queue.sourceIsSync) break;
+					}
+					if (queue.done) break;
+					const appended = queue.readSourceOrPromise?.() ?? queue.readSource();
+					if (typeof appended === "number") {
+						if (++synchronousReads >= 64) {
+							synchronousReads = 0;
+							await yieldToHost();
+						}
+					} else {
+						synchronousReads = 0;
+						await new Promise((resolve, reject) => {
+							this.#wakeHostSourceRead = () => resolve(void 0);
+							appended.then(resolve, reject);
+						}).finally(() => {
+							this.#wakeHostSourceRead = null;
+						});
+					}
+					if (this.isDropped()) {
+						if (this.#stopError) throw this.#stopError;
+						return this.#endHostSourceRead();
+					}
+				}
+				const transferred = bytes ? bytes.length : values.length;
+				if (rejectLength !== void 0 && transferred > rejectLength) return {
+					...this.#endHostSourceRead(),
+					rejectedLength: transferred
+				};
+				const exhausted = queue.done && queue.length === 0;
+				const ended = exhausted || dropAfterCopy ? this.#endHostSourceRead() : void 0;
+				if (exhausted) source.close();
+				if (transferred === 0) return ended;
+				if (bytes) return {
+					value: bytes,
+					done: false
+				};
+				if (isNone) values.fill(null);
+				return {
+					value: typedArray === void 0 ? count === 1 ? values[0] : values : new typedArray(values),
+					done: false
+				};
+			} finally {
+				if (this.getCopyState() === StreamEnd.CopyState.ASYNC_COPYING) this.setCopyState(StreamEnd.CopyState.IDLE);
+			}
+		}
+		/** Ends the stream for the host reads that follow, as a copy that reports the dropped writer does. */
+		#endHostSourceRead() {
+			this.#endOfStream = true;
+			this.setCopyState(StreamEnd.CopyState.DONE);
+			return {
+				value: void 0,
+				done: true
+			};
 		}
 		#readOpts(opts) {
 			const count = opts === void 0 ? 1 : typeof opts === "number" ? opts : opts && typeof opts === "object" ? opts.count ?? 1 : void 0;
