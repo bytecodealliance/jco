@@ -169,6 +169,20 @@ export interface TranspilationOptions {
      */
     perfStringsSkipCopyUtf16Validation?: boolean;
 
+    /**
+     * Call synchronous exports and imports without creating a task for each call
+     *
+     * Applies only to a component in which that cannot be observed: one component instance,
+     * with no asynchronous function, lift or lower, no stream, future or error context, no
+     * JSPI import or export, no built-in other than those of resources, and neither call
+     * tracking, asm.js output nor optimized import bindings. Other components are generated
+     * as without the option.
+     *
+     * Traps, stopped instances, `may_leave`, borrowed handles and post-return functions are
+     * handled as they are by default.
+     */
+    perfSyncFastPath?: boolean;
+
     /** Optional experimental runtime package or directory base. Imports runtime and intrinsics/* subpaths; directory/URL bases use .js files. */
     cmRuntimeEsModule?: string;
 
@@ -386,6 +400,7 @@ export async function transpileBytes(
         strict: opts.strict === true,
         perfStringsSkipCopyUtf8Validation: opts.perfStringsSkipCopyUtf8Validation === true,
         perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
+        perfSyncFastPath: opts.perfSyncFastPath === true,
         cmRuntimeEsModule: opts.cmRuntimeEsModule,
         runtimeProfile: opts.runtimeProfile,
         flagsAsBigint: opts.flagsAsBigInt === true,
