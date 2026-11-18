@@ -169,6 +169,15 @@ pub struct FunctionBindgen<'a> {
     #[builder(default)]
     pub skip_fn_call_task_management: bool,
 
+    /// Generate a synchronous call without a task, thread or subtask. Defaults to `false`.
+    ///
+    /// Unlike `skip_fn_call_task_management`, the function still runs under the host task
+    /// runtime: it checks and records traps, the stopped store and `may_leave` itself, in
+    /// the places where the task machinery would. The caller must have established that
+    /// nothing else the machinery does can be observed (see `SyncFastPathBlocker`).
+    #[builder(default)]
+    pub(crate) sync_fast_path: bool,
+
     /// Associate a generated host invocation with its private runtime task.
     #[builder(default)]
     pub track_call: bool,
@@ -430,7 +439,26 @@ fn instruction_requires_task_runtime(inst: &Instruction<'_>) -> bool {
 }
 
 impl FunctionBindgen<'_> {
+    /// Whether the function creates a task, and for an import joins a subtask, for its call.
+    fn task_managed(&self) -> bool {
+        !self.skip_fn_call_task_management && !self.sync_fast_path
+    }
+
     fn validate_task_management(&self) {
+        if self.sync_fast_path {
+            assert!(
+                !self.is_async
+                    && !self.canonical_abi_async
+                    && !self.func_type_async
+                    && !self.requires_async_porcelain
+                    && !self.wrap_async_future_result,
+                "The sync fast path requires a synchronous function"
+            );
+            assert!(
+                !self.asmjs && !self.track_call,
+                "The sync fast path supports neither asm.js nor call tracking"
+            );
+        }
         if !self.skip_fn_call_task_management {
             return;
         }
@@ -487,8 +515,23 @@ impl FunctionBindgen<'_> {
         crate::intrinsics::runtime::select(self.external_runtime).call_prefix(intrinsic, true)
     }
 
+    /// JS expression for the state of the component instance that a function on the sync
+    /// fast path belongs to, which is where traps are recorded and checked.
+    fn sync_fast_path_component_state(&mut self) -> String {
+        let get_component_state = self.intrinsic_call_prefix(Intrinsic::Component(
+            ComponentIntrinsic::GetOrCreateAsyncState,
+        ));
+        let component_idx = self
+            .component_state
+            .as_ref()
+            .expect("the sync fast path requires component state")
+            .get_js_exprs()
+            .component_idx;
+        format!("{get_component_state}{component_idx})")
+    }
+
     fn task_intrinsic_call_prefix(&mut self, intrinsic: Intrinsic) -> String {
-        if !self.skip_fn_call_task_management {
+        if self.task_managed() {
             self.intrinsic_call_prefix(intrinsic)
         } else {
             crate::intrinsics::runtime::select(false).call_prefix(intrinsic, true)
@@ -801,6 +844,13 @@ impl FunctionBindgen<'_> {
         if self.skip_fn_call_task_management {
             return;
         }
+        if self.sync_fast_path {
+            // Entering is all that is left of starting the task: an instance that
+            // trapped, or whose store was stopped, cannot be entered.
+            let component_state = self.sync_fast_path_component_state();
+            uwriteln!(self.src, "{component_state}.throwIfTrapped();");
+            return;
+        }
         let is_async = self.is_async;
         let is_manual_async = self.requires_async_porcelain;
         let preserve_future_result = self.wrap_async_future_result;
@@ -965,7 +1015,7 @@ impl FunctionBindgen<'_> {
     /// result lifting, both of which may call guest core functions.
     pub(crate) fn begin_wasm_export_body(&mut self) {
         self.validate_task_management();
-        if self.skip_fn_call_task_management {
+        if !self.task_managed() {
             return;
         }
         let is_async = self.is_async || self.requires_async_porcelain;
@@ -1033,7 +1083,7 @@ impl FunctionBindgen<'_> {
 
     pub(crate) fn end_wasm_export_body(&mut self) {
         self.validate_task_management();
-        if self.skip_fn_call_task_management {
+        if !self.task_managed() {
             return;
         }
         uwriteln!(
@@ -1117,7 +1167,7 @@ impl Bindgen for FunctionBindgen<'_> {
         results: &mut Vec<String>,
     ) {
         self.validate_task_management();
-        let task_managed = !self.skip_fn_call_task_management;
+        let task_managed = self.task_managed();
         if !task_managed {
             assert!(
                 !instruction_requires_task_runtime(inst),
@@ -2419,6 +2469,22 @@ impl Bindgen for FunctionBindgen<'_> {
                       task.endInitialInvocation();
                     "#,
                     );
+                } else if self.sync_fast_path {
+                    // Without a task to reject, a trap is still recorded against the
+                    // instance, which no call may enter afterwards.
+                    let component_state = self.sync_fast_path_component_state();
+                    uwriteln!(
+                        self.src,
+                        r#"
+                      {vars_init}
+                      try {{
+                           {assignment_lhs} {callee_invoke};
+                      }} catch (err) {{
+                          {component_state}.markTrapped(err);
+                          throw err;
+                      }}
+                    "#,
+                    );
                 } else {
                     uwriteln!(
                         self.src,
@@ -2682,9 +2748,24 @@ impl Bindgen for FunctionBindgen<'_> {
                           }})
                         "#,
                     )
+                } else if self.sync_fast_path {
+                    // The host function is still a tracked host operation: it is not
+                    // called once the store has stopped, and a promise it returns is
+                    // counted as pending host work.
+                    let track_host_operation = self.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::TrackHostOperation,
+                    ));
+                    format!("{track_host_operation}() => {callee_fn_js}({callee_args_js}))")
                 } else {
                     format!("{call_prefix}{callee_fn_js}({callee_args_js})")
                 };
+                // What is checked of the instance once the host function has returned,
+                // and whether a trap the host function throws is recorded.
+                let sync_fast_path_component_state = self
+                    .sync_fast_path
+                    .then(|| self.sync_fast_path_component_state());
+                // Embedders that manage calls themselves release borrows per call
+                let scoped_borrows = self.skip_fn_call_task_management;
                 let (vars_init, assignment_lhs) = if self.err == ErrHandling::ResultCatchHandler {
                     results.push("ret".to_string());
                     ("let ret;".to_string(), "ret = ".to_string())
@@ -2692,7 +2773,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.generate_result_assignment_lhs(fn_wasm_result_count, results, is_async)
                 };
                 uwriteln!(self.src, "{vars_init}");
-                let borrows = if !task_managed && self.clear_resource_borrows {
+                let borrows = if scoped_borrows && self.clear_resource_borrows {
                     let queue =
                         self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows));
                     let borrows = format!("borrows{}", self.tmp());
@@ -2756,9 +2837,18 @@ impl Bindgen for FunctionBindgen<'_> {
                         } else {
                             self.intrinsic_call_prefix(Intrinsic::GetErrorPayload)
                         };
-                        let trap_check = task_managed.then(|| format!(
-                            "if ({get_component_state}{component_idx_expr}).markTrapped(e)) {{ throw e; }}"
-                        ));
+                        // (a trap the host function throws is never a WIT error value)
+                        let trap_check = if let Some(component_state) =
+                            &sync_fast_path_component_state
+                        {
+                            Some(format!(
+                                "if ({component_state}.markTrapped(e)) {{ throw e; }}"
+                            ))
+                        } else {
+                            task_managed.then(|| format!(
+                                "if ({get_component_state}{component_idx_expr}).markTrapped(e)) {{ throw e; }}"
+                            ))
+                        };
                         uwriteln!(
                             self.src,
                             r#"
@@ -2795,7 +2885,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 // A host can stop the instance during an import, including an
                 // import returning a WIT result whose catch handler wraps errors.
                 // Do not lower that result or return to guest code afterwards.
-                if task_managed {
+                if let Some(component_state) = &sync_fast_path_component_state {
+                    uwriteln!(self.src, "{component_state}.throwIfInterrupted();");
+                } else if task_managed {
                     uwriteln!(
                         self.src,
                         "{get_component_state}{component_idx_expr}).throwIfInterrupted();"
@@ -2829,10 +2921,10 @@ impl Bindgen for FunctionBindgen<'_> {
                             rsc[{symbol_resource_handle}] = undefined;
                         }}"
                     );
-                    if task_managed {
-                        uwriteln!(self.src, "{cur_resource_borrows} = [];");
-                    } else {
+                    if scoped_borrows {
                         uwriteln!(self.src, "}}");
+                    } else {
+                        uwriteln!(self.src, "{cur_resource_borrows} = [];");
                     }
                     self.clear_resource_borrows = false;
                 }
@@ -2869,13 +2961,32 @@ impl Bindgen for FunctionBindgen<'_> {
                 // to clean up tasks and possibly return values. The post-return function
                 // itself is wrapped where it is extracted, so that it cannot leave its
                 // component instance.
-                let post_return_trap_fn = self.post_return.filter(|_| task_managed).map(|_| {
-                    self.task_intrinsic_call_prefix(Intrinsic::Component(
-                        ComponentIntrinsic::PostReturnTrap,
-                    ))
-                });
+                let sync_fast_path = self.sync_fast_path;
+                let post_return_trap_fn = self
+                    .post_return
+                    .filter(|_| task_managed || sync_fast_path)
+                    .map(|_| {
+                        self.intrinsic_call_prefix(Intrinsic::Component(
+                            ComponentIntrinsic::PostReturnTrap,
+                        ))
+                    });
                 let gen_post_return_js =
                     |(post_return_call, ret_stmt): (String, Option<String>)| {
+                        if sync_fast_path {
+                            // Whatever a post-return throws is a trap of its instance
+                            return format!(
+                                r#"
+                        try {{
+                            {post_return_call}
+                        }} catch (err) {{
+                            throw {post_return_trap_fn}{component_idx_expr}, err);
+                        }}
+                        {ret_stmt}
+                            "#,
+                                post_return_trap_fn = post_return_trap_fn.as_ref().unwrap(),
+                                ret_stmt = ret_stmt.unwrap_or_default(),
+                            );
+                        }
                         if !task_managed {
                             return format!("{post_return_call}\n{}", ret_stmt.unwrap_or_default());
                         }
@@ -2897,6 +3008,16 @@ impl Bindgen for FunctionBindgen<'_> {
                         )
                     };
 
+                // An export on the sync fast path fails where its task would have failed
+                // to resolve: a stop of the store rejects the tasks that are running, even
+                // if their guest code then runs to its end (e.g. after stopping from the
+                // destructor of a host resource, which no import returns from).
+                let stopped_check = (sync_fast_path && self.for_import != Some(true)).then(|| {
+                    let store =
+                        self.intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+                    format!("if ({store}.stopped) {{ throw {store}.error; }}")
+                });
+
                 // Depending how many values are on the stack after returning, we must execute differently.
                 //
                 // In particular, if this function is async (distinct from whether async porcelain was necessary or not),
@@ -2907,6 +3028,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     0 => {
                         if task_managed {
                             uwriteln!(self.src, "task.resolve([ret]);");
+                        }
+                        if let Some(stopped_check) = &stopped_check {
+                            uwriteln!(self.src, "{stopped_check}");
                         }
                         if let Some(f) = &self.post_return {
                             uwriteln!(
@@ -2938,6 +3062,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         uwriteln!(self.src, "const retCopy = {op};");
                         if task_managed {
                             uwriteln!(self.src, "task.resolve([retCopy]);");
+                        }
+                        if let Some(stopped_check) = &stopped_check {
+                            uwriteln!(self.src, "{stopped_check}");
                         }
 
                         if let Some(f) = &self.post_return {
@@ -2978,7 +3105,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         };
                         // The result goes both to the task and to the caller. Unless it
                         // is already a variable, evaluate it once: it may convert or copy.
-                        let ret_val = if task_managed && !is_js_identifier(&ret_val) {
+                        let ret_val = if (task_managed || stopped_check.is_some())
+                            && !is_js_identifier(&ret_val)
+                        {
                             let result_var = format!("taskResult{}", self.tmp());
                             uwriteln!(self.src, "const {result_var} = {ret_val};");
                             result_var
@@ -2996,6 +3125,9 @@ impl Bindgen for FunctionBindgen<'_> {
 
                         if task_managed {
                             uwriteln!(self.src, "task.resolve([{ret_val}]);");
+                        }
+                        if let Some(stopped_check) = &stopped_check {
+                            uwriteln!(self.src, "{stopped_check}");
                         }
 
                         // Handle the post return if necessary
