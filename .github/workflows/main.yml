@@ -569,6 +569,10 @@ jobs:
       - name: Build jco
         run: pnpm run build
 
+      # The shims load the workspace build of the native filesystem helper.
+      - name: Build native filesystem helper
+        run: pnpm --filter '@bytecodealliance/jco-node-fs' --fail-if-no-match run build:debug
+
       - name: Build preview2-shim
         run: pnpm --filter '@bytecodealliance/preview2-shim' --fail-if-no-match run build
 
@@ -1208,6 +1212,10 @@ jobs:
 
       - name: Build workspace jco-std
         run: pnpm --filter '@bytecodealliance/jco-std' run build:ts
+
+      # The Preview 3 shim loads the workspace build of the native filesystem helper.
+      - name: Build native filesystem helper
+        run: pnpm --filter '@bytecodealliance/jco-node-fs' --fail-if-no-match run build:debug
 
       - name: Build workspace Preview 3 shim
         run: pnpm --filter '@bytecodealliance/preview3-shim' --fail-if-no-match run build
