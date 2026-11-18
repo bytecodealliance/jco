@@ -24,7 +24,7 @@
 //! every instance that makes the same choice. Being outside `instantiate`, the
 //! runtime sees none of the names declared there, such as the local names of imports.
 //! A profile that removes diagnostics leaves nothing to log, so there the choice
-//! is not read and every instance shares the one runtime.
+//! is not read and the bindings refer directly to the shared module-level intrinsics.
 //!
 //! Instances share a runtime because engines share inline caches between the
 //! closures created from one function body. A runtime for each instance would give
@@ -72,6 +72,14 @@ const RUNTIME_OF_INSTANCE: &str = "$runtime";
 /// Key of the runtime's debug logger in the export map.
 const DEBUG_LOG_EXPORT: &str = "intrinsics/core:debugLog";
 
+/// Where a linked runtime gets its diagnostic setting.
+#[derive(Clone, Copy)]
+enum Logging {
+    Disabled,
+    Module,
+    Instance,
+}
+
 /// The runtime with its top-level names moved into a private namespace.
 struct Runtime {
     /// The runtime's statements, without its export list. Those of a runtime for
@@ -83,10 +91,7 @@ struct Runtime {
 
 impl Runtime {
     /// Parse the shipped runtime and prefix its top-level names with `namespace`.
-    ///
-    /// `per_instance` prepares the statements for use as the body of a function
-    /// that creates the runtime of one instance.
-    fn with_namespace(namespace: &str, per_instance: bool) -> Result<Self> {
+    fn with_namespace(namespace: &str, logging: Logging) -> Result<Self> {
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, RUNTIME_SOURCE, SourceType::mjs()).parse();
         ensure!(
@@ -120,10 +125,10 @@ impl Runtime {
         // The setting is a parameter of the function the statements are placed in,
         // so it stays a free name here and is not moved into the namespace below.
         // There it has already been resolved against the environment.
-        let initializer = if per_instance {
-            debug_logger(&format!("{namespace}{INSTANCE_DEBUG}"))
-        } else {
-            debug_log_initializer(None)
+        let initializer = match logging {
+            Logging::Disabled => "() => {}".to_string(),
+            Logging::Module => debug_log_initializer(None),
+            Logging::Instance => debug_logger(&format!("{namespace}{INSTANCE_DEBUG}")),
         };
         let initializer = allocator.alloc_str(&initializer);
         let mut replaced = false;
@@ -215,18 +220,19 @@ impl Runtime {
     }
 
     /// The runtime under the default namespace, prepared once per process for each
-    /// of the two ways it is placed in bindings.
-    fn shared(per_instance: bool) -> Result<&'static Self> {
+    /// logging configuration.
+    fn shared(logging: Logging) -> Result<&'static Self> {
+        static CHECKED: OnceLock<std::result::Result<Runtime, String>> = OnceLock::new();
         static PER_MODULE: OnceLock<std::result::Result<Runtime, String>> = OnceLock::new();
         static PER_INSTANCE: OnceLock<std::result::Result<Runtime, String>> = OnceLock::new();
-        let shared = if per_instance {
-            &PER_INSTANCE
-        } else {
-            &PER_MODULE
+        let shared = match logging {
+            Logging::Disabled => &CHECKED,
+            Logging::Module => &PER_MODULE,
+            Logging::Instance => &PER_INSTANCE,
         };
         shared
             .get_or_init(|| {
-                Self::with_namespace(NAMESPACE, per_instance).map_err(|error| format!("{error:#}"))
+                Self::with_namespace(NAMESPACE, logging).map_err(|error| format!("{error:#}"))
             })
             .as_ref()
             .map_err(|error| anyhow::anyhow!("{error}"))
@@ -318,11 +324,18 @@ pub(crate) fn link(
     while generated.contains(&namespace) || RUNTIME_SOURCE.contains(&namespace) {
         namespace.push('$');
     }
+    // Checked bindings have no per-instance logging choice. Link their imports
+    // directly so instantiation does not construct and destructure an export table.
+    let logging = match (profile, per_instance) {
+        (RuntimeProfile::Checked, _) => Logging::Disabled,
+        (RuntimeProfile::Debug, false) => Logging::Module,
+        (RuntimeProfile::Debug, true) => Logging::Instance,
+    };
     let owned_runtime;
     let runtime = if namespace == NAMESPACE {
-        Runtime::shared(per_instance)?
+        Runtime::shared(logging)?
     } else {
-        owned_runtime = Runtime::with_namespace(&namespace, per_instance)?;
+        owned_runtime = Runtime::with_namespace(&namespace, logging)?;
         &owned_runtime
     };
 
@@ -358,15 +371,11 @@ pub(crate) fn link(
         .body
         .retain(|statement| runtime_subpath(statement).is_none());
 
-    let runtime_code = if per_instance {
+    let runtime_code = if matches!(logging, Logging::Instance) {
         let instantiate = instantiate_function(&mut bindings.body)
             .context("bindings that take instantiation options export no instantiate function")?;
-        // A runtime without diagnostics has nothing to log, so there the logging
-        // choice of an instance selects nothing and every instance shares one runtime.
-        let logs = !profile.dropped_labels().contains(&"DEBUG");
         // The options are the fourth parameter, whatever the bindings call it.
         let setting = match instantiate.params.items.get(3).map(|item| &item.pattern) {
-            _ if !logs => String::new(),
             Some(BindingPattern::BindingIdentifier(options)) => format!("{}?.debug", options.name),
             _ => "undefined".to_string(),
         };
@@ -403,22 +412,13 @@ pub(crate) fn link(
         // The environment is read for each instance that makes no choice of its
         // own, as it would be were the runtime created for that instance alone.
         let enabled = debug_log_enabled(Some(&debug));
-        let choice = if logs {
-            format!(
-                "const {runtimes} = [void 0, void 0];\n\
+        let choice = format!(
+            "const {runtimes} = [void 0, void 0];\n\
                  function {lookup}({debug}) {{\n\
                  const logging = ({enabled}) ? 1 : 0;\n\
                  if ({runtimes}[logging] === void 0) {{ {runtimes}[logging] = {function}(logging === 1); }}\n\
                  return {runtimes}[logging];\n}}\n"
-            )
-        } else {
-            format!(
-                "let {runtimes};\n\
-                 function {lookup}() {{\n\
-                 if ({runtimes} === void 0) {{ {runtimes} = {function}(false); }}\n\
-                 return {runtimes};\n}}\n"
-            )
-        };
+        );
         format!(
             "function {function}({debug}) {{\n{}\nreturn {{ {} }};\n}}\n{choice}",
             runtime.code,
@@ -624,12 +624,12 @@ mod tests {
         let linked = super::link(source, true, RuntimeProfile::Checked)
             .unwrap()
             .unwrap();
-        // The logging choice of an instance is not read, nor is the environment.
-        assert!(linked.contains(&format!("= {NAMESPACE}$runtime();")));
+        let instantiate = linked.find("export function instantiate(").unwrap();
+        assert!(linked[..instantiate].contains(&format!("{NAMESPACE}withCurrentTaskMeta")));
+        assert!(!linked.contains(&format!("{NAMESPACE}$runtime")));
         assert!(!linked.contains("settings?.debug"));
         assert!(!linked.contains("JCO_DEBUG"));
         assert!(!linked.contains("console.debug"));
-        assert_eq!(linked.matches(&format!("{NAMESPACE}$instance(")).count(), 2);
     }
 
     #[test]
