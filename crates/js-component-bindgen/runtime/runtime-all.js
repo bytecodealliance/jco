@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 919f7dd683cff4d2fbf0ad9c69b88f7cd06056ce
+// generated from commit 4f57ca097359fadc1dd206f7a918f29e0457d459
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -352,10 +352,6 @@ function withConstructorStatics(constructor, statics) {
 * Returns a function that cancels the callback.
 */
 function onNextMacrotask(callback) {
-	if (typeof setImmediate === "function") {
-		const handle = setImmediate(callback);
-		return () => clearImmediate(handle);
-	}
 	if (typeof MessageChannel === "function") {
 		const channel = new MessageChannel();
 		let cancelled = false;
@@ -1961,25 +1957,16 @@ const conditionalSuspendingHostImport = (context, module, componentIdx, fn) => n
 
 //#endregion
 //#region runtime/intrinsics/string.js
-const nativeEncoders = /* @__PURE__ */ new WeakMap();
 const nonAscii = /[^\x00-\x7f]/;
-/** Use Node's byte primitives only for the selected, unmodified default encoder. */
-function nativeEncoder(encoder, value) {
-	if (value.length < 256 || nonAscii.test(value)) return;
-	const native = nativeEncoders.get(encoder);
-	return native && native.encodeInto === encoder.encodeInto ? native : void 0;
-}
 function requireString(value) {
 	if (typeof value !== "string") throw new TypeError("expected a string, received [" + typeof value + "]");
 	return value;
 }
-/** Measure a string as UTF-8, and decide once whether Node can write it. */
-function utf8Size(s, encoder) {
-	const native = nativeEncoder(encoder, s);
-	if (native) return {
+/** Count UTF-8 bytes and Unicode scalars before allocating guest memory. */
+function utf8Size(s) {
+	if (s.length >= 256 && !nonAscii.test(s)) return {
 		len: s.length,
-		codepoints: s.length,
-		native
+		codepoints: s.length
 	};
 	let len = 0;
 	let codepoints = 0;
@@ -1995,8 +1982,7 @@ function utf8Size(s, encoder) {
 	}
 	return {
 		len,
-		codepoints,
-		native
+		codepoints
 	};
 }
 const initializeUtf8Decoder = () => new TextDecoder("utf-8", {
@@ -2007,15 +1993,7 @@ const initializeUtf16Decoder = () => new TextDecoder("utf-16", {
 	fatal: true,
 	ignoreBOM: true
 });
-const initializeUtf8Encoder = () => {
-	const encoder = new TextEncoder();
-	const host = globalThis;
-	if (host.process?.versions?.node && typeof host.Buffer?.from === "function") nativeEncoders.set(encoder, {
-		buffer: host.Buffer,
-		encodeInto: encoder.encodeInto
-	});
-	return encoder;
-};
+const initializeUtf8Encoder = () => new TextEncoder();
 const initializeUtf16Encoding = () => ({ littleEndian: new Uint8Array(new Uint16Array([1]).buffer)[0] === 1 });
 function writeUtf16(context, str, ptr, memory) {
 	const len = str.length;
@@ -2039,15 +2017,7 @@ function writeUtf16(context, str, ptr, memory) {
 		codepoints
 	};
 }
-function writeUtf8(encoder, native, s, ptr, len, codepoints, memory) {
-	if (native && native.encodeInto === encoder.encodeInto) {
-		if (native.buffer.from(memory.buffer, ptr, len).write(s, 0, len, "utf8") !== len) throw new Error("failed to encode whole string");
-		return {
-			ptr,
-			len,
-			codepoints
-		};
-	}
+function writeUtf8(encoder, s, ptr, len, codepoints, memory) {
 	const { read, written } = encoder.encodeInto(s, new Uint8Array(memory.buffer, ptr, len));
 	if (read !== s.length || written !== len) throw new Error("failed to encode whole string");
 	return {
@@ -2083,8 +2053,8 @@ const utf8Encode = (encoder, value, realloc, memory) => {
 		ptr: 1,
 		len: 0
 	};
-	const { len, codepoints, native } = utf8Size(s, encoder);
-	return writeUtf8(encoder, native, s, realloc(0, 0, 1, len), len, codepoints, memory);
+	const { len, codepoints } = utf8Size(s);
+	return writeUtf8(encoder, s, realloc(0, 0, 1, len), len, codepoints, memory);
 };
 const utf8EncodeAsync = async (encoder, value, realloc, memory) => {
 	const s = requireString(value);
@@ -2092,8 +2062,8 @@ const utf8EncodeAsync = async (encoder, value, realloc, memory) => {
 		ptr: 1,
 		len: 0
 	};
-	const { len, codepoints, native } = utf8Size(s, encoder);
-	return writeUtf8(encoder, native, s, await realloc(0, 0, 1, len), len, codepoints, memory);
+	const { len, codepoints } = utf8Size(s);
+	return writeUtf8(encoder, s, await realloc(0, 0, 1, len), len, codepoints, memory);
 };
 const validateGuestChar = (value) => {
 	if (value > 1114111 || value >= 55296 && value <= 57343) throw new TypeError("not a valid char");
@@ -2711,17 +2681,20 @@ const coinFlip = () => Math.random() > .5;
 const typeCheckValidI32 = (value) => typeof value === "number" && value >= -2147483648 && value <= 2147483647;
 const typeCheckAsyncFn = (constructor, value) => value instanceof constructor;
 const base64Compile = (context, encoded) => {
-	const host = globalThis;
-	return context.WebAssembly.compile(context.nodejsCompat && typeof host.Buffer !== "undefined" ? host.Buffer.from(encoded, "base64") : Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0)));
+	const bytes = typeof Uint8Array.fromBase64 === "function" ? Uint8Array.fromBase64(encoded) : Uint8Array.from(atob(encoded), (byte) => byte.charCodeAt(0));
+	return context.WebAssembly.compile(bytes);
 };
-async function fetchWithNode(context, url) {
-	if (context.fileCache.node) {
-		context.fileCache.fs = context.fileCache.fs || await import("node:fs/promises");
+const fetchCompile = async (context, url) => {
+	if (url.protocol === "file:" && context.nodejsCompat && context.fileCache.node) {
+		const moduleUrl = new URL("node:fs/promises");
+		context.fileCache.fs ??= await import(
+			/* @vite-ignore */
+			moduleUrl.href
+);
 		return context.WebAssembly.compile(await context.fileCache.fs.readFile(url));
 	}
 	return fetch(url).then(context.WebAssembly.compileStreaming);
-}
-const fetchCompile = (context, url) => context.nodejsCompat ? fetchWithNode(context, url) : fetch(url).then(context.WebAssembly.compileStreaming);
+};
 const instantiateCore = (platform, module, imports) => platform.instantiate(module, imports);
 const clampGuest = (value, min, max) => {
 	if (value < min || value > max) throw new TypeError(`must be between ${min} and ${max}`);
