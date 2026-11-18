@@ -51,6 +51,7 @@ fn main() -> Result<()> {
             }
             None if arg == "--valid-lifting-optimization" => opts.valid_lifting_optimization = true,
             None if arg == "--tracing" => opts.tracing = true,
+            None if arg == "--multi-memory" => opts.multi_memory = true,
             None if arg == "--jspi" => jspi = true,
             Some(("--async-import", name)) => async_imports.push(name.to_string()),
             Some(("--async-export", name)) => async_exports.push(name.to_string()),

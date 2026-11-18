@@ -51,6 +51,17 @@ try {
     generate(component, 'stream-pass-through', ['--jspi']);
     await rm(component);
 
+    // Two components with a memory each, whose calls copy through a fused adapter.
+    const composed = join(staging, 'echo-composed.wasm');
+    execFileSync('wasm-tools', [
+        'parse',
+        fileURLToPath(new URL('./echo-composed.wat', import.meta.url)),
+        '-o',
+        composed,
+    ]);
+    generate(composed, 'echo-composed', []);
+    await rm(composed);
+
     const destination = join(output, variant);
     await rm(destination, { recursive: true, force: true });
     await rename(staging, destination);
