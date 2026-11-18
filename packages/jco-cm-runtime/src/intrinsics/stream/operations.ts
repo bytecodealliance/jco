@@ -24,7 +24,7 @@ import { createStream, getStreamEnd, removeStreamEndFromTable, addStreamEndToTab
  * Create a stream and pack its readable and writable indices into one i64.
  */
 export function streamNew(_context: StreamNewContext, ctx: StreamNewOptions): bigint {
-    debugLog('[streamNew()] args', { ctx });
+    DEBUG: debugLog('[streamNew()] args', { ctx });
     const { streamTableIdx, callerComponentIdx, elemMeta } = ctx;
     if (callerComponentIdx === undefined) {
         throw new Error('missing caller component idx during stream.new');
@@ -60,7 +60,7 @@ export function streamNew(_context: StreamNewContext, ctx: StreamNewOptions): bi
         },
     );
 
-    debugLog('[streamNew()] created stream ends', {
+    DEBUG: debugLog('[streamNew()] created stream ends', {
         writeEnd: {
             waitableIdx: writeEndWaitableIdx,
             handle: writeEndHandle,
@@ -77,7 +77,7 @@ export function streamNew(_context: StreamNewContext, ctx: StreamNewOptions): bi
 }
 
 export function streamNewFromLift(_context: StreamNewFromLiftContext, ctx: StreamNewFromLiftOptions): ExternalStream {
-    debugLog('[streamNewFromLift()] args', { ctx });
+    DEBUG: debugLog('[streamNewFromLift()] args', { ctx });
     const { componentIdx, streamEndWaitableIdx, streamTableIdx, payloadLiftFn, payloadTypeSize32, payloadLowerFn } =
         ctx;
     void payloadTypeSize32;
@@ -135,7 +135,7 @@ function streamCopy(
     ptr: number,
     count: number,
 ): number | Promise<number> {
-    debugLog(`[${direction.copy}()] args`, { ctx, streamEndWaitableIdx, ptr, count });
+    DEBUG: debugLog(`[${direction.copy}()] args`, { ctx, streamEndWaitableIdx, ptr, count });
     const {
         componentIdx,
         getMemoryFn,
@@ -243,7 +243,7 @@ function streamCancel(
     ctx: StreamOperationOptions,
     streamEndWaitableIdx: number,
 ): number | Promise<number> {
-    debugLog(`[${direction.cancel}()] args`, { ctx, streamEndWaitableIdx });
+    DEBUG: debugLog(`[${direction.cancel}()] args`, { ctx, streamEndWaitableIdx });
     const { streamTableIdx, isAsync, componentIdx } = ctx;
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -275,7 +275,7 @@ function streamCancel(
             throw new Error('event index does not match stream end');
         }
 
-        debugLog(`[${direction.cancel}()] successful cancel`, { ctx, streamEndWaitableIdx, streamEnd, event });
+        DEBUG: debugLog(`[${direction.cancel}()] successful cancel`, { ctx, streamEndWaitableIdx, streamEnd, event });
         return payload;
     };
 
@@ -336,7 +336,7 @@ function streamDrop(
     ctx: StreamOperationOptions,
     streamEndWaitableIdx: number,
 ): void {
-    debugLog(`[${direction.drop}()] args`, { ctx, streamEndWaitableIdx });
+    DEBUG: debugLog(`[${direction.drop}()] args`, { ctx, streamEndWaitableIdx });
     const { streamTableIdx, componentIdx } = ctx;
 
     const task = getCurrentTask(_context.taskLookup, componentIdx);
@@ -393,7 +393,7 @@ export function streamTransfer(
     srcTableIdx: number,
     destTableIdx: number,
 ): number {
-    debugLog('[streamTransfer()] args', {
+    DEBUG: debugLog('[streamTransfer()] args', {
         srcStreamWaitableIdx,
         srcTableIdx,
         destTableIdx,
@@ -442,7 +442,7 @@ export function streamTransfer(
     const { handle, waitableIdx } = addStreamEndToTable(_context, { tableIdx: destTableIdx, streamEnd });
     streamEnd.setTarget(`stream read end (waitable [${waitableIdx}])`);
 
-    debugLog('[streamTransfer()] successfully transferred', {
+    DEBUG: debugLog('[streamTransfer()] successfully transferred', {
         dest: {
             streamEndHandle: handle,
             streamEndWaitableIdx: waitableIdx,

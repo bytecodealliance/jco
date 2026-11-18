@@ -24,6 +24,7 @@ import {
     OUTPUT_STREAM_WRITE_ZEROES,
     OUTPUT_STREAM_WRITE,
     POLL_POLL_LIST,
+    POLL_POLL_LIST_READY,
     POLL_POLLABLE_BLOCK,
     POLL_POLLABLE_DISPOSE,
     POLL_POLLABLE_READY,
@@ -33,6 +34,12 @@ import {
     STDOUT,
     reverseMap,
 } from "./calls.js";
+import {
+    createReadyPollableRep,
+    disposeReadyPollableRep,
+    isReadyPollableRep,
+    type ReadyPollableOwner,
+} from "./ready-pollables.js";
 import nodeProcess, { exit, stderr, stdout, env } from "node:process";
 
 import type { streams as StreamsNamespace } from "../../types/io.js";
@@ -152,6 +159,32 @@ class IoError extends Error {
     }
 }
 
+/**
+ * Build the `last-operation-failed` stream error for a failed Node.js operation.
+ *
+ * The error resource carries the Node.js error code, message and stack, which
+ * is what `filesystem-error-code` later maps to a WASI error code.
+ *
+ * @param error - the Node.js error, or the fields of one posted by the I/O worker
+ * @returns the value to throw from a stream method
+ */
+export function lastOperationFailed(error: { message: string }) {
+    return {
+        tag: "last-operation-failed",
+        val: new IoError(Object.assign(new Error(error.message), error)),
+    };
+}
+
+/**
+ * Report a stream operation that the guest was not allowed to make, and exit.
+ *
+ * @param error - what went wrong
+ */
+export function streamTrap(error: unknown): never {
+    console.trace(error);
+    exit(1);
+}
+
 function streamIoErrorCall(call, id, payload) {
     try {
         return ioCall(call, id, payload);
@@ -160,13 +193,62 @@ function streamIoErrorCall(call, id, payload) {
             throw e;
         }
         if (e.tag === "last-operation-failed") {
-            e.val = new IoError(Object.assign(new Error(e.val.message), e.val));
+            e.val = lastOperationFailed(e.val).val;
             throw e;
         }
         // any invalid error is a trap
-        console.trace(e);
-        exit(1);
+        streamTrap(e);
     }
+}
+
+/**
+ * Most bytes a file stream on the main thread reads or accepts in one call,
+ * and most bytes moved by one splice that passes through the main thread. It
+ * matches the buffer size of the worker's file streams.
+ */
+export const STREAM_CHUNK = 64 * 1024;
+
+/**
+ * Splice between two streams that are not both served by the I/O worker, by
+ * reading from one and writing to the other through their own methods.
+ *
+ * @param output - the stream to write to
+ * @param input - the stream to read from
+ * @param len - the most bytes to move
+ * @param blocking - whether to wait for input and for the write to complete
+ * @returns the number of bytes moved
+ */
+export function hostSplice(
+    output: IOutputStream,
+    input: IInputStream,
+    len: bigint,
+    blocking: boolean,
+): bigint {
+    let limit = BigInt(len);
+    if (limit > BigInt(STREAM_CHUNK)) {
+        limit = BigInt(STREAM_CHUNK);
+    }
+
+    if (blocking) {
+        const bytes = input.blockingRead(limit);
+        output.blockingWriteAndFlush(bytes);
+        return BigInt(bytes.byteLength);
+    }
+
+    // Never read more than the output accepts: bytes taken from the input
+    // cannot be put back.
+    const permit = output.checkWrite();
+    if (permit < limit) {
+        limit = permit;
+    }
+    if (limit === 0n) {
+        return 0n;
+    }
+    const bytes = input.read(limit);
+    if (bytes.byteLength > 0) {
+        output.write(bytes);
+    }
+    return BigInt(bytes.byteLength);
 }
 
 class InputStream implements IInputStream {
@@ -298,14 +380,23 @@ class OutputStream implements IOutputStream {
         );
     }
     splice(src, len) {
+        // Only a stream of the I/O worker has an id there to splice from.
+        const srcId = inputStreamId(src);
+        if (srcId === undefined) {
+            return hostSplice(this, src, len, false);
+        }
         return streamIoErrorCall(OUTPUT_STREAM_SPLICE | this.#streamType, this.#id, {
-            src: src.#id,
+            src: srcId,
             len,
         });
     }
     blockingSplice(src, len) {
+        const srcId = inputStreamId(src);
+        if (srcId === undefined) {
+            return hostSplice(this, src, len, true);
+        }
         return streamIoErrorCall(OUTPUT_STREAM_BLOCKING_SPLICE | this.#streamType, this.#id, {
-            src: inputStreamId(src),
+            src: srcId,
             len,
         });
     }
@@ -389,19 +480,87 @@ export const error = { Error: IoError };
 
 export const streams = { InputStream, OutputStream };
 
-function pollableDispose(id) {
-    ioCall(POLL_POLLABLE_DISPOSE, id);
+// A pollable is either served by the I/O worker or ready for good (see
+// ready-pollables.ts). The two are told apart by rep alone, because bindings
+// that lower pollables themselves pass nothing else.
+
+function pollableReady(rep: number): boolean {
+    return isReadyPollableRep(rep) || ioCall(POLL_POLLABLE_READY, rep);
+}
+
+function pollableBlock(rep: number): void {
+    if (!isReadyPollableRep(rep)) {
+        ioCall(POLL_POLLABLE_BLOCK, rep);
+    }
+}
+
+function pollableDispose(rep: number): void {
+    if (isReadyPollableRep(rep)) {
+        disposeReadyPollableRep(rep);
+    } else {
+        ioCall(POLL_POLLABLE_DISPOSE, rep);
+    }
+}
+
+/**
+ * Wait until at least one pollable of a list is ready.
+ *
+ * A list that holds a ready pollable never waits. The I/O worker is still
+ * asked, without waiting, which of its own pollables are ready, so that a
+ * guest polling a file beside a socket or a timer keeps hearing about them.
+ *
+ * @param reps - the reps of the pollables, in list order
+ * @returns the indices of the pollables that are ready, in ascending order
+ */
+function pollList(reps: number[]): Uint32Array {
+    const workerReps: number[] = [];
+    const workerIndices: number[] = [];
+    for (let index = 0; index < reps.length; index++) {
+        if (!isReadyPollableRep(reps[index])) {
+            workerReps.push(reps[index]);
+            workerIndices.push(index);
+        }
+    }
+    if (workerReps.length === reps.length) {
+        return ioCall(POLL_POLL_LIST, null, reps);
+    }
+
+    // The worker answers with indices into the list it was given, ascending.
+    const workerReady: ArrayLike<number> =
+        workerReps.length > 0 ? ioCall(POLL_POLL_LIST_READY, null, workerReps) : [];
+    const ready = new Uint32Array(reps.length - workerReps.length + workerReady.length);
+    let readyCount = 0;
+    let nextWorkerReady = 0;
+    for (let index = 0; index < reps.length; index++) {
+        if (isReadyPollableRep(reps[index])) {
+            ready[readyCount++] = index;
+        } else if (workerIndices[workerReady[nextWorkerReady]] === index) {
+            ready[readyCount++] = index;
+            nextWorkerReady++;
+        }
+    }
+    return ready;
 }
 
 const rep = Symbol.for("cabiRep");
 
+/**
+ * The rep that bindings and the I/O worker know a pollable by.
+ *
+ * @param pollable - a pollable
+ * @returns its rep
+ */
+function repOf(pollable: Pollable): number {
+    return (pollable as unknown as Record<symbol, number>)[rep];
+}
+
 class Pollable {
     #finalizer;
     ready() {
-        return ioCall(POLL_POLLABLE_READY, this[rep]);
+        return pollableReady(repOf(this));
     }
     block() {
-        ioCall(POLL_POLLABLE_BLOCK, this[rep]);
+        pollableBlock(repOf(this));
     }
     static _create(id, parent) {
         const pollable = new Pollable();
@@ -421,36 +580,40 @@ const cabiLowerSymbol = Symbol.for("cabiLower");
 const T_FLAG = 1 << 30;
 
 Pollable.prototype.ready[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
-    return function pollableReady(handle) {
+    return function loweredPollableReady(handle) {
         const rep = table[(handle << 1) + 1] & ~T_FLAG;
-        const ready = ioCall(POLL_POLLABLE_READY, rep);
-        return ready ? 1 : 0;
+        return pollableReady(rep) ? 1 : 0;
     };
 };
 
 Pollable.prototype.block[cabiLowerSymbol] = function ({ resourceTables: [table] }) {
-    return function pollableBlock(handle) {
+    return function loweredPollableBlock(handle) {
         const rep = table[(handle << 1) + 1] & ~T_FLAG;
-        ioCall(POLL_POLLABLE_BLOCK, rep);
+        pollableBlock(rep);
     };
 };
 
-Pollable[Symbol.for("cabiDispose")] = function pollableDispose(rep) {
-    ioCall(POLL_POLLABLE_DISPOSE, rep);
-};
+Pollable[Symbol.for("cabiDispose")] = pollableDispose;
 
 export const pollableCreate = Pollable._create;
 // @ts-expect-error - Deleting static method
 delete Pollable._create;
 
+/**
+ * Create a pollable that is ready for as long as it exists.
+ *
+ * @param owner - state of the resource subscribed to, which counts its live pollables
+ * @param parent - the resource subscribed to
+ * @returns the pollable
+ */
+export function readyPollableCreate(owner: ReadyPollableOwner, parent: object) {
+    return pollableCreate(createReadyPollableRep(owner), parent);
+}
+
 export const poll = {
     Pollable,
     poll(list) {
-        return ioCall(
-            POLL_POLL_LIST,
-            null,
-            list.map((pollable) => pollable[rep]),
-        );
+        return pollList(list.map(repOf));
     },
 };
 
@@ -462,7 +625,7 @@ poll.poll[cabiLowerSymbol] = function ({ memory, realloc, resourceTables: [table
             const handle = handleList[i];
             repList[i] = table[(handle << 1) + 1] & ~T_FLAG;
         }
-        const result = ioCall(POLL_POLL_LIST, null, repList);
+        const result = pollList(repList);
         const ptr = realloc(0, 0, 4, result.byteLength);
         const out = new Uint32Array(memory.buffer, ptr, result.length);
         out.set(result);

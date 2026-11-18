@@ -289,10 +289,20 @@ impl_from_intrinsic! {
 /// initialized in the scope of the bindings' own names, which may include the
 /// local name of an import.
 pub(crate) fn debug_log_initializer(setting: Option<&str>) -> String {
-    let enabled = match setting {
+    debug_logger(&debug_log_enabled(setting))
+}
+
+/// An expression for whether debug logging is enabled, given the same `setting`
+/// as [`debug_log_initializer`]. It is truthy or falsy rather than a boolean.
+pub(crate) fn debug_log_enabled(setting: Option<&str>) -> String {
+    match setting {
         Some(setting) => format!("{setting} ?? !!globalThis?.process?.env?.JCO_DEBUG"),
         None => "globalThis?.process?.env?.JCO_DEBUG".to_string(),
-    };
+    }
+}
+
+/// The debug logger for the logging choice that the expression `enabled` evaluates to.
+pub(crate) fn debug_logger(enabled: &str) -> String {
     format!("({enabled}) ? (message, ...args) => console.debug(message, ...args) : () => {{}}")
 }
 

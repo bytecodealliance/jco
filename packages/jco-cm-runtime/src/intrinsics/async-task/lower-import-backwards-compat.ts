@@ -7,7 +7,7 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
-import { getCurrentTaskMeta, clearCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, clearCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
 import { promiseWithResolvers } from '../core/promises.js';
 
@@ -17,7 +17,7 @@ export function lowerImportBackwardsCompat(
     args: TaskLowerImportOptions,
     ...params: unknown[]
 ): ReturnType<AsyncTaskModule['lowerImportBackwardsCompat']> {
-    debugLog('[_lowerImportBackwardsCompat()] args', { args, params });
+    DEBUG: debugLog('[_lowerImportBackwardsCompat()] args', { args, params });
     const {
         componentIdx,
         isAsync,
@@ -32,7 +32,7 @@ export function lowerImportBackwardsCompat(
         stringEncoding,
     } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
-    const meta = getCurrentTaskMeta(_context.registers, componentIdx);
+    const meta = readTaskRegister(_context.registers, componentIdx);
     let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
     let createdTask: AsyncTaskType | undefined;
     // Some components depend on initialization logic (i.e. `_initialize` or some such
@@ -196,7 +196,7 @@ export function lowerImportBackwardsCompat(
     // Call the host in this slice so a synchronous answer stays synchronous.
     // Nonblocking tasks, including destructors, trap only on a returned promise.
     if (!isAsync && !funcTypeIsAsync && isManualAsync) {
-        debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
+        DEBUG: debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
         if (createdTask) {
             createdTask.enterSync();
         }
@@ -223,7 +223,7 @@ export function lowerImportBackwardsCompat(
     }
     queueMicrotask(async () => {
         try {
-            debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
+            DEBUG: debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });
             if (createdTask) {
                 await createdTask.enter();
             }
@@ -232,12 +232,12 @@ export function lowerImportBackwardsCompat(
                 createdTask.resolve([asyncRes]);
             }
         } catch (err) {
-            debugLog('[_lowerImportBackwardsCompat()] import fn error:', err);
+            DEBUG: debugLog('[_lowerImportBackwardsCompat()] import fn error:', err);
             task.setErrored(err);
             task.reject(err);
         }
     });
-    debugLog('[_lowerImportBackwardsCompat()] async-lowered import return', {
+    DEBUG: debugLog('[_lowerImportBackwardsCompat()] async-lowered import return', {
         fnName: importFn.fnName,
         componentIdx,
         subtaskID: subtask.id(),

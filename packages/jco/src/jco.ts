@@ -202,6 +202,14 @@ program
     )
     .option("--bindgen-enable-wasm-exnref", "enable bindgen output that uses Wasm exception references (exnref)")
     .option("--strict", "generate bindings with strict type checking")
+    .addOption(
+        new Option(
+            "--runtime-profile <profile>",
+            "what the bundled Component Model runtime keeps: checked removes diagnostics, debug keeps them (logged with JCO_DEBUG)",
+        )
+            .choices(["checked", "debug"])
+            .default("checked"),
+    )
     .option(
         "--cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base (named runtime and intrinsics/* subpaths)",
@@ -336,6 +344,16 @@ program
         "Custom module to import before the run executes to support custom environment setup",
     )
     .option("--jco-map <mappings...>", "specifier=./output custom mappings for the component imports")
+    // TODO: the --perf-* flags need the preview2-shim dependency raised to the
+    // first release with filesystem performance options.
+    .option(
+        "--perf-main-thread-filesystem",
+        "Operate on regular files on the main thread instead of in the WASI I/O worker (WASI 0.2 only)",
+    )
+    .option(
+        "--perf-cache-directory-paths",
+        "Resolve the host path of each preopened and opened directory once (WASI 0.2 only)",
+    )
     .addOption(
         new Option("--jco-import-bindings [mode]", "bindings mode for imports")
             .choices(["js", "optimized", "hybrid", "direct-optimized"])
@@ -385,6 +403,16 @@ program
             .preset("js"),
     )
     .option("--jco-map <mappings...>", "specifier=./output custom mappings for the component imports")
+    // TODO: the --perf-* flags need the preview2-shim dependency raised to the
+    // first release with filesystem performance options.
+    .option(
+        "--perf-main-thread-filesystem",
+        "Operate on regular files on the main thread instead of in the WASI I/O worker (WASI 0.2 only)",
+    )
+    .option(
+        "--perf-cache-directory-paths",
+        "Resolve the host path of each preopened and opened directory once (WASI 0.2 only)",
+    )
     .argument("[args...]", "Any CLI arguments for the component")
     .action(
         asyncAction(async function serve(cmd: string, args: string[], opts: any, command: any) {

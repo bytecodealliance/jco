@@ -4,7 +4,9 @@ import { PassThrough, Writable } from "node:stream";
 export default function create(context: WorkerExtensionContext): WorkerExtension {
     let calls = 0;
     let writtenBytes = 0;
-    return (operation: string): unknown => {
+    const spliceSources = new Map<number, PassThrough>();
+    const spliceSinks = new Map<number, Buffer[]>();
+    return (operation: string, args: unknown[]): unknown => {
         switch (operation) {
             case "count":
                 return ++calls;
@@ -42,6 +44,35 @@ export default function create(context: WorkerExtensionContext): WorkerExtension
                 );
                 return closed;
             }
+            case "splice-pair": {
+                // A source that holds a few bytes and stays open, as a socket does.
+                const source = new PassThrough();
+                const chunks: Buffer[] = [];
+                const input = context.createReadableStream(source);
+                const output = context.createWritableStream(
+                    new Writable({
+                        write(chunk, _encoding, callback) {
+                            chunks.push(Buffer.from(chunk));
+                            callback();
+                        },
+                    }),
+                );
+                spliceSources.set(input, source);
+                spliceSinks.set(output, chunks);
+                source.write(Buffer.from("abc"));
+                return { input, output };
+            }
+            case "splice-feed-later": {
+                const [input, text] = args as [number, string];
+                setTimeout(() => spliceSources.get(input)?.write(Buffer.from(text)), 20);
+                return undefined;
+            }
+            case "splice-end": {
+                spliceSources.get(args[0] as number)?.end();
+                return undefined;
+            }
+            case "splice-received":
+                return Buffer.concat(spliceSinks.get(args[0] as number) ?? []).toString();
             default:
                 throw new Error("unknown test operation");
         }

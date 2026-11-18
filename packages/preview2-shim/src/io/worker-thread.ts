@@ -4,6 +4,7 @@ import { createReadStream, createWriteStream, PathLike } from "node:fs";
 import { hrtime, stderr, stdout } from "node:process";
 import { PassThrough } from "node:stream";
 import { runAsWorker } from "../synckit/index.js";
+import { checkWorkerPollId } from "./ready-pollables.js";
 import {
     clearOutgoingResponse,
     createHttpRequest,
@@ -23,7 +24,6 @@ import {
     FILE,
     FILESYSTEM_DESCRIPTOR_ADVISE,
     FILESYSTEM_DESCRIPTOR_CLOSE,
-    FILESYSTEM_DESCRIPTOR_GET_TYPE,
     FILESYSTEM_DESCRIPTOR_METADATA_HASH,
     FILESYSTEM_DESCRIPTOR_OPEN,
     FILESYSTEM_DESCRIPTOR_READ,
@@ -68,6 +68,7 @@ import {
     POLL_POLLABLE_DISPOSE,
     POLL_POLLABLE_READY,
     POLL_POLL_LIST,
+    POLL_POLL_LIST_READY,
     SOCKET_RESOLVE_ADDRESS_CREATE_REQUEST,
     SOCKET_RESOLVE_ADDRESS_SUBSCRIBE_REQUEST,
     SOCKET_RESOLVE_ADDRESS_DISPOSE_REQUEST,
@@ -117,7 +118,6 @@ import {
 import {
     adviseFileResource,
     fileResourceFd,
-    getFileResourceType,
     metadataHashFileResource,
     openFileResource,
     readFileResource,
@@ -340,6 +340,22 @@ export function closeStream(streamId: number): void {
     stream.closed = true;
     stream.pollState.parentStream = null;
     pollStateReady(stream.pollState);
+}
+
+/**
+ * Return bytes whose backing store holds nothing else.
+ *
+ * Posting a typed array to the main thread clones its whole `ArrayBuffer`, so
+ * a short read that is a view of a larger chunk would copy the chunk with it.
+ *
+ * @param bytes - a chunk read from a Node stream
+ * @returns `bytes`, or a copy of it when it is a view of a larger buffer
+ */
+function detachFromBackingStore(bytes: Uint8Array): Uint8Array {
+    if (!bytes.buffer || bytes.byteLength === bytes.buffer.byteLength) {
+        return bytes;
+    }
+    return new Uint8Array(bytes);
 }
 
 const extensions = new Map<string, Promise<WorkerExtension>>();
@@ -655,8 +671,6 @@ function handle(call, id, payload) {
             return adviseFileResource(id, payload.offset, payload.length, payload.advice);
         case FILESYSTEM_DESCRIPTOR_SYNC_DATA:
             return syncFileResourceData(id);
-        case FILESYSTEM_DESCRIPTOR_GET_TYPE:
-            return getFileResourceType(id);
         case FILESYSTEM_DESCRIPTOR_SET_SIZE:
             return setFileResourceSize(id, payload);
         case FILESYSTEM_DESCRIPTOR_SET_TIMES:
@@ -709,7 +723,7 @@ function handle(call, id, payload) {
             }
             const res = stream.stream.read(Math.min(stream.stream.readableLength, Number(payload)));
             if (res) {
-                return res;
+                return detachFromBackingStore(res);
             }
             if (stream.stream.readableEnded) {
                 throw { tag: "closed" };
@@ -879,28 +893,31 @@ function handle(call, id, payload) {
             );
         case OUTPUT_STREAM_SPLICE: {
             const outputStream = getStreamOrThrow(id);
-            const inputStream = getStreamOrThrow(payload.src);
-            let bytesRemaining = Number(payload.len);
-            let chunk;
-            while (
-                bytesRemaining > 0 &&
-                (chunk = inputStream.stream.read(
-                    Math.min(
-                        outputStream.writableHighWaterMark - outputStream.writableLength,
-                        bytesRemaining,
-                    ),
-                ))
-            ) {
-                bytesRemaining -= chunk.byteLength;
-                outputStream.stream.write(chunk);
+            const inputStream = getStreamOrThrow(payload.src, true);
+            const source = inputStream.stream;
+            const destination = outputStream.stream;
+            // Bounded by what the source has buffered: asked for more, a Node
+            // readable returns nothing at all until it has that much or ends.
+            const length = Math.min(
+                Number(payload.len),
+                Math.max(destination.writableHighWaterMark - destination.writableLength, 0),
+                source.readableLength,
+            );
+            // A read of nothing still makes an empty source fetch more.
+            const chunk = source.read(length);
+            if (chunk) {
+                destination.write(chunk);
             }
-            if (inputStream.stream.errored) {
-                throw streamError(inputStream.stream.errored);
+            if (source.errored && source.readableLength === 0) {
+                throw streamError(source.errored);
             }
-            if (outputStream.stream.errored) {
-                throw streamError(outputStream.stream.errored);
+            if (destination.errored) {
+                throw streamError(destination.errored);
             }
-            return payload.len - BigInt(bytesRemaining);
+            if (!chunk && source.readableLength === 0 && source.readableEnded) {
+                throw { tag: "closed" };
+            }
+            return BigInt(chunk ? chunk.byteLength : 0);
         }
         case OUTPUT_STREAM_SUBSCRIBE:
             return createPoll(streams.get(id).pollState);
@@ -923,25 +940,17 @@ function handle(call, id, payload) {
                     },
                 );
             }
-            const inputStream = getStreamOrThrow(payload.src);
-            if (!inputStream.stream.readable) {
-                promise = promise.then(() =>
-                    new Promise((_resolve, _reject) => {
-                        inputStream.stream
-                            .once("readable", (resolve = _resolve))
-                            .once("error", (reject = _reject));
-                    }).then(
-                        () => {
-                            inputStream.stream.off("error", reject);
-                        },
-                        (err) => {
-                            inputStream.stream.off("readable", resolve);
-                            throw streamError(err);
-                        },
-                    ),
-                );
-            }
-            return promise.then(() => handle(OUTPUT_STREAM_SPLICE, id, payload));
+            // Wait for the source as a blocking read does: until it has bytes,
+            // has ended or has failed.
+            const { pollState } = getStreamOrThrow(payload.src, true);
+            return promise
+                .then(() => {
+                    pollStateCheck(pollState);
+                    if (!pollState.ready) {
+                        return new Promise((resolve) => void (pollState.listener = resolve));
+                    }
+                })
+                .then(() => handle(OUTPUT_STREAM_SPLICE, id, payload));
         }
         case OUTPUT_STREAM_DISPOSE: {
             const stream = streams.get(id);
@@ -959,6 +968,17 @@ function handle(call, id, payload) {
 
         case POLL_POLLABLE_READY:
             return polls.get(id).ready;
+        case POLL_POLL_LIST_READY: {
+            const readyList: number[] = [];
+            for (const [idx, pollId] of payload.entries()) {
+                const pollState = polls.get(pollId);
+                pollStateCheck(pollState);
+                if (pollState.ready) {
+                    readyList.push(idx);
+                }
+            }
+            return new Uint32Array(readyList);
+        }
         case POLL_POLLABLE_BLOCK:
             payload = [id];
         // [intentional case fall-through]
@@ -1019,7 +1039,7 @@ function handle(call, id, payload) {
  * @param {PollState} pollState
  */
 function createPoll(pollState) {
-    const pollId = ++pollCnt;
+    const pollId = checkWorkerPollId(++pollCnt);
     pollState.polls.push(pollId);
     polls.set(pollId, pollState);
     return pollId;

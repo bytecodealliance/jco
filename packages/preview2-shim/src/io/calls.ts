@@ -46,7 +46,6 @@ export const FILESYSTEM_DESCRIPTOR_OPEN = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_CLOSE = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_ADVISE = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_SYNC_DATA = ++call_id << CALL_SHIFT;
-export const FILESYSTEM_DESCRIPTOR_GET_TYPE = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_SET_SIZE = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_SET_TIMES = ++call_id << CALL_SHIFT;
 export const FILESYSTEM_DESCRIPTOR_READ = ++call_id << CALL_SHIFT;
@@ -60,6 +59,8 @@ export const POLL_POLLABLE_READY = ++call_id << CALL_SHIFT;
 export const POLL_POLLABLE_BLOCK = ++call_id << CALL_SHIFT;
 export const POLL_POLLABLE_DISPOSE = ++call_id << CALL_SHIFT;
 export const POLL_POLL_LIST = ++call_id << CALL_SHIFT;
+// Like POLL_POLL_LIST, but answers at once, possibly with no ready pollable.
+export const POLL_POLL_LIST_READY = ++call_id << CALL_SHIFT;
 
 // Futures
 export const FUTURE_DISPOSE = ++call_id << CALL_SHIFT;

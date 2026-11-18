@@ -788,6 +788,8 @@ pub fn ts_bindgen(
                 "
                     /**
                      * Whether this instance logs debugging information with `console.debug`.
+                     * Bindings contain the statements that log only when they were generated
+                     * with the `debug` runtime profile.
                      * Defaults to whether the JCO_DEBUG environment variable is set when
                      * instantiation begins. Later changes to the options or to the
                      * environment do not affect the instance.

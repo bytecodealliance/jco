@@ -364,3 +364,19 @@ test('without setImmediate the tick loop resumes through a MessageChannel', asyn
         vi.unstubAllGlobals();
     }
 });
+
+test.concurrent('host completions share scheduler wakeups within a checkpoint', async () => {
+    const { component } = create();
+    const state = component.getOrCreateAsyncState(0);
+    const tick = vi.spyOn(state, 'runTickLoop').mockImplementation(() => {});
+    try {
+        const operations = Array.from({ length: 32 }, (_, index) =>
+            component.trackHostOperation(() => Promise.resolve(index)),
+        );
+        expect(await Promise.all(operations)).toEqual(Array.from({ length: 32 }, (_, index) => index));
+        expect(component.storeAsyncState.pendingHostOperations).toBe(0);
+        expect(tick).toHaveBeenCalledTimes(1);
+    } finally {
+        clearDeadlockCheck(component);
+    }
+});

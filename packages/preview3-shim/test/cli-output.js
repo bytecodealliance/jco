@@ -226,6 +226,47 @@ suite("Preview 3 output lifecycle", () => {
     });
   });
 
+  test.concurrent("sequential writes leave no listeners on the destination", async () => {
+    const chunks = [];
+    const writable = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(Buffer.from(chunk).toString());
+        callback();
+      },
+    });
+    const events = ["error", "close", "finish", "drain", "unpipe"];
+    const count = () => events.map((event) => writable.listenerCount(event));
+    let afterFirst;
+    await withOutput("stdout", writable, async (cli) => {
+      for (let i = 0; i < 20; i++) {
+        afterFirst ??= i === 1 ? count() : undefined;
+        const result = await cli.stdout.writeViaStream(new StreamReader([[65 + i]]));
+        expect(result).toEqual({ tag: "ok", val: undefined });
+      }
+      await cli.stdout._flush();
+    });
+    expect(chunks.join("")).toBe("ABCDEFGHIJKLMNOPQRST");
+    // One error listener stays for the life of the destination, however many writes follow.
+    expect(afterFirst).toEqual([1, 0, 0, 0, 0]);
+    expect(count()).toEqual(afterFirst);
+    expect(writable.writableEnded).toBe(false);
+  });
+
+  test.concurrent("a destination that closed fails the write as a broken pipe", async () => {
+    const writable = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+    writable.destroy();
+    await withOutput("stdout", writable, async (cli) => {
+      const result = await cli.stdout.writeViaStream(new StreamReader([[65]]));
+      expect(result).toEqual({ tag: "err", val: "pipe" });
+    });
+    expect(writable.listenerCount("error")).toBe(1);
+    expect(writable.listenerCount("close")).toBe(0);
+  });
+
   test.concurrent.each([
     ["EPIPE", "pipe"],
     ["ERR_STREAM_PREMATURE_CLOSE", "pipe"],

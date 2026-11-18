@@ -47,6 +47,22 @@ suite("Node.js Preview2", () => {
             }
         });
 
+        test("Wall clock takes seconds and nanoseconds from one reading", async () => {
+            const {
+                clocks: { wallClock },
+            } = await import("@bytecodealliance/preview2-shim");
+
+            // Consecutive readings straddle a second boundary.
+            const dateNow = Date.now;
+            const readings = [1_999, 2_000];
+            Date.now = () => readings.shift() ?? 2_000;
+            try {
+                assert.deepStrictEqual(wallClock.now(), { seconds: 1n, nanoseconds: 999e6 });
+            } finally {
+                Date.now = dateNow;
+            }
+        });
+
         test("Monotonic clock now", async () => {
             const {
                 clocks: { monotonicClock },
@@ -146,6 +162,36 @@ suite("Node.js Preview2", () => {
 
         for (const item of toDispose) {
             item[symbolDispose]();
+        }
+    });
+
+    test("FS read of more bytes than a file holds returns what is there", async () => {
+        const { mkdtempSync, rmSync, writeFileSync } = await import("node:fs");
+        const { tmpdir } = await import("node:os");
+        const { join } = await import("node:path");
+        const { filesystem } = await import("@bytecodealliance/preview2-shim");
+        const directory = mkdtempSync(join(tmpdir(), "jco-p2-read-"));
+        try {
+            writeFileSync(join(directory, "small.txt"), "hello world");
+            writeFileSync(join(directory, "large.bin"), new Uint8Array(100_000).fill(7));
+            const root = (filesystem as any)._createPreopenDescriptor(directory);
+
+            const small = root.openAt({}, "small.txt", {}, { read: true });
+            for (const length of [2n ** 31n, 2n ** 40n, 2n ** 64n - 1n]) {
+                const [bytes, eof] = small.read(length, 6n);
+                assert.strictEqual(new TextDecoder().decode(bytes), "world");
+                assert.strictEqual(eof, false);
+            }
+            assert.deepStrictEqual(small.read(2n ** 40n, 11n), [new Uint8Array(), true]);
+            small[symbolDispose]();
+
+            const large = root.openAt({}, "large.bin", {}, { read: true });
+            const [bytes] = large.read(2n ** 40n, 1n);
+            assert.strictEqual(bytes.byteLength, 99_999);
+            assert.ok(bytes.every((byte: number) => byte === 7));
+            large[symbolDispose]();
+        } finally {
+            rmSync(directory, { recursive: true, force: true });
         }
     });
 
@@ -777,6 +823,28 @@ suite("Node.js Preview2", () => {
 });
 
 suite("HTTPServer", () => {
+    test("importing the shim leaves node:http unloaded until a header is validated", async () => {
+        const { execFile } = await import("node:child_process");
+        const { promisify } = await import("node:util");
+        const shimUrl = import.meta.resolve("@bytecodealliance/preview2-shim");
+
+        // Run in a process of its own, because the test runner loads node:http itself.
+        const script = `
+            const { http } = await import(${JSON.stringify(shimUrl)});
+            const loaded = () => process.moduleLoadList.includes("NativeModule http");
+            const before = loaded();
+            new http.types.Fields().set("x-test", [new TextEncoder().encode("value")]);
+            console.log(JSON.stringify({ before, after: loaded() }));
+            process.exit(0);
+        `;
+        const { stdout } = await promisify(execFile)(process.execPath, [
+            "--input-type=module",
+            "-e",
+            script,
+        ]);
+        assert.deepStrictEqual(JSON.parse(stdout), { before: false, after: true });
+    });
+
     test(
         "HTTPServer: can retrieve randomized server address",
         testWithGCWrap(async () => {

@@ -1,7 +1,7 @@
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from 'vitest';
+import { expect, test } from 'vitest';
 
 import { parse } from '../src/wasm-tools.js';
 import { getTmpDir, nodeExec } from './helpers.js';
@@ -17,6 +17,7 @@ for (const instantiation of ['sync', 'async'] as const) {
             name: 'component',
             instantiation,
             cmRuntimeEsModule: undefined,
+            runtimeProfile: 'debug',
         });
         const directory = await getTmpDir();
         try {
@@ -30,3 +31,26 @@ for (const instantiation of ['sync', 'async'] as const) {
         }
     });
 }
+
+test('bindings contain diagnostics only with the debug runtime profile', async () => {
+    const component = await parse(await readFile(fixture, 'utf8'));
+    const diagnostic = '[contextGet()] args';
+    const assertion = 'corrupt rep table freelist';
+
+    for (const [runtimeProfile, diagnostics, assertions] of [
+        [undefined, false, true],
+        ['checked', false, true],
+        ['debug', true, true],
+    ] as const) {
+        const { files } = await transpileBytes(component, {
+            name: 'component',
+            instantiation: 'sync',
+            cmRuntimeEsModule: undefined,
+            runtimeProfile,
+        });
+        const bindings = new TextDecoder().decode(files['component.js']);
+
+        expect(bindings.includes(diagnostic), String(runtimeProfile)).toBe(diagnostics);
+        expect(bindings.includes(assertion), String(runtimeProfile)).toBe(assertions);
+    }
+});
