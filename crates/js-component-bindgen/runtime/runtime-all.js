@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 35636f07b8e84f66199d269c4f1e210ece75d1e8
+// generated from commit f3e182aefb6a84a3ffa720aa7289f9899ae661fe
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -10377,7 +10377,7 @@ var PendingValueQueue = class {
 		const cursor = this.#front();
 		if (!cursor || !(cursor.data instanceof Uint8Array)) return;
 		const available = cursor.data.length - cursor.offset;
-		if (available < maxCount && !(allowShort && available === this.#length)) return;
+		if (available < maxCount && !allowShort) return;
 		const transfer = Math.min(available, maxCount);
 		const bytes = new Uint8Array(cursor.data.subarray(cursor.offset, cursor.offset + transfer));
 		this.#advance(cursor, transfer);
@@ -10560,7 +10560,8 @@ function initializeStreamReadableEndClass(_context) {
 				dropAfterCopy
 			});
 			const queue = source.values;
-			const { typedArray, isNone } = this.#elemMeta;
+			const { typedArray, isNone, payloadTypeName } = this.#elemMeta;
+			const keepsByteChunks = typedArray === void 0 && payloadTypeName === "U8";
 			const values = [];
 			let bytes;
 			let remaining = count;
@@ -10574,8 +10575,9 @@ function initializeStreamReadableEndClass(_context) {
 							done: true
 						};
 					} else {
-						if (typedArray === Uint8Array && values.length === 0) {
-							bytes = queue.takeBytes?.(remaining, !queue.sourceIsSync || queue.done);
+						if ((typedArray === Uint8Array || keepsByteChunks) && values.length === 0) {
+							const allowShort = keepsByteChunks || !queue.sourceIsSync || queue.done;
+							bytes = queue.takeBytes?.(remaining, allowShort);
 							if (bytes) break;
 						}
 						remaining -= queue.drainInto(values, remaining);
