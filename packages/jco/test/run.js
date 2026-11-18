@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { suite, test, assert, expect } from "vitest";
 
-import { createRequestIsolatedHandler, getSandboxSetup, run } from "../src/cmd/run.js";
+import { createRequestIsolatedHandler, getPerformanceSetup, getSandboxSetup, run } from "../src/cmd/run.js";
 import { exec, getTmpDir, jcoPath } from "./helpers.js";
 
 suite("Run output lifecycle", () => {
@@ -142,6 +142,87 @@ suite("Run sandbox", () => {
         const sandboxResult = JSON.parse(await readFile(resultPath, "utf8"));
         assert.strictEqual(sandboxResult.count, 0);
         assert.isFalse(sandboxResult.preserved);
+    });
+});
+
+suite("Run performance options", () => {
+    test("emits no setup unless a --perf flag is given", () => {
+        assert.strictEqual(getPerformanceSetup({}), "");
+        assert.strictEqual(getPerformanceSetup({ perfMainThreadFilesystem: false }), "");
+    });
+
+    test("sets the requested preview2-shim performance options", () => {
+        const setup = getPerformanceSetup({ perfMainThreadFilesystem: true });
+        assert.include(setup, '_setPerformance({"mainThreadFilesystem":true})');
+    });
+
+    const componentPath = fileURLToPath(new URL("./fixtures/components/hello_stdout.component.wasm", import.meta.url));
+    const MISSING_OPTION = "that has filesystem performance options";
+
+    /**
+     * Run the component with a module that reports where the shim opened a file.
+     *
+     * @param {string[]} flags - extra `jco run` flags
+     * @param {object} [options]
+     * @param {number} [options.expectedExitCode] - the exit code `jco run` is expected to end with
+     * @returns {Promise<{ mainThread?: boolean, stdout: string, stderr: string }>} what the run observed
+     */
+    async function runProbe(flags, { expectedExitCode = 0 } = {}) {
+        const directory = await getTmpDir();
+        const importPath = join(directory, "probe.mjs");
+        const resultPath = join(directory, "result.json");
+        const probed = join(directory, "probe.txt").replace(/^[\\/]+/, "");
+        await writeFile(join(directory, "probe.txt"), "probe");
+        // A stream of the I/O worker has an id there; one served on the main thread has none.
+        await writeFile(
+            importPath,
+            `
+                import { writeFileSync } from "node:fs";
+                import { preopens } from "@bytecodealliance/preview2-shim/filesystem";
+                import { inputStreamId } from "@bytecodealliance/preview2-shim/io-worker";
+                const [[root]] = preopens.getDirectories();
+                const file = root.openAt({}, ${JSON.stringify(probed)}, {}, { read: true });
+                const stream = file.readViaStream(0n);
+                writeFileSync(${JSON.stringify(resultPath)}, JSON.stringify({
+                    mainThread: inputStreamId(stream) === undefined,
+                }));
+                stream[Symbol.dispose]();
+                file[Symbol.dispose]();
+            `,
+        );
+
+        try {
+            const args = ["run", "--jco-dir", directory, ...flags, "--jco-import", importPath];
+            const output = await exec(jcoPath, ...args, componentPath, { expectedExitCode });
+            const result = await readFile(resultPath, "utf8").catch((error) => {
+                if (error.code !== "ENOENT") {
+                    throw error;
+                }
+                return "{}";
+            });
+            return { ...JSON.parse(result), ...output };
+        } finally {
+            await rm(directory, { recursive: true, force: true });
+        }
+    }
+
+    // TODO(unskip): remove this test once packages/jco depends on a preview2-shim
+    // release that has filesystem performance options, together with the
+    // compatibility error in getPerformanceSetup.
+    test("jco run reports a preview2-shim that predates the performance options", async () => {
+        const { mainThread, stderr } = await runProbe(["--perf-main-thread-filesystem"], { expectedExitCode: 1 });
+        assert.isUndefined(mainThread);
+        assert.include(stderr, MISSING_OPTION);
+    });
+
+    // TODO(unskip): change `test.skip` to `test` once packages/jco depends on the
+    // first preview2-shim release with filesystem performance options (after 0.31.1).
+    // Verified locally with packages/jco linked to the workspace preview2-shim.
+    test.skip("jco run --perf-main-thread-filesystem serves files on the main thread", async () => {
+        assert.isFalse((await runProbe([])).mainThread);
+        const { mainThread, stdout } = await runProbe(["--perf-main-thread-filesystem"]);
+        assert.isTrue(mainThread);
+        assert.include(stdout, "writing to stdout: hello, world");
     });
 });
 

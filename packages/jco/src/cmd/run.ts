@@ -17,7 +17,14 @@ export interface GetSandboxSetupArgs {
     sandboxNetInherit?: boolean;
 }
 
-interface RunComponentOptions extends GetSandboxSetupArgs {
+// TODO: these options need the preview2-shim dependency raised to the first
+// release with filesystem performance options.
+export interface GetPerformanceSetupArgs {
+    /** Operate on regular files with synchronous `node:fs` calls on the main thread. */
+    perfMainThreadFilesystem?: boolean;
+}
+
+interface RunComponentOptions extends GetSandboxSetupArgs, GetPerformanceSetupArgs {
     jcoDir?: string;
     jcoImport?: string;
     jcoImportBindings?: "js" | "optimized" | "hybrid" | "direct-optimized";
@@ -421,6 +428,7 @@ async function runComponent(
 
         const runPath = resolve(outDir, "_run.js");
         const sandboxSetup = getSandboxSetup(opts);
+        const performanceSetup = getPerformanceSetup(opts);
         const jcoImportSetup = jcoImport ? `await import(${JSON.stringify(pathToFileURL(jcoImport).href)});` : "";
         // Let custom environments replace the legacy preopen, then apply sandbox restrictions if requested.
         const setupBeforeJcoImport = opts.sandbox ? "" : sandboxSetup;
@@ -433,6 +441,7 @@ async function runComponent(
       import { readFileSync } from 'node:fs';
       import { HTTPServer } from '@bytecodealliance/preview2-shim/http';
       import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
+      ${performanceSetup}
       ${setupBeforeJcoImport}
       ${jcoImportSetup}
       ${setupAfterJcoImport}
@@ -462,6 +471,7 @@ async function runComponent(
             runPath,
             `
       import process from 'node:process';
+      ${performanceSetup}
       ${setupBeforeJcoImport}
       ${jcoImport && opts.isolateRequests !== "worker" ? jcoImportSetup : ""}
       ${setupAfterJcoImport}
@@ -494,6 +504,35 @@ async function runComponent(
             // empty
         }
     }
+}
+
+/**
+ * Generate the module code that turns on the preview2-shim performance options
+ * requested with the `--perf-*` flags.
+ *
+ * The options are set as the shim's defaults, so they apply to the preopens
+ * that the run sets up and to those a `--jco-import` module adds without
+ * options of its own.
+ *
+ * @param opts - the parsed `--perf-*` flags
+ * @returns code for the generated entry module, empty when no flag is set
+ */
+export function getPerformanceSetup(opts: GetPerformanceSetupArgs): string {
+    const performance = {
+        ...(opts.perfMainThreadFilesystem ? { mainThreadFilesystem: true } : {}),
+    };
+    if (Object.keys(performance).length === 0) {
+        return "";
+    }
+    // TODO: remove the check for `_setPerformance` from the generated code once
+    // the preview2-shim dependency is raised to the first release that has it.
+    return `
+      import * as JCO_P2_FILESYSTEM from '@bytecodealliance/preview2-shim/filesystem';
+      if (typeof JCO_P2_FILESYSTEM._setPerformance !== 'function') {
+        throw new Error('--perf-* options need a version of @bytecodealliance/preview2-shim that has filesystem performance options (filesystem._setPerformance); the one installed does not');
+      }
+      JCO_P2_FILESYSTEM._setPerformance(${JSON.stringify(performance)});
+    `;
 }
 
 export function getSandboxSetup(opts: GetSandboxSetupArgs): string {
