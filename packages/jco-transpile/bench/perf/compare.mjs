@@ -1,5 +1,5 @@
 /**
- * Compare variants built by `gen.sh`, interleaving fresh processes so that
+ * Compare variants built by `gen.mjs`, interleaving fresh processes so that
  * machine noise affects each variant alike.
  *
  * usage: node compare.mjs [--runs=N] [--filter=text] <baseline> <variant>...
@@ -8,14 +8,16 @@
  */
 import { execFileSync } from 'node:child_process';
 import { summarize } from './statistics.mjs';
+import { cpus } from 'node:os';
+import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
 
-const args = process.argv.slice(2);
-const option = (name, fallback) =>
-    args.find((value) => value.startsWith(`--${name}=`))?.slice(name.length + 3) ?? fallback;
-const runs = Number(option('runs', 5));
-const filter = option('filter', '');
-const variants = args.filter((value) => !value.startsWith('--'));
+const { values, positionals: variants } = parseArgs({
+    options: { runs: { type: 'string', default: '5' }, filter: { type: 'string', default: '' } },
+    allowPositionals: true,
+});
+const runs = Number(values.runs);
+const filter = values.filter;
 const bench = fileURLToPath(new URL('./bench.mjs', import.meta.url));
 
 if (!Number.isInteger(runs) || runs < 1 || variants.length < 2 || new Set(variants).size !== variants.length) {
@@ -51,4 +53,14 @@ for (const name of Object.keys(observations.get(baseline))) {
     console.log(`| ${[name, format(base), ...cells].join(' | ')} |`);
 }
 
-console.log(JSON.stringify({ runs, baseline, variants, observations: Object.fromEntries(observations) }));
+console.log(
+    JSON.stringify({
+        node: process.version,
+        v8: process.versions.v8,
+        cpu: cpus()[0]?.model,
+        runs,
+        baseline,
+        variants,
+        observations: Object.fromEntries(observations),
+    }),
+);
