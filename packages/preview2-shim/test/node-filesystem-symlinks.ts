@@ -328,4 +328,160 @@ suite("Node filesystem symlink paths", () => {
             "outside contents",
         );
     });
+
+    /** Assert that no path operation on `descriptor` reaches the host filesystem. */
+    function assertEveryPathOperationDenied(descriptor: Descriptor) {
+        const denied = (operation: () => unknown) =>
+            throws(operation, (error) => error === "not-permitted");
+
+        denied(() => descriptor.openAt({}, "secret.txt", {}, { read: true }));
+        denied(() => descriptor.openAt({ symlinkFollow: true }, "secret.txt", {}, { read: true }));
+        denied(() => descriptor.openAt({}, "created.txt", { create: true }, { write: true }));
+        denied(() => descriptor.openAt({}, ".", { directory: true }, { read: true }));
+        denied(() => descriptor.readDirectory());
+        denied(() => descriptor.statAt({}, "secret.txt"));
+        denied(() => descriptor.metadataHashAt({}, "secret.txt"));
+        denied(() => descriptor.readlinkAt("secret.txt"));
+        denied(() => descriptor.createDirectoryAt("created-dir"));
+        denied(() => descriptor.setTimesAt({}, "secret.txt", { tag: "now" }, { tag: "now" }));
+        denied(() => descriptor.linkAt({}, "secret.txt", root, "linked.txt"));
+        denied(() => root.linkAt({}, "target.txt", descriptor, "linked.txt"));
+        denied(() => descriptor.renameAt("secret.txt", root, "renamed.txt"));
+        denied(() => root.renameAt("target.txt", descriptor, "renamed.txt"));
+        denied(() => descriptor.symlinkAt("secret.txt", "new-link.txt"));
+        denied(() => descriptor.unlinkFileAt("secret.txt"));
+        denied(() => descriptor.removeDirectoryAt("empty"));
+    }
+
+    /** Assert that the directory outside the preopen still has its initial contents. */
+    function assertOutsideUntouched(directory = outsideDir) {
+        assert.strictEqual(readFileSync(join(directory, "secret.txt"), "utf8"), "outside contents");
+        assert.strictEqual(existsSync(join(directory, "empty")), true);
+        for (const created of ["created.txt", "created-dir", "linked.txt", "renamed.txt"]) {
+            assert.strictEqual(existsSync(join(directory, created)), false);
+        }
+        assert.strictEqual(existsSync(join(directory, "new-link.txt")), false);
+        assert.strictEqual(existsSync(join(testDir, "linked.txt")), false);
+        assert.strictEqual(existsSync(join(testDir, "renamed.txt")), false);
+        assert.strictEqual(readFileSync(join(testDir, "target.txt"), "utf8"), "target contents");
+    }
+
+    test("rejects a descriptor whose directory was replaced by an escaping symlink", () => {
+        mkdirSync(join(testDir, "held"));
+        const held = open("held", {}, { directory: true });
+
+        root.removeDirectoryAt("held");
+        root.symlinkAt(`../${basename(outsideDir)}`, "held");
+
+        assertEveryPathOperationDenied(held);
+        assertOutsideUntouched();
+    });
+
+    test("rejects a descriptor below a directory replaced by an escaping symlink", () => {
+        mkdirSync(join(testDir, "outer", "inner"), { recursive: true });
+        mkdirSync(join(outsideDir, "inner", "empty"), { recursive: true });
+        writeFileSync(join(outsideDir, "inner", "secret.txt"), "outside contents");
+        const inner = open("outer/inner", {}, { directory: true });
+
+        root.renameAt("outer", root, "moved");
+        root.symlinkAt(`../${basename(outsideDir)}`, "outer");
+
+        assertEveryPathOperationDenied(inner);
+        assertOutsideUntouched(join(outsideDir, "inner"));
+    });
+
+    test("rejects a descriptor whose directory was replaced by a symlink to a sibling", () => {
+        mkdirSync(join(testDir, "held"));
+        mkdirSync(join(testDir, "sibling", "empty"), { recursive: true });
+        writeFileSync(join(testDir, "sibling", "secret.txt"), "outside contents");
+        const held = open("held", {}, { directory: true });
+
+        root.removeDirectoryAt("held");
+        root.symlinkAt("sibling", "held");
+
+        assertEveryPathOperationDenied(held);
+        assertOutsideUntouched(join(testDir, "sibling"));
+    });
+
+    test("a descriptor works again once its directory is a real directory", () => {
+        mkdirSync(join(testDir, "held"));
+        const held = open("held", {}, { directory: true });
+
+        root.removeDirectoryAt("held");
+        root.symlinkAt(`../${basename(outsideDir)}`, "held");
+        throws(
+            () => held.statAt({}, "secret.txt"),
+            (error) => error === "not-permitted",
+        );
+
+        root.unlinkFileAt("held");
+        root.createDirectoryAt("held");
+        held.createDirectoryAt("created-dir");
+        assert.strictEqual(statSync(join(testDir, "held", "created-dir")).isDirectory(), true);
+    });
+
+    test("descriptors opened through symlinks inside the preopen keep working", () => {
+        mkdirSync(join(testDir, "nested", "deeper"), { recursive: true });
+        writeFileSync(join(testDir, "nested", "child.txt"), "child contents");
+        symlinkSync("nested", join(testDir, "alias"), "dir");
+        symlinkSync("../target.txt", join(testDir, "nested", "up.txt"));
+
+        const viaAlias = open("alias", { symlinkFollow: true }, { directory: true });
+        const deeper = open("alias/deeper", {}, { directory: true });
+
+        // Unrelated changes elsewhere in the tree do not affect open descriptors.
+        root.createDirectoryAt("unrelated");
+        root.symlinkAt("target.txt", "unrelated-link.txt");
+
+        const child = viaAlias.openAt({}, "child.txt", {}, { read: true });
+        opened.push(child);
+        assert.strictEqual(new TextDecoder().decode(child.read(64n, 0n)[0]), "child contents");
+        assert.strictEqual(viaAlias.statAt({}, "child.txt").type, "regular-file");
+        assert.strictEqual(viaAlias.statAt({}, "deeper").type, "directory");
+        assert.strictEqual(viaAlias.readlinkAt("up.txt"), "../target.txt");
+        // A symlink target may not climb above the descriptor it is resolved from.
+        throws(
+            () => viaAlias.statAt({ symlinkFollow: true }, "up.txt"),
+            (error) => error === "not-permitted",
+        );
+
+        const names: string[] = [];
+        const entries = viaAlias.readDirectory();
+        for (let entry = entries.readDirectoryEntry(); entry; ) {
+            names.push(entry.name);
+            entry = entries.readDirectoryEntry();
+        }
+        (entries as unknown as Disposable)[Symbol.dispose]();
+        assert.deepStrictEqual(names.sort(), ["child.txt", "deeper", "up.txt"]);
+
+        deeper.createDirectoryAt("created-dir");
+        const created = deeper.openAt({}, "created.txt", { create: true }, { write: true });
+        opened.push(created);
+        assert.strictEqual(
+            statSync(join(testDir, "nested", "deeper", "created-dir")).isDirectory(),
+            true,
+        );
+        assert.strictEqual(
+            statSync(join(testDir, "nested", "deeper", "created.txt")).isFile(),
+            true,
+        );
+    });
+
+    test("descriptors below a preopen reached through a host symlink keep working", () => {
+        mkdirSync(join(testDir, "nested"));
+        writeFileSync(join(testDir, "nested", "child.txt"), "child contents");
+        symlinkSync(testDir, join(outsideDir, "preopen-alias"), "dir");
+        const shim = new WASIShim({
+            sandbox: { preopens: { "/alias": join(outsideDir, "preopen-alias") } },
+        });
+        const [aliasRoot] = shim.getImportObject()["wasi:filesystem/preopens"].getDirectories()[0];
+
+        const nested = aliasRoot.openAt({}, "nested", { directory: true }, { read: true });
+        opened.push(nested);
+        const child = nested.openAt({}, "child.txt", {}, { read: true });
+        opened.push(child);
+        assert.strictEqual(new TextDecoder().decode(child.read(64n, 0n)[0]), "child contents");
+        nested.createDirectoryAt("created-dir");
+        assert.strictEqual(statSync(join(testDir, "nested", "created-dir")).isDirectory(), true);
+    });
 });

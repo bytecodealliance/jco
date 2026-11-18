@@ -76,14 +76,21 @@ function normalizeHostPath(path: string) {
  * and fails with EISDIR. Drive and UNC paths resolve the same without the prefix.
  */
 function realHostPath(path: string) {
-    if (isWindows) {
-        path = path
+    return normalizeHostPath(realpathSync(stripWindowsNamespace(path)));
+}
+
+/** Drop the Windows namespace prefix (`\\?\`) from a drive or UNC path. */
+function stripWindowsNamespace(path: string) {
+    if (!isWindows) {
+        return path;
+    }
+    return (
+        path
             .replace(/^[\\/]{2}\?[\\/]UNC[\\/]/i, "//")
             .replace(/^[\\/]{2}\?[\\/]([a-zA-Z]:)(?=[\\/]|$)/, "$1")
             // A bare drive would otherwise resolve against that drive's cwd
-            .replace(/^([a-zA-Z]:)$/, "$1/");
-    }
-    return normalizeHostPath(realpathSync(path));
+            .replace(/^([a-zA-Z]:)$/, "$1/")
+    );
 }
 
 const nsMagnitude = 1_000_000_000n;
@@ -130,6 +137,11 @@ class Descriptor implements IDescriptor {
     #mode!: DescriptorFlags;
     #enableMutateDirectory = false;
     #fullPath;
+    /**
+     * Whether `#fullPath` contained no symlinks when this descriptor was opened.
+     * False only below the unbounded Windows preopen, whose paths are not resolved.
+     */
+    #fullPathResolved = false;
     #virtualDirectory = false;
     private _id = 0;
 
@@ -155,7 +167,7 @@ class Descriptor implements IDescriptor {
         return descriptor;
     }
 
-    static _create(fileResourceId, mode, fullPath, enableMutateDirectory) {
+    static _create(fileResourceId, mode, fullPath, fullPathResolved, enableMutateDirectory) {
         const descriptor = new Descriptor();
         descriptor.#fileResourceId = fileResourceId;
         descriptor.#finalizer = registerDispose(
@@ -167,14 +179,16 @@ class Descriptor implements IDescriptor {
         descriptor.#enableMutateDirectory = enableMutateDirectory;
         descriptor.#mode = enableMutateDirectory ? { ...mode } : mode;
         descriptor.#fullPath = fullPath;
+        descriptor.#fullPathResolved = fullPathResolved;
         return descriptor;
     }
 
-    static _createVirtualDirectory(mode, fullPath, enableMutateDirectory) {
+    static _createVirtualDirectory(mode, fullPath, fullPathResolved, enableMutateDirectory) {
         const descriptor = new Descriptor();
         descriptor.#enableMutateDirectory = enableMutateDirectory;
         descriptor.#mode = enableMutateDirectory ? { ...mode } : mode;
         descriptor.#fullPath = fullPath;
+        descriptor.#fullPathResolved = fullPathResolved;
         descriptor.#virtualDirectory = true;
         return descriptor;
     }
@@ -312,7 +326,7 @@ class Descriptor implements IDescriptor {
         );
         try {
             if (this.#virtualDirectory) {
-                utimesSync(this.#fullPath, atime, mtime);
+                utimesSync(this.#getFullPath(".", true), atime, mtime);
             } else {
                 ioCall(FILESYSTEM_DESCRIPTOR_SET_TIMES, this.#fileResourceId, { atime, mtime });
             }
@@ -365,8 +379,9 @@ class Descriptor implements IDescriptor {
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
+        const fullPath = this.#getFullPath(".", true);
         try {
-            const dir = opendirSync(this.#fullPath);
+            const dir = opendirSync(fullPath);
             return directoryEntryStreamCreate(dir);
         } catch (e) {
             throw convertFsError(e);
@@ -404,7 +419,7 @@ class Descriptor implements IDescriptor {
         let stats;
         try {
             stats = this.#virtualDirectory
-                ? statSync(this.#fullPath, { bigint: true })
+                ? statSync(this.#getFullPath(".", true), { bigint: true })
                 : ioCall(FILESYSTEM_DESCRIPTOR_STAT, this.#fileResourceId);
         } catch (e) {
             throw convertFsError(e);
@@ -539,6 +554,8 @@ class Descriptor implements IDescriptor {
         if (descriptorFlags.fileIntegritySync || descriptorFlags.dataIntegritySync) {
             throw "unsupported";
         }
+        // Below the unbounded Windows preopen the path is used as given.
+        const fullPathResolved = !(isWindows && this.#hostPreopen === "//");
         if (isWindows) {
             if (!pathFlags.symlinkFollow && !openFlags.create) {
                 let isSymlink = false;
@@ -572,6 +589,7 @@ class Descriptor implements IDescriptor {
                     return Descriptor._createVirtualDirectory(
                         descriptorFlags,
                         fullPath,
+                        fullPathResolved,
                         this.#enableMutateDirectory,
                     );
                 }
@@ -616,6 +634,7 @@ class Descriptor implements IDescriptor {
                       }
                     : descriptorFlags,
                 fullPath,
+                fullPathResolved,
                 this.#enableMutateDirectory,
             );
             if (fullPath.endsWith("/") && type !== "directory") {
@@ -735,7 +754,7 @@ class Descriptor implements IDescriptor {
             return { upper: 0n, lower: BigInt(this._id) };
         }
         if (this.#virtualDirectory) {
-            const stats = statSync(this.#fullPath, { bigint: true });
+            const stats = statSync(this.#getFullPath(".", true), { bigint: true });
             return { upper: stats.mtimeNs, lower: stats.ino };
         }
         try {
@@ -757,7 +776,19 @@ class Descriptor implements IDescriptor {
         }
     }
 
-    #getFullPath(subpath, followFinalSymlink) {
+    /**
+     * Resolve a guest path against this descriptor to a host path.
+     *
+     * The result stays below the directory this descriptor was opened on: `..`
+     * and symlink targets may not climb above it, absolute symlink targets are
+     * rejected, and so is a descriptor whose own path now passes through a symlink.
+     *
+     * @param subpath - Guest path, relative to this descriptor
+     * @param followFinalSymlink - Whether a symlink in the final component is resolved
+     * @returns The host path to operate on
+     * @throws A WASI error code, `not-permitted` for paths leaving the descriptor
+     */
+    #getFullPath(subpath: string, followFinalSymlink: boolean): string {
         subpath = subpath.replace(/\\/g, "/").replace(/\/\/+/g, "/");
         if (subpath.startsWith("/")) {
             throw "not-permitted";
@@ -795,6 +826,17 @@ class Descriptor implements IDescriptor {
             baseResolved = realHostPath(base);
         } catch (error) {
             throw convertFsError(error);
+        }
+
+        // Node has no openat(), so a descriptor is only a remembered path. That
+        // path had no symlinks when it was opened. If it has one now, the tree
+        // was rearranged underneath the descriptor and the path may lead
+        // anywhere, including outside the preopen.
+        if (
+            this.#fullPathResolved &&
+            hostPath.relative(stripWindowsNamespace(base), baseResolved) !== ""
+        ) {
+            throw "not-permitted";
         }
 
         let current = baseResolved;
