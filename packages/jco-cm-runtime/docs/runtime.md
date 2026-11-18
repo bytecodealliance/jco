@@ -242,3 +242,15 @@ host so timers and cancellation can run. The store tracks that yield as pending
 work. Host completions within a microtask checkpoint share a scheduler wakeup.
 Each tick resumes one guest thread, giving it time to restore its registers
 before the next continuation runs.
+
+### Reading a host stream returned by the guest
+
+A stream lowered from a host source keeps that source on its readable end. When
+a guest hands the end back to the host, for example by returning the stream it
+was given, both ends belong to the host: a host read then takes its values from
+the source's queue, where a write injected for a guest read takes them, without
+the buffers and events of a copy. Values a guest read left queued come first,
+and a queue that exposes `takeBytes` has byte chunks copied whole. The read
+still marks the end as copying, ends with a drop or an instance stop, and honors
+`rejectLength` and `dropAfterCopy`. An end that is not idle, such as one with an
+event the guest has yet to take, is read through a copy as before.

@@ -1,7 +1,9 @@
 // Test-only composition of selected constructors and actual shared owners.
 import * as stream from '../src/intrinsics/stream.js';
+import { lowerFlatStream } from '../src/intrinsics/lower.js';
 import { create as createComponent } from './component-helpers.js';
 import type {
+    StreamReadableEnd,
     InternalStream,
     RuntimeErrorConstructor,
     StreamElementMetadata,
@@ -165,6 +167,67 @@ export function guestOptions(memory: { buffer: ArrayBuffer }, streamTableIdx = 2
         stringEncoding: 'utf8',
         getMemoryFn: () => memory,
         elemMeta: scalar,
+    };
+}
+
+/** `u8` stream elements, which a host read returns as `Uint8Array` chunks. */
+export const bytes: StreamElementMetadata = {
+    align32: 1,
+    size32: 1,
+    isNumeric: true,
+    payloadTypeName: 'U8',
+    typedArray: Uint8Array as StreamElementMetadata['typedArray'],
+};
+
+/**
+ * A store with one stream lowered from a host source into table 2 of component 0.
+ *
+ * @param source - an iterable, async iterable or `ReadableStream` of the host
+ * @param elemMeta - metadata of the element type
+ * @returns the store, the readable end the guest is given, and its waitable index
+ */
+export function createLowered(source: unknown, elemMeta: StreamElementMetadata = scalar) {
+    const s = create();
+    s.addTable(0, 2);
+    const index = lowerFlatStream(s.lower, { componentIdx: 0, streamTableIdx: 2, elemMeta: { ...elemMeta } })({
+        componentIdx: 0,
+        vals: [source],
+        storagePtr: undefined,
+    }) as number;
+    const read = stream.getStreamEnd(s.ends, { tableIdx: 2, streamEndWaitableIdx: index }) as StreamReadableEnd;
+    return {
+        ...s,
+        read,
+        index,
+        /** Notifies the stream the way stopping its instance does. */
+        stopInstance() {
+            (s.streams.get(read.globalStreamMapRep()!) as InternalStream).onInstanceStop();
+        },
+    };
+}
+
+/**
+ * An async iterator over fixed results, which records the calls made to it.
+ *
+ * @param results - what `next` resolves to, in order, before it reports the end
+ * @returns the iterator, with the names of the calls it received in `calls`
+ */
+export function asyncSource(...results: IteratorResult<unknown>[]) {
+    const calls: string[] = [];
+    let index = 0;
+    return {
+        calls,
+        [Symbol.asyncIterator]() {
+            return this;
+        },
+        async next(): Promise<IteratorResult<unknown>> {
+            calls.push('next');
+            return results[index++] ?? { value: undefined, done: true };
+        },
+        async return(): Promise<IteratorResult<unknown>> {
+            calls.push('return');
+            return { value: undefined, done: true };
+        },
     };
 }
 
