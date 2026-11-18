@@ -20,7 +20,8 @@ node compare.mjs --runs=4 base embedded
 ```
 
 Flags after the runtime are passed on to the transpile example,
-for example `./gen.sh debug embedded --profile=debug` to keep the diagnostics of the bundled runtime.
+for example `./gen.sh debug embedded --profile=debug` to keep the diagnostics of the bundled runtime,
+or `./gen.sh fast embedded --perf-sync-fast-path` to skip the task of synchronous calls.
 
 A variant is a directory under `../output/perf/`.
 To try a runtime change, copy `dist` elsewhere, edit the copy, and pass it to `gen.sh`.
