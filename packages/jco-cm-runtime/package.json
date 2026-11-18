@@ -90,20 +90,30 @@
         "./intrinsics/stream": {
             "types": "./dist/intrinsics/stream.d.ts",
             "default": "./dist/intrinsics/stream.js"
+        },
+        "./debug": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/debug/index.js"
+        },
+        "./debug/*": {
+            "types": "./dist/*.d.ts",
+            "default": "./dist/debug/*.js"
         }
     },
     "scripts": {
-        "build": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+        "build": "node scripts/build.mjs",
         "types:check": "tsc -p tsconfig.json",
         "fmt": "oxfmt",
         "fmt:check": "oxfmt --check",
         "lint": "oxlint",
         "lint:fix": "oxlint --fix",
         "test": "vitest run -c test/vitest.ts",
+        "test:checked": "vitest run -c test/vitest.checked.mjs",
         "prepack": "pnpm run build"
     },
     "devDependencies": {
         "@types/node": "^24.13.3",
+        "rolldown": "1.2.13",
         "typescript": "catalog:",
         "vitest": "catalog:"
     }
