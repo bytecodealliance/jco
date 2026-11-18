@@ -34,9 +34,18 @@ function main() {
         extract(platformTarball, platformPackageDir);
 
         const require = createRequire(join(testDir, 'smoke-test.cjs'));
-        const { fadvise } = require('@bytecodealliance/jco-node-fs');
+        const { Dir, fadvise } = require('@bytecodealliance/jco-node-fs');
         fd = openSync(join(rootPackageDir, 'package.json'), 'r');
         fadvise(fd, 0n, 0n, 'normal');
+
+        const dir = Dir.open(rootPackageDir);
+        try {
+            if (dir.statAt('package.json', true).type !== 'regular-file') {
+                throw new Error('directory handle did not stat the package manifest');
+            }
+        } finally {
+            dir.close();
+        }
     } finally {
         if (fd !== undefined) {
             closeSync(fd);

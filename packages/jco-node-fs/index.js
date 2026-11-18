@@ -628,5 +628,6 @@ if (!nativeBinding) {
 }
 
 module.exports = nativeBinding
+module.exports.DirHandle = nativeBinding.DirHandle
 module.exports.fadviseRaw = nativeBinding.fadviseRaw
 module.exports.renameRaw = nativeBinding.renameRaw
