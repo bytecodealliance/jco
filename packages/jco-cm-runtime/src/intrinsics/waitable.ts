@@ -25,152 +25,155 @@ import { getOrCreateAsyncState } from './component.js';
 import { getCurrentTask } from './async-task/task-operations.js';
 import { isThenable } from './async-task/helpers.js';
 
-class Waitable {
-    #componentIdx: number | undefined;
+function defineWaitable() {
+    return class Waitable {
+        #componentIdx: number | undefined;
 
-    #pendingEventFn: (() => WaitableEvent) | null = null;
+        #pendingEventFn: (() => WaitableEvent) | null = null;
 
-    #promise!: Promise<void>;
-    #resolve!: () => void;
-    #reject!: (error: unknown) => void;
+        #promise!: Promise<void>;
+        #resolve!: () => void;
+        #reject!: (error: unknown) => void;
 
-    #waitableSet: ComponentWaitableSet | null = null;
+        #waitableSet: ComponentWaitableSet | null = null;
 
-    #hasSyncWaiter = false;
+        #hasSyncWaiter = false;
 
-    #idx: number | null = null; // to component-global waitables
+        #idx: number | null = null; // to component-global waitables
 
-    target: unknown;
+        target: unknown;
 
-    constructor(args: { componentIdx?: number; target?: unknown }) {
-        const { componentIdx } = args;
-        this.#componentIdx = componentIdx;
-        this.target = args.target;
-        this.#resetPromise();
-    }
-
-    componentIdx() {
-        return this.#componentIdx;
-    }
-    isInSet() {
-        return this.#waitableSet !== null;
-    }
-
-    idx() {
-        return this.#idx;
-    }
-    setIdx(idx: number) {
-        if (idx === 0) {
-            throw new Error('waitable idx cannot be zero');
-        }
-        this.#idx = idx;
-    }
-
-    setTarget(tgt: unknown) {
-        this.target = tgt;
-    }
-
-    #resetPromise() {
-        const { promise, resolve, reject } = promiseWithResolvers<void>();
-        this.#promise = promise;
-        this.#resolve = resolve;
-        this.#reject = reject;
-    }
-
-    resolve() {
-        this.#resolve();
-    }
-    reject(err: unknown) {
-        this.#reject(err);
-    }
-    promise() {
-        return this.#promise;
-    }
-
-    hasPendingEvent() {
-        // debugLog('[Waitable#hasPendingEvent()]', {
-        //     componentIdx: this.#componentIdx,
-        //     waitable: this,
-        //     waitableSet: this.#waitableSet,
-        //     hasPendingEvent: this.#pendingEventFn !== null,
-        // });
-        return this.#pendingEventFn !== null;
-    }
-
-    setPendingEvent(fn: () => WaitableEvent) {
-        DEBUG: debugLog('[Waitable#setPendingEvent()] args', {
-            waitable: this,
-            inSet: this.#waitableSet,
-        });
-        this.#pendingEventFn = fn;
-    }
-
-    getPendingEvent() {
-        DEBUG: debugLog('[Waitable#getPendingEvent()] args', {
-            waitable: this,
-            inSet: this.#waitableSet,
-            hasPendingEvent: this.#pendingEventFn !== null,
-        });
-        if (this.#pendingEventFn === null) {
-            return null;
-        }
-        const eventFn = this.#pendingEventFn;
-        this.#pendingEventFn = null;
-        const e = eventFn();
-        this.#resetPromise();
-        return e;
-    }
-
-    join(waitableSet: ComponentWaitableSet | null) {
-        DEBUG: debugLog('[Waitable#join()] args', {
-            waitable: this,
-            waitableSet: waitableSet,
-            isRemoval: waitableSet === null,
-        });
-
-        if (waitableSet === undefined) {
-            throw new TypeError('waitable set must be not be undefined');
+        constructor(args: { componentIdx?: number; target?: unknown }) {
+            const { componentIdx } = args;
+            this.#componentIdx = componentIdx;
+            this.target = args.target;
+            this.#resetPromise();
         }
 
-        if (this.#waitableSet) {
-            this.#waitableSet.removeWaitable(this);
+        componentIdx() {
+            return this.#componentIdx;
+        }
+        isInSet() {
+            return this.#waitableSet !== null;
         }
 
-        this.#waitableSet = waitableSet;
-
-        if (waitableSet) {
-            waitableSet.addWaitable(this);
+        idx() {
+            return this.#idx;
         }
-    }
-
-    drop() {
-        DEBUG: debugLog('[Waitable#drop()] args', {
-            componentIdx: this.#componentIdx,
-            waitable: this,
-        });
-        this.join(null);
-    }
-
-    async waitForPendingEvent(args: Parameters<WaitableType['waitForPendingEvent']>[0]) {
-        const { cstate } = args;
-        if (!cstate) {
-            throw new TypeError('missing component state');
+        setIdx(idx: number) {
+            if (idx === 0) {
+                throw new Error('waitable idx cannot be zero');
+            }
+            this.#idx = idx;
         }
 
-        if (this.#waitableSet !== null || this.#hasSyncWaiter) {
-            throw new Error('waitable is already in a set/has a sync waiter');
+        setTarget(tgt: unknown) {
+            this.target = tgt;
         }
-        this.#hasSyncWaiter = true;
-        try {
-            await cstate.waitUntil({
-                cancellable: false,
-                readyFn: () => this.hasPendingEvent(),
+
+        #resetPromise() {
+            const { promise, resolve, reject } = promiseWithResolvers<void>();
+            this.#promise = promise;
+            this.#resolve = resolve;
+            this.#reject = reject;
+        }
+
+        resolve() {
+            this.#resolve();
+        }
+        reject(err: unknown) {
+            this.#reject(err);
+        }
+        promise() {
+            return this.#promise;
+        }
+
+        hasPendingEvent() {
+            // debugLog('[Waitable#hasPendingEvent()]', {
+            //     componentIdx: this.#componentIdx,
+            //     waitable: this,
+            //     waitableSet: this.#waitableSet,
+            //     hasPendingEvent: this.#pendingEventFn !== null,
+            // });
+            return this.#pendingEventFn !== null;
+        }
+
+        setPendingEvent(fn: () => WaitableEvent) {
+            DEBUG: debugLog('[Waitable#setPendingEvent()] args', {
+                waitable: this,
+                inSet: this.#waitableSet,
             });
-        } finally {
-            this.#hasSyncWaiter = false;
+            this.#pendingEventFn = fn;
         }
-    }
+
+        getPendingEvent() {
+            DEBUG: debugLog('[Waitable#getPendingEvent()] args', {
+                waitable: this,
+                inSet: this.#waitableSet,
+                hasPendingEvent: this.#pendingEventFn !== null,
+            });
+            if (this.#pendingEventFn === null) {
+                return null;
+            }
+            const eventFn = this.#pendingEventFn;
+            this.#pendingEventFn = null;
+            const e = eventFn();
+            this.#resetPromise();
+            return e;
+        }
+
+        join(waitableSet: ComponentWaitableSet | null) {
+            DEBUG: debugLog('[Waitable#join()] args', {
+                waitable: this,
+                waitableSet: waitableSet,
+                isRemoval: waitableSet === null,
+            });
+
+            if (waitableSet === undefined) {
+                throw new TypeError('waitable set must be not be undefined');
+            }
+
+            if (this.#waitableSet) {
+                this.#waitableSet.removeWaitable(this);
+            }
+
+            this.#waitableSet = waitableSet;
+
+            if (waitableSet) {
+                waitableSet.addWaitable(this);
+            }
+        }
+
+        drop() {
+            DEBUG: debugLog('[Waitable#drop()] args', {
+                componentIdx: this.#componentIdx,
+                waitable: this,
+            });
+            this.join(null);
+        }
+
+        async waitForPendingEvent(args: Parameters<WaitableType['waitForPendingEvent']>[0]) {
+            const { cstate } = args;
+            if (!cstate) {
+                throw new TypeError('missing component state');
+            }
+
+            if (this.#waitableSet !== null || this.#hasSyncWaiter) {
+                throw new Error('waitable is already in a set/has a sync waiter');
+            }
+            this.#hasSyncWaiter = true;
+            try {
+                await cstate.waitUntil({
+                    cancellable: false,
+                    readyFn: () => this.hasPendingEvent(),
+                });
+            } finally {
+                this.#hasSyncWaiter = false;
+            }
+        }
+    };
 }
+let sharedWaitable: ReturnType<typeof defineWaitable>;
 
 /**
  * Fresh class identity per store, with no state or platform capability required.
@@ -181,178 +184,182 @@ class Waitable {
  * copies with private names of their own would defeat those caches.
  */
 export function initializeWaitableClass(): WaitableConstructor {
+    const Waitable = (sharedWaitable ??= defineWaitable());
     return class StoreWaitable extends Waitable {};
 }
 
-class WaitableSet {
-    #asyncEventCode: Pick<AsyncEventCodes, 'TASK_CANCELLED'>;
-    #componentIdx: number;
-    #waitables: ComponentWaitable[] = [];
+function defineWaitableSet() {
+    return class WaitableSet {
+        #asyncEventCode: Pick<AsyncEventCodes, 'TASK_CANCELLED'>;
+        #componentIdx: number;
+        #waitables: ComponentWaitable[] = [];
 
-    #waiting = 0;
+        #waiting = 0;
 
-    target: unknown;
+        target: unknown;
 
-    constructor(asyncEventCode: Pick<AsyncEventCodes, 'TASK_CANCELLED'>, componentIdx: number) {
-        this.#asyncEventCode = asyncEventCode;
-        if (componentIdx === undefined) {
-            throw new TypeError('missing/invalid component idx');
-        }
-        this.#componentIdx = componentIdx;
-        this.target = `component [${this.#componentIdx}] waitable set`;
-    }
-
-    componentIdx() {
-        return this.#componentIdx;
-    }
-
-    numWaitables() {
-        return this.#waitables.length;
-    }
-    numWaiting() {
-        return this.#waiting;
-    }
-
-    incrementNumWaiting(n?: number) {
-        this.#waiting += n ?? 1;
-    }
-    decrementNumWaiting(n?: number) {
-        this.#waiting -= n ?? 1;
-    }
-
-    targets() {
-        return this.#waitables.map((w) => w.target);
-    }
-
-    setTarget(tgt: unknown) {
-        this.target = tgt;
-    }
-
-    shuffleWaitables() {
-        this.#waitables = this.#waitables
-            .map((value) => ({ value, sort: Math.random() }))
-            .sort((a, b) => a.sort - b.sort)
-            .map(({ value }) => value);
-    }
-
-    removeWaitable(waitable: ComponentWaitable) {
-        const existing = this.#waitables.find((w) => w === waitable);
-        if (!existing) {
-            return undefined;
-        }
-        this.#waitables = this.#waitables.filter((w) => w !== waitable);
-        return waitable;
-    }
-
-    addWaitable(waitable: ComponentWaitable) {
-        this.removeWaitable(waitable);
-        this.#waitables.push(waitable);
-    }
-
-    hasPendingEvent() {
-        DEBUG: debugLog('[WaitableSet#hasPendingEvent()] args', {
-            componentIdx: this.#componentIdx,
-            waitableSet: this,
-            waitableSetTargets: this.targets(),
-        });
-        return this.#waitables.some((waitable) => waitable.hasPendingEvent());
-    }
-
-    getPendingEvent() {
-        DEBUG: debugLog('[WaitableSet#getPendingEvent()] args', {
-            componentIdx: this.#componentIdx,
-            waitableSet: this,
-        });
-        for (const waitable of this.#waitables) {
-            if (!waitable.hasPendingEvent()) {
-                continue;
+        constructor(asyncEventCode: Pick<AsyncEventCodes, 'TASK_CANCELLED'>, componentIdx: number) {
+            this.#asyncEventCode = asyncEventCode;
+            if (componentIdx === undefined) {
+                throw new TypeError('missing/invalid component idx');
             }
-            const event = waitable.getPendingEvent();
-            DEBUG: debugLog('[WaitableSet#getPendingEvent()] found pending event', {
-                waitable,
-                event,
+            this.#componentIdx = componentIdx;
+            this.target = `component [${this.#componentIdx}] waitable set`;
+        }
+
+        componentIdx() {
+            return this.#componentIdx;
+        }
+
+        numWaitables() {
+            return this.#waitables.length;
+        }
+        numWaiting() {
+            return this.#waiting;
+        }
+
+        incrementNumWaiting(n?: number) {
+            this.#waiting += n ?? 1;
+        }
+        decrementNumWaiting(n?: number) {
+            this.#waiting -= n ?? 1;
+        }
+
+        targets() {
+            return this.#waitables.map((w) => w.target);
+        }
+
+        setTarget(tgt: unknown) {
+            this.target = tgt;
+        }
+
+        shuffleWaitables() {
+            this.#waitables = this.#waitables
+                .map((value) => ({ value, sort: Math.random() }))
+                .sort((a, b) => a.sort - b.sort)
+                .map(({ value }) => value);
+        }
+
+        removeWaitable(waitable: ComponentWaitable) {
+            const existing = this.#waitables.find((w) => w === waitable);
+            if (!existing) {
+                return undefined;
+            }
+            this.#waitables = this.#waitables.filter((w) => w !== waitable);
+            return waitable;
+        }
+
+        addWaitable(waitable: ComponentWaitable) {
+            this.removeWaitable(waitable);
+            this.#waitables.push(waitable);
+        }
+
+        hasPendingEvent() {
+            DEBUG: debugLog('[WaitableSet#hasPendingEvent()] args', {
+                componentIdx: this.#componentIdx,
+                waitableSet: this,
+                waitableSetTargets: this.targets(),
             });
-            return event;
-        }
-        throw new Error('no waitables had a pending event');
-    }
-
-    /** Read the pending event or construct a fresh cancellation event after a wait. */
-    #eventAfterWait(keepGoing: boolean): WaitableEvent | null {
-        return keepGoing
-            ? this.getPendingEvent()
-            : { code: this.#asyncEventCode.TASK_CANCELLED, payload0: 0, payload1: 0 };
-    }
-
-    tryWait(opts: WaitableWaitOptions) {
-        DEBUG: debugLog('[WaitableSet#tryWait()] args', { opts });
-        // TODO(threads): this task should be the thread
-        const { readyFn, task, cancellable } = opts;
-
-        if (task.deliverPendingCancel({ cancellable })) {
-            return this.#eventAfterWait(false);
-        }
-        const hasPendingEvent = this.hasPendingEvent();
-        if (readyFn() && hasPendingEvent) {
-            return this.getPendingEvent();
-        }
-        return null;
-    }
-
-    waitUntil(opts: WaitableWaitOptions) {
-        DEBUG: debugLog('[WaitableSet#waitUntil()] args', { opts });
-        const event = this.tryWait(opts);
-        if (event !== null) {
-            return event;
+            return this.#waitables.some((waitable) => waitable.hasPendingEvent());
         }
 
-        const { readyFn, task, cancellable } = opts;
-        const isReady = () => readyFn() && this.hasPendingEvent();
-        this.incrementNumWaiting();
-
-        return task.suspendUntil({ readyFn: isReady, cancellable }).then(
-            (keepGoing) => {
-                // Resumed without an event because the task was torn down
-                // (e.g. the store trapped): that is not a cancellation the
-                // guest may observe and act on.
-                if (!keepGoing && task.isErrored()) {
-                    this.decrementNumWaiting();
-                    throw task.isErrored();
+        getPendingEvent() {
+            DEBUG: debugLog('[WaitableSet#getPendingEvent()] args', {
+                componentIdx: this.#componentIdx,
+                waitableSet: this,
+            });
+            for (const waitable of this.#waitables) {
+                if (!waitable.hasPendingEvent()) {
+                    continue;
                 }
-                const readyEvent = this.#eventAfterWait(keepGoing);
-                this.decrementNumWaiting();
-                return readyEvent;
-            },
-            (err) => {
-                this.decrementNumWaiting();
-                throw err;
-            },
-        );
-    }
-
-    waitUntilCallback(opts: WaitableWaitOptions, onEvent: (event: WaitableEvent | null) => void) {
-        DEBUG: debugLog('[WaitableSet#waitUntilCallback()] args', { opts });
-        const event = this.tryWait(opts);
-        if (event !== null) {
-            onEvent(event);
-            return;
+                const event = waitable.getPendingEvent();
+                DEBUG: debugLog('[WaitableSet#getPendingEvent()] found pending event', {
+                    waitable,
+                    event,
+                });
+                return event;
+            }
+            throw new Error('no waitables had a pending event');
         }
 
-        const { readyFn, task, cancellable } = opts;
-        this.incrementNumWaiting();
-        task.suspendUntilCallback(
-            {
-                readyFn: () => readyFn() && this.hasPendingEvent(),
-                cancellable,
-            },
-            (keepGoing) => {
-                const resumedEvent = this.#eventAfterWait(keepGoing);
-                this.decrementNumWaiting();
-                onEvent(resumedEvent);
-            },
-        );
-    }
+        /** Read the pending event or construct a fresh cancellation event after a wait. */
+        #eventAfterWait(keepGoing: boolean): WaitableEvent | null {
+            return keepGoing
+                ? this.getPendingEvent()
+                : { code: this.#asyncEventCode.TASK_CANCELLED, payload0: 0, payload1: 0 };
+        }
+
+        tryWait(opts: WaitableWaitOptions) {
+            DEBUG: debugLog('[WaitableSet#tryWait()] args', { opts });
+            // TODO(threads): this task should be the thread
+            const { readyFn, task, cancellable } = opts;
+
+            if (task.deliverPendingCancel({ cancellable })) {
+                return this.#eventAfterWait(false);
+            }
+            const hasPendingEvent = this.hasPendingEvent();
+            if (readyFn() && hasPendingEvent) {
+                return this.getPendingEvent();
+            }
+            return null;
+        }
+
+        waitUntil(opts: WaitableWaitOptions) {
+            DEBUG: debugLog('[WaitableSet#waitUntil()] args', { opts });
+            const event = this.tryWait(opts);
+            if (event !== null) {
+                return event;
+            }
+
+            const { readyFn, task, cancellable } = opts;
+            const isReady = () => readyFn() && this.hasPendingEvent();
+            this.incrementNumWaiting();
+
+            return task.suspendUntil({ readyFn: isReady, cancellable }).then(
+                (keepGoing) => {
+                    // Resumed without an event because the task was torn down
+                    // (e.g. the store trapped): that is not a cancellation the
+                    // guest may observe and act on.
+                    if (!keepGoing && task.isErrored()) {
+                        this.decrementNumWaiting();
+                        throw task.isErrored();
+                    }
+                    const readyEvent = this.#eventAfterWait(keepGoing);
+                    this.decrementNumWaiting();
+                    return readyEvent;
+                },
+                (err) => {
+                    this.decrementNumWaiting();
+                    throw err;
+                },
+            );
+        }
+
+        waitUntilCallback(opts: WaitableWaitOptions, onEvent: (event: WaitableEvent | null) => void) {
+            DEBUG: debugLog('[WaitableSet#waitUntilCallback()] args', { opts });
+            const event = this.tryWait(opts);
+            if (event !== null) {
+                onEvent(event);
+                return;
+            }
+
+            const { readyFn, task, cancellable } = opts;
+            this.incrementNumWaiting();
+            task.suspendUntilCallback(
+                {
+                    readyFn: () => readyFn() && this.hasPendingEvent(),
+                    cancellable,
+                },
+                (keepGoing) => {
+                    const resumedEvent = this.#eventAfterWait(keepGoing);
+                    this.decrementNumWaiting();
+                    onEvent(resumedEvent);
+                },
+            );
+        }
+    };
 }
+let sharedWaitableSet: ReturnType<typeof defineWaitableSet>;
 
 /**
  * Fresh class identity per store, as for `initializeWaitableClass`.
@@ -361,6 +368,7 @@ class WaitableSet {
 export function initializeWaitableSetClass(
     asyncEventCode: Pick<AsyncEventCodes, 'TASK_CANCELLED'>,
 ): WaitableSetConstructor {
+    const WaitableSet = (sharedWaitableSet ??= defineWaitableSet());
     return class StoreWaitableSet extends WaitableSet {
         constructor(componentIdx: number) {
             super(asyncEventCode, componentIdx);

@@ -1,4 +1,4 @@
-import { defineScalarLift, scalarLiftValue } from './scalar-lift.js';
+import { registerScalarLift, scalarLiftValue } from './scalar-lift.js';
 import { consumeParams, readParam, remainingParams, copyParams, takeParam, hasParamCursor } from './flat-params.js';
 import { memoryView } from './memory-view.js';
 import type {
@@ -95,13 +95,11 @@ export const initializeLiftVariant: LiftModule['initializeLiftVariant'] = () => 
     scratch: new DataView(new ArrayBuffer(8)),
 });
 
-export const liftFlatBool = /* @__PURE__ */ defineScalarLift(
-    liftFlatBoolPublic,
-    liftFlatBoolDirect,
-    liftFlatBoolMemory,
-);
-
-function liftFlatBoolPublic(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredBool: boolean;
+export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredBool) {
+        registeredBool = registerScalarLift(liftFlatBool, liftFlatBoolDirect, liftFlatBoolMemory);
+    }
     return [ctx.useDirectParams ? liftFlatBoolDirect(ctx) : liftFlatBoolMemory(ctx), ctx];
 }
 
@@ -135,9 +133,11 @@ function liftFlatBoolMemory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Public, liftFlatS8Direct, liftFlatS8Memory);
-
-function liftFlatS8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredS8: boolean;
+export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredS8) {
+        registeredS8 = registerScalarLift(liftFlatS8, liftFlatS8Direct, liftFlatS8Memory);
+    }
     if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
         if (ctx.params.length === 0) {
@@ -172,9 +172,11 @@ function liftFlatS8Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Public, liftFlatU8Direct, liftFlatU8Memory);
-
-function liftFlatU8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredU8: boolean;
+export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredU8) {
+        registeredU8 = registerScalarLift(liftFlatU8, liftFlatU8Direct, liftFlatU8Memory);
+    }
     if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
         if (ctx.params.length === 0) {
@@ -214,9 +216,11 @@ function liftFlatU8Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Public, liftFlatS16Direct, liftFlatS16Memory);
-
-function liftFlatS16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredS16: boolean;
+export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredS16) {
+        registeredS16 = registerScalarLift(liftFlatS16, liftFlatS16Direct, liftFlatS16Memory);
+    }
     if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
         if (ctx.params.length === 0) {
@@ -251,9 +255,11 @@ function liftFlatS16Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Public, liftFlatU16Direct, liftFlatU16Memory);
-
-function liftFlatU16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredU16: boolean;
+export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredU16) {
+        registeredU16 = registerScalarLift(liftFlatU16, liftFlatU16Direct, liftFlatU16Memory);
+    }
     if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
         if (ctx.params.length === 0) {
@@ -298,9 +304,11 @@ function liftFlatU16Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Public, liftFlatS32Direct, liftFlatS32Memory);
-
-function liftFlatS32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredS32: boolean;
+export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredS32) {
+        registeredS32 = registerScalarLift(liftFlatS32, liftFlatS32Direct, liftFlatS32Memory);
+    }
     if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
         if (ctx.params.length === 0) {
@@ -335,9 +343,11 @@ function liftFlatS32Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU32 = /* @__PURE__ */ defineScalarLift(liftFlatU32Public, liftFlatU32Direct, liftFlatU32Memory);
-
-function liftFlatU32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredU32: boolean;
+export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredU32) {
+        registeredU32 = registerScalarLift(liftFlatU32, liftFlatU32Direct, liftFlatU32Memory);
+    }
     return [ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx), ctx];
 }
 
@@ -374,9 +384,11 @@ function liftFlatU32Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS64 = /* @__PURE__ */ defineScalarLift(liftFlatS64Public, liftFlatS64Direct, liftFlatS64Memory);
-
-function liftFlatS64Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredS64: boolean;
+export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredS64) {
+        registeredS64 = registerScalarLift(liftFlatS64, liftFlatS64Direct, liftFlatS64Memory);
+    }
     return [ctx.useDirectParams ? liftFlatS64Direct(ctx) : liftFlatS64Memory(ctx), ctx];
 }
 
@@ -412,9 +424,11 @@ function liftFlatS64Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU64 = /* @__PURE__ */ defineScalarLift(liftFlatU64Public, liftFlatU64Direct, liftFlatU64Memory);
-
-function liftFlatU64Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredU64: boolean;
+export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredU64) {
+        registeredU64 = registerScalarLift(liftFlatU64, liftFlatU64Direct, liftFlatU64Memory);
+    }
     return [ctx.useDirectParams ? liftFlatU64Direct(ctx) : liftFlatU64Memory(ctx), ctx];
 }
 
@@ -451,13 +465,11 @@ function liftFlatU64Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatFloat32 = /* @__PURE__ */ defineScalarLift(
-    liftFlatFloat32Public,
-    liftFlatFloat32Direct,
-    liftFlatFloat32Memory,
-);
-
-function liftFlatFloat32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredFloat32: boolean;
+export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredFloat32) {
+        registeredFloat32 = registerScalarLift(liftFlatFloat32, liftFlatFloat32Direct, liftFlatFloat32Memory);
+    }
     return [ctx.useDirectParams ? liftFlatFloat32Direct(ctx) : liftFlatFloat32Memory(ctx), ctx];
 }
 
@@ -492,13 +504,11 @@ function liftFlatFloat32Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatFloat64 = /* @__PURE__ */ defineScalarLift(
-    liftFlatFloat64Public,
-    liftFlatFloat64Direct,
-    liftFlatFloat64Memory,
-);
-
-function liftFlatFloat64Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredFloat64: boolean;
+export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredFloat64) {
+        registeredFloat64 = registerScalarLift(liftFlatFloat64, liftFlatFloat64Direct, liftFlatFloat64Memory);
+    }
     return [ctx.useDirectParams ? liftFlatFloat64Direct(ctx) : liftFlatFloat64Memory(ctx), ctx];
 }
 
@@ -532,13 +542,11 @@ function liftFlatFloat64Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatChar = /* @__PURE__ */ defineScalarLift(
-    liftFlatCharPublic,
-    liftFlatCharDirect,
-    liftFlatCharMemory,
-);
-
-function liftFlatCharPublic(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+let registeredChar: boolean;
+export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (!registeredChar) {
+        registeredChar = registerScalarLift(liftFlatChar, liftFlatCharDirect, liftFlatCharMemory);
+    }
     return [ctx.useDirectParams ? liftFlatCharDirect(ctx) : liftFlatCharMemory(ctx), ctx];
 }
 
