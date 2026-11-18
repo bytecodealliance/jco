@@ -12,17 +12,22 @@
   (core func $drop (canon resource.drop $thing))
   (core func $stream_new (canon stream.new $s))
   (core func $stream_write (canon stream.write $s async (memory $memory)))
+  (core func $stream_cancel_write (canon stream.cancel-write $s async))
   (core module $m
     (import "" "memory" (memory 1))
     (import "" "drop" (func $drop (param i32)))
     (import "" "stream.new" (func $stream_new (result i64)))
     (import "" "stream.write" (func $write (param i32 i32 i32) (result i32)))
+    (import "" "stream.cancel-write" (func $cancel_write (param i32) (result i32)))
     (func (export "start") (param $thing i32) (result i32)
       (local $writer i32)
       (local.set $writer (i32.wrap_i64 (i64.shr_u (call $stream_new) (i64.const 32))))
       (i32.store (i32.const 96) (call $write (local.get $writer) (i32.const 16) (i32.const 1)))
       (call $drop (local.get $thing))
-      (i32.store (i32.const 100) (call $write (local.get $writer) (i32.const 16) (i32.const 1)))
+      ;; The blocked write keeps the end busy until its result is delivered, so it is
+      ;; cancelled rather than followed by another write. The instance has stopped by
+      ;; now and can no longer wait, hence the `async` cancellation.
+      (i32.store (i32.const 100) (call $cancel_write (local.get $writer)))
       (i32.const 0)
     )
     (func (export "cb") (param i32 i32 i32) (result i32) (unreachable))
@@ -32,6 +37,7 @@
     (export "drop" (func $drop))
     (export "stream.new" (func $stream_new))
     (export "stream.write" (func $stream_write))
+    (export "stream.cancel-write" (func $stream_cancel_write))
   ))))
   (type $start (func async (param "t" (own $thing))))
   (func (export "start") (type $start)

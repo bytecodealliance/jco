@@ -139,9 +139,9 @@ const NEVER_WRITES = rustComponent('instance-stop-unwritten');
 
 /**
  * A write of `start`'s blocks, as nothing reads it. It then drops the object it is
- * given, and writes again, whose result only it sees if the host ends the instance
- * on being told of that drop. Memory has what its writes returned: the first at 96,
- * the second at 100.
+ * given, and cancels the write, whose result only it sees if the host ends the instance
+ * on being told of that drop. Memory has what the write returned at 96, and what its
+ * cancellation returned at 100.
  */
 const WRITES_ACROSS_THE_END = new URL('./fixtures/components/p3/instance-stop-reentrant-write.wat', import.meta.url);
 
@@ -288,7 +288,7 @@ suite.skipIf(!hasJspi)('stopping an instance closes its streams and futures', ()
         await expect(Promise.resolve(future)).rejects.toThrow(/component instance has been stopped/);
     });
 
-    test.concurrent("a pending write fails, and so does the writer's next", async () => {
+    test.concurrent('a pending write fails, as the writer is told on cancelling it', async () => {
         const instantiate = await transpiled(WRITES_ACROSS_THE_END);
         let memory;
         class Thing {
