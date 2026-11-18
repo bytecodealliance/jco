@@ -7,7 +7,7 @@ import type {
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
-import { getCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, setCurrentTaskMeta } from '../task-context.js';
 
 // EnterSymmetricSyncGuestCall
 export function symmetricSyncGuestCallEnter(
@@ -17,7 +17,7 @@ export function symmetricSyncGuestCallEnter(
     calleeComponentIdx: number,
     syncOnly = false,
 ): ReturnType<AsyncTaskModule['symmetricSyncGuestCallEnter']> {
-    debugLog('[_symmetricSyncGuestCallEnter()] args', {
+    DEBUG: debugLog('[_symmetricSyncGuestCallEnter()] args', {
         callerComponentIdx,
         calleeIsAsync,
         calleeComponentIdx,
@@ -30,7 +30,7 @@ export function symmetricSyncGuestCallEnter(
     if (syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()) {
         return 0;
     }
-    const callerThreadMeta = getCurrentTaskMeta(_context.registers, callerComponentIdx);
+    const callerThreadMeta = readTaskRegister(_context.registers, callerComponentIdx);
     if (!callerThreadMeta) {
         throw new Error('missing current caller thread metadata');
     }
@@ -87,7 +87,7 @@ export function symmetricSyncGuestCallEnter(
             previousTaskMayBlock: (_context.mayBlock as TaskMutableRegister).value,
         });
         (_context.mayBlock as TaskMutableRegister).value = newTask.mayBlock() ? 1 : 0;
-        debugLog('[_symmetricSyncGuestCallEnter()] finished preparing', {
+        DEBUG: debugLog('[_symmetricSyncGuestCallEnter()] finished preparing', {
             callerComponentIdx,
             calleeComponentIdx,
             subtaskID: subtask.id(),
@@ -130,7 +130,7 @@ export function symmetricSyncGuestCallExit(
     if (!task) {
         throw new Error('missing current caller task');
     }
-    debugLog('[_symmetricSyncGuestCallExit()] exiting', {
+    DEBUG: debugLog('[_symmetricSyncGuestCallExit()] exiting', {
         componentIdx,
         taskID: task.id(),
         subtask: task.getParentSubtask(),

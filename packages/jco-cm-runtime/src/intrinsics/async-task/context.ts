@@ -8,6 +8,7 @@ import type {
 } from '../../runtime.js';
 import { typeCheckValidI32 } from './helpers.js';
 import { debugLog } from '../core/debug.js';
+import { registerSlot } from '../task-context.js';
 import { getOrCreateAsyncState } from '../component.js';
 
 /**
@@ -101,7 +102,7 @@ function activeSlots(context: ThreadLookupContext, componentIdx: number | undefi
     const own =
         componentIdx === undefined || componentIdx === null
             ? undefined
-            : resolveThread(context, registers[componentIdx]);
+            : resolveThread(context, registers[registerSlot(componentIdx)]);
     const slots = registers.freshContextSlots ?? (own ?? resolveThread(context, registers.current))?.storage;
     if (!slots) {
         throw new Error(
@@ -307,7 +308,9 @@ export const contextSlotAccessor: AsyncTaskModule['contextSlotAccessor'] = (_con
     if (slot === undefined || slot < 0 || slot >= SLOT_COUNT) {
         throw new TypeError('invalid slot');
     }
-    const logs = debugLog.length > 0;
+    // Without diagnostics the JS functions log nothing, so logging does not select them.
+    let logs = false;
+    DEBUG: logs = debugLog.length > 0;
     const globals = componentIdx === undefined || logs ? undefined : contextSlotGlobals(_context, componentIdx);
     if (globals === undefined) {
         return operation === 'get' ? contextGet.bind(null, _context, ctx) : contextSet.bind(null, _context, ctx);
@@ -332,7 +335,7 @@ export function contextSet(
         throw new Error('invalid value for context set (not valid i32)');
     }
     const storage = activeSlots(_context, ctx.componentIdx, 'set');
-    debugLog('[contextSet()] args', { slot, value, storage, componentIdx: ctx.componentIdx });
+    DEBUG: debugLog('[contextSet()] args', { slot, value, storage, componentIdx: ctx.componentIdx });
     if (slot < 0 || slot >= storage.length) {
         throw new Error('invalid slot for current thread');
     }
@@ -359,7 +362,7 @@ export function contextGet(
         throw new TypeError('missing slot');
     }
     const storage = activeSlots(_context, ctx.componentIdx, 'get');
-    debugLog('[contextGet()] args', { slot, storage, componentIdx: ctx.componentIdx });
+    DEBUG: debugLog('[contextGet()] args', { slot, storage, componentIdx: ctx.componentIdx });
     if (slot < 0 || slot >= storage.length) {
         throw new Error('invalid slot for current thread');
     }

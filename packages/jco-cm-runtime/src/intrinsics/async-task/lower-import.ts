@@ -1,7 +1,7 @@
 import type { TaskLowerImportRuntimeContext, TaskLowerImportOptions, AsyncTaskModule } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
-import { getCurrentTaskMeta, withCurrentTaskMetaAsync, withCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, withCurrentTaskMetaAsync, withCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';
 import { promiseWithResolvers } from '../core/promises.js';
 
@@ -11,7 +11,7 @@ export function lowerImport(
     args: TaskLowerImportOptions,
     ...params: unknown[]
 ): ReturnType<AsyncTaskModule['lowerImport']> {
-    debugLog('[_lowerImport()] args', { args, params });
+    DEBUG: debugLog('[_lowerImport()] args', { args, params });
     const {
         componentIdx,
         isAsync,
@@ -26,7 +26,7 @@ export function lowerImport(
         importFn,
     } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
-    const { taskID, threadID } = getCurrentTaskMeta(_context.registers, componentIdx)!;
+    const { taskID, threadID } = readTaskRegister(_context.registers, componentIdx)!;
     const taskMeta = getCurrentTask(_context, componentIdx, taskID);
     if (!taskMeta) {
         throw new Error('invalid/missing async task meta');
@@ -175,7 +175,7 @@ export function lowerImport(
         } else {
             res = (Number(subtask.ensureHandle()) << 4) | subtaskState;
         }
-        debugLog('[_lowerImport()] async-lowered import return', {
+        DEBUG: debugLog('[_lowerImport()] async-lowered import return', {
             fnName: importFn.fnName,
             componentIdx,
             subtaskID: subtask.id(),
@@ -223,7 +223,7 @@ export function lowerImport(
             if (subtask.cancellationRequested() || task.taskState() === _context.AsyncTask.State.CANCEL_PENDING) {
                 return;
             }
-            debugLog('[_lowerImport()] calling lowered import', { importFn, params });
+            DEBUG: debugLog('[_lowerImport()] calling lowered import', { importFn, params });
             await withCurrentTaskMetaAsync(_context.registers, {
                 taskID: task.id(),
                 threadID,
@@ -234,7 +234,7 @@ export function lowerImport(
                 manualAsyncResult!.resolve(subtask.getResult());
             }
         } catch (err) {
-            debugLog('[_lowerImport()] import fn error:', err);
+            DEBUG: debugLog('[_lowerImport()] import fn error:', err);
             if (requiresManualAsyncResult) {
                 manualAsyncResult!.reject(err);
                 return;

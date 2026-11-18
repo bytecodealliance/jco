@@ -17,23 +17,43 @@ import type {
     LocalErrorContext,
 } from '../runtime.js';
 import { debugLog } from './core/debug.js';
+import { withConstructorStatics } from './core/shared-class.js';
 import { getOrCreateAsyncState } from './component.js';
+
+class GlobalErrorContextTable {}
 
 export function initializeGlobalErrorContextTableClass(
     RepTable: RepTableConstructor,
 ): GlobalErrorContextTableConstructor {
-    class GlobalErrorContextTable {
-        static data: RepTableType<GlobalErrorContext> | null = null;
-        static get() {
-            if (GlobalErrorContextTable.data === null) {
-                GlobalErrorContextTable.data = new RepTable<GlobalErrorContext>({
-                    target: 'global error context table',
-                });
-            }
-            return GlobalErrorContextTable.data;
+    /**
+     * Construct an instance, which has no members: the table is a static member.
+     *
+     * @returns the instance
+     */
+    class StoreGlobalErrorContextTable extends GlobalErrorContextTable {
+        constructor() {
+            super();
         }
     }
-    return GlobalErrorContextTable;
+
+    /**
+     * The table of the store, created on first use.
+     *
+     * @returns the table
+     */
+    function get(): RepTableType<GlobalErrorContext> {
+        if (StoreTable.data === null) {
+            StoreTable.data = new RepTable<GlobalErrorContext>({
+                target: 'global error context table',
+            });
+        }
+        return StoreTable.data;
+    }
+    const StoreTable = withConstructorStatics<GlobalErrorContextTableConstructor>(StoreGlobalErrorContextTable, {
+        data: { value: null, writable: true, enumerable: true, configurable: true },
+        get: { value: get, writable: true, configurable: true },
+    });
+    return StoreTable;
 }
 export const initializeErrorContextTableRegistrations: ErrorContextModule['initializeErrorContextTableRegistrations'] =
     () => ({});
@@ -48,7 +68,7 @@ export function errCtxNew(
     msgLen: number,
 ) {
     const { globalTable: GlobalErrorContextTable } = context;
-    debugLog('[errCtxNew()] args', { args, msgPtr, msgLen });
+    DEBUG: debugLog('[errCtxNew()] args', { args, msgPtr, msgLen });
     const { componentIdx, localTableIdx, readStrFn } = args;
     const localTable = errCtxGetLocalTable(context.local, componentIdx, localTableIdx);
     const debugMessage = readStrFn(msgPtr, msgLen);
@@ -69,7 +89,7 @@ export function errCtxDebugMessage(
     outputStrPtr: number,
 ) {
     const { globalTable: GlobalErrorContextTable, RuntimeError } = context;
-    debugLog('[errCtxDebugMessage()] ctx', { ctx, handle, outputStrPtr });
+    DEBUG: debugLog('[errCtxDebugMessage()] ctx', { ctx, handle, outputStrPtr });
     const { componentIdx, writeStrFn } = ctx;
     const globalTable = GlobalErrorContextTable.get();
     const cstate = getOrCreateAsyncState(context.lookup, componentIdx);
@@ -86,7 +106,7 @@ export function errCtxDebugMessage(
 /** Implements `canon error-context.drop`. */
 export function errCtxDrop(context: ErrorContextDropContext, ctx: ErrorContextLocation, handle: number) {
     const { globalTable: GlobalErrorContextTable, RuntimeError } = context;
-    debugLog('[errCtxDrop()] ctx', { ctx, handle });
+    DEBUG: debugLog('[errCtxDrop()] ctx', { ctx, handle });
     const { componentIdx, localTableIdx } = ctx;
     const globalTable = GlobalErrorContextTable.get();
     const cstate = getOrCreateAsyncState(context.lookup, componentIdx);
@@ -123,7 +143,7 @@ export function errCtxTransfer(
     destTableIdx: number,
 ) {
     const { tables } = context;
-    debugLog('[errCtxTransfer()] args', { waitableIdx, srcTableIdx, destTableIdx });
+    DEBUG: debugLog('[errCtxTransfer()] args', { waitableIdx, srcTableIdx, destTableIdx });
     const { componentIdx: srcComponentIdx } = tables[srcTableIdx];
     const { componentIdx: destComponentIdx } = tables[destTableIdx];
     // Validate the source table even though its entries remain for generated cleanup.
@@ -149,7 +169,7 @@ export function errCtxTransfer(
         toTbl,
         errCtx.globalRep,
     );
-    debugLog('[errCtxTransfer()] successfully transferred', {
+    DEBUG: debugLog('[errCtxTransfer()] successfully transferred', {
         dest: {
             errCtxHandle: localIdx,
             errCtxWaitableIdx: newWaitableIdx,
