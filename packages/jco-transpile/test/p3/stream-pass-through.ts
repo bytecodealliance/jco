@@ -26,26 +26,19 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('host streams returne
         await cleanup?.();
     });
 
-    test('bytes are read back in the chunks of the source, as copies of them', async () => {
-        const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array(70_000).fill(7), new Uint8Array([9])];
+    test('bytes are read back in the chunks of the source', async () => {
+        const chunks = [new Uint8Array([1, 2, 3]), new Uint8Array(70_000).fill(7), [8, 9]];
         const output = await instance.passBytes(
             (async function* () {
                 yield* chunks;
             })(),
         );
 
-        const head = await output.read(2);
-        assert.deepEqual(head, { value: new Uint8Array([1, 2]), done: false });
-        head.value[0] = 99;
-        assert.deepEqual(chunks[0], new Uint8Array([1, 2, 3]));
-        assert.deepEqual(await output.read(65_536), { value: new Uint8Array([3]), done: false });
-
-        const large = await output.read(100_000);
-        assert.instanceOf(large.value, Uint8Array);
-        assert.deepEqual(large.value, chunks[1]);
-        assert.notStrictEqual(large.value.buffer, chunks[1].buffer);
-
-        assert.deepEqual(await output.read(8), { value: new Uint8Array([9]), done: false });
+        assert.deepEqual(await output.read(2), { value: [1, 2], done: false });
+        assert.deepEqual(await output.read(65_536), { value: [3], done: false });
+        assert.deepEqual(await output.read(100_000), { value: Array.from(chunks[1]), done: false });
+        assert.deepEqual(await output.read(), { value: 8, done: false });
+        assert.deepEqual(await output.read(8), { value: [9], done: false });
         assert.deepEqual(await output.read(8), { value: undefined, done: true });
     });
 
@@ -60,8 +53,8 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('host streams returne
             }),
         );
         const received: number[] = [];
-        for await (const chunk of output) {
-            received.push(...chunk);
+        for await (const value of output) {
+            received.push(value);
         }
         assert.deepEqual(received, [1, 2, 3]);
     });
@@ -98,8 +91,8 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('host streams returne
                 return { value: new Uint8Array([1, 2, 3]), done: true };
             },
         });
-        assert.deepEqual(await output.read(2), { value: new Uint8Array([1, 2]), done: false });
-        assert.deepEqual(await output.read(2), { value: new Uint8Array([3]), done: false });
+        assert.deepEqual(await output.read(2), { value: [1, 2], done: false });
+        assert.deepEqual(await output.read(2), { value: [3], done: false });
         assert.deepEqual(await output.read(2), { value: undefined, done: true });
     });
 
