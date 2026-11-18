@@ -4,17 +4,23 @@
 /**
  * An open directory.
  *
- * This is an internal binding. The JavaScript wrapper validates arguments and
- * adds `syscall` and `path` to errors.
+ * This is an internal binding. The JavaScript wrapper validates arguments,
+ * adds `syscall` and `path` to errors, and rejects with the failure that an
+ * asynchronous binding resolves with.
  */
 export declare class DirHandle {
   /**
    * Open a host directory by path, with the authority of the process.
    *
-   * This is the only binding that is not confined to a directory handle.
+   * This and its asynchronous form are the only bindings that are not
+   * confined to a directory handle.
    */
   static openAmbient(path: string): DirHandle
-  /** Release the directory. Later calls fail with `EBADF`. */
+  static openAmbientAsync(path: string): Promise<DirHandle | FailureRaw>
+  /**
+   * Release the directory. Later calls fail with `EBADF`, while asynchronous
+   * operations that are in flight finish on the directory.
+   */
   close(): void
   /**
    * Open a file or directory beneath this directory.
@@ -23,20 +29,28 @@ export declare class DirHandle {
    * file descriptor that Node.js can use, which the caller must close.
    */
   openAt(path: string, options: OpenAtOptions): DirHandle | number
+  openAtAsync(path: string, options: OpenAtOptions): Promise<DirHandle | number | FailureRaw>
   /** Return the attributes of this directory. */
   stat(): StatRaw
+  statAsync(): Promise<StatRaw | FailureRaw>
   /** Return the attributes of a path beneath this directory. */
   statAt(path: string, follow: boolean): StatRaw
+  statAtAsync(path: string, follow: boolean): Promise<StatRaw | FailureRaw>
   /** Return the target of a symlink, exactly as stored. */
   readlinkAt(path: string): string
+  readlinkAtAsync(path: string): Promise<string | FailureRaw>
   /** Create a directory. */
   createDirAt(path: string): void
+  createDirAtAsync(path: string): Promise<void | FailureRaw>
   /** Remove an empty directory. */
   removeDirAt(path: string): void
+  removeDirAtAsync(path: string): Promise<void | FailureRaw>
   /** Remove a file or symlink. A symlink is removed, not its target. */
   unlinkAt(path: string): void
+  unlinkAtAsync(path: string): Promise<void | FailureRaw>
   /** Rename a path beneath this directory to a path beneath `new_dir`. */
   renameAt(oldPath: string, newDir: DirHandle, newPath: string): void
+  renameAtAsync(oldPath: string, newDir: DirHandle, newPath: string): Promise<void | FailureRaw>
   /**
    * Create a hard link beneath `new_dir`.
    *
@@ -45,20 +59,26 @@ export declare class DirHandle {
    * beneath this directory first and the result is linked.
    */
   linkAt(oldPath: string, newDir: DirHandle, newPath: string, follow?: boolean | undefined | null): void
+  linkAtAsync(oldPath: string, newDir: DirHandle, newPath: string, follow?: boolean | undefined | null): Promise<void | FailureRaw>
   /**
    * Create a symlink at `path` that refers to `target`.
    *
    * An absolute `target` is refused, as it could not be followed.
    */
   symlinkAt(target: string, path: string): void
+  symlinkAtAsync(target: string, path: string): Promise<void | FailureRaw>
   /** Set the access and modification times of this directory. */
   setTimes(atime?: bigint | string | undefined | null, mtime?: bigint | string | undefined | null): void
+  setTimesAsync(atime?: bigint | string | undefined | null, mtime?: bigint | string | undefined | null): Promise<void | FailureRaw>
   /** Set the access and modification times of a path beneath this directory. */
   setTimesAt(path: string, atime: bigint | string | undefined | null, mtime: bigint | string | undefined | null, follow: boolean): void
+  setTimesAtAsync(path: string, atime: bigint | string | undefined | null, mtime: bigint | string | undefined | null, follow: boolean): Promise<void | FailureRaw>
   /** Flush this directory to its device. */
   sync(): void
+  syncAsync(): Promise<void | FailureRaw>
   /** List this directory, without `.` and `..`. */
   readDir(): Array<DirEntryRaw>
+  readDirAsync(): Promise<Array<DirEntryRaw> | FailureRaw>
 }
 
 /** An entry of a directory listing. */
@@ -75,6 +95,19 @@ export interface DirEntryRaw {
  * turns the returned errno into a Node-style exception.
  */
 export declare function fadviseRaw(fd: number, offset: string, length: string, advice: string): number
+
+/**
+ * Why an asynchronous operation failed.
+ *
+ * An asynchronous binding resolves with this instead of rejecting, as a
+ * rejection could not carry the error code. The JavaScript wrapper turns it
+ * into the same error that the synchronous binding throws.
+ */
+export interface FailureRaw {
+  /** Node.js-style error code, such as `ENOENT`. */
+  failureCode: string
+  failureMessage: string
+}
 
 /** How `DirHandle::open_at` opens a path. */
 export interface OpenAtOptions {
