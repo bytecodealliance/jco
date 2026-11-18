@@ -166,6 +166,7 @@ export interface TranspileOpts extends TypegenOptions {
     multiMemory?: boolean;
     perfStringsSkipCopyUtf8Validation?: boolean;
     perfStringsSkipCopyUtf16Validation?: boolean;
+    perfSyncFastPath?: boolean;
     bindgenEnableWasmExnref?: boolean;
     experimentalIdlImports?: boolean;
     optArgs?: string[];
