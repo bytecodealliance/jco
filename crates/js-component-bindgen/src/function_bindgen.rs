@@ -1908,11 +1908,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(self.src, "var ptr{tmp} = {} >>> 0;", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
                 self.emit_list_bounds_check(&format!("ptr{tmp}"), &format!("len{tmp}"), size);
+                // Copy through a view of memory: slicing a typed array is several times cheaper
+                // for short lists than slicing the `ArrayBuffer` and wrapping the copy. The
+                // checks above keep the view in bounds and aligned to the element size.
+                // The copy is unshared even when the memory is shared.
                 uwriteln!(
                     self.src,
                     "if (ptr{tmp} % {align} !== 0) throw new TypeError(`list pointer [${{ptr{tmp}}}] is not aligned to {align}`);
-                    var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {elem_size}));",
-                    elem_size = size,
+                    var result{tmp} = new {array_ty}({memory}.buffer, ptr{tmp}, len{tmp}).slice();",
                     array_ty = js_array_ty(resolve, element).unwrap(), // TODO: this is the wrong endianness
                 );
                 self.emit_dealloc(&format!("ptr{tmp}"), &format!("len{tmp}"), size, align);
