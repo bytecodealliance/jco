@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 811474cd0c6458c2404c1860280d87df31bdc8e1
+// generated from commit b89ab176a9c7f6ef0a4708f3cb3bb259f71ba4e9
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -351,6 +351,7 @@ function withConstructorStatics(constructor, statics) {
 
 //#endregion
 //#region runtime/intrinsics/core/scheduling.js
+let idleChannel;
 /**
 * Run `callback` on the next macrotask, after the current microtasks have drained, as
 * `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
@@ -359,16 +360,25 @@ function withConstructorStatics(constructor, statics) {
 */
 function onNextMacrotask(callback) {
 	if (typeof MessageChannel === "function") {
-		const channel = new MessageChannel();
-		let cancelled = false;
+		const channel = idleChannel ?? new MessageChannel();
+		idleChannel = void 0;
+		let pending = true;
 		channel.port1.onmessage = () => {
-			channel.port1.close();
-			if (!cancelled) callback();
+			pending = false;
+			channel.port1.onmessage = null;
+			if (idleChannel) {
+				channel.port1.close();
+				channel.port2.close();
+			} else idleChannel = channel;
+			callback();
 		};
 		channel.port2.postMessage(null);
 		return () => {
-			cancelled = true;
+			if (!pending) return;
+			pending = false;
+			channel.port1.onmessage = null;
 			channel.port1.close();
+			channel.port2.close();
 		};
 	}
 	const handle = setTimeout(callback, 0);
