@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-6bea628a.js";
+            window.path_to_searchindex_js = "searchindex-51608849.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-332598f4.js"></script>
@@ -485,7 +485,7 @@ its type as <code>InstantiateOptions</code>:</p>
 <tr><th>Option</th><th>Purpose</th><th>Default</th></tr>
 </thead>
 <tbody>
-<tr><td><a href="#debug-logging"><code>debug</code></a></td><td>Enable or disable debug logging for this instance. Absent when the bindings import an external runtime.</td><td>The truthiness of <code>JCO_DEBUG</code> when instantiation begins.</td></tr>
+<tr><td><a href="#debug-logging"><code>debug</code></a></td><td>Enable or disable diagnostics retained by the <code>debug</code> runtime profile. Absent when the bindings import an external runtime.</td><td>The truthiness of <code>JCO_DEBUG</code> when instantiation begins.</td></tr>
 <tr><td><a href="#trap-notifications"><code>onTrap</code></a></td><td>Receive traps, including traps from background guest tasks.</td><td>No callback; failed calls still report their errors.</td></tr>
 <tr><td><a href="#runtime-overrides"><code>shim.globals.WebAssembly</code></a></td><td>Supply the WebAssembly implementation used by runtime helpers and the default core instantiator.</td><td><code>globalThis.WebAssembly</code>.</td></tr>
 </tbody>
@@ -497,18 +497,33 @@ its type as <code>InstantiateOptions</code>:</p>
 });
 </code></pre>
 <h4 id="debug-logging"><a class="header" href="#debug-logging">Debug logging</a></h4>
-<p><code>debug: true</code> enables <code>console.debug</code> diagnostics; <code>debug: false</code> disables them even
-when <code>JCO_DEBUG</code> is set. If omitted, the runtime reads <code>JCO_DEBUG</code> once during
-instantiation. Each instance keeps its own setting, so later changes to the
-options object or environment do not affect it.</p>
-<p>The option exists only where the bindings contain their runtime. Bindings that import
-an external runtime share that module’s logger between instances, so their
-<code>InstantiateOptions</code> has no <code>debug</code> property and the provider configures its own
-logging. The default external runtime reads <code>JCO_DEBUG</code> once when it loads.</p>
-<p>Direct ESM output has no instantiation options, and also reads <code>JCO_DEBUG</code> once when
-the module loads. In either case, setting <code>JCO_DEBUG</code> after the module has loaded has
-no effect: set it before starting the process, or before the first import of the
-bindings.</p>
+<p>Generated bindings use the <code>checked</code> runtime profile by default, which removes
+runtime diagnostics. Setting <code>JCO_DEBUG=1</code> or <code>debug: true</code> cannot restore those
+statements. To debug a component, regenerate its bindings with the <code>debug</code> profile:</p>
+<pre><code class="language-sh">jco transpile component.wasm -o output --runtime-profile debug
+JCO_DEBUG=1 node app.js
+</code></pre>
+<p>The JavaScript API accepts the equivalent <code>runtimeProfile: 'debug'</code> transpilation
+option. Both profiles retain canonical ABI validation, traps, and assertions.</p>
+<p><code>jco run</code> and <code>jco serve</code> generate bindings as they start, and take the profile as
+<code>--jco-runtime-profile</code>:</p>
+<pre><code class="language-sh">JCO_DEBUG=1 jco run --jco-runtime-profile debug component.wasm
+</code></pre>
+<p>With the <code>debug</code> profile, <code>debug: true</code> enables <code>console.debug</code> diagnostics;
+<code>debug: false</code> disables them even when <code>JCO_DEBUG</code> is set. If omitted, the runtime
+reads <code>JCO_DEBUG</code> once during instantiation. Each instance keeps its own setting,
+so later changes to the options object or environment do not affect it.</p>
+<p>The option exists only where the bindings contain their runtime. Bindings that
+import an external runtime share that module’s logger between instances, so their
+<code>InstantiateOptions</code> has no <code>debug</code> property. Select the external debug build by
+its module base; <code>--runtime-profile</code> does not select an external runtime’s profile:</p>
+<pre><code class="language-sh">jco transpile component.wasm -o output \
+  --cm-runtime-es-module @bytecodealliance/jco-cm-runtime/debug
+JCO_DEBUG=1 node app.js
+</code></pre>
+<p>The external debug runtime reads <code>JCO_DEBUG</code> once when it loads. Direct ESM output
+with a bundled debug runtime also reads it once when the module loads. Set the
+variable before starting the process or before the first import of the bindings.</p>
 <h4 id="trap-notifications"><a class="header" href="#trap-notifications">Trap notifications</a></h4>
 <p><code>options.onTrap</code> is called with each trap of the instance, once, as soon as it happens. That includes
 a trap in a task a guest left running, after the calls of the host’s that started it have returned,
