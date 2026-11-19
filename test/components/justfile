@@ -20,6 +20,7 @@ build:
     {{just}} build-jco-issue-1887
     {{just}} build-jco-issue-1887-list-param
     {{just}} build-jco-issue-1887-resource-drop
+    {{just}} build-jco-issue-2510
     {{just}} build-jco-issue-2178
     {{just}} build-jco-issue-2393
     {{just}} build-posix-pthread-mutex-lock-1-1
@@ -80,6 +81,14 @@ build:
     mkdir -p output/jco-issue-1887-resource-drop
     {{just}} -f c/jco-issue-1887-resource-drop/justfile build
     mv c/jco-issue-1887-resource-drop/component.wasm output/jco-issue-1887-resource-drop/component.wasm
+
+# Build the wasi-sdk P2 command required to test jco issue #2510
+[group('build')]
+@build-jco-issue-2510:
+    echo "==> building jco-issue-2510 command (c)..."
+    mkdir -p output/jco-issue-2510
+    {{just}} -f c/jco-issue-2510/justfile build
+    mv c/jco-issue-2510/component.wasm output/jco-issue-2510/component.wasm
 
 # Build the moonbit component required to test jco issue #2185
 [group('build')]

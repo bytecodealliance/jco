@@ -1,0 +1,16 @@
+wasi_sdk_path := env_var_or_default("WASI_SDK_PATH", env_var_or_default("WASI_SDK", "/opt/wasi-sdk"))
+
+@_default:
+    just --list
+
+build:
+    @if [ ! -x "{{wasi_sdk_path}}/bin/clang" ]; then \
+        echo '[error] failed to find wasi-sdk clang at {{wasi_sdk_path}}/bin/clang'; \
+        echo '    install wasi-sdk 25+ and set WASI_SDK_PATH'; \
+        exit 1; \
+    fi
+    {{wasi_sdk_path}}/bin/clang \
+        -target wasm32-wasip2 \
+        -O1 \
+        src/main.c \
+        -o component.wasm
