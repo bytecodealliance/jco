@@ -19,3 +19,7 @@ test.each(["client-send", "accepted-send", "receive", "both", "disposed-streams"
         await run(process.execPath, [fixture, scenario], { timeout: 10_000 });
     },
 );
+
+test("TCP accepted socket drops its streams before its own pollable", async () => {
+    await run(process.execPath, [fixture, "accepted-drop"], { timeout: 10_000 });
+});
