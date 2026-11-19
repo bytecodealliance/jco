@@ -161,6 +161,12 @@ try {
         client.socket.shutdown("both");
         client.socket.shutdown("both");
         assert.throws(() => accepted.input.blockingRead(1n), { tag: "closed" });
+    } else if (scenario === "accepted-drop") {
+        // wasi-libc closes a socket by dropping its streams before the socket's own pollable.
+        const socketPoll = accepted.socket.subscribe();
+        accepted.input[Symbol.dispose]();
+        accepted.output[Symbol.dispose]();
+        socketPoll[Symbol.dispose]();
     } else {
         throw new Error(`unknown scenario: ${scenario}`);
     }

@@ -299,7 +299,14 @@ export function socketTcpAccept(id: number) {
         keepAlive: false,
         keepAliveIdleTime: 0,
         pendingAccepts: [],
-        pollState: accept.pollState,
+        // accept.pollState belongs to the input stream; the socket's pollables
+        // must not count as children of the stream.
+        pollState: {
+            ready: true,
+            listener: null,
+            polls: [],
+            parentStream: null,
+        },
     });
     return [tcpSocketCnt, inputStream, outputStream];
 }
