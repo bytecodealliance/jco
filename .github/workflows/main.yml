@@ -1209,9 +1209,6 @@ jobs:
       - name: Build workspace jco-std
         run: pnpm --filter '@bytecodealliance/jco-std' run build:ts
 
-      - name: Build workspace Preview 2 shim
-        run: pnpm --filter '@bytecodealliance/preview2-shim' --fail-if-no-match run build
-
       - name: Build workspace Preview 3 shim
         run: pnpm --filter '@bytecodealliance/preview3-shim' --fail-if-no-match run build
 
