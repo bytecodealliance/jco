@@ -243,6 +243,38 @@ suite.concurrent('host reads of a stream lowered from the host', () => {
         expect(await s.read.read(8)).toEqual(done);
     });
 
+    test('a cancel that lost to the host does not cancel the next guest read', async () => {
+        const arrive: ((result: IteratorResult<unknown>) => void)[] = [];
+        const source = {
+            [Symbol.asyncIterator]() {
+                return this;
+            },
+            next: () => new Promise<IteratorResult<unknown>>((resolve) => arrive.push(resolve)),
+            async return() {
+                return done;
+            },
+        };
+        const s = createLowered(source);
+        const ops = s.operations();
+        const opts = guestOptions({ buffer: new ArrayBuffer(16) });
+        expect(stream.streamRead(ops.readable, opts, s.index, 0, 1)).toBe(0xffffffff);
+        expect(stream.streamCancelRead(ops.readable, opts, s.index)).toBe(0xffffffff);
+
+        // The host delivers before the deferred cancellation runs, so the read completes.
+        arrive[0](chunk(7));
+        for (let i = 0; i < 20 && !s.read.hasPendingEvent(); i++) {
+            await Promise.resolve();
+        }
+        expect(s.read.hasPendingEvent()).toBe(true);
+        expect(s.read.getPendingEvent()!.payload1).toBe(16 | s.StreamEnd.CopyResult.COMPLETED);
+
+        // The guest starts its next read; the earlier cancellation must not touch it.
+        expect(stream.streamRead(ops.readable, opts, s.index, 0, 1)).toBe(0xffffffff);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(s.read.hasPendingEvent()).toBe(false);
+        expect(s.read.isCopying()).toBe(true);
+    });
+
     test('pending on the source end when the stream is dropped', async () => {
         const source = silentSource();
         const s = createLowered(source);
