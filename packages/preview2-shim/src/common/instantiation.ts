@@ -242,7 +242,7 @@ export class WASIShim {
     ): VersionedWASIImportObject<V> {
         const versionSuffix = opts?.asVersion ? `@${opts.asVersion}` : "";
 
-        const obj = {};
+        const obj: Record<string, object | undefined> = Object.create(null);
 
         obj[`wasi:cli/environment${versionSuffix}`] = this.#environment ?? this.#cli.environment;
         obj[`wasi:cli/exit${versionSuffix}`] = this.#cli.exit;
@@ -280,6 +280,14 @@ export class WASIShim {
         obj[`wasi:http/types${versionSuffix}`] = this.#http.types;
         obj[`wasi:http/incoming-handler${versionSuffix}`] = this.#http.incomingHandler;
         obj[`wasi:http/outgoing-handler${versionSuffix}`] = this.#http.outgoingHandler;
+
+        // Wasm resolves both the module and the member by JavaScript property lookup.
+        // Expose each namespace's own exports without mutating the supplied shims.
+        for (const [name, namespace] of Object.entries(obj)) {
+            if (namespace !== undefined) {
+                obj[name] = Object.create(null, Object.getOwnPropertyDescriptors(namespace));
+            }
+        }
 
         return obj as VersionedWASIImportObject<V>;
     }
