@@ -625,6 +625,13 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
                 if (this.isDropped()) {
                     return;
                 }
+                // The deferred timer can outlive the cancel it belongs to: host
+                // injection may have completed the copy, the cancel returned,
+                // and the guest started a new read on this end. Only a copy
+                // that is still being cancelled may be cancelled here.
+                if (this.getCopyState() !== StreamEnd.CopyState.CANCELLING_COPY) {
+                    return;
+                }
                 // Host injection may complete the copy before this deferred
                 // cancellation runs. Preserve that completion event instead of
                 // cancelling the next operation or starting a duplicate write.
