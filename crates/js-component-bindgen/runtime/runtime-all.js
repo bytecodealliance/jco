@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 38219f33acaa5b11bf4d9b714ad5c986f0c3bdd1
+// generated from commit 3c1940fbbefbc6e805987717fe145b4f8f4c894b
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -9950,6 +9950,7 @@ function initializeStreamEndClass(_context) {
 			DEBUG: debugLog("[StreamEnd#cancel()]");
 			const completeCancel = () => {
 				if (this.isDropped()) return;
+				if (this.getCopyState() !== _a.CopyState.CANCELLING_COPY) return;
 				if (this.hasPendingEvent()) return;
 				if (this.#hostCancelFn?.()) return;
 				this.resetAndNotifyPending(_a.CopyResult.CANCELLED);
