@@ -64,6 +64,22 @@ impl stream_concurrency_test::Guest for Component {
         values
     }
 
+    async fn read_after_raced_cancel(mut rx: StreamReader<u8>) -> Vec<u8> {
+        let (status, mut values) = {
+            let mut read = pin!(rx.read(Vec::with_capacity(1)));
+            let mut context = Context::from_waker(Waker::noop());
+            assert!(read.as_mut().poll(&mut context).is_pending());
+            read.cancel()
+        };
+        // The host delivered the first byte while cancel was waiting.
+        assert_eq!(status, StreamResult::Complete(1));
+
+        let (status, second) = rx.read(Vec::with_capacity(1)).await;
+        assert_eq!(status, StreamResult::Complete(1));
+        values.extend(second);
+        values
+    }
+
     async fn read_with_cancellation(mut rx: StreamReader<u8>) -> Vec<u8> {
         let mut values = Vec::new();
         let mut buffer = Vec::with_capacity(1024);
