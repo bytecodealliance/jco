@@ -54,7 +54,7 @@ use crate::intrinsics::{
 };
 use crate::names::{
     LocalNames, function_expression_name, is_readonly_class_static, js_string_literal,
-    maybe_quote_id, maybe_quote_member, static_member_name,
+    maybe_quote_member, static_member_name,
 };
 use crate::{
     FunctionIdentifier, ManagesIntrinsics, core, get_thrown_type, is_async_fn,
@@ -4234,13 +4234,17 @@ impl<'a> Instantiator<'a, '_> {
         // Build list of imports
         let mut imports = String::new();
         if !import_obj.is_empty() {
-            imports.push_str(", {\n");
+            // Keep both levels free of inherited imports. Computed keys also let
+            // a module explicitly import a binding named "__proto__".
+            imports.push_str(", {\n__proto__: null,\n");
             for (module, names) in import_obj {
-                imports.push_str(&maybe_quote_id(module));
-                imports.push_str(": {\n");
+                uwriteln!(
+                    imports,
+                    "[{}]: {{\n__proto__: null,",
+                    js_string_literal(module)
+                );
                 for (name, val) in names {
-                    imports.push_str(&maybe_quote_id(name));
-                    uwriteln!(imports, ": {val},");
+                    uwriteln!(imports, "[{}]: {val},", js_string_literal(name));
                 }
                 imports.push_str("},\n");
             }
@@ -4257,7 +4261,7 @@ impl<'a> Instantiator<'a, '_> {
                 .bindgen
                 .intrinsic_call_prefix(Intrinsic::SetGlobalCurrentThreadMetaFn);
             let idx = component_idx.as_u32();
-            let import_object = imports.strip_prefix(", ").unwrap_or("{}");
+            let import_object = imports.strip_prefix(", ").unwrap_or("{ __proto__: null }");
             imports = format!(
                 ", ({set_task_meta}{{ componentIdx: {idx}, taskID: _initTaskID{idx}, threadID: _initThreadID{idx} }}), {import_object})"
             );
