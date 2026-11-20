@@ -1,6 +1,7 @@
 import { join } from 'node:path';
+import { setImmediate } from 'node:timers/promises';
 
-import { suite, test, assert } from 'vitest';
+import { suite, test, assert, vi } from 'vitest';
 
 import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 
@@ -159,6 +160,42 @@ suite('async scheduling regressions', () => {
                 new Uint8Array([42]),
             );
         } finally {
+            await cleanup();
+        }
+    });
+
+    test('a deferred cancel leaves the next guest stream read pending until delivery', async () => {
+        async function* source() {
+            // Let the guest enter its synchronous cancel before delivering the first byte.
+            await setImmediate();
+            yield 7;
+
+            // Once the second read is pending, fire the old timer before delivering its byte.
+            await setImmediate();
+            vi.advanceTimersByTime(0);
+            yield 11;
+        }
+
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                path: join(LOCAL_TEST_COMPONENTS_DIR, 'stream-concurrency.wasm'),
+                imports: {
+                    ...new WASIShim().getImportObject(),
+                    'jco:test-components/stream-concurrency-host': {
+                        signal: () => {},
+                        zeroReadComplete: () => {},
+                    },
+                },
+            },
+        });
+
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+        try {
+            const guest = instance['jco:test-components/stream-concurrency-test'];
+            assert.deepEqual(await guest.readAfterRacedCancel(source()), new Uint8Array([7, 11]));
+        } finally {
+            vi.useRealTimers();
             await cleanup();
         }
     });
