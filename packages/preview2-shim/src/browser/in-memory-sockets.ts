@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import type { TcpSocketsShim, UdpSocketsShim } from "../../types/instantiation.js";
 import type {
     IpAddressFamily,
@@ -65,13 +66,14 @@ export class InMemoryTcpSockets implements TcpSocketsShim {
     constructor() {
         const pending = this.#pending;
 
-        class TcpSocket {
+        class TcpSocket extends WasiResource {
             readonly #family: IpAddressFamily;
             #localAddress: IpSocketAddress | undefined;
             #remoteAddress: IpSocketAddress | undefined;
             #listening = false;
 
             constructor(family: IpAddressFamily) {
+                super();
                 this.#family = family;
             }
 
@@ -208,8 +210,10 @@ export class InMemoryUdpSockets implements UdpSocketsShim {
         const datagrams = this.#datagrams;
         const clients = this.#clients;
 
-        class IncomingDatagramStream {
-            constructor(private readonly queue: IncomingDatagram[]) {}
+        class IncomingDatagramStream extends WasiResource {
+            constructor(private readonly queue: IncomingDatagram[]) {
+                super();
+            }
             receive(maxResults: bigint) {
                 return this.queue.splice(0, checkedU64AsNumber(maxResults, "max results"));
             }
@@ -219,10 +223,12 @@ export class InMemoryUdpSockets implements UdpSocketsShim {
             [symbolDispose]() {}
         }
 
-        class OutgoingDatagramStream {
+        class OutgoingDatagramStream extends WasiResource {
             #permit = 0;
 
-            constructor(private readonly remoteAddress: IpSocketAddress | undefined) {}
+            constructor(private readonly remoteAddress: IpSocketAddress | undefined) {
+                super();
+            }
             checkSend() {
                 this.#permit = 1_024;
                 return 1_024n;
@@ -251,12 +257,13 @@ export class InMemoryUdpSockets implements UdpSocketsShim {
             [symbolDispose]() {}
         }
 
-        class UdpSocket {
+        class UdpSocket extends WasiResource {
             readonly #family: IpAddressFamily;
             #localAddress: IpSocketAddress | undefined;
             #remoteAddress: IpSocketAddress | undefined;
 
             constructor(family: IpAddressFamily) {
+                super();
                 this.#family = family;
             }
             startBind(_network: unknown, localAddress: IpSocketAddress) {

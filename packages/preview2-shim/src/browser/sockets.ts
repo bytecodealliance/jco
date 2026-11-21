@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import type {
     instanceNetwork as InstanceNetworkNamespace,
     ipNameLookup as IpNameLookupNamespace,
@@ -19,7 +20,7 @@ const unsupported = (): never => {
     throw "not-supported";
 };
 
-class Network implements NetworkNamespace.Network {}
+class Network extends WasiResource implements NetworkNamespace.Network {}
 const defaultNetwork = new Network();
 
 export const instanceNetwork: typeof InstanceNetworkNamespace = {
@@ -28,7 +29,10 @@ export const instanceNetwork: typeof InstanceNetworkNamespace = {
 
 export const network: typeof NetworkNamespace = { Network };
 
-class ResolveAddressStream implements IpNameLookupNamespace.ResolveAddressStream {
+class ResolveAddressStream
+    extends WasiResource
+    implements IpNameLookupNamespace.ResolveAddressStream
+{
     resolveNextAddress = unsupported;
     subscribe = unsupported;
 }
@@ -38,7 +42,7 @@ export const ipNameLookup: typeof IpNameLookupNamespace = {
     resolveAddresses: unsupported,
 };
 
-class TcpSocket implements TcpNamespace.TcpSocket {
+class TcpSocket extends WasiResource implements TcpNamespace.TcpSocket {
     startBind = unsupported;
     finishBind = unsupported;
     startConnect = unsupported;
@@ -75,18 +79,18 @@ export const tcpCreateSocket: typeof TcpCreateSocketNamespace = {
 
 export const tcp: typeof TcpNamespace = { TcpSocket };
 
-class IncomingDatagramStream implements UdpNamespace.IncomingDatagramStream {
+class IncomingDatagramStream extends WasiResource implements UdpNamespace.IncomingDatagramStream {
     receive = unsupported;
     subscribe = unsupported;
 }
 
-class OutgoingDatagramStream implements UdpNamespace.OutgoingDatagramStream {
+class OutgoingDatagramStream extends WasiResource implements UdpNamespace.OutgoingDatagramStream {
     checkSend = unsupported;
     send = unsupported;
     subscribe = unsupported;
 }
 
-class UdpSocket implements UdpNamespace.UdpSocket {
+class UdpSocket extends WasiResource implements UdpNamespace.UdpSocket {
     startBind = unsupported;
     finishBind = unsupported;
     stream = unsupported;

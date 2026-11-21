@@ -737,7 +737,20 @@ suite("HTTPServer", () => {
 });
 
 suite("Instantiation", () => {
-    test("WASIShim exposes only own module and namespace properties", async () => {
+    test.concurrent("shim resources expose their WASI methods on null-rooted prototypes", async () => {
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const imports = new WASIShim().getImportObject();
+        const { Fields } = imports["wasi:http/types"];
+        const fields = new Fields();
+
+        assert.instanceOf(fields, Fields);
+        assert.strictEqual(Object.getPrototypeOf(fields), Fields.prototype);
+        assert.isNull(Object.getPrototypeOf(Fields.prototype));
+        assert.isFalse("bind" in Fields);
+        assert.deepEqual(fields.entries(), []);
+    });
+
+    test.concurrent("WASIShim exposes only own module and namespace properties", async () => {
         const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
         const shim = new WASIShim({ sandbox: { env: { MODE: "test" } } });
 
