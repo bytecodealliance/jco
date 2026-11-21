@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { afterEach, suite, test, vi } from "vitest";
 
 import { outgoingHandler, types } from "../../src/browser/http.js";
+import { error as ioError } from "../../src/browser/io.js";
 import type { InputStream } from "../../types/interfaces/wasi-io-streams.js";
 
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
@@ -221,8 +222,9 @@ suite("Browser HTTP input stream", () => {
                     typeof error === "object" && error !== null && "tag" in error && "val" in error,
                 );
                 assert.strictEqual(error.tag, "last-operation-failed");
-                assert.ok(error.val instanceof Error);
-                assert.strictEqual(error.val.message, "body failed");
+                assert.ok(error.val instanceof ioError.Error);
+                assert.strictEqual(error.val.toDebugString(), "body failed");
+                assert.strictEqual(Object.getPrototypeOf(ioError.Error.prototype), null);
                 return true;
             },
         );

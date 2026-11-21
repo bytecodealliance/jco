@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import type {
     environment as EnvironmentNamespace,
     exit as ExitNamespace,
@@ -136,8 +137,8 @@ export const stderr: typeof StderrNamespace = {
     },
 };
 
-class TerminalInput implements TerminalInputNamespace.TerminalInput {}
-class TerminalOutput implements TerminalOutputNamespace.TerminalOutput {}
+class TerminalInput extends WasiResource implements TerminalInputNamespace.TerminalInput {}
+class TerminalOutput extends WasiResource implements TerminalOutputNamespace.TerminalOutput {}
 
 export const terminalInput: typeof TerminalInputNamespace = {
     TerminalInput,

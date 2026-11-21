@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import { types as TypesNamespace, preopens as PreopensNamespace } from "../../types/filesystem.js";
 import { Error as IoError } from "../../types/interfaces/wasi-io-error.js";
 import { environment } from "./environment.js";
@@ -62,7 +63,7 @@ export interface BrowserFilesystemConfig<Capability> {
     preopens: Record<string, Capability>;
 }
 
-class DirectoryEntryStream implements TypesNamespace.DirectoryEntryStream {
+class DirectoryEntryStream extends WasiResource implements TypesNamespace.DirectoryEntryStream {
     #implementation!: BrowserDirectoryEntryStream;
 
     static _create(implementation: BrowserDirectoryEntryStream) {
@@ -80,7 +81,7 @@ const directoryEntryStreamCreate = DirectoryEntryStream._create;
 // @ts-expect-error - Deleting static method
 delete DirectoryEntryStream._create;
 
-class Descriptor implements TypesNamespace.Descriptor {
+class Descriptor extends WasiResource implements TypesNamespace.Descriptor {
     #implementation!: BrowserFilesystemDescriptor;
 
     _getImplementation(descriptor: Descriptor) {

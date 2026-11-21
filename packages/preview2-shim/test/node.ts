@@ -737,6 +737,36 @@ suite("HTTPServer", () => {
 });
 
 suite("Instantiation", () => {
+    test.concurrent("shim resources expose their WASI methods on null-rooted prototypes", async () => {
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const imports = new WASIShim().getImportObject();
+        const { Fields } = imports["wasi:http/types"];
+        const fields = new Fields();
+
+        assert.instanceOf(fields, Fields);
+        assert.strictEqual(Object.getPrototypeOf(fields), Fields.prototype);
+        assert.isNull(Object.getPrototypeOf(Fields.prototype));
+        assert.isFalse("bind" in Fields);
+        assert.deepEqual(fields.entries(), []);
+    });
+
+    test.concurrent("WASIShim exposes only own module and namespace properties", async () => {
+        const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
+        const shim = new WASIShim({ sandbox: { env: { MODE: "test" } } });
+
+        for (const asVersion of ["", "0.2.3"] as const) {
+            const imports = shim.getImportObject({ asVersion });
+            assert.isNull(Object.getPrototypeOf(imports));
+            for (const namespace of Object.values(imports)) {
+                if (namespace !== undefined) {
+                    assert.isNull(Object.getPrototypeOf(namespace));
+                }
+            }
+            const key = asVersion ? "wasi:cli/environment@0.2.3" : "wasi:cli/environment";
+            assert.deepEqual(imports[key].getEnvironment(), [["MODE", "test"]]);
+        }
+    });
+
     test("WASIShim export (random)", async () => {
         const { random } = await import("@bytecodealliance/preview2-shim");
         const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
@@ -783,7 +813,8 @@ suite("Instantiation", () => {
     test("WASIShim accepts application-provided filesystem namespaces", async () => {
         const { filesystem } = await import("@bytecodealliance/preview2-shim");
         const { WASIShim } = await import("@bytecodealliance/preview2-shim/instantiation");
-        const customPreopens = { getDirectories: () => [] };
+        const prototype = { hostOnly: true };
+        const customPreopens = { __proto__: prototype, getDirectories: () => [] };
         const shim = new WASIShim({
             filesystem: {
                 types: filesystem.types,
@@ -792,8 +823,16 @@ suite("Instantiation", () => {
         });
         const imports = shim.getImportObject();
 
-        assert.strictEqual(imports["wasi:filesystem/types"], filesystem.types);
-        assert.strictEqual(imports["wasi:filesystem/preopens"], customPreopens);
+        assert.strictEqual(Object.getPrototypeOf(customPreopens), prototype);
+        assert.isFalse("hostOnly" in imports["wasi:filesystem/preopens"]);
+        assert.strictEqual(
+            imports["wasi:filesystem/types"].Descriptor,
+            filesystem.types.Descriptor,
+        );
+        assert.strictEqual(
+            imports["wasi:filesystem/preopens"].getDirectories,
+            customPreopens.getDirectories,
+        );
     });
 
     test("WASIShim delegates sandbox preopens to a custom filesystem", async () => {
@@ -817,8 +856,14 @@ suite("Instantiation", () => {
         const imports = shim.getImportObject();
         assert.strictEqual(receivedPreopens, configuredPreopens);
         assert.strictEqual(receivedPreopens?.["/guest"], capability);
-        assert.strictEqual(imports["wasi:filesystem/types"], filesystem.types);
-        assert.strictEqual(imports["wasi:filesystem/preopens"], customPreopens);
+        assert.strictEqual(
+            imports["wasi:filesystem/types"].Descriptor,
+            filesystem.types.Descriptor,
+        );
+        assert.strictEqual(
+            imports["wasi:filesystem/preopens"].getDirectories,
+            customPreopens.getDirectories,
+        );
     });
 
     test("WASIShim requires custom filesystems to interpret sandbox preopens", async () => {

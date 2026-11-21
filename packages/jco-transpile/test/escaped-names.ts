@@ -11,6 +11,43 @@ import { getTmpDir } from './helpers.js';
 
 const FIXTURES_DIR = join(COMPONENT_FIXTURES_DIR, 'escaped-names');
 
+test.concurrent.each(['sync', 'async'] as const)('core imports have null prototypes (%s)', async (instantiation) => {
+    const component = await parse(`(component
+        (core module $provider
+            (func $init) (start $init)
+            (func (export "answer") (result i32) i32.const 42))
+        (core instance $p (instantiate $provider))
+        (core module $consumer
+            (import "__proto__" "__proto__" (func $answer (result i32)))
+            (func (export "run") (result i32) call $answer))
+        (core instance $c (instantiate $consumer
+            (with "__proto__" (instance (export "__proto__" (func $p "answer"))))))
+        (func (export "run") (result u32) (canon lift (core func $c "run"))))`);
+    const { files } = await transpileBytes(component, { name: 'core-imports', instantiation, base64Cutoff: 0 });
+    const outDir = await getTmpDir();
+    try {
+        await writeFiles(files, { baseDir: outDir });
+        await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+        const { instantiate } = await import(pathToFileURL(join(outDir, 'core-imports.js')).href);
+        const instance = await instantiate(
+            (path: string) => new WebAssembly.Module(files[path]),
+            {},
+            (module: WebAssembly.Module, imports?: WebAssembly.Imports) => {
+                if (imports) {
+                    assert.isNull(Object.getPrototypeOf(imports));
+                    for (const namespace of Object.values(imports)) {
+                        assert.isNull(Object.getPrototypeOf(namespace));
+                    }
+                }
+                return new WebAssembly.Instance(module, imports);
+            },
+        );
+        assert.strictEqual(instance.run(), 42);
+    } finally {
+        await rm(outDir, { recursive: true, force: true });
+    }
+});
+
 test.concurrent.each([
     ['core-export-numeric.wat', '0'],
     ['core-export-numeric.wat', '-1'],

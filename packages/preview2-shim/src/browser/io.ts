@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import type {
     error as ErrorNamespace,
     poll as PollNamespace,
@@ -39,7 +40,11 @@ export type OutputStreamHandler = Partial<IOutputStream> &
         drop?: () => void;
     };
 
-class IoError extends Error implements ErrorNamespace.Error {
+class IoError extends WasiResource implements ErrorNamespace.Error {
+    constructor(readonly message = "") {
+        super();
+    }
+
     toDebugString() {
         return this.message;
     }
@@ -47,7 +52,7 @@ class IoError extends Error implements ErrorNamespace.Error {
 
 export const ioErrorCreate = (message: string): ErrorNamespace.Error => new IoError(message);
 
-class InputStream implements IInputStream {
+class InputStream extends WasiResource implements IInputStream {
     id!: number;
     handler!: InputStreamHandler;
     #open = true;
@@ -142,7 +147,7 @@ export const inputStreamCreate = InputStream._create;
 // @ts-expect-error - Deleting static method
 delete InputStream._create;
 
-class OutputStream implements IOutputStream {
+class OutputStream extends WasiResource implements IOutputStream {
     id!: number;
     open!: boolean;
     handler!: OutputStreamHandler;
@@ -292,7 +297,7 @@ export const error: typeof ErrorNamespace = {
 
 export const streams: typeof StreamsNamespace = { InputStream, OutputStream };
 
-class Pollable implements PollNamespace.Pollable {
+class Pollable extends WasiResource implements PollNamespace.Pollable {
     #source: PollableSource = { ready: () => true, wait: () => Promise.resolve() };
     #invalid = false;
     #disposed = false;

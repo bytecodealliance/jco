@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import process, { argv, env, cwd } from "node:process";
 import { ioCall, inputStreamCreate, outputStreamCreate } from "../io/worker-io.js";
 import type {
@@ -81,8 +82,8 @@ export const stderr: typeof StderrNamespace = {
     },
 };
 
-class TerminalInput {}
-class TerminalOutput {}
+class TerminalInput extends WasiResource {}
+class TerminalOutput extends WasiResource {}
 
 let terminalStdoutInstance = new TerminalOutput();
 let terminalStderrInstance = new TerminalOutput();

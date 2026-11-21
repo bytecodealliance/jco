@@ -35,6 +35,10 @@ suite('resources', () => {
             const second = new SecondToken(22);
             const madeFirst = FirstToken.make(33);
             const madeSecond = SecondToken.make(44);
+            assert.isNull(Object.getPrototypeOf(FirstToken));
+            assert.isNull(Object.getPrototypeOf(FirstToken.prototype));
+            assert.strictEqual(Object.getPrototypeOf(first), FirstToken.prototype);
+            assert.strictEqual(Object.getPrototypeOf(madeFirst), FirstToken.prototype);
             const firstInterface = instance['example:resources/first'];
             const secondInterface = instance['example:resources/second'];
             if (useNamespaceObjects) {

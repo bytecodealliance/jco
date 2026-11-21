@@ -238,6 +238,16 @@ const component = await instantiate(loader, sandboxedShim.getImportObject());
 
 ### Notes on sandboxing
 
+`getImportObject()` returns a null-prototype object. Each WASI namespace is a
+null-prototype copy of the supplied namespace's own properties. Custom shims
+should expose imported functions and resource classes as own properties.
+To add a module, assign its namespace directly to the returned object and give
+that namespace a null prototype as well.
+
+Built-in WASI resources share methods through their resource prototype, whose
+parent is null. Use `instanceof` with the WASI resource class to identify a
+handle. For `wasi:io/error`, use `toDebugString()` to read the diagnostic.
+
 #### Directory mutation compatibility (Node.js)
 
 Node filesystems preserve the existing behavior by default: `mutate-directory`

@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import { types as TypesNamespace, preopens as PreopensNamespace } from "../../types/filesystem.js";
 import type {
     Descriptor as IDescriptor,
@@ -130,7 +131,7 @@ function closeFileResource(id: number) {
 /**
  * @implements {DescriptorProps}
  */
-class Descriptor implements IDescriptor {
+class Descriptor extends WasiResource implements IDescriptor {
     #hostPreopen;
     #fileResourceId;
     #finalizer;
@@ -908,7 +909,7 @@ const descriptorCreate = Descriptor._create;
 // @ts-expect-error - Deleting static method
 delete Descriptor._create;
 
-class DirectoryEntryStream implements IDirectoryEntryStream {
+class DirectoryEntryStream extends WasiResource implements IDirectoryEntryStream {
     #dir;
     #finalizer;
     readDirectoryEntry() {
