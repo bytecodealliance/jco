@@ -1598,17 +1598,30 @@ impl<'a> Instantiator<'a, '_> {
         uwriteln!(self.src.js_init, "}}");
     }
 
+    fn begin_local_resource_class(&mut self, local_name: &str) {
+        self.defined_resource_classes.insert(local_name.to_string());
+        // Set the roots once at class definition. Lifted handles and constructor
+        // results can then share the resource's methods and retain instanceof.
+        uwriteln!(
+            self.src.js,
+            "\nclass {local_name} {{
+                static {{
+                    Object.setPrototypeOf(this.prototype, null);
+                    Object.setPrototypeOf(this, null);
+                }}"
+        );
+    }
+
     fn ensure_local_resource_class(&mut self, local_name: String) {
         if !self.defined_resource_classes.contains(&local_name) {
+            self.begin_local_resource_class(&local_name);
             uwriteln!(
                 self.src.js,
-                "\nclass {local_name} {{
-                constructor () {{
+                "constructor () {{
                     throw new Error('\"{local_name}\" resource does not define a constructor');
                 }}
             }}"
             );
-            self.defined_resource_classes.insert(local_name.to_string());
         }
     }
 
@@ -6644,13 +6657,8 @@ impl<'a> Instantiator<'a, '_> {
                         "Internal error: Resource constructor must be defined before other methods and statics"
                     );
                 }
-                uwrite!(
-                    self.src.js,
-                    "
-                    class {local_name} {{
-                        constructor"
-                );
-                self.defined_resource_classes.insert(local_name.to_string());
+                self.begin_local_resource_class(local_name);
+                self.src.js("constructor");
             }
             FunctionKind::AsyncFreestanding => {
                 uwrite!(self.src.js, "\n{maybe_async}function {local_name}")
