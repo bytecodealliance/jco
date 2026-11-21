@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import { Worker } from "node:worker_threads";
 import { createSyncFn } from "../synckit/index.js";
 import {
@@ -141,11 +142,11 @@ export function earlyDispose(finalizer) {
     finalizer();
 }
 
-class IoError extends Error {
-    payload: any;
-    constructor(payload: any) {
-        super(payload);
-        this.payload = payload;
+class IoError extends WasiResource {
+    readonly message: string;
+    constructor(readonly payload: Error | string) {
+        super();
+        this.message = String(payload);
     }
     toDebugString() {
         return this.message;
@@ -169,7 +170,7 @@ function streamIoErrorCall(call, id, payload) {
     }
 }
 
-class InputStream implements IInputStream {
+class InputStream extends WasiResource implements IInputStream {
     #id;
     #streamType;
     #finalizer;
@@ -253,7 +254,7 @@ export const inputStreamId = InputStream._id;
 // @ts-expect-error - Deleting static method
 delete InputStream._id;
 
-class OutputStream implements IOutputStream {
+class OutputStream extends WasiResource implements IOutputStream {
     #id;
     #streamType;
     #finalizer;
@@ -395,7 +396,7 @@ function pollableDispose(id) {
 
 const rep = Symbol.for("cabiRep");
 
-class Pollable {
+class Pollable extends WasiResource {
     #finalizer;
     ready() {
         return ioCall(POLL_POLLABLE_READY, this[rep]);

@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import type {
     incomingHandler as IncomingHandlerNamespace,
     outgoingHandler as OutgoingHandlerNamespace,
@@ -41,7 +42,7 @@ function validateHeaderValue(value: string | Uint8Array): void {
 type FieldName = TypesNamespace.FieldName;
 type FieldValue = TypesNamespace.FieldValue;
 
-class Fields implements TypesNamespace.Fields {
+class Fields extends WasiResource implements TypesNamespace.Fields {
     #immutable = false;
     #entries: [FieldName, FieldValue][] = [];
     #table = new Map<string, [FieldName, FieldValue][]>();
@@ -173,7 +174,7 @@ const fieldsFromEntriesChecked = Fields._fromEntriesChecked;
 // @ts-expect-error - Deleting static method
 delete Fields._fromEntriesChecked;
 
-class RequestOptions implements TypesNamespace.RequestOptions {
+class RequestOptions extends WasiResource implements TypesNamespace.RequestOptions {
     #connectTimeout: bigint | undefined;
     #firstByteTimeout: bigint | undefined;
     #betweenBytesTimeout: bigint | undefined;
@@ -212,7 +213,7 @@ class RequestOptions implements TypesNamespace.RequestOptions {
     }
 }
 
-class OutgoingBody implements TypesNamespace.OutgoingBody {
+class OutgoingBody extends WasiResource implements TypesNamespace.OutgoingBody {
     #outputStream: any = null;
     #chunks: Uint8Array[] = [];
     #finished = false;
@@ -330,7 +331,7 @@ interface BrowserHttpConfig {
 type Method = TypesNamespace.Method;
 type Scheme = TypesNamespace.Scheme;
 
-class OutgoingRequest implements TypesNamespace.OutgoingRequest {
+class OutgoingRequest extends WasiResource implements TypesNamespace.OutgoingRequest {
     #method: Method = { tag: "get" };
     #scheme: Scheme | undefined = undefined;
     #pathWithQuery: string | undefined = undefined;
@@ -340,6 +341,7 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
     #bodyRequested = false;
 
     constructor(headers: Fields) {
+        super();
         fieldsLock(headers);
         this.#headers = headers;
         this.#body = outgoingBodyCreate();
@@ -467,7 +469,7 @@ const outgoingRequestHandle = OutgoingRequest._handle;
 // @ts-expect-error - Deleting static method
 delete OutgoingRequest._handle;
 
-class IncomingBody implements TypesNamespace.IncomingBody {
+class IncomingBody extends WasiResource implements TypesNamespace.IncomingBody {
     #finished = false;
     #stream: ReturnType<typeof inputStreamCreate> | null = null;
 
@@ -628,7 +630,7 @@ const incomingBodyCreate = IncomingBody._create;
 // @ts-expect-error - Deleting static method
 delete IncomingBody._create;
 
-class IncomingResponse implements TypesNamespace.IncomingResponse {
+class IncomingResponse extends WasiResource implements TypesNamespace.IncomingResponse {
     #headers!: Fields;
     #status = 0;
     #body: IncomingBody | undefined;
@@ -670,7 +672,7 @@ const incomingResponseCreate = IncomingResponse._create;
 // @ts-expect-error - Deleting static method
 delete IncomingResponse._create;
 
-class IncomingRequest implements TypesNamespace.IncomingRequest {
+class IncomingRequest extends WasiResource implements TypesNamespace.IncomingRequest {
     #request!: Request;
     #headers!: Fields;
     #body: IncomingBody | undefined;
@@ -734,13 +736,14 @@ const incomingRequestToRequest = IncomingRequest._toRequest;
 // @ts-expect-error - Deleting static method
 delete IncomingRequest._toRequest;
 
-class OutgoingResponse implements TypesNamespace.OutgoingResponse {
+class OutgoingResponse extends WasiResource implements TypesNamespace.OutgoingResponse {
     #headers: Fields;
     #status = 200;
     #body = outgoingBodyCreate();
     #bodyRequested = false;
 
     constructor(headers: Fields) {
+        super();
         fieldsLock(headers);
         this.#headers = headers;
     }
@@ -781,7 +784,7 @@ const outgoingResponseToResponse = OutgoingResponse._toResponse;
 // @ts-expect-error - Deleting static method
 delete OutgoingResponse._toResponse;
 
-class ResponseOutparam implements TypesNamespace.ResponseOutparam {
+class ResponseOutparam extends WasiResource implements TypesNamespace.ResponseOutparam {
     #used = false;
     #resolve!: (response: Response) => void;
     #reject!: (cause: unknown) => void;
@@ -828,7 +831,7 @@ const responseOutparamIsUsed = ResponseOutparam._isUsed;
 // @ts-expect-error - Deleting static method
 delete ResponseOutparam._isUsed;
 
-class FutureTrailers implements TypesNamespace.FutureTrailers {
+class FutureTrailers extends WasiResource implements TypesNamespace.FutureTrailers {
     #requested = false;
 
     subscribe(): any {
@@ -866,7 +869,7 @@ function mapFetchError(err: Error) {
     return { tag: "internal-error", val: err.message };
 }
 
-class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
+class FutureIncomingResponse extends WasiResource implements TypesNamespace.FutureIncomingResponse {
     #result: any = undefined;
     #promise: Promise<void> | null = null;
     #controller: AbortController | null = null;

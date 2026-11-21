@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import {
     SOCKET_DATAGRAM_STREAM_DISPOSE,
     SOCKET_DATAGRAM_STREAM_SUBSCRIBE,
@@ -64,7 +65,7 @@ import { IpAddressFamily } from "../../types/interfaces/wasi-sockets-network.js"
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 
 // Network class privately stores capabilities
-class Network implements NetworkNamespace.Network {
+class Network extends WasiResource implements NetworkNamespace.Network {
     // Compatibility with the resource placeholder in the bundled WASI 0.2.10 WIT.
     noop(): void {}
     #allowDnsLookup = true;
@@ -145,7 +146,10 @@ export const network: typeof NetworkNamespace & {
     },
 };
 
-class ResolveAddressStream implements IpNameLookupNamespace.ResolveAddressStream {
+class ResolveAddressStream
+    extends WasiResource
+    implements IpNameLookupNamespace.ResolveAddressStream
+{
     #id = 0;
     #data: Array<IpNameLookupNamespace.IpAddress> | null = null;
     #curItem = 0;
@@ -200,7 +204,7 @@ export const ipNameLookup: typeof IpNameLookupNamespace = {
     resolveAddresses,
 };
 
-class TcpSocket implements TcpNamespace.TcpSocket {
+class TcpSocket extends WasiResource implements TcpNamespace.TcpSocket {
     #id = 0;
     #network;
     #family;
@@ -427,7 +431,7 @@ export const tcp: typeof TcpNamespace = {
     TcpSocket,
 };
 
-class UdpSocket implements UdpNamespace.UdpSocket {
+class UdpSocket extends WasiResource implements UdpNamespace.UdpSocket {
     #id = 0;
     #network;
     #family;
@@ -532,7 +536,7 @@ const createUdpSocket = UdpSocket._create;
 // @ts-expect-error - Deleting static method
 delete UdpSocket._create;
 
-class IncomingDatagramStream implements UdpNamespace.IncomingDatagramStream {
+class IncomingDatagramStream extends WasiResource implements UdpNamespace.IncomingDatagramStream {
     #id = 0;
     #finalizer;
     static _create(id) {
@@ -563,7 +567,7 @@ const incomingDatagramStreamCreate = IncomingDatagramStream._create;
 // @ts-expect-error - Deleting static method
 delete IncomingDatagramStream._create;
 
-class OutgoingDatagramStream implements UdpNamespace.OutgoingDatagramStream {
+class OutgoingDatagramStream extends WasiResource implements UdpNamespace.OutgoingDatagramStream {
     #id = 0;
     #finalizer;
     static _create(id) {

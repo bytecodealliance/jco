@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import type { types as TypesNamespace } from "../../types/http.js";
 import {
     FUTURE_DISPOSE,
@@ -35,7 +36,7 @@ type Result<T, E> = TypesNamespace.Result<T, E>;
 const symbolDispose = Symbol.dispose || Symbol.for("dispose");
 export const _forbiddenHeaders = new Set(["connection", "keep-alive", "host"]);
 
-class IncomingBody implements TypesNamespace.IncomingBody {
+class IncomingBody extends WasiResource implements TypesNamespace.IncomingBody {
     #finished = false;
     #stream: InputStream | null = null;
     stream() {
@@ -64,7 +65,7 @@ const incomingBodyCreate = IncomingBody._create;
 // @ts-expect-error - Deleting static method
 delete IncomingBody._create;
 
-class IncomingRequest {
+class IncomingRequest extends WasiResource {
     #method;
     #pathWithQuery;
     #scheme;
@@ -105,7 +106,7 @@ const incomingRequestCreate = IncomingRequest._create;
 // @ts-expect-error - Deleting static method
 delete IncomingRequest._create;
 
-class FutureTrailers implements TypesNamespace.FutureTrailers {
+class FutureTrailers extends WasiResource implements TypesNamespace.FutureTrailers {
     #requested = false;
     subscribe() {
         return createPoll(CLOCKS_DURATION_SUBSCRIBE, null, 0n);
@@ -134,7 +135,7 @@ const futureTrailersCreate = FutureTrailers._create;
 // @ts-expect-error - Deleting static method
 delete FutureTrailers._create;
 
-class OutgoingResponse {
+class OutgoingResponse extends WasiResource {
     #body;
     /** @type {number} */ #statusCode = 200;
     /** @type {Fields} */ #headers;
@@ -144,6 +145,7 @@ class OutgoingResponse {
      * @param {Fields} headers
      */
     constructor(headers) {
+        super();
         fieldsLock(headers);
         this.#headers = headers;
     }
@@ -179,7 +181,7 @@ const outgoingResponseBody = OutgoingResponse._body;
 // @ts-expect-error - Deleting static method
 delete OutgoingResponse._body;
 
-class ResponseOutparam {
+class ResponseOutparam extends WasiResource {
     #setListener;
     static set(param, response) {
         param.#setListener(response);
@@ -196,7 +198,7 @@ delete ResponseOutparam._create;
 
 const defaultHttpTimeout = 600_000_000_000n;
 
-class RequestOptions {
+class RequestOptions extends WasiResource {
     #connectTimeout = defaultHttpTimeout;
     #firstByteTimeout = defaultHttpTimeout;
     #betweenBytesTimeout = defaultHttpTimeout;
@@ -223,7 +225,7 @@ class RequestOptions {
 type Method = TypesNamespace.Method;
 type Scheme = TypesNamespace.Scheme;
 
-class OutgoingRequest implements TypesNamespace.OutgoingRequest {
+class OutgoingRequest extends WasiResource implements TypesNamespace.OutgoingRequest {
     #method: Method = { tag: "get" };
     #scheme: Scheme | undefined = undefined;
     #pathWithQuery: string | undefined = undefined;
@@ -232,6 +234,7 @@ class OutgoingRequest implements TypesNamespace.OutgoingRequest {
     #body: OutgoingBody;
     #bodyRequested = false;
     constructor(headers) {
+        super();
         fieldsLock(headers);
         this.#headers = headers;
         let contentLengthValues = this.#headers.get("content-length");
@@ -331,7 +334,7 @@ const outgoingRequestHandle = OutgoingRequest._handle;
 // @ts-expect-error - Deleting static method
 delete OutgoingRequest._handle;
 
-class OutgoingBody implements TypesNamespace.OutgoingBody {
+class OutgoingBody extends WasiResource implements TypesNamespace.OutgoingBody {
     #outputStream: OutputStream | null = null;
     #outputStreamId: number | null = null;
     #contentLength = undefined;
@@ -393,7 +396,7 @@ const outgoingBodyCreate = OutgoingBody._create;
 // @ts-expect-error - Deleting static method
 delete OutgoingBody._create;
 
-class IncomingResponse implements TypesNamespace.IncomingResponse {
+class IncomingResponse extends WasiResource implements TypesNamespace.IncomingResponse {
     #headers!: Fields;
     #status = 0;
     #bodyStream: IncomingBody | undefined;
@@ -430,7 +433,7 @@ const incomingResponseCreate = IncomingResponse._create;
 // @ts-expect-error - Deleting static method
 delete IncomingResponse._create;
 
-class FutureIncomingResponse implements TypesNamespace.FutureIncomingResponse {
+class FutureIncomingResponse extends WasiResource implements TypesNamespace.FutureIncomingResponse {
     #id;
     #finalizer;
     subscribe(): Pollable {
@@ -499,7 +502,7 @@ delete FutureIncomingResponse._create;
 type FieldName = TypesNamespace.FieldName;
 type FieldValue = TypesNamespace.FieldValue;
 
-class Fields {
+class Fields extends WasiResource {
     #immutable = false;
     #entries: [FieldName, FieldValue][] = [];
     #table = new Map<string, [FieldName, FieldValue][]>();

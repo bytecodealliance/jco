@@ -1,3 +1,4 @@
+import { WasiResource } from "../common/resource.js";
 import { types as TypesNamespace } from "../../types/filesystem.js";
 import {
     InputStream as IInputStream,
@@ -266,7 +267,7 @@ function getFileWriteBuffer(
     return newBuffer;
 }
 
-class DirectoryEntryStream implements BrowserDirectoryEntryStream {
+class DirectoryEntryStream extends WasiResource implements BrowserDirectoryEntryStream {
     idx = 0;
     entries: [string, FileDataEntry][] = [];
 
@@ -293,7 +294,7 @@ const descriptorEntryStreamCreate = DirectoryEntryStream._create;
 // @ts-expect-error - Deleting static method
 delete DirectoryEntryStream._create;
 
-class Descriptor implements BrowserFilesystemDescriptor {
+class Descriptor extends WasiResource implements BrowserFilesystemDescriptor {
     #stream: any;
     #entry!: FileDataEntry;
     #flags: TypesNamespace.DescriptorFlags = {
