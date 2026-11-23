@@ -1849,6 +1849,7 @@ impl AsyncFutureIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let future_drop_fn = self.name();
+                let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
                 let remove_future_end_from_table_fn =
                     render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
                 let is_writable = matches!(self, Self::FutureDropWritable);
@@ -1856,6 +1857,11 @@ impl AsyncFutureIntrinsic {
                     render_args.require_intrinsic(Self::FutureWritableEndClass)
                 } else {
                     render_args.require_intrinsic(Self::FutureReadableEndClass)
+                };
+                let busy_drop_msg = if is_writable {
+                    "cannot drop busy future"
+                } else {
+                    "cannot remove busy future"
                 };
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -1868,14 +1874,25 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        const futureEnd = {remove_future_end_from_table_fn}({{
+                        const futureEnd = {get_future_end_fn}({{
                             tableIdx: futureTableIdx,
-                            futureWaitableIdx: futureEndWaitableIdx
+                            futureEndWaitableIdx
                         }});
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new {runtime_error_class}('invalid future end, expected [{future_end_class}]');
                         }}
 
+                        if (futureEnd.isCopying()) {{
+                            throw new {runtime_error_class}('{busy_drop_msg}');
+                        }}
+
+                        const removedFutureEnd = {remove_future_end_from_table_fn}({{
+                            tableIdx: futureTableIdx,
+                            futureWaitableIdx: futureEndWaitableIdx
+                        }});
+                        if (removedFutureEnd !== futureEnd) {{
+                            throw new Error('removed future end does not match validated future end');
+                        }}
                         futureEnd.drop();
                     }}
                 "#));
