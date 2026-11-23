@@ -36,7 +36,7 @@ to the `@bytecodealliance/preview2-shim` package. This package can be installed 
 runtime usage. This shim layer supports both Node.js and browsers.
 
 Rust callers can select the same binding options with
-`TranspileConfig::for_jco_cli`. The preset tracks CLI and `jco-transpile` defaults,
+`config::presets::jco_transpile`. The preset tracks CLI and `jco-transpile` defaults,
 which may change even in a patch release. See the
 [Rust crate's usage example](../../crates/js-component-bindgen/README.md#using-the-jco-cli-defaults-from-rust).
 

@@ -10,7 +10,6 @@ use wit_bindgen_core::wit_parser::Function;
 use wit_component::DecodedWasm;
 use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
 
-mod cli;
 mod core;
 #[cfg(feature = "embedded-cm-runtime")]
 mod embedded_runtime;
@@ -18,6 +17,7 @@ mod files;
 mod transpile_bindgen;
 mod ts_bindgen;
 
+pub mod config;
 pub mod esm_bindgen;
 pub mod function_bindgen;
 pub mod names;

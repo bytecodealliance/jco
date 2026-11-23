@@ -69,7 +69,7 @@ not change the generated JavaScript.
 
 ### Using the Jco CLI defaults from Rust
 
-`TranspileConfig::for_jco_cli` selects the binding options for a default
+`config::presets::jco_transpile` selects the binding options for a default
 `jco transpile` invocation. Supply the output name the CLI derives from the
 input filename. Pass `None` for direct ES module output, or
 `Some(InstantiationMode::Async)` or `Some(InstantiationMode::Sync)` for the
@@ -77,9 +77,9 @@ corresponding `--instantiation` mode. Select the mode when constructing the
 preset so its import mappings and trampoline settings agree.
 
 ```rust
-use js_component_bindgen::{TranspileConfig, transpile_with_config};
+use js_component_bindgen::{config::presets::jco_transpile, transpile_with_config};
 
-let config = TranspileConfig::for_jco_cli("service", None);
+let config = jco_transpile("service", None);
 let transpiled = transpile_with_config(component, config)?;
 ```
 
