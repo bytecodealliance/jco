@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-51608849.js";
+            window.path_to_searchindex_js = "searchindex-0845afb9.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-332598f4.js"></script>
@@ -204,6 +204,10 @@ fn();
 <p>Components relying on WASI bindings will contain external WASI imports, which are automatically updated
 to the <code>@bytecodealliance/preview2-shim</code> package. This package can be installed from npm separately for
 runtime usage. This shim layer supports both Node.js and browsers.</p>
+<p>Rust callers can select the same binding options with
+<code>config::presets::jco_transpile</code>. The preset tracks CLI and <code>jco-transpile</code> defaults,
+which may change even in a patch release. See the
+<a href="../../crates/js-component-bindgen/README.html#using-the-jco-cli-defaults-from-rust">Rust crate’s usage example</a>.</p>
 <h2 id="options"><a class="header" href="#options">Options</a></h2>
 <p>Options include:</p>
 <ul>
