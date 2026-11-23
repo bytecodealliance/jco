@@ -415,13 +415,39 @@ mod tests {
     #[test]
     #[ignore = "requires built workspace jco and jco-transpile packages"]
     fn rust_preset_matches_cli() {
-        for (flags, mode) in [
-            (&[][..], None),
+        let preset = || jco_transpile("flavorful.component");
+        for (flags, config) in [
+            (&[][..], preset().build()),
+            (
+                &["--instantiation"],
+                preset()
+                    .instantiation_mode(InstantiationMode::Async)
+                    .build(),
+            ),
             (
                 &["--instantiation", "async"],
-                Some(InstantiationMode::Async),
+                preset()
+                    .instantiation_mode(InstantiationMode::Async)
+                    .build(),
             ),
-            (&["--instantiation", "sync"], Some(InstantiationMode::Sync)),
+            (
+                &["--instantiation", "sync"],
+                preset().instantiation_mode(InstantiationMode::Sync).build(),
+            ),
+            (
+                &[
+                    "--map",
+                    "wasi:random/*=./random.js#*",
+                    "--base64-cutoff",
+                    "0",
+                    "--no-component-error-wrapping",
+                ],
+                preset()
+                    .map([("wasi:random/*".into(), "./random.js#*".into())].into())
+                    .base64_cutoff(0)
+                    .no_component_error_wrapping(true)
+                    .build(),
+            ),
         ] {
             let output = Command::new("node")
                 .current_dir(env!("CARGO_MANIFEST_DIR"))
@@ -445,7 +471,7 @@ mod tests {
             let options: GenerateOptions =
                 serde_json::from_slice(&output.stdout).expect("read the CLI's bindgen options");
             assert_eq!(
-                jco_transpile("flavorful.component", mode),
+                config,
                 TranspileConfig::from(options),
                 "jco transpile {flags:?}",
             );
