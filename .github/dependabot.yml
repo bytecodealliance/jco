@@ -44,6 +44,11 @@ updates:
         patterns:
           - 'napi'
           - 'napi-*'
+      # The oxc crates share types and are pinned to one exact version, so they must move together.
+      oxc:
+        patterns:
+          - 'oxc'
+          - 'oxc_*'
       upstream-wasm:
         patterns:
           - 'wasm*'
