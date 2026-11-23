@@ -72,8 +72,8 @@ not change the generated JavaScript.
 `config::presets::jco_transpile` selects the binding options for a default
 `jco transpile` invocation. Supply the output name the CLI derives from the
 input filename and call `.build()` for direct ES module output. To export an
-explicit instantiation function, set `.instantiation_mode(InstantiationMode::Async)`
-or `.instantiation_mode(InstantiationMode::Sync)` before building. The CLI flag
+explicit instantiation function, use `config::presets::jco_transpile_with_instantiation` with
+`InstantiationMode::Async` or `InstantiationMode::Sync`. The CLI flag
 `--instantiation` without a value selects async instantiation. The mode determines
 the default import mappings and trampoline settings.
 
@@ -86,9 +86,11 @@ let transpiled = transpile_with_config(component, config)?;
 
 The ES module preset includes the CLI's Preview 2, Preview 3, and Node
 capability import maps. It also selects the CLI's base64 inlining threshold,
-component-error wrapping, and TypeScript declaration defaults. The builder accepts
-overrides through `.map(...)`, `.base64_cutoff(...)`, and `.no_component_error_wrapping(...)`.
-For other options, edit the fields on the built `TranspileConfig` before transpiling.
+component-error wrapping, and TypeScript declaration defaults. Both presets return
+the standard `TranspileConfigBuilder` with `opts` and `type_generation` already
+set. Chain settings such as `.call_tracking(true)` or `.runtime_profile(...)`
+before `.build()`. To edit individual preset values, such as an import mapping,
+modify `config.opts` or `config.type_generation` on the built configuration.
 Enable the `embedded-cm-runtime` Cargo feature to bundle the runtime used by the CLI.
 
 **Compatibility.** The preset follows the Jco and `jco-transpile` sources
