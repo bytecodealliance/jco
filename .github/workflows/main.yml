@@ -106,6 +106,9 @@ jobs:
       - name: Build jco-transpile
         run: pnpm --filter '@bytecodealliance/jco-transpile' run build
 
+      - name: Check Rust preset against workspace CLI options
+        run: cargo test --locked -p js-component-bindgen-component --lib -- --include-ignored
+
       - name: Verify jco-std generated declarations
         run: |
           pnpm --filter '@bytecodealliance/jco-std' --fail-if-no-match run build:ts

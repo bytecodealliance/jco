@@ -756,6 +756,8 @@ version = "1.10.0"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
+ "serde",
+ "serde_json",
  "wasmtime-environ",
  "wat",
  "wit-bindgen",
