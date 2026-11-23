@@ -10,6 +10,7 @@ use wit_bindgen_core::wit_parser::Function;
 use wit_component::DecodedWasm;
 use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
 
+mod cli;
 mod core;
 #[cfg(feature = "embedded-cm-runtime")]
 mod embedded_runtime;
@@ -78,7 +79,7 @@ pub struct ComponentInfo {
 
 /// Controls declaration contracts that embedding tools may need to stabilize independently.
 /// All fields default to true; the Jco frontend selects its compatibility defaults explicitly.
-#[derive(Debug, Clone, Copy, bon::Builder)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, bon::Builder)]
 #[non_exhaustive]
 pub struct TypeGenerationConfig {
     /// Require nominal identities for resources supplied by the bindings.
@@ -148,7 +149,7 @@ impl RuntimeProfile {
 ///
 /// `TranspileOpts` keeps its published fields so existing struct literals remain
 /// valid. New options belong here, where fields can be added compatibly.
-#[derive(Debug, Default, Clone, bon::Builder)]
+#[derive(Debug, Default, Clone, PartialEq, Eq, bon::Builder)]
 #[non_exhaustive]
 pub struct TranspileConfig {
     /// Options shared with `transpile` and [`generate_types`].
