@@ -409,44 +409,51 @@ impl From<AsyncMode> for js_component_bindgen::AsyncMode {
 #[cfg(test)]
 mod tests {
     use super::{GenerateOptions, TranspileConfig, parse_package_spec};
-    use js_component_bindgen::{InstantiationMode, config::presets::jco_transpile};
+    use js_component_bindgen::{
+        InstantiationMode,
+        config::presets::{jco_transpile, jco_transpile_with_instantiation},
+    };
     use std::process::Command;
 
     #[test]
     #[ignore = "requires built workspace jco and jco-transpile packages"]
     fn rust_preset_matches_cli() {
-        let preset = || jco_transpile("flavorful.component");
+        let name = "flavorful.component";
+        let instantiation = |mode| jco_transpile_with_instantiation(name, mode).build();
+        let mut custom = jco_transpile(name).call_tracking(true).build();
+        custom
+            .opts
+            .map
+            .as_mut()
+            .unwrap()
+            .insert("wasi:random/*".into(), "./random.js#*".into());
+        custom.opts.base64_cutoff = 0;
+        custom.opts.no_component_error_wrapping = true;
+
         for (flags, config) in [
-            (&[][..], preset().build()),
+            (&[][..], jco_transpile(name).build()),
             (
                 &["--instantiation"],
-                preset()
-                    .instantiation_mode(InstantiationMode::Async)
-                    .build(),
+                instantiation(InstantiationMode::Async),
             ),
             (
                 &["--instantiation", "async"],
-                preset()
-                    .instantiation_mode(InstantiationMode::Async)
-                    .build(),
+                instantiation(InstantiationMode::Async),
             ),
             (
                 &["--instantiation", "sync"],
-                preset().instantiation_mode(InstantiationMode::Sync).build(),
+                instantiation(InstantiationMode::Sync),
             ),
             (
                 &[
+                    "--call-tracking",
                     "--map",
                     "wasi:random/*=./random.js#*",
                     "--base64-cutoff",
                     "0",
                     "--no-component-error-wrapping",
                 ],
-                preset()
-                    .map([("wasi:random/*".into(), "./random.js#*".into())].into())
-                    .base64_cutoff(0)
-                    .no_component_error_wrapping(true)
-                    .build(),
+                custom,
             ),
         ] {
             let output = Command::new("node")
