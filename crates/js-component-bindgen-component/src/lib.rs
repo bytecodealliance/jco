@@ -38,7 +38,16 @@ mod bindings {
 
     use super::JsComponentBindgenComponent;
     wit_bindgen::generate!({
-        world: "js-component-bindgen"
+        world: "js-component-bindgen",
+        // The parity test reads the options captured at the JavaScript/Wasm boundary.
+        additional_type_attributes: {
+            "js-component-bindgen/generate-options": [#[cfg_attr(test, derive(serde::Deserialize), serde(rename_all = "camelCase"))]],
+            "js-component-bindgen/instantiation-mode": [#[cfg_attr(test, derive(serde::Deserialize), serde(tag = "tag", rename_all = "lowercase"))]],
+            "js-component-bindgen/bindings-mode": [#[cfg_attr(test, derive(serde::Deserialize), serde(tag = "tag", rename_all = "kebab-case"))]],
+            "js-component-bindgen/async-mode": [#[cfg_attr(test, derive(serde::Deserialize), serde(tag = "tag", content = "val", rename_all = "lowercase"))]],
+            "js-component-bindgen/async-imports-exports": [#[cfg_attr(test, derive(serde::Deserialize))]],
+            "js-component-bindgen/runtime-profile": [#[cfg_attr(test, derive(serde::Deserialize), serde(rename_all = "lowercase"))]],
+        }
     });
     export!(JsComponentBindgenComponent);
 }
@@ -57,76 +66,13 @@ struct JsComponentBindgenComponent;
 impl bindings::Guest for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         let component = wat::parse_bytes(&component).map_err(|e| format!("{e}"))?;
-        let opts = js_component_bindgen::TranspileOpts::builder()
-            .name(options.name)
-            .no_typescript(options.no_typescript.unwrap_or(false))
-            .maybe_instantiation_mode(options.instantiation.map(Into::into))
-            .maybe_map(options.map.map(|map| map.into_iter().collect()))
-            .nodejs_compat_disabled(options.no_nodejs_compat.unwrap_or(false))
-            .base64_cutoff(options.base64_cutoff.unwrap_or(5000) as usize)
-            .tla_compat(
-                options
-                    .tla_compat
-                    .unwrap_or(options.compat.unwrap_or(false)),
-            )
-            .valid_lifting_optimization(options.valid_lifting_optimization.unwrap_or(false))
-            .tracing(options.tracing.unwrap_or(false))
-            .no_component_error_wrapping(options.no_component_error_wrapping.unwrap_or(false))
-            .no_namespaced_exports(options.no_namespaced_exports.unwrap_or(false))
-            .multi_memory(options.multi_memory.unwrap_or(false))
-            .supports_wasm_exnref(options.bindgen_enable_wasm_exnref.unwrap_or(false))
-            .maybe_import_bindings(options.import_bindings.map(Into::into))
-            .guest(options.guest.unwrap_or(false))
-            .maybe_async_mode(options.async_mode.map(Into::into))
-            .strict(options.strict.unwrap_or(false))
-            .perf_strings_skip_copy_utf8_validation(
-                options
-                    .perf_strings_skip_copy_utf8_validation
-                    .unwrap_or(false),
-            )
-            .perf_strings_skip_copy_utf16_validation(
-                options
-                    .perf_strings_skip_copy_utf16_validation
-                    .unwrap_or(false),
-            )
-            .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
-            .variants_inline_cases(options.variants_inline_cases.unwrap_or(false))
-            .use_namespace_objects(options.use_namespace_objects.unwrap_or(false))
-            .enum_values_screaming_snake_case(
-                options.enum_values_screaming_snake_case.unwrap_or(false),
-            )
-            .asmjs(options.asmjs.unwrap_or(false))
-            .emit_conditional_suspending_wasm(
-                options.emit_conditional_suspending_wasm.unwrap_or(false),
-            )
-            .build();
-
         let js_component_bindgen::Transpiled {
             files,
             imports,
             mut exports,
-        } = transpile_with_config(
-            &component,
-            TranspileConfig::builder()
-                .opts(opts)
-                .call_tracking(options.call_tracking.unwrap_or(false))
-                .optional_result_payloads(options.optional_result_payloads.unwrap_or(false))
-                .type_generation(
-                    js_component_bindgen::TypeGenerationConfig::builder()
-                        .nominal_resources(options.nominal_resources.unwrap_or(true))
-                        .async_imports_may_return_sync(
-                            options.async_imports_may_return_sync.unwrap_or(true),
-                        )
-                        .typed_error_classes(options.typed_error_classes.unwrap_or(true))
-                        .separate_interface_types(options.separate_interface_types.unwrap_or(true))
-                        .build(),
-                )
-                .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
-                .runtime_profile(options.runtime_profile.map(Into::into).unwrap_or_default())
-                .build(),
-        )
-        .map_err(|e| format!("{e:?}"))
-        .map_err(|e| e.to_string())?;
+        } = transpile_with_config(&component, options.into())
+            .map_err(|e| format!("{e:?}"))
+            .map_err(|e| e.to_string())?;
 
         Ok(Transpiled {
             files,
@@ -354,6 +300,72 @@ fn parse_package_spec(spec: &str) -> Option<String> {
         .map(|group| group.main.name.to_string())
 }
 
+impl From<GenerateOptions> for TranspileConfig {
+    fn from(options: GenerateOptions) -> Self {
+        let opts = js_component_bindgen::TranspileOpts::builder()
+            .name(options.name)
+            .no_typescript(options.no_typescript.unwrap_or(false))
+            .maybe_instantiation_mode(options.instantiation.map(Into::into))
+            .maybe_map(options.map.map(|map| map.into_iter().collect()))
+            .nodejs_compat_disabled(options.no_nodejs_compat.unwrap_or(false))
+            .base64_cutoff(options.base64_cutoff.unwrap_or(5000) as usize)
+            .tla_compat(
+                options
+                    .tla_compat
+                    .unwrap_or(options.compat.unwrap_or(false)),
+            )
+            .valid_lifting_optimization(options.valid_lifting_optimization.unwrap_or(false))
+            .tracing(options.tracing.unwrap_or(false))
+            .no_component_error_wrapping(options.no_component_error_wrapping.unwrap_or(false))
+            .no_namespaced_exports(options.no_namespaced_exports.unwrap_or(false))
+            .multi_memory(options.multi_memory.unwrap_or(false))
+            .supports_wasm_exnref(options.bindgen_enable_wasm_exnref.unwrap_or(false))
+            .maybe_import_bindings(options.import_bindings.map(Into::into))
+            .guest(options.guest.unwrap_or(false))
+            .maybe_async_mode(options.async_mode.map(Into::into))
+            .strict(options.strict.unwrap_or(false))
+            .perf_strings_skip_copy_utf8_validation(
+                options
+                    .perf_strings_skip_copy_utf8_validation
+                    .unwrap_or(false),
+            )
+            .perf_strings_skip_copy_utf16_validation(
+                options
+                    .perf_strings_skip_copy_utf16_validation
+                    .unwrap_or(false),
+            )
+            .flags_as_bigint(options.flags_as_bigint.unwrap_or(false))
+            .variants_inline_cases(options.variants_inline_cases.unwrap_or(false))
+            .use_namespace_objects(options.use_namespace_objects.unwrap_or(false))
+            .enum_values_screaming_snake_case(
+                options.enum_values_screaming_snake_case.unwrap_or(false),
+            )
+            .asmjs(options.asmjs.unwrap_or(false))
+            .emit_conditional_suspending_wasm(
+                options.emit_conditional_suspending_wasm.unwrap_or(false),
+            )
+            .build();
+
+        TranspileConfig::builder()
+            .opts(opts)
+            .call_tracking(options.call_tracking.unwrap_or(false))
+            .optional_result_payloads(options.optional_result_payloads.unwrap_or(false))
+            .type_generation(
+                js_component_bindgen::TypeGenerationConfig::builder()
+                    .nominal_resources(options.nominal_resources.unwrap_or(true))
+                    .async_imports_may_return_sync(
+                        options.async_imports_may_return_sync.unwrap_or(true),
+                    )
+                    .typed_error_classes(options.typed_error_classes.unwrap_or(true))
+                    .separate_interface_types(options.separate_interface_types.unwrap_or(true))
+                    .build(),
+            )
+            .maybe_cm_runtime_es_module(options.cm_runtime_es_module)
+            .runtime_profile(options.runtime_profile.map(Into::into).unwrap_or_default())
+            .build()
+    }
+}
+
 impl From<RuntimeProfile> for js_component_bindgen::RuntimeProfile {
     fn from(value: RuntimeProfile) -> Self {
         match value {
@@ -396,7 +408,49 @@ impl From<AsyncMode> for js_component_bindgen::AsyncMode {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_package_spec;
+    use super::{GenerateOptions, TranspileConfig, parse_package_spec};
+    use js_component_bindgen::InstantiationMode;
+    use std::process::Command;
+
+    #[test]
+    #[ignore = "requires built workspace jco and jco-transpile packages"]
+    fn rust_preset_matches_cli() {
+        for (flags, mode) in [
+            (&[][..], None),
+            (
+                &["--instantiation", "async"],
+                Some(InstantiationMode::Async),
+            ),
+            (&["--instantiation", "sync"], Some(InstantiationMode::Sync)),
+        ] {
+            let output = Command::new("node")
+                .current_dir(env!("CARGO_MANIFEST_DIR"))
+                .args([
+                    "--import",
+                    "./tests/capture-cli-options.mjs",
+                    "../../packages/jco/dist/jco.js",
+                    "transpile",
+                    "../../packages/jco/test/fixtures/components/flavorful.component.wasm",
+                    "--out-dir",
+                    "../../target/cli-preset-test",
+                ])
+                .args(flags)
+                .output()
+                .expect("run the workspace CLI");
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let options: GenerateOptions =
+                serde_json::from_slice(&output.stdout).expect("read the CLI's bindgen options");
+            assert_eq!(
+                TranspileConfig::for_jco_cli("flavorful.component", mode),
+                TranspileConfig::from(options),
+                "jco transpile {flags:?}",
+            );
+        }
+    }
 
     #[test]
     fn validates_package_specs_with_the_wit_parser() {

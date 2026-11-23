@@ -17,3 +17,7 @@ wit-component = { workspace = true }
 wat = { workspace = true, features = [ "component-model" ]}
 
 js-component-bindgen = { path = "../js-component-bindgen", features = ["external-runtime", "embedded-cm-runtime"] }
+
+[dev-dependencies]
+serde = { workspace = true }
+serde_json = { workspace = true }
