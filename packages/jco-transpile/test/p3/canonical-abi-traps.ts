@@ -657,6 +657,26 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     }
 
+    test.concurrent.each([
+        ['readable', /cannot remove busy future/],
+        ['writable', /cannot drop busy future/],
+    ] as const)('future.drop-%s traps before the completion event is delivered', async (end, message) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: `future-drop-undelivered-event-${end}`,
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'future-drop-undelivered-event.wat'),
+            },
+        });
+        try {
+            const err = await rejection(Promise.resolve().then(() => instance.run(end === 'writable')));
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, message);
+        } finally {
+            await cleanup();
+        }
+    });
+
     // A copy completed by the peer leaves its end busy until the completion event
     // is delivered: another copy on that end must trap rather than be handed the
     // event, while delivering it (from a waitable set, or by cancelling) frees the end.

@@ -1,0 +1,37 @@
+(component
+  (core module $memory (memory (export "mem") 1))
+  (core instance $memory (instantiate $memory))
+  (type $future (future u8))
+  (core func $new (canon future.new $future))
+  (core func $read (canon future.read $future async (memory (core memory $memory "mem"))))
+  (core func $write (canon future.write $future async (memory (core memory $memory "mem"))))
+  (core func $drop-r (canon future.drop-readable $future))
+  (core func $drop-w (canon future.drop-writable $future))
+  (core module $guest
+    (import "" "new" (func $new (result i64)))
+    (import "" "read" (func $read (param i32 i32) (result i32)))
+    (import "" "write" (func $write (param i32 i32) (result i32)))
+    (import "" "drop-r" (func $drop-r (param i32)))
+    (import "" "drop-w" (func $drop-w (param i32)))
+    (func (export "run") (param $write-first i32)
+      (local $ends i64) (local $reader i32) (local $writer i32)
+      (local.set $ends (call $new))
+      (local.set $reader (i32.wrap_i64 (local.get $ends)))
+      (local.set $writer (i32.wrap_i64 (i64.shr_u (local.get $ends) (i64.const 32))))
+      ;; The first operation blocks (-1), then its peer completes the copy (0).
+      (if (local.get $write-first)
+        (then
+          (if (i32.ne (call $write (local.get $writer) (i32.const 0)) (i32.const -1)) (then unreachable))
+          (if (call $read (local.get $reader) (i32.const 1)) (then unreachable))
+          (call $drop-w (local.get $writer)))
+        (else
+          (if (i32.ne (call $read (local.get $reader) (i32.const 1)) (i32.const -1)) (then unreachable))
+          (if (call $write (local.get $writer) (i32.const 0)) (then unreachable))
+          (call $drop-r (local.get $reader))))))
+  (core instance $guest (instantiate $guest (with "" (instance
+    (export "new" (func $new))
+    (export "read" (func $read))
+    (export "write" (func $write))
+    (export "drop-r" (func $drop-r))
+    (export "drop-w" (func $drop-w))))))
+  (func (export "run") (param "write-first" bool) (canon lift (core func $guest "run"))))
