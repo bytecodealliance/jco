@@ -98,12 +98,12 @@ xshell = { version = "0.2.7", default-features = false }
 wasmtime-environ = { version = "50.0.1", features= [ "component-model", "compile", "anyhow" ] }
 
 wasm-encoder = { version = "0.263.0", default-features = false }
-wasm-metadata = { version = "0.262.0", default-features = false }
+wasm-metadata = { version = "0.263.0", default-features = false }
 wasmparser = { version = "0.263.0", default-features = false }
 wasmprinter = { version = "0.263.0", default-features = false }
 wit-encoder = { version = "0.263.0", default-features = false }
-wit-component = { version = "0.262.0", features = ["dummy-module"] }
-wit-parser = { version = "0.262.0", default-features = false }
+wit-component = { version = "0.263.0", features = ["dummy-module"] }
+wit-parser = { version = "0.263.0", default-features = false }
 
 wat = { version = "~1.263.0", default-features = false }
 
