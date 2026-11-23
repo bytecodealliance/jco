@@ -69,7 +69,7 @@ const MAX_FLAT_RESULTS: usize = 1;
 
 // TODO(breaking): replace this exhaustively constructible options type with the
 // non-exhaustive TranspileConfig at the next major release.
-/// Options for generating component bindings. See [`crate::TranspileConfig::for_jco_cli`]
+/// Options for generating component bindings. See [`crate::config::presets::jco_transpile`]
 /// for the Jco CLI preset.
 #[derive(Debug, Default, Clone, PartialEq, Eq, bon::Builder)]
 pub struct TranspileOpts {

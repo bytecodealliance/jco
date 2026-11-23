@@ -409,7 +409,7 @@ impl From<AsyncMode> for js_component_bindgen::AsyncMode {
 #[cfg(test)]
 mod tests {
     use super::{GenerateOptions, TranspileConfig, parse_package_spec};
-    use js_component_bindgen::InstantiationMode;
+    use js_component_bindgen::{InstantiationMode, config::presets::jco_transpile};
     use std::process::Command;
 
     #[test]
@@ -445,7 +445,7 @@ mod tests {
             let options: GenerateOptions =
                 serde_json::from_slice(&output.stdout).expect("read the CLI's bindgen options");
             assert_eq!(
-                TranspileConfig::for_jco_cli("flavorful.component", mode),
+                jco_transpile("flavorful.component", mode),
                 TranspileConfig::from(options),
                 "jco transpile {flags:?}",
             );
