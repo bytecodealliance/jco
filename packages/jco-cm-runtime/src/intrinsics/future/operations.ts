@@ -473,6 +473,47 @@ export function futureCancelWrite(
     return finishCancel();
 }
 
+/** The end a future drop expects, and how it reports a busy end. */
+interface FutureDropDirection {
+    readonly end: 'FutureReadableEnd' | 'FutureWritableEnd';
+    readonly busyDrop: string;
+}
+const DROP_READABLE: FutureDropDirection = { end: 'FutureReadableEnd', busyDrop: 'cannot remove busy future' };
+const DROP_WRITABLE: FutureDropDirection = { end: 'FutureWritableEnd', busyDrop: 'cannot drop busy future' };
+
+/** Validate the endpoint before releasing either of its table entries. */
+function futureDrop(
+    _context: FutureDropReadableContext | FutureDropWritableContext,
+    direction: FutureDropDirection,
+    ctx: FutureOperationOptions,
+    futureEndWaitableIdx: number,
+): void {
+    const { componentIdx, futureTableIdx } = ctx;
+
+    const cstate = getOrCreateAsyncState(_context.tables.lookup, componentIdx);
+    if (!cstate.mayLeave) {
+        throw new Error('component instance is not marked as may leave');
+    }
+
+    const futureEnd = getFutureEnd(_context.tables, { tableIdx: futureTableIdx, futureEndWaitableIdx });
+    if (!(futureEnd instanceof _context.FutureEnd)) {
+        throw new _context.RuntimeError(`invalid future end, expected [${direction.end}]`);
+    }
+    // A peer can empty the buffer before this end receives its completion event.
+    if (futureEnd.isCopying()) {
+        throw new _context.RuntimeError(direction.busyDrop);
+    }
+
+    const removedFutureEnd = removeFutureEndFromTable(_context.tables, {
+        tableIdx: futureTableIdx,
+        futureWaitableIdx: futureEndWaitableIdx,
+    });
+    if (removedFutureEnd !== futureEnd) {
+        throw new Error('removed future end does not match validated future end');
+    }
+    futureEnd.drop();
+}
+
 /**
  * Implements `canon future.drop-readable`.
  * Remove and drop the readable endpoint from its owning tables.
@@ -483,22 +524,7 @@ export function futureDropReadable(
     futureEndWaitableIdx: number,
 ): void {
     DEBUG: debugLog('[futureDropReadable()] args', { ctx });
-    const { componentIdx, futureTableIdx } = ctx;
-
-    const cstate = getOrCreateAsyncState(_context.tables.lookup, componentIdx);
-    if (!cstate.mayLeave) {
-        throw new Error('component instance is not marked as may leave');
-    }
-
-    const futureEnd = removeFutureEndFromTable(_context.tables, {
-        tableIdx: futureTableIdx,
-        futureWaitableIdx: futureEndWaitableIdx,
-    });
-    if (!(futureEnd instanceof _context.FutureEnd)) {
-        throw new _context.RuntimeError('invalid future end, expected [FutureReadableEnd]');
-    }
-
-    futureEnd.drop();
+    futureDrop(_context, DROP_READABLE, ctx, futureEndWaitableIdx);
 }
 
 /**
@@ -511,22 +537,7 @@ export function futureDropWritable(
     futureEndWaitableIdx: number,
 ): void {
     DEBUG: debugLog('[futureDropWritable()] args', { ctx });
-    const { componentIdx, futureTableIdx } = ctx;
-
-    const cstate = getOrCreateAsyncState(_context.tables.lookup, componentIdx);
-    if (!cstate.mayLeave) {
-        throw new Error('component instance is not marked as may leave');
-    }
-
-    const futureEnd = removeFutureEndFromTable(_context.tables, {
-        tableIdx: futureTableIdx,
-        futureWaitableIdx: futureEndWaitableIdx,
-    });
-    if (!(futureEnd instanceof _context.FutureEnd)) {
-        throw new _context.RuntimeError('invalid future end, expected [FutureWritableEnd]');
-    }
-
-    futureEnd.drop();
+    futureDrop(_context, DROP_WRITABLE, ctx, futureEndWaitableIdx);
 }
 
 /** Transfer a readable endpoint between component tables. */

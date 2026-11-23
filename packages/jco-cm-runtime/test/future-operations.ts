@@ -87,6 +87,16 @@ test.concurrent('canonical future new packs handles and async read/write use the
         s.FutureEnd.CopyResult.COMPLETED,
     );
     const read = future.getFutureEnd(s.ends, { tableIdx: 2, futureEndWaitableIdx: readIdx });
+    const dropRead = () =>
+        future.futureDropReadable(
+            { RuntimeError: s.core.RuntimeError, tables: s.tableContext, FutureEnd: s.FutureReadableEnd },
+            options,
+            readIdx,
+        );
+    expect(dropRead).toThrow(s.core.RuntimeError);
+    expect(dropRead).toThrow('cannot remove busy future');
+    expect(future.getFutureEnd(s.ends, { tableIdx: 2, futureEndWaitableIdx: readIdx })).toBe(read);
+    expect(s.tables[2].table.get(read.handle()!)).toBe(read);
     expect(read.getPendingEvent()).toEqual({
         code: s.core.asyncEventCode.FUTURE_READ,
         payload0: readIdx,
@@ -96,15 +106,65 @@ test.concurrent('canonical future new packs handles and async read/write use the
     expect(() => future.futureRead({ ...common, FutureEnd: s.FutureReadableEnd }, options, readIdx, 4)).toThrow(
         /previous read succeeded/,
     );
-    future.futureDropReadable(
-        { RuntimeError: s.core.RuntimeError, tables: s.tableContext, FutureEnd: s.FutureReadableEnd },
-        options,
-        readIdx,
-    );
+    dropRead();
     future.futureDropWritable(
         { RuntimeError: s.core.RuntimeError, tables: s.tableContext, FutureEnd: s.FutureWritableEnd },
         options,
         writeIdx,
+    );
+    expect(s.tables[2].table.size()).toBe(0);
+});
+
+test.concurrent('a writable future end stays busy until its completed write is delivered', () => {
+    const s = create();
+    s.addTable(0, 2);
+    const tasks = taskLookup();
+    const packed = future.futureNew(
+        { taskLookup: tasks, lookup: s.lookup, creation: s.creation },
+        { componentIdx: 0, futureTableIdx: 2, elemMeta: scalar },
+    );
+    const readIdx = Number(packed & 0xffffffffn),
+        writeIdx = Number(packed >> 32n),
+        memory = { buffer: new ArrayBuffer(16) };
+    const common = {
+        RuntimeError: s.core.RuntimeError,
+        lookup: s.lookup,
+        taskLookup: tasks,
+        ends: s.ends,
+        events: s.core.asyncEventCode,
+        Base: s.FutureEnd,
+    };
+    const options = {
+        componentIdx: 0,
+        futureTableIdx: 2,
+        isAsync: true,
+        stringEncoding: 'utf8',
+        getMemoryFn: () => memory,
+    };
+    expect(future.futureWrite({ ...common, FutureEnd: s.FutureWritableEnd }, options, writeIdx, 0)).toBe(0xffffffff);
+    expect(future.futureRead({ ...common, FutureEnd: s.FutureReadableEnd }, options, readIdx, 4)).toBe(
+        s.FutureEnd.CopyResult.COMPLETED,
+    );
+    const write = future.getFutureEnd(s.ends, { tableIdx: 2, futureEndWaitableIdx: writeIdx });
+    const dropWrite = () =>
+        future.futureDropWritable(
+            { RuntimeError: s.core.RuntimeError, tables: s.tableContext, FutureEnd: s.FutureWritableEnd },
+            options,
+            writeIdx,
+        );
+    expect(dropWrite).toThrow(s.core.RuntimeError);
+    expect(dropWrite).toThrow('cannot drop busy future');
+    expect(s.tables[2].table.get(write.handle()!)).toBe(write);
+    expect(write.getPendingEvent()).toEqual({
+        code: s.core.asyncEventCode.FUTURE_WRITE,
+        payload0: writeIdx,
+        payload1: s.FutureEnd.CopyResult.COMPLETED,
+    });
+    dropWrite();
+    future.futureDropReadable(
+        { RuntimeError: s.core.RuntimeError, tables: s.tableContext, FutureEnd: s.FutureReadableEnd },
+        options,
+        readIdx,
     );
     expect(s.tables[2].table.size()).toBe(0);
 });
