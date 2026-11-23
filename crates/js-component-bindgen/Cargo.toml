@@ -64,7 +64,7 @@ oxc_ast = { version = "=0.157.0", default-features = false, optional = true }
 oxc_codegen = { version = "=0.157.0", default-features = false, optional = true }
 oxc_minifier = { version = "=0.157.0", default-features = false, optional = true }
 oxc_parser = { version = "=0.157.0", default-features = false, optional = true }
-oxc_semantic = { version = "=0.157.0", default-features = false, optional = true }
+oxc_semantic = { version = "=0.158.0", default-features = false, optional = true }
 oxc_span = { version = "=0.157.0", default-features = false, optional = true }
 oxc_str = { version = "=0.157.0", default-features = false, optional = true }
 
