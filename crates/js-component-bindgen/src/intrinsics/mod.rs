@@ -2620,6 +2620,32 @@ mod tests {
     }
 
     #[test]
+    fn future_drop_rejects_busy_ends_before_table_removal() {
+        for (intrinsic, error) in [
+            (
+                AsyncFutureIntrinsic::FutureDropReadable,
+                "cannot remove busy future",
+            ),
+            (
+                AsyncFutureIntrinsic::FutureDropWritable,
+                "cannot drop busy future",
+            ),
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncFuture(intrinsic));
+            let busy_check = source
+                .find("if (futureEnd.isCopying()) {")
+                .expect("future drop should reject an active copy");
+            let removal = source
+                .find("const removedFutureEnd = removeFutureEndFromTable(")
+                .expect("future drop should remove a validated idle end");
+
+            assert!(source.contains(&format!("throw new WebAssemblyRuntimeError('{error}');")));
+            assert!(busy_check < removal, "busy validation must precede removal");
+            assert!(source.contains("if (removedFutureEnd !== futureEnd) {"));
+        }
+    }
+
+    #[test]
     fn stream_copy_rejects_busy_ends_before_taking_a_pending_event() {
         for intrinsic in [
             AsyncStreamIntrinsic::StreamReadableEndClass,
