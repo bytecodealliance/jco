@@ -69,7 +69,9 @@ const MAX_FLAT_RESULTS: usize = 1;
 
 // TODO(breaking): replace this exhaustively constructible options type with the
 // non-exhaustive TranspileConfig at the next major release.
-#[derive(Debug, Default, Clone, bon::Builder)]
+/// Options for generating component bindings. See [`crate::TranspileConfig::for_jco_cli`]
+/// for the Jco CLI preset.
+#[derive(Debug, Default, Clone, PartialEq, Eq, bon::Builder)]
 pub struct TranspileOpts {
     pub name: String,
     /// Disables generation of `*.d.ts` files and instead only generates `*.js`
@@ -179,7 +181,7 @@ impl TranspileOpts {
     }
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum AsyncMode {
     #[default]
@@ -190,7 +192,7 @@ pub enum AsyncMode {
     },
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum InstantiationMode {
     #[default]
@@ -214,7 +216,7 @@ enum CallType {
     AsyncCalleeResourceDispatch,
 }
 
-#[derive(Default, Clone, Debug)]
+#[derive(Default, Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum BindingsMode {
     Hybrid,

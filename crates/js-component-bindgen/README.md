@@ -67,6 +67,34 @@ task-named variants remain available for exhaustive matches. This feature is
 independent of `external-runtime`; it controls the public Rust names and does
 not change the generated JavaScript.
 
+### Using the Jco CLI defaults from Rust
+
+`TranspileConfig::for_jco_cli` selects the binding options for a default
+`jco transpile` invocation. Supply the output name the CLI derives from the
+input filename. Pass `None` for direct ES module output, or
+`Some(InstantiationMode::Async)` or `Some(InstantiationMode::Sync)` for the
+corresponding `--instantiation` mode. Select the mode when constructing the
+preset so its import mappings and trampoline settings agree.
+
+```rust
+use js_component_bindgen::{TranspileConfig, transpile_with_config};
+
+let config = TranspileConfig::for_jco_cli("service", None);
+let transpiled = transpile_with_config(component, config)?;
+```
+
+The ES module preset includes the CLI's Preview 2, Preview 3, and Node
+capability import maps. It also selects the CLI's base64 inlining threshold,
+component-error wrapping, and TypeScript declaration defaults. You can override
+individual fields on the returned configuration before transpiling. Enable the
+`embedded-cm-runtime` Cargo feature to bundle the runtime used by the CLI.
+
+**Compatibility.** The preset follows the Jco and `jco-transpile` sources
+corresponding to the installed crate. Any preset value may change in any
+release, including patch releases. An upgrade can break consumers of previously
+generated bindings. Pin the crate version for reproducible output or set the
+options your application depends on explicitly.
+
 ### Bundling the jco runtime
 
 The opt-in `embedded-cm-runtime` Cargo feature replaces the inline intrinsics
