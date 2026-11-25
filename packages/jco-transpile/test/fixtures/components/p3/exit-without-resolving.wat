@@ -1,7 +1,6 @@
 ;; The $Tester component of upstream component-model
-;; test/async/exit-without-resolving.wast (#767). Jco skips that WAST fixture
-;; because its synchronous case reports deadlock instead of the synchronous
-;; blocking trap; canonical-abi-traps.ts runs all three cases against this copy.
+;; test/async/exit-without-resolving.wast (#767). canonical-abi-traps.ts runs
+;; each of its three cases against this copy, in addition to the WAST itself.
 (component
   (component $C
     (core module $Core
