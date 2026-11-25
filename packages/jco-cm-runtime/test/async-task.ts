@@ -922,7 +922,7 @@ test.concurrent('stopping a task rejects completion before its host import retur
 });
 
 test.concurrent.each([-1, -16, 4, NaN, 2 ** 31, 'invalid'])(
-    'the async driver reports invalid callback %s after a task has returned',
+    'the async driver reports invalid callback %s after a task has returned and traps the instance',
     (callbackResult) => {
         const reported: unknown[] = [];
         const store = setup({ reportTrap: (error) => reported.push(error) });
@@ -936,6 +936,8 @@ test.concurrent.each([-1, -16, 4, NaN, 2 ** 31, 'invalid'])(
             expect(reported[0]).toBeInstanceOf(WebAssembly.RuntimeError);
             expect(task.isErrored()).toBe(reported[0]);
             expect(task.isExited()).toBe(true);
+            // A trap in the callback loop is a trap of the instance.
+            expect(state.isTrapped()).toBe(true);
         } finally {
             store.cleanup();
         }
