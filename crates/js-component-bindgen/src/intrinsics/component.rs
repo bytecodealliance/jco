@@ -446,7 +446,6 @@ impl ComponentIntrinsic {
                             // A deadlock is a trap of the whole store: no instance may be entered again.
                             for (const state of {async_state_map}.values()) {{ state.markTrapped(err); }}
                             for (const state of {async_state_map}.values()) {{ state.abandonLockWaiters(); }}
-                            for (const state of {async_state_map}.values()) {{ state.abandonAdmissionWaiters(); }}
                             for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                         }}, 0);
                     }}
@@ -738,7 +737,8 @@ impl ComponentIntrinsic {
                         #syncImportWait = {promise_with_resolvers_fn}();
                         #lockHolderTaskID = null;
                         #lockWaiters = [];
-                        #admissionQueue = [];
+                        #numWaitingToEnter = 0;
+                        #enteringTaskID = null;
                         #lockHandoffScheduled = false;
                         #pendingTaskStarts = 0;
                         #parkedTasks = new Map();
@@ -1031,35 +1031,36 @@ impl ComponentIntrinsic {
                             }});
                         }}
 
-                        // Release every queued entry without granting ownership, so that
-                        // calls waiting to enter a trapped store fail instead of hanging.
-                        // FIFO admission of tasks entering this instance (Canonical ABI
-                        // `inst.pending`): a task enters only after every task that asked to
-                        // enter before it has entered or given up, so calls enter in the order
-                        // they were made, whatever each waits for on the way.
-                        takeAdmissionTicket(taskID) {{
-                            const ticket = {{ taskID, ...{promise_with_resolvers_fn}() }};
-                            this.#admissionQueue.push(ticket);
-                            return ticket;
-                        }}
-                        hasPendingAdmissions() {{ return this.#admissionQueue.length > 0; }}
-                        waitForAdmissionTurn(ticket) {{
-                            if (this.#admissionQueue[0] === ticket) {{ return; }}
-                            return ticket.promise;
-                        }}
-                        releaseAdmissionTicket(ticket) {{
-                            const idx = this.#admissionQueue.indexOf(ticket);
-                            if (idx === -1) {{ return; }}
-                            this.#admissionQueue.splice(idx, 1);
-                            if (idx === 0 && this.#admissionQueue.length > 0) {{
-                                this.#admissionQueue[0].resolve();
+                        // Canonical ABI `num_waiting_to_enter` (`Task.enter_implicit_thread`):
+                        // while any task waits to enter this instance, a new entry waits at
+                        // least once, then only for its own condition. A task that may enter
+                        // is never held behind one that may not.
+                        numWaitingToEnter() {{ return this.#numWaitingToEnter; }}
+                        addWaitingToEnter() {{ this.#numWaitingToEnter++; }}
+                        removeWaitingToEnter() {{
+                            if (this.#numWaitingToEnter === 0) {{
+                                throw new Error('unexpectedly negative number of tasks waiting to enter');
                             }}
+                            this.#numWaitingToEnter--;
                         }}
-                        // Release every queued entry (the instance trapped): each then fails
-                        // in `enter()` instead of waiting forever.
-                        abandonAdmissionWaiters() {{
-                            const tickets = this.#admissionQueue.splice(0);
-                            for (const ticket of tickets) {{ ticket.resolve(); }}
+
+                        // The Canonical ABI runs an entered task until it first returns or
+                        // blocks before anything else enters. A task entered through `enter()`
+                        // runs only once that resolves, so it holds this slot until its first
+                        // slice ends, and later entries observe that slice's effects (e.g.
+                        // backpressure it set).
+                        hasEnteringTask() {{ return this.#enteringTaskID !== null; }}
+                        beginEntry(taskID) {{
+                            if (this.#enteringTaskID !== null) {{
+                                throw new Error(`task [${{taskID}}] cannot enter component [${{this.#componentIdx}}] while task [${{this.#enteringTaskID}}] is entering`);
+                            }}
+                            this.#enteringTaskID = taskID;
+                        }}
+                        endEntry(taskID) {{
+                            if (this.#enteringTaskID !== taskID) {{ return false; }}
+                            this.#enteringTaskID = null;
+                            if (this.#suspendedThreadsByRef.size > 0) {{ this.runTickLoop(); }}
+                            return true;
                         }}
 
                         abandonLockWaiters() {{
@@ -1340,7 +1341,6 @@ impl ComponentIntrinsic {
                             this.#tickLoop?.();
                             this.#tickLoop = null;
                             this.abandonLockWaiters();
-                            this.abandonAdmissionWaiters();
                             for (const thread of [...this.#suspendedThreadsByRef.keys()]) {{
                                 this.resumeThread(thread);
                             }}
