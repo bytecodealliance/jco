@@ -271,6 +271,9 @@ impl HostIntrinsic {
                                 'new-prepared-async-task'
                             ].join('/'),
                             stringEncoding: encoding,
+                            // A task waiting to enter holds no thread index (Canonical ABI
+                            // `Task.enter_implicit_thread`): the start call reads it once entered.
+                            indexOnEntry: true,
                         }});
                         newTask.setParentSubtask(subtask);
                         // Whether the callee may block depends on the callee's function type
@@ -291,6 +294,8 @@ impl HostIntrinsic {
                             isAsync,
                         }};
 
+                        // (the thread has no index until the task enters, so the register
+                        // names no thread yet)
                         {set_global_current_thread_meta_fn}{{
                             taskID: newTask.id(),
                             threadID: newThread.id(),
@@ -334,6 +339,8 @@ impl HostIntrinsic {
                     .intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFnAsync);
                 let with_global_current_thread_meta_fn =
                     render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                let set_global_current_thread_meta_fn =
+                    render_args.intrinsic_call_prefix(Intrinsic::SetGlobalCurrentThreadMetaFn);
                 let get_global_current_thread_meta_fn =
                     render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
@@ -351,7 +358,8 @@ impl HostIntrinsic {
                         const globalTaskMeta = {get_global_current_thread_meta_fn}componentIdx);
                         if (!globalTaskMeta) {{ throw new Error('missing global current task globalTaskMeta'); }}
                         const taskID = globalTaskMeta.taskID;
-                        const threadID = globalTaskMeta.threadID;
+                        // The callee's implicit thread, which has an index once its task enters.
+                        let threadID = globalTaskMeta.threadID;
 
                         {debug_log_fn}('[{async_start_call_fn}()] args', {{ args, componentIdx }});
                         const {{ getCallbackFn, callbackIdx, getPostReturnFn, postReturnIdx }} = args;
@@ -694,6 +702,15 @@ impl HostIntrinsic {
                         // returning STARTED, matching the canonical ABI scheduling contract.
                         const enteredSynchronously = preparedTask.tryEnter();
                         if (enteredSynchronously === true) {{
+                            // The callee's register names its implicit thread from now on, as
+                            // lowering the arguments may run the callee's code.
+                            threadID = preparedTask.defaultThread().id();
+                            {set_global_current_thread_meta_fn}{{
+                                taskID: preparedTask.id(),
+                                threadID,
+                                componentIdx: preparedTask.componentIdx(),
+                            }});
+
                             // Directly returned STARTED is not also delivered as an event, so
                             // install the progress handler only after the state transition.
                             startSubtask();
@@ -748,6 +765,7 @@ impl HostIntrinsic {
                                         if (preparedTask.isCancelled()) {{ return; }}
                                         throw preparedTask.isErrored() ?? new Error("task failed to start");
                                     }}
+                                    threadID = preparedTask.defaultThread().id();
 
                                     // PrepareCall installs the callee task before the eager
                                     // path runs, but that metadata is gone by the time a
@@ -869,7 +887,6 @@ impl HostIntrinsic {
                         const globalTaskMeta = {get_global_current_thread_meta_fn}componentIdx);
                         if (!globalTaskMeta) {{ throw new Error('missing global current task meta during sync start call'); }}
                         const taskID = globalTaskMeta.taskID;
-                        const threadID = globalTaskMeta.threadID;
 
                         {debug_log_fn}('[{sync_start_call_fn}()] args', {{ args, paramCount, componentIdx }});
                         const {{ getCallbackFn, callbackIdx }} = args;
@@ -951,16 +968,25 @@ impl HostIntrinsic {
                             }}
                         }});
 
-                        let startRes = subtask.onStart({{ startFnParams: params }});
-                        startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
-                        if (startRes.length !== paramCount) {{
-                            throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {sync_start_call_fn} invocation expected [${{ paramCount }}]`);
-                        }}
-
                         const started = await preparedTask.enter();
                         if (!started) {{
                             if (preparedTask.isCancelled()) {{ return undefined; }}
                             throw new Error('callee task failed to start during sync start call');
+                        }}
+
+                        // Canonical ABI `canon_lift`: the arguments are lowered once the task
+                        // has entered and its implicit thread has an index. Lowering them may
+                        // run the callee's code, under the callee's register.
+                        const threadID = preparedTask.defaultThread().id();
+                        let startRes = {with_global_current_thread_meta_fn}{{
+                            taskID: preparedTask.id(),
+                            threadID,
+                            componentIdx: preparedTask.componentIdx(),
+                            fn: () => subtask.onStart({{ startFnParams: params }}),
+                        }});
+                        startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
+                        if (startRes.length !== paramCount) {{
+                            throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {sync_start_call_fn} invocation expected [${{ paramCount }}]`);
                         }}
 
                         let jspiCallee;
