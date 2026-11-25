@@ -63,7 +63,12 @@ export function driverLoop(
             err,
         });
         if (err instanceof _context.RuntimeError) {
-            _context.reportTrap?.(err);
+            // A trap in the callback loop is a trap of the instance, like any other
+            // (Canonical ABI `canon_lift`, `unpack_callback_result`), so later calls
+            // into it trap too. Marking it trapped also reports the trap.
+            if (!cstate.markTrapped(err)) {
+                _context.reportTrap?.(err);
+            }
         }
         task.setErrored(err);
         task.reject(err);

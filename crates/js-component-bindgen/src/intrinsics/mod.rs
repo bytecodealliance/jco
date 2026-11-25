@@ -2813,6 +2813,9 @@ mod tests {
                 "{intrinsic:?}"
             );
         }
+        // A trap in the callback loop is a trap of the instance too.
+        let driver = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+        assert!(driver.contains("if (!cstate.markTrapped(err)) {"));
     }
 
     #[test]

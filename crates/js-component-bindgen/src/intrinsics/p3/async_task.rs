@@ -3495,8 +3495,13 @@ impl AsyncTaskIntrinsic {
                                 }},
                                 err,
                             }});
-                            // (a trap here ends only its task, and may fail no call of the host's)
-                            {report_trap_fn}(err);
+                            // A trap in the callback loop is a trap of the instance, like any other
+                            // (Canonical ABI `canon_lift`, `unpack_callback_result`), so later calls
+                            // into it trap too. Marking it trapped also reports the trap, which
+                            // may fail no call of the host's.
+                            if (!cstate.markTrapped(err)) {{
+                                {report_trap_fn}(err);
+                            }}
                             task.setErrored(err);
                             task.reject(err);
                             if (!task.isExited()) {{
