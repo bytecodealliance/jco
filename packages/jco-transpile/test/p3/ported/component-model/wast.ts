@@ -52,13 +52,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         // artifacts need additional reentrance/threading support.
         artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
-    'async/during-sync-call-exclusive-resume.wast': {
-        skip: 'exiting the last ready thread reports deadlock instead of the synchronous blocking trap',
-    },
-    'async/exit-without-resolving.wast': {
-        // canonical-abi-traps.ts covers all three cases, expecting deadlock for the synchronous one.
-        skip: 'a synchronous caller blocked on an exited callee reports deadlock instead of the synchronous blocking trap',
-    },
     'async/trap-if-sync-and-waitable-set.wast': {
         skip: 'synchronous waitable operations do not reject handles belonging to a waitable set',
     },
