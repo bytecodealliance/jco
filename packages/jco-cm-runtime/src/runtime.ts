@@ -704,6 +704,8 @@ export interface ComponentThread {
     readonly isCancelled: () => boolean;
     readonly isRejected: () => boolean;
     readonly notifyProgress: () => void;
+    /** Whether this is its task's implicit thread, rather than one made by `thread.new-indirect`. */
+    readonly isImplicit: () => boolean;
 }
 export interface SuspendThreadOptions {
     thread: ComponentThread;

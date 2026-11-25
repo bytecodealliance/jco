@@ -120,6 +120,7 @@ export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
         notifyProgress: () => {
             progress++;
         },
+        isImplicit: () => true,
     };
     return {
         value,

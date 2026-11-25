@@ -928,6 +928,11 @@ function defineComponentAsyncState() {
             if (!meta.readyFn()) {
                 return false;
             }
+            // Only the implicit thread of a task that takes the exclusive lock
+            // waits for it; threads made by `thread.new-indirect` never do.
+            if (!meta.thread.isImplicit()) {
+                return true;
+            }
             const task = meta.thread.task();
             return !task.needsExclusiveLock() || !this.isExclusivelyLocked() || this.exclusivelyLockedBy(task.id());
         }

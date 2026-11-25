@@ -324,6 +324,40 @@ test.concurrent('a component trap wakes suspended threads with a failed resume r
     }
 });
 
+test.concurrent('threads made by thread.new-indirect do not wait for the exclusive lock', () => {
+    const { component } = create();
+    try {
+        const state = component.getOrCreateAsyncState(0);
+        const owner = task(1n);
+        const explicit = { ...owner.thread, id: () => 2, isImplicit: () => false };
+        const resumed: number[] = [];
+        state.suspendThread({
+            thread: owner.thread,
+            readyFn: () => true,
+            cancellable: false,
+            onResume: () => resumed.push(1),
+        });
+        state.suspendThread({
+            thread: explicit,
+            readyFn: () => true,
+            cancellable: false,
+            onResume: () => resumed.push(2),
+        });
+        state.exclusiveLock(3n);
+        expect(state.suspendedThreadReady(owner.thread)).toBe(false);
+        expect(state.suspendedThreadReady(explicit)).toBe(true);
+        expect(state.isThreadReady(explicit)).toBe(true);
+        expect(state.tick()).toBe('resumed');
+        expect(resumed).toEqual([2]);
+        expect(state.tick()).toBe('idle');
+        state.exclusiveRelease(3n);
+        expect(state.tick()).toBe('resumed');
+        expect(resumed).toEqual([2, 1]);
+    } finally {
+        clearDeadlockCheck(component);
+    }
+});
+
 // The tick loop's own scheduling: only setTimeout is faked, so a slice that runs without
 // advancing the clock was scheduled on the next macrotask, not on a timer.
 function scriptedTicks(results: string[]) {
