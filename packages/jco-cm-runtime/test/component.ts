@@ -119,7 +119,7 @@ test.concurrent('external component traps notify the selected reporter after rec
 });
 
 test.concurrent('backpressure waits for zero, wakes every waiter, and cleans up handlers once', async () => {
-    const { component } = create();
+    const { component, core } = create();
     const state = component.getOrCreateAsyncState(0);
     expect(await state.waitForBackpressure()).toBeNull();
     component.backpressureInc(0);
@@ -153,7 +153,9 @@ test.concurrent('backpressure waits for zero, wakes every waiter, and cleans up 
     expect(state.getBackpressureWaiters()).toBe(0n);
     expect(() => component.backpressureDec(0)).toThrow('backpressure counter underflow');
     state.setBackpressure(65535);
-    expect(() => component.backpressureInc(0)).toThrow('overflow');
+    // A RuntimeError, so that the instance is marked trapped.
+    expect(() => component.backpressureInc(0)).toThrow(core.RuntimeError);
+    expect(() => component.backpressureInc(0)).toThrow('backpressure counter overflow');
     expect(state.getBackpressure()).toBe(65535);
     const changes: number[] = [];
     const handlerID = state.registerHandler({ event: 'backpressure-change', fn: (bp) => changes.push(bp) });

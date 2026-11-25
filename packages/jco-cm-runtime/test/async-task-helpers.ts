@@ -56,9 +56,9 @@ export function create(options: Options = {}) {
         FutureValue: options.FutureValue ?? initializeFutureValueClass(core.symbolDispose),
     });
     const creation = { ...clearing, AsyncTask, AsyncThread };
-    const cancellation = { ...taskLookup, lookup };
-    const subtaskCancellation = { ...cancellation, AsyncSubtask, RuntimeError: core.RuntimeError };
-    const taskReturn = { ...taskLookup, RuntimeError: core.RuntimeError };
+    const cancellation = { ...taskLookup, lookup, RuntimeError: core.RuntimeError };
+    const subtaskCancellation = { ...cancellation, AsyncSubtask };
+    const taskReturn = { ...taskLookup, lookup, RuntimeError: core.RuntimeError };
     const driver = {
         RuntimeError: core.RuntimeError,
         lookup,
