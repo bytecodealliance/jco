@@ -18,6 +18,7 @@ import { debugLog } from '../core/debug.js';
 import { trackHostOperation } from '../component.js';
 import { getCurrentTask } from '../async-task/task-operations.js';
 import { asyncBlockedCode } from '../async-task.js';
+import { waitSynchronously } from '../sync-waiter.js';
 
 /**
  * Everything both ends of a stream share: table identity, copy state, the buffer
@@ -545,22 +546,23 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
                     }
 
                     const streamEnd = this;
-                    return task
-                        .suspendUntil({
+                    return waitSynchronously(
+                        this.#waitable,
+                        task.suspendUntil({
                             readyFn: () => streamEnd.hasPendingEvent(),
-                        })
-                        .then(async () => {
-                            if (deferSyncFinish) {
-                                await Promise.resolve();
-                            }
-                            if (!injectedWritePromise) {
-                                return finishCopy();
-                            }
-                            return injectedWritePromise.then((cleanupFn) => {
-                                cleanupFn();
-                                return finishCopy();
-                            });
+                        }),
+                    ).then(async () => {
+                        if (deferSyncFinish) {
+                            await Promise.resolve();
+                        }
+                        if (!injectedWritePromise) {
+                            return finishCopy();
+                        }
+                        return injectedWritePromise.then((cleanupFn) => {
+                            cleanupFn();
+                            return finishCopy();
                         });
+                    });
                 }
             }
 

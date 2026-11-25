@@ -734,6 +734,8 @@ export interface ComponentWaitable {
     target: unknown;
     readonly componentIdx: () => number | undefined;
     readonly isInSet: () => boolean;
+    readonly hasSyncWaiter: () => boolean;
+    readonly setSyncWaiter: (value: boolean) => void;
     readonly idx: () => number | null;
     readonly setIdx: (idx: number) => void;
     readonly setTarget: (target: unknown) => void;

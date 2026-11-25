@@ -24,6 +24,7 @@ import { promiseWithResolvers } from './core/promises.js';
 import { getOrCreateAsyncState } from './component.js';
 import { getCurrentTask } from './async-task/task-operations.js';
 import { isThenable } from './async-task/helpers.js';
+import { WAITABLE_SYNC_IN_SET } from './sync-waiter.js';
 
 function defineWaitable() {
     return class Waitable {
@@ -55,6 +56,14 @@ function defineWaitable() {
         }
         isInSet() {
             return this.#waitableSet !== null;
+        }
+
+        /** Whether a synchronous built-in is blocked waiting on this waitable. */
+        hasSyncWaiter() {
+            return this.#hasSyncWaiter;
+        }
+        setSyncWaiter(value: boolean) {
+            this.#hasSyncWaiter = value;
         }
 
         idx() {
@@ -605,6 +614,10 @@ export function waitableJoin(
     const waitable = waitableObj.getWaitable ? waitableObj.getWaitable() : waitableObj;
     if (!(waitable instanceof Waitable)) {
         throw new RuntimeError('handle does not name a waitable');
+    }
+    // A waitable set must not take the event a synchronous built-in is waiting for.
+    if (waitable.hasSyncWaiter()) {
+        throw new RuntimeError(WAITABLE_SYNC_IN_SET);
     }
 
     const waitableSet =

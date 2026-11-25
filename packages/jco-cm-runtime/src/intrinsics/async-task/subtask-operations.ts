@@ -3,6 +3,7 @@ import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { readTaskRegister } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';
+import { WAITABLE_SYNC_IN_SET, waitSynchronously } from '../sync-waiter.js';
 
 /** Implements `canon subtask.drop`. */
 export function subtaskDrop(
@@ -45,8 +46,9 @@ export function subtaskCancel(
     if (subtask.resolveDelivered()) {
         throw new _context.RuntimeError('`subtask.cancel` called after terminal status delivered');
     }
-    if (!isAsync && subtask.waitable().isInSet()) {
-        throw new _context.RuntimeError('cannot synchronously cancel a subtask that is in a waitable set');
+    // Even an async cancel claims the resolution event, which a waitable set could otherwise take.
+    if (subtask.waitable().isInSet()) {
+        throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
     }
     const finishCancel = () => {
         // Consume the subtask's pending resolution event (which also marks the
@@ -82,12 +84,13 @@ export function subtaskCancel(
                 if (!taskMeta || !taskMeta.task) {
                     throw new Error('invalid/missing async task');
                 }
-                return taskMeta.task
-                    .waitUntil({
+                return waitSynchronously(
+                    subtask.waitable(),
+                    taskMeta.task.waitUntil({
                         cancellable: false,
                         readyFn: () => subtask.isResolved(),
-                    })
-                    .then(finishCancel);
+                    }),
+                ).then(finishCancel);
             });
         }
         const { taskID } = readTaskRegister(_context.registers, componentIdx)!;
@@ -95,12 +98,13 @@ export function subtaskCancel(
         if (!taskMeta || !taskMeta.task) {
             throw new Error('invalid/missing async task');
         }
-        return taskMeta.task
-            .waitUntil({
+        return waitSynchronously(
+            subtask.waitable(),
+            taskMeta.task.waitUntil({
                 cancellable: false,
                 readyFn: () => subtask.isResolved(),
-            })
-            .then(finishCancel);
+            }),
+        ).then(finishCancel);
     }
     let cancellationWillCompleteAsync = false;
     if (!subtask.isResolved()) {
@@ -149,12 +153,13 @@ export function subtaskCancel(
             if (!taskMeta || !taskMeta.task) {
                 throw new Error('invalid/missing async task');
             }
-            return taskMeta.task
-                .waitUntil({
+            return waitSynchronously(
+                subtask.waitable(),
+                taskMeta.task.waitUntil({
                     cancellable: false,
                     readyFn: () => subtask.isResolved(),
-                })
-                .then(finishCancel);
+                }),
+            ).then(finishCancel);
         }
     }
     return finishCancel();
