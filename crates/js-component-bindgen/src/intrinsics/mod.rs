@@ -1789,9 +1789,20 @@ mod tests {
     }
 
     #[test]
-    fn waitable_intrinsic_names_are_reserved() {
+    fn intrinsic_names_called_by_trampolines_are_reserved() {
         let names: Vec<_> = Intrinsic::get_global_names().into_iter().collect();
-        for name in ["waitableSetWait", "waitableSetPoll", "waitableJoin"] {
+        for name in [
+            "waitableSetWait",
+            "waitableSetPoll",
+            "waitableJoin",
+            "backpressureInc",
+            "backpressureDec",
+            "getOrCreateAsyncState",
+            "getErrorPayloadString",
+            "lookupMemoriesForComponent",
+            "promiseWithResolvers",
+            "registerGlobalMemoryForComponent",
+        ] {
             assert!(names.contains(&name), "{name} is not reserved");
         }
     }
@@ -3248,11 +3259,15 @@ impl Intrinsic {
                 "fetchCompile",
                 "finalizationRegistryCreate",
                 "getErrorPayload",
+                Intrinsic::GetErrorPayloadString.name(),
                 "HANDLE_TABLES",
                 "hasOwnProperty",
                 "imports",
                 "instantiateCore",
                 "isLE",
+                Intrinsic::LookupMemoriesForComponent.name(),
+                Intrinsic::PromiseWithResolversPonyfill.name(),
+                Intrinsic::RegisterGlobalMemoryForComponent.name(),
                 VERSION_LOCAL,
                 "scopeId",
                 "symbolCabiDispose",

@@ -138,6 +138,11 @@ impl ComponentIntrinsic {
             "_checkIdle",
             "_isIdle",
             "CALL_TRACKING",
+            // Reserved so that an export named e.g. `backpressure-inc` is not
+            // bound as a local that shadows the intrinsic its trampolines call.
+            Self::GetOrCreateAsyncState.name(),
+            Self::BackpressureInc.name(),
+            Self::BackpressureDec.name(),
         ]
     }
 
