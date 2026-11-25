@@ -811,15 +811,6 @@ export async function syncStartCall(
             throw new Error('callee task failed to start during sync start call');
         }
 
-        // The prepared task was created with the *lowering's* async-ness
-        // (sync), so enter() took the sync shortcut without acquiring the
-        // per-slice exclusive lock the callback-driven slices below pair
-        // with; acquire it here (FIFO-queued when another slice of the callee
-        // is mid-flight.
-        if (preparedTask.needsExclusiveLock()) {
-            await calleeComponentState.acquireExclusiveLock(preparedTask.id());
-        }
-
         let jspiCallee;
         if (callee._cachedPromising) {
             jspiCallee = callee._cachedPromising;
@@ -830,6 +821,7 @@ export async function syncStartCall(
 
         const failCalleeLifecycle = (err: unknown) => {
             DEBUG: debugLog('[_syncStartCall()] callee lifecycle failed', { err });
+            preparedTask.endFirstSlice();
 
             // The initial slice owns component entry until it either hands
             // control to the callback driver or fails. A failure has no driver

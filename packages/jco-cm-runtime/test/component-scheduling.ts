@@ -48,27 +48,23 @@ test.concurrent('cancelled and abandoned lock waiters resume without acquiring o
     expect(state.isExclusivelyLocked()).toBe(false);
 });
 
-test.concurrent('admission tickets preserve call order and release abandoned entries', async () => {
+test.concurrent('the entry slot admits one task at a time and waiting entries are counted', () => {
     const state = create().component.getOrCreateAsyncState(0);
-    const a = state.takeAdmissionTicket(1n);
-    const b = state.takeAdmissionTicket(2n);
-    const c = state.takeAdmissionTicket(3n);
-    expect(state.waitForAdmissionTurn(a)).toBeUndefined();
-    expect(state.waitForAdmissionTurn(b)).toBe(b.promise);
-    state.releaseAdmissionTicket(b); // Giving up out of order must not admit c yet.
-    let admitted = false;
-    const waiting = state.waitForAdmissionTurn(c)!.then(() => {
-        admitted = true;
-    });
-    await Promise.resolve();
-    expect(admitted).toBe(false);
-    state.releaseAdmissionTicket(a);
-    await waiting;
-    expect(state.waitForAdmissionTurn(c)).toBeUndefined();
-    const d = state.takeAdmissionTicket(4n);
-    state.abandonAdmissionWaiters();
-    await d.promise;
-    expect(state.hasPendingAdmissions()).toBe(false);
+    expect(state.numWaitingToEnter()).toBe(0);
+    state.addWaitingToEnter();
+    state.addWaitingToEnter();
+    expect(state.numWaitingToEnter()).toBe(2);
+    state.removeWaitingToEnter();
+    state.removeWaitingToEnter();
+    expect(() => state.removeWaitingToEnter()).toThrow('negative number of tasks waiting to enter');
+    state.beginEntry(1n);
+    expect(state.hasEnteringTask()).toBe(true);
+    expect(() => state.beginEntry(2n)).toThrow('while task [1] is entering');
+    // Only the entering task ends its entry.
+    expect(state.endEntry(2n)).toBe(false);
+    expect(state.hasEnteringTask()).toBe(true);
+    expect(state.endEntry(1n)).toBe(true);
+    expect(state.hasEnteringTask()).toBe(false);
 });
 
 test.concurrent('scheduler resumes one ready task per tick and respects lock ownership', async () => {
@@ -131,7 +127,7 @@ test.concurrent('rejected tasks resume despite readiness and cancellation is del
     }
 });
 
-test.concurrent('deadlock traps the whole store and releases lock and admission waiters', async () => {
+test.concurrent('deadlock traps the whole store and releases lock waiters', async () => {
     const { component } = create();
     const a = component.getOrCreateAsyncState(0);
     const b = component.getOrCreateAsyncState(1);
@@ -144,8 +140,6 @@ test.concurrent('deadlock traps the whole store and releases lock and admission 
         b.suspendTask({ task: child.value, readyFn: () => false, cancellable: false, onResume() {} });
         a.exclusiveLock(1n);
         const lock = a.acquireExclusiveLock(3n);
-        a.takeAdmissionTicket(3n);
-        const admission = a.takeAdmissionTicket(4n);
         await new Promise((resolve) => setTimeout(resolve, 5));
         const error = component.storeTrap.error as Error & { deadlockDetail: ComponentDeadlockDetail };
         expect(error).toBeInstanceOf(WebAssembly.RuntimeError);
@@ -157,9 +151,7 @@ test.concurrent('deadlock traps the whole store and releases lock and admission 
         expect(a.isTrapped()).toBe(true);
         expect(b.isTrapped()).toBe(true);
         await lock;
-        await admission.promise;
         expect(a.exclusivelyLockedBy(1n)).toBe(true);
-        expect(a.hasPendingAdmissions()).toBe(false);
     } finally {
         clearDeadlockCheck(component);
     }
