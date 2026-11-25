@@ -699,16 +699,24 @@ suite.skipIf(!hasJspi)('hearing of traps', () => {
         const instance = await instantiate({}, { onTrap });
         await instance.start();
         await first;
-        // That ended only its task: it can happen again.
-        await instance.start();
-        while (traps.length < 2) {
-            await sleep(1);
-        }
-        assert.notStrictEqual(traps[0], traps[1]);
+        // A trap in the callback loop is a trap of the instance's: it can't be
+        // entered again, which is not another trap.
+        await expect(instance.start()).rejects.toThrow(/cannot enter component instance/);
+        assert.throws(() => instance.syncTrap(), /cannot enter component instance/);
+        await sleep(20);
+        assert.strictEqual(traps.length, 1);
+    });
+
+    test.concurrent('each trap of a sync call is heard once', async () => {
+        const instantiate = await transpiled(TRAPS_AFTER_RETURNING);
+        const { traps, onTrap } = hear();
+        const instance = await instantiate({}, { onTrap });
+        assert.throws(() => instance.syncTrap(), /unreachable/);
         // A trap of the instance's: it can't be entered again, which is not another trap.
-        assert.throws(() => instance.syncTrap());
-        assert.throws(() => instance.syncTrap());
-        assert.strictEqual(traps.length, 3);
+        assert.throws(() => instance.syncTrap(), /cannot enter component instance/);
+        await expect(instance.start()).rejects.toThrow(/cannot enter component instance/);
+        await sleep(20);
+        assert.strictEqual(traps.length, 1);
     });
 
     test.concurrent('a deadlock is a trap', async () => {
@@ -746,7 +754,9 @@ suite.skipIf(!hasJspi)('hearing of traps', () => {
         await instance.start();
         assert.match((await heard).message, /unreachable/);
         await sleep(20);
-        await expect(instance.start()).rejects.toThrow(/component instance has been stopped/);
+        // A stopped instance fails later calls with the trap that came first,
+        // where one that had only trapped would refuse entry.
+        await expect(instance.start()).rejects.toThrow(/unreachable/);
     });
 
     test.concurrent('another instance of the same module hears only its own', async () => {
