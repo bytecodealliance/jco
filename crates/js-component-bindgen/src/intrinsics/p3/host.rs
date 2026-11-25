@@ -947,15 +947,6 @@ impl HostIntrinsic {
                             throw new Error('callee task failed to start during sync start call');
                         }}
 
-                        // The prepared task was created with the *lowering's* async-ness
-                        // (sync), so enter() took the sync shortcut without acquiring the
-                        // per-slice exclusive lock the callback-driven slices below pair
-                        // with; acquire it here (FIFO-queued when another slice of the callee
-                        // is mid-flight.
-                        if (preparedTask.needsExclusiveLock()) {{
-                            await calleeComponentState.acquireExclusiveLock(preparedTask.id());
-                        }}
-
                         let jspiCallee;
                         if (callee._cachedPromising) {{
                             jspiCallee = callee._cachedPromising;
@@ -966,6 +957,7 @@ impl HostIntrinsic {
 
                         const failCalleeLifecycle = (err) => {{
                             {debug_log_fn}('[{sync_start_call_fn}()] callee lifecycle failed', {{ err }});
+                            preparedTask.endFirstSlice();
 
                             // The initial slice owns component entry until it either hands
                             // control to the callback driver or fails. A failure has no driver
