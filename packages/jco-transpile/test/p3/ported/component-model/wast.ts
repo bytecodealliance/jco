@@ -52,9 +52,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         // artifacts need additional reentrance/threading support.
         artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
-    'async/trap-if-sync-and-waitable-set.wast': {
-        skip: 'synchronous stream/future cancels of an end in a waitable set do not trap yet',
-    },
     'async/validate-task-return.wast': {
         skip: 'the pinned validator accepts task.return results containing borrow types',
     },
