@@ -1,7 +1,13 @@
 import { expect, test } from 'vitest';
 import * as future from '../src/intrinsics/future.js';
 import { create } from './future-helpers.js';
-import type { FutureElementMetadata, FutureTask, AsyncTaskMeta, TaskLookupContext } from '../src/runtime.js';
+import type {
+    AsyncTaskMeta,
+    ComponentWaitableSet,
+    FutureElementMetadata,
+    FutureTask,
+    TaskLookupContext,
+} from '../src/runtime.js';
 
 const scalar: FutureElementMetadata = {
     align32: 4,
@@ -10,10 +16,10 @@ const scalar: FutureElementMetadata = {
     liftFn: (ctx) => [new DataView(ctx.memory.buffer).getUint32(ctx.storagePtr, true), ctx],
     lowerFn: (ctx) => new DataView(ctx.memory.buffer).setUint32(ctx.storagePtr, ctx.vals![0] as number, true),
 };
-function taskLookup(): TaskLookupContext<FutureTask> {
+function taskLookup(mayBlock = false): TaskLookupContext<FutureTask> {
     const task: FutureTask = {
         id: () => 1n,
-        mayBlock: () => false,
+        mayBlock: () => mayBlock,
         isErrored: () => null,
         suspendUntil: async (options) => options.readyFn(),
     };
@@ -167,6 +173,42 @@ test.concurrent('a writable future end stays busy until its completed write is d
         readIdx,
     );
     expect(s.tables[2].table.size()).toBe(0);
+});
+
+test.concurrent('synchronous future reads trap with RuntimeError where they cannot wait', () => {
+    const s = create(),
+        state = s.addTable(0, 2),
+        pair = future.createFuture(s.creation, state, { tableIdx: 2, elemMeta: scalar });
+    const context = {
+        RuntimeError: s.core.RuntimeError,
+        lookup: s.lookup,
+        taskLookup: taskLookup(),
+        ends: s.ends,
+        events: s.core.asyncEventCode,
+        Base: s.FutureEnd,
+        FutureEnd: s.FutureReadableEnd,
+    };
+    const options = {
+        componentIdx: 0,
+        futureTableIdx: 2,
+        isAsync: false,
+        stringEncoding: 'utf8',
+        getMemoryFn: () => ({ buffer: new ArrayBuffer(16) }),
+    };
+    const read = () => future.futureRead(context, options, pair.readEndWaitableIdx!, 4);
+    const readMayBlock = () =>
+        future.futureRead({ ...context, taskLookup: taskLookup(true) }, options, pair.readEndWaitableIdx!, 4);
+    expect(read).toThrow(s.core.RuntimeError);
+    expect(read).toThrow('cannot block a synchronous task before returning');
+
+    // Canonical ABI `stream_copy`/`future_copy`: a synchronous copy may not
+    // wait on an end whose events a waitable set could take.
+    const set = { addWaitable() {}, removeWaitable() {} } as unknown as ComponentWaitableSet;
+    pair.readEnd.getWaitable().join(set);
+    expect(readMayBlock).toThrow(s.core.RuntimeError);
+    expect(readMayBlock).toThrow('waitable cannot be used synchronously while added to a waitable set');
+    expect(pair.readEnd.isIdleState()).toBe(true);
+    pair.readEnd.getWaitable().join(null);
 });
 
 test.concurrent('async future cancellation consumes its event and leaves the selected endpoint idle', () => {
