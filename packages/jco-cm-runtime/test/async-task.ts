@@ -555,6 +555,8 @@ test.concurrent('driver callbacks wait on the shared waitable set and exit the t
             { _jcoMaySuspend: false },
         );
         t.setCallbackFn(callback, 'done');
+        // (a callback lift is only valid for an async-typed function)
+        t.setFuncTypeIsAsync(true);
         expect(t.tryEnter()).toBe(true);
         s.asyncTask.driverLoop({ componentState: state, task: t, callbackResult: (setRep << 4) | 2 });
         expect(state.isTaskSuspended(t.id())).toBe(true);

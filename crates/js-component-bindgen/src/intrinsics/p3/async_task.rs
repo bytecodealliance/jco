@@ -1044,6 +1044,7 @@ impl AsyncTaskIntrinsic {
                             cancellable: false,
                             suspended: {self_suspended},
                             readyFn: {self_ready_fn},
+                            switching: true,
                         }});
                         cstate.resumeThread(other);
 
@@ -1103,6 +1104,7 @@ impl AsyncTaskIntrinsic {
                                 cancellable: false,
                                 suspended: {self_suspended},
                                 readyFn: {self_ready_fn},
+                                switching: true,
                             }});
                             cstate.resumeThread(other);
                             return suspension.then(() => 0);
@@ -1915,6 +1917,9 @@ impl AsyncTaskIntrinsic {
                             if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) {{
                                 cstate.noteUnresolvedExit(this);
                             }}
+                            // A thread exiting returns control to a sync call in progress,
+                            // which goes on only if it can (Canonical ABI `canon_lift`).
+                            cstate?.checkSyncCallBlocked();
 
                             if (this.#exited && this.#threads.length === 0) {{
                                 {clear_current_task_fn}(this.#componentIdx, this.#id);
@@ -2294,6 +2299,7 @@ impl AsyncTaskIntrinsic {
                         isResolvedState() {{ return this.#state === {task_class}.State.RESOLVED; }}
                         isResolved() {{ return this.#state === {task_class}.State.RESOLVED; }}
                         isExited() {{ return this.#exited; }}
+                        hasEntered() {{ return this.#entered; }}
 
                         async waitUntil(opts) {{
                             const {{ readyFn, cancellable }} = opts;
@@ -2845,6 +2851,7 @@ impl AsyncTaskIntrinsic {
                         #state;
                         #startFn = null;
                         #implicit;
+                        #awaitedCallee = null;
                         storage = [0, 0];
 
                         constructor (opts) {{
@@ -2872,6 +2879,13 @@ impl AsyncTaskIntrinsic {
 
                         // Whether this is its task's implicit thread (not made by `thread.new-indirect`).
                         isImplicit() {{ return this.#implicit; }}
+
+                        // The callee task this thread waits on through a synchronous lowering.
+                        // Until the callee settles, the thread is blocked on it (Canonical ABI
+                        // `canon_lower`), even though its stack waits on the callee rather than
+                        // in the scheduler.
+                        awaitedCallee() {{ return this.#awaitedCallee; }}
+                        setAwaitedCallee(task) {{ this.#awaitedCallee = task; }}
 
                         id() {{ return this.#id; }}
                         // Whether the thread has been given its index in the instance's thread table.

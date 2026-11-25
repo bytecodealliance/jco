@@ -349,6 +349,56 @@ test.concurrent('a blocked synchronous call with no ready thread traps instead o
     }
 });
 
+test.concurrent('a blocked synchronous call traps where it blocks despite host work of another instance', async () => {
+    const { component, core } = create();
+    const state = component.getOrCreateAsyncState(0);
+    Object.defineProperty(state, 'runTickLoop', { value: () => {} });
+    const deferred = core.promiseWithResolvers<void>();
+    try {
+        // Host work of instance 1 cannot help a sync call into instance 0, which
+        // runs alone until it returns (Canonical ABI `canon_lift`, `not ft.async_`).
+        void component.trackHostOperation(() => deferred.promise, 1);
+        const sync = task(1n);
+        state.beginSyncCall(sync.value);
+        state.suspendThread({
+            thread: sync.thread,
+            suspended: true,
+            readyFn: () => false,
+            cancellable: false,
+            onResume() {},
+        });
+        expect(component.storeTrap.error?.message).toBe('cannot block a synchronous task before returning');
+        expect(sync.errors).toEqual([component.storeTrap.error]);
+    } finally {
+        deferred.resolve();
+        clearDeadlockCheck(component);
+    }
+});
+
+test.concurrent('host work of the instance a synchronous call runs in holds back its trap', async () => {
+    const { component, core } = create();
+    const state = component.getOrCreateAsyncState(0);
+    Object.defineProperty(state, 'runTickLoop', { value: () => {} });
+    const deferred = core.promiseWithResolvers<void>();
+    try {
+        void component.trackHostOperation(() => deferred.promise, 0);
+        const sync = task(1n);
+        state.beginSyncCall(sync.value);
+        state.suspendThread({
+            thread: sync.thread,
+            suspended: true,
+            readyFn: () => false,
+            cancellable: false,
+            onResume() {},
+        });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(component.storeTrap.error).toBeNull();
+    } finally {
+        deferred.resolve();
+        clearDeadlockCheck(component);
+    }
+});
+
 test.concurrent('pending host operations defer deadlock detection until settlement', async () => {
     const { component, core } = create();
     const state = component.getOrCreateAsyncState(0);

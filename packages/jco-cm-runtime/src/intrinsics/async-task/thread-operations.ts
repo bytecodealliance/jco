@@ -192,6 +192,7 @@ export function threadSuspendThenResume(
         cancellable: false,
         suspended: true,
         readyFn: () => false,
+        switching: true,
     });
     cstate.resumeThread(other);
 
@@ -214,6 +215,7 @@ export function threadYieldThenResume(_context: ThreadControlContext, ctx: Threa
         cancellable: false,
         suspended: false,
         readyFn: () => true,
+        switching: true,
     });
     cstate.resumeThread(other);
 
@@ -246,6 +248,7 @@ export function threadSuspendThenPromote(
             cancellable: false,
             suspended: true,
             readyFn: () => false,
+            switching: true,
         });
         cstate.resumeThread(other);
         return suspension.then(() => 0);
@@ -276,6 +279,7 @@ export function threadYieldThenPromote(_context: ThreadControlContext, ctx: Thre
             cancellable: false,
             suspended: false,
             readyFn: () => true,
+            switching: true,
         });
         cstate.resumeThread(other);
         return suspension.then(() => 0);

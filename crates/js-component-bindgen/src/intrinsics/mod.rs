@@ -1918,7 +1918,9 @@ mod tests {
                 "{intrinsic:?}"
             );
             assert!(
-                source.contains("Promise.resolve(_trackHostOperation(() => hostWait))"),
+                source.contains(
+                    "Promise.resolve(_trackHostOperation(() => hostWait, meta.componentIdx))"
+                ),
                 "{intrinsic:?}"
             );
         }
@@ -1934,7 +1936,11 @@ mod tests {
             render_intrinsic_body(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass));
         assert!(source.contains("markHostHeld() {"));
         assert!(source.contains("if (!guestCopyPending || !meta.hostHeld) {"));
-        assert!(source.contains("Promise.resolve(_trackHostOperation(() => hostWait))"));
+        assert!(
+            source.contains(
+                "Promise.resolve(_trackHostOperation(() => hostWait, meta.componentIdx))"
+            )
+        );
         let host_future = render_intrinsic_body(Intrinsic::AsyncFuture(
             AsyncFutureIntrinsic::HostFutureClass,
         ));
@@ -2382,11 +2388,46 @@ mod tests {
 
         let deadlock =
             render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::CheckForDeadlock));
-        assert!(deadlock.contains("'cannot block a synchronous task before returning'"));
+        assert!(deadlock.contains("_checkSyncCallBlocked();"));
+        let blocked = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::CheckSyncCallBlocked,
+        ));
+        assert!(blocked.contains("'cannot block a synchronous task before returning'"));
 
         let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
         assert!(task.contains("beginSyncCall() {"));
         assert!(task.contains("this.#endSyncCall();"));
+    }
+
+    #[test]
+    fn sync_call_decides_at_the_block_point_whether_to_trap() {
+        // Canonical ABI `canon_lift` (`not ft.async_`): a thread blocking or exiting during
+        // a sync call returns control to it, which traps with no ready thread to switch to.
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+        assert!(state.contains("if (!switching) { this.checkSyncCallBlocked(); }"));
+        assert!(state.contains("hasSyncCallCandidate() {"));
+        assert!(state.contains("hasRunningStackWithin(call) {"));
+        assert!(state.contains("const callee = thread.awaitedCallee();"));
+
+        let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+        assert!(task.contains("cstate?.checkSyncCallBlocked();"));
+        assert!(task.contains("hasEntered() { return this.#entered; }"));
+
+        let check = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::CheckSyncCallBlocked,
+        ));
+        assert!(check.contains("state.hasSyncCallCandidate()"));
+        assert!(check.contains("state.hasRunningStackWithin(call)"));
+        assert!(check.contains("hostOperations.get(call.componentIdx)"));
+        assert!(check.contains("_trapBlockedStore(call);"));
+
+        // Host work counts for the instance it is for.
+        let tracker =
+            render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
+        assert!(tracker.contains("function _trackHostOperation(operation, componentIdx) {"));
+        assert!(tracker.contains("byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);"));
     }
 
     #[test]
@@ -2402,6 +2443,13 @@ mod tests {
             render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::CheckForDeadlock));
         assert!(check.contains("for (const state of ASYNC_STATE.values())"));
         assert!(check.contains("STORE_ASYNC_STATE.pendingHostOperations > 0"));
+        assert!(check.contains("_trapBlockedStore(undefined);"));
+
+        // The trap itself is rendered with the sync-call check, which shares it.
+        let check = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::CheckSyncCallBlocked,
+        ));
+        assert!(check.contains("function _trapBlockedStore(syncCall) {"));
         assert!(check.contains("const root = task.getRootTask();"));
         assert!(
             check.contains(
@@ -2415,8 +2463,9 @@ mod tests {
 
     #[test]
     fn detected_deadlocks_carry_the_state_that_produced_them() {
-        let check =
-            render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::CheckForDeadlock));
+        let check = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::CheckSyncCallBlocked,
+        ));
 
         // The message is what the Canonical ABI asks for and is asserted on elsewhere, so
         // the state that produced the deadlock rides beside it rather than inside it.

@@ -4,6 +4,7 @@ import type {
     AsyncThreadConstructor,
     AsyncTask as AsyncTaskType,
     AsyncThreadOptions,
+    ComponentTask,
     TaskSuspendOptions,
 } from '../../runtime.js';
 import { getOrCreateAsyncState, recordTrap } from '../component.js';
@@ -42,6 +43,7 @@ function defineAsyncThread() {
         #state: 'not-started' | 'running' | 'completed';
         #startFn: (() => unknown) | null = null;
         #implicit: boolean;
+        #awaitedCallee: ComponentTask | null = null;
         storage = [0, 0];
 
         constructor(context: AsyncThreadClassContext, opts: AsyncThreadOptions) {
@@ -75,6 +77,18 @@ function defineAsyncThread() {
 
         id() {
             return this.#id!;
+        }
+        /**
+         * The callee task this thread waits on through a synchronous lowering.
+         * Until the callee settles, the thread is blocked on it (Canonical ABI
+         * `canon_lower`), even though its stack waits on the callee rather
+         * than in the scheduler.
+         */
+        awaitedCallee() {
+            return this.#awaitedCallee;
+        }
+        setAwaitedCallee(task: ComponentTask | null) {
+            this.#awaitedCallee = task;
         }
         /** Whether the thread has been given its index in the instance's thread table. */
         hasIndex() {

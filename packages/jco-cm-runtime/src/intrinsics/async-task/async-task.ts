@@ -766,6 +766,9 @@ function defineAsyncTask() {
         isExited() {
             return this.#exited;
         }
+        hasEntered() {
+            return this.#entered;
+        }
         async waitUntil(opts: TaskSuspendOptions) {
             const { readyFn, cancellable } = opts;
             DEBUG: debugLog('[AsyncTask#waitUntil()] args', { taskID: this.#id, args: { cancellable } });
@@ -1325,6 +1328,9 @@ function defineAsyncTask() {
             if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) {
                 cstate.noteUnresolvedExit(this);
             }
+            // A thread exiting returns control to a sync call in progress,
+            // which goes on only if it can (Canonical ABI `canon_lift`).
+            cstate?.checkSyncCallBlocked();
 
             if (this.#exited && this.#threads.length === 0) {
                 clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);

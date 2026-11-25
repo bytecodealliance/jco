@@ -41,8 +41,8 @@ export function create(options: ComponentTestOptions = {}) {
         asyncState,
         ComponentAsyncState,
         checkForDeadlock: () => operations.checkForDeadlock(deadlock),
-        trackHostOperation: <T>(fn: () => T) =>
-            operations.trackHostOperation({ ...deadlock, symbolDispose: core.symbolDispose }, fn),
+        trackHostOperation: <T>(fn: () => T, componentIdx?: number | null) =>
+            operations.trackHostOperation({ ...deadlock, symbolDispose: core.symbolDispose }, fn, componentIdx),
         normalizeCoreTrap: <T>(error: T) => operations.normalizeCoreTrap(normalization, error),
         checkMayLeave: (idx: number) => operations.checkMayLeave(mayLeave, idx),
         guardMayLeave: <A extends unknown[], T, R>(idx: number, fn: (this: R, ...args: A) => T) =>
@@ -96,6 +96,7 @@ export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
         isResolvedState: () => rejected,
         isRejected: () => rejected,
         isCancelled: () => cancelled,
+        hasEntered: () => true,
         needsExclusiveLock: () => locked,
         endInitialInvocation: () => {
             initialInvocationEnds++;
@@ -124,6 +125,8 @@ export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
             progress++;
         },
         isImplicit: () => true,
+        awaitedCallee: () => null,
+        hasIndex: () => true,
     };
     return {
         value,

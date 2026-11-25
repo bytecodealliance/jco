@@ -928,6 +928,14 @@ impl HostIntrinsic {
                         // time and restore it before the caller resumes (the same
                         // discipline as the suspending-import wrapper).
                         const savedCallerTaskMeta = {get_global_current_thread_meta_fn}callerComponentIdx);
+                        // Until the callee settles, the caller's thread is blocked on it
+                        // (Canonical ABI `canon_lower`): a sync call in progress must not count
+                        // it as running.
+                        const callerThread = savedCallerTaskMeta?.threadID
+                            ? {get_or_create_async_state_fn}callerComponentIdx).threads.get(savedCallerTaskMeta.threadID)
+                            : undefined;
+                        const awaitingThread = callerThread?.taskID() === savedCallerTaskMeta?.taskID ? callerThread : undefined;
+                        awaitingThread?.setAwaitedCallee(preparedTask);
                         try {{
 
                         const callbackFn = getCallbackFn();
@@ -1120,6 +1128,7 @@ impl HostIntrinsic {
                         }});
                         return flatResult;
                         }} finally {{
+                            awaitingThread?.setAwaitedCallee(null);
                             if (savedCallerTaskMeta) {{
                                 {set_global_current_thread_meta_fn}{{
                                     taskID: savedCallerTaskMeta.taskID,
