@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 9231cd0f0e6537d9f1a75d69c29b56a43893b6a7
+// generated from commit dcb44b2cebf54bbff73752129a70b0c7ad455d79
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -893,7 +893,7 @@ function defineComponentAsyncState() {
 			const current = this.#backpressure;
 			if (current < 0 || current > 2 ** 16) throw new Error(`invalid current backpressure value [${current}]`);
 			const newValue = this.getBackpressure() + 1;
-			if (newValue >= 2 ** 16) throw new Error(`invalid new backpressure value [${newValue}], overflow`);
+			if (newValue >= 2 ** 16) throw new this.#context.RuntimeError("backpressure counter overflow");
 			return this.setBackpressure(newValue);
 		}
 		decrementBackpressure() {
@@ -1356,6 +1356,8 @@ const guardPostReturn = (context, componentIdx, fn) => (...args) => {
 
 //#endregion
 //#region runtime/intrinsics/async-task/task-operations.js
+/** Trap message for resolving a task twice, e.g. with a second `task.return` (Canonical ABI `Task.return_`). */
+const TASK_ALREADY_RESOLVED = "task has already resolved";
 function getCurrentTask(_context, componentIdx, taskID) {
 	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing component idx");
 	const taskMetas = _context.tasks.get(componentIdx);
@@ -1461,10 +1463,22 @@ function taskReturn(_context, ctx, ...params) {
 	if (!taskMeta) throw new Error("failed to retrieve current task metadata");
 	const task = taskMeta.task;
 	if (!task) throw new Error("invalid/missing current task in metadata");
+	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new _context.RuntimeError("cannot leave component instance");
 	if (!task.calleeIsAsync()) throw new _context.RuntimeError("task.return requires an async canonical lift");
-	task.validateResourceBorrowScope();
 	const expectedResultType = task.returnResultTypeIdx();
 	if (expectedResultType !== null && ctx.resultTypeIdx !== void 0 && ctx.resultTypeIdx !== expectedResultType) throw new _context.RuntimeError("task.return result type does not match the function type");
+	const expectedMemoryIdx = task.getReturnMemoryIdx();
+	if (typeof expectedMemoryIdx === "number" && typeof memoryIdx === "number" && expectedMemoryIdx !== memoryIdx) {
+		DEBUG: debugLog("[taskReturn()] mismatched memory indices", {
+			expectedMemoryIdx,
+			memoryIdx
+		});
+		throw new _context.RuntimeError("task.return memory [" + memoryIdx + "] does not match task [" + expectedMemoryIdx + "]");
+	}
+	const expectedStringEncoding = task.getReturnStringEncoding();
+	if (expectedStringEncoding && stringEncoding && expectedStringEncoding !== stringEncoding) throw new _context.RuntimeError(`task.return string encoding [${stringEncoding}] does not match task [${expectedStringEncoding}]`);
+	if (task.isResolvedState()) throw task.isErrored() ?? new _context.RuntimeError("task has already resolved");
+	task.validateResourceBorrowScope();
 	DEBUG: debugLog("[taskReturn()] args", {
 		componentIdx,
 		taskID: task.id(),
@@ -1493,14 +1507,6 @@ function taskReturn(_context, ctx, ...params) {
 		subtaskCallMetadata.returnFnCalled = true;
 		task.resolve([]);
 		return;
-	}
-	const expectedMemoryIdx = task.getReturnMemoryIdx();
-	if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {
-		DEBUG: debugLog("[taskReturn()] mismatched memory indices", {
-			expectedMemoryIdx,
-			memoryIdx
-		});
-		throw new Error("task.return memory [" + memoryIdx + "] does not match task [" + expectedMemoryIdx + "]");
 	}
 	task.callbackFnIdx = callbackFnIdx;
 	if (!memory && liftFns.length > 4) {
@@ -1546,13 +1552,13 @@ function taskReturn(_context, ctx, ...params) {
 /** Implements `canon task.cancel`. */
 function taskCancel(_context, componentIdx) {
 	DEBUG: debugLog("[taskCancel()] args", { componentIdx });
-	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave, cannot be cancelled");
+	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new _context.RuntimeError("component instance is not marked as may leave, cannot be cancelled");
 	const { taskID } = readTaskRegister(_context.registers, componentIdx);
 	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 	if (!taskMeta) throw new Error("invalid/missing async task meta");
 	const task = taskMeta.task;
 	if (!task) throw new Error("invalid/missing async task");
-	if (Reflect.get(task, "sync") && !task.alwaysTaskReturn) throw new Error("cannot cancel sync tasks without always task return set");
+	if (!task.calleeIsAsync()) throw new _context.RuntimeError("task.cancel requires an async canonical lift");
 	task.cancel();
 }
 
@@ -1849,16 +1855,16 @@ function currentThreadOrThrow(context, componentIdx) {
 /** Implements `canon thread.yield`. */
 function asyncYield(_context, ctx) {
 	DEBUG: debugLog("[asyncYield()] args", { ctx });
-	const { componentIdx, isCancellable } = ctx;
+	const { componentIdx } = ctx;
 	const { thread, task } = currentThreadOrThrow(_context, componentIdx);
 	if (!task.mayBlock()) {
 		getOrCreateAsyncState(_context.lookup, componentIdx).runTickLoop();
-		return isCancellable && thread.isCancelled() ? 1 : 0;
+		return 0;
 	}
 	return thread.suspend({
 		cancellable: false,
 		readyFn: () => true
-	}).then((keepGoing) => keepGoing ? 0 : 1);
+	}).then(() => 0);
 }
 /** Implements `canon thread.index`. */
 function threadIndex(_context, componentIdx) {
@@ -1869,13 +1875,14 @@ function threadIndex(_context, componentIdx) {
 /** Implements `canon thread.suspend`. */
 async function threadSuspend(_context, ctx) {
 	DEBUG: debugLog("[threadSuspend()] args", { ctx });
-	const { componentIdx, isCancellable } = ctx;
+	const { componentIdx } = ctx;
 	const { thread } = currentThreadOrThrow(_context, componentIdx);
-	return await thread.suspend({
-		cancellable: isCancellable,
+	await thread.suspend({
+		cancellable: false,
 		suspended: true,
 		readyFn: () => false
-	}) ? 0 : 1;
+	});
+	return 0;
 }
 /** Implements `canon thread.new-indirect`. */
 function threadNewIndirect(_context, ctx, startFuncIdx, context) {
@@ -1931,10 +1938,9 @@ function threadResumeLater(_context, ctx, threadHandle) {
 }
 /** Implements `canon thread.suspend-then-resume`. */
 function threadSuspendThenResume(_context, ctx, threadIdx) {
-	const { componentIdx, isCancellable } = ctx;
+	const { componentIdx } = ctx;
 	DEBUG: debugLog("[threadSuspendThenResume()] args", {
 		componentIdx,
-		isCancellable,
 		threadIdx
 	});
 	const { thread } = currentThreadOrThrow(_context, componentIdx);
@@ -1942,19 +1948,18 @@ function threadSuspendThenResume(_context, ctx, threadIdx) {
 	const other = threadIdx === 0 ? void 0 : cstate.threads.get(threadIdx >>> 0);
 	if (!other || other === thread || !cstate.isThreadSuspended(other)) throw new _context.RuntimeError("cannot resume thread which is not suspended");
 	const suspension = thread.suspend({
-		cancellable: isCancellable,
+		cancellable: false,
 		suspended: true,
 		readyFn: () => false
 	});
 	cstate.resumeThread(other);
-	return suspension.then((keepGoing) => keepGoing ? 0 : 1);
+	return suspension.then(() => 0);
 }
 /** Implements `canon thread.yield-then-resume`. */
 function threadYieldThenResume(_context, ctx, threadIdx) {
-	const { componentIdx, isCancellable } = ctx;
+	const { componentIdx } = ctx;
 	DEBUG: debugLog("[threadYieldThenResume()] args", {
 		componentIdx,
-		isCancellable,
 		threadIdx
 	});
 	const { thread } = currentThreadOrThrow(_context, componentIdx);
@@ -1962,19 +1967,18 @@ function threadYieldThenResume(_context, ctx, threadIdx) {
 	const other = threadIdx === 0 ? void 0 : cstate.threads.get(threadIdx >>> 0);
 	if (!other || other === thread || !cstate.isThreadSuspended(other)) throw new _context.RuntimeError("cannot resume thread which is not suspended");
 	const suspension = thread.suspend({
-		cancellable: isCancellable,
+		cancellable: false,
 		suspended: false,
 		readyFn: () => true
 	});
 	cstate.resumeThread(other);
-	return suspension.then((keepGoing) => keepGoing ? 0 : 1);
+	return suspension.then(() => 0);
 }
 /** Implements `canon thread.suspend-then-promote`. */
 function threadSuspendThenPromote(_context, ctx, threadIdx) {
-	const { componentIdx, isCancellable } = ctx;
+	const { componentIdx } = ctx;
 	DEBUG: debugLog("[threadSuspendThenPromote()] args", {
 		componentIdx,
-		isCancellable,
 		threadIdx
 	});
 	const { thread } = currentThreadOrThrow(_context, componentIdx);
@@ -1984,21 +1988,20 @@ function threadSuspendThenPromote(_context, ctx, threadIdx) {
 	if (other === thread) throw new _context.RuntimeError("cannot resume thread which is not suspended");
 	if (cstate.isThreadReady(other)) {
 		const suspension = thread.suspend({
-			cancellable: isCancellable,
+			cancellable: false,
 			suspended: true,
 			readyFn: () => false
 		});
 		cstate.resumeThread(other);
-		return suspension.then((keepGoing) => keepGoing ? 0 : 1);
+		return suspension.then(() => 0);
 	}
 	return threadSuspend(_context, ctx);
 }
 /** Implements `canon thread.yield-then-promote`. */
 function threadYieldThenPromote(_context, ctx, threadIdx) {
-	const { componentIdx, isCancellable } = ctx;
+	const { componentIdx } = ctx;
 	DEBUG: debugLog("[threadYieldThenPromote()] args", {
 		componentIdx,
-		isCancellable,
 		threadIdx
 	});
 	const { thread } = currentThreadOrThrow(_context, componentIdx);
@@ -2008,12 +2011,12 @@ function threadYieldThenPromote(_context, ctx, threadIdx) {
 	if (other === thread) throw new _context.RuntimeError("cannot resume thread which is not suspended");
 	if (cstate.isThreadReady(other)) {
 		const suspension = thread.suspend({
-			cancellable: isCancellable,
+			cancellable: false,
 			suspended: false,
 			readyFn: () => true
 		});
 		cstate.resumeThread(other);
-		return suspension.then((keepGoing) => keepGoing ? 0 : 1);
+		return suspension.then(() => 0);
 	}
 	return asyncYield(_context, ctx);
 }
@@ -3031,7 +3034,7 @@ function unpackCallbackResult(_context, result) {
 /** Decode a callback whose scalar type and i32 range have already been checked. */
 function unpackValidatedCallbackResult(context, result) {
 	const eventCode = result & 15;
-	if (eventCode > 3) throw new context.RuntimeError("invalid async return value [" + eventCode + "], outside callback code range");
+	if (eventCode > 2) throw new context.RuntimeError("unsupported callback code: " + eventCode);
 	if (result < 0) throw new context.RuntimeError("invalid callback result");
 	return [eventCode, result >> 4];
 }
@@ -3073,7 +3076,9 @@ function driverLoop(_context, args) {
 			},
 			err
 		});
-		if (err instanceof _context.RuntimeError) _context.reportTrap?.(err);
+		if (err instanceof _context.RuntimeError) {
+			if (!cstate.markTrapped(err)) _context.reportTrap?.(err);
+		}
 		task.setErrored(err);
 		task.reject(err);
 		if (!task.isExited()) task.exit({ skipExclusiveLockCheck: true });
@@ -3128,7 +3133,7 @@ function driverLoop(_context, args) {
 					}, continueWithEvent);
 					task.settleCompletion();
 					return;
-				default: throw new Error(`Unrecognized async function result [${callbackCode}]`);
+				default: throw new _context.RuntimeError(`unsupported callback code: ${callbackCode}`);
 			}
 		} catch (err) {
 			handleError(err);
@@ -3435,6 +3440,13 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 		DEBUG: debugLog("[_asyncStartCall()] initial subtask callee run failed", err);
 		_context.driver.reportTrap?.(err);
 		subtask.getParentTask().setErrored(err);
+		if (err instanceof _context.driver.RuntimeError) {
+			const rootTask = subtask.getParentTask().getRootTask();
+			if (!rootTask.isResolvedState()) {
+				rootTask.setErrored(err);
+				rootTask.reject(err);
+			}
+		}
 		if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
 	};
 	const driveCallback = (callbackResult) => {
@@ -3762,6 +3774,26 @@ function storeEventInComponentMemory(args) {
 }
 
 //#endregion
+//#region runtime/intrinsics/sync-waiter.js
+/**
+* Trap message for using a waitable synchronously while it is in a waitable set,
+* or joining it to one while a synchronous built-in waits on it.
+*/
+const WAITABLE_SYNC_IN_SET = "waitable cannot be used synchronously while added to a waitable set";
+/**
+* Mark `waitable` as having a synchronous waiter until `wait` settles, so that
+* `waitable.join` traps rather than let a waitable set take the awaited event.
+*
+* @param waitable - the waitable that a synchronous built-in blocks on
+* @param wait - the pending wait
+* @returns `wait`, settling after the waiter is cleared
+*/
+function waitSynchronously(waitable, wait) {
+	waitable.setSyncWaiter(true);
+	return wait.finally(() => waitable.setSyncWaiter(false));
+}
+
+//#endregion
 //#region runtime/intrinsics/waitable.js
 function defineWaitable() {
 	return class Waitable {
@@ -3785,6 +3817,13 @@ function defineWaitable() {
 		}
 		isInSet() {
 			return this.#waitableSet !== null;
+		}
+		/** Whether a synchronous built-in is blocked waiting on this waitable. */
+		hasSyncWaiter() {
+			return this.#hasSyncWaiter;
+		}
+		setSyncWaiter(value) {
+			this.#hasSyncWaiter = value;
 		}
 		idx() {
 			return this.#idx;
@@ -4135,7 +4174,7 @@ function waitableSetDrop(context, componentIdx, waitableSetRep) {
 	if (!task) throw new Error("invalid/missing async task");
 	if (task.componentIdx !== componentIdx) throw Error("task component idx [" + task.componentIdx + "] != component instance ID [" + componentIdx + "]");
 	const state = getOrCreateAsyncState(context.lookup, componentIdx);
-	if (!state.mayLeave) throw new Error("component instance is not marked as may leave, cannot be cancelled");
+	if (!state.mayLeave) throw new context.RuntimeError("component instance is not marked as may leave, cannot drop waitable set");
 	removeWaitableSet(context, {
 		state,
 		waitableSetRep
@@ -4169,6 +4208,7 @@ function waitableJoin(context, componentIdx, waitableRep, waitableSetRep) {
 	if (!waitableObj) throw new RuntimeError(`missing waitable obj (rep [${waitableRep}]), component idx [${componentIdx}])`);
 	const waitable = waitableObj.getWaitable ? waitableObj.getWaitable() : waitableObj;
 	if (!(waitable instanceof Waitable)) throw new RuntimeError("handle does not name a waitable");
+	if (waitable.hasSyncWaiter()) throw new RuntimeError(WAITABLE_SYNC_IN_SET);
 	const waitableSet = waitableSetRep === 0 ? null : state.handles.get(waitableSetRep);
 	if (waitableSetRep !== 0 && !(waitableSet instanceof WaitableSet)) throw new RuntimeError(`missing waitable set [${waitableSetRep}] in component idx [${componentIdx}]`);
 	waitable.join(waitableSet ?? null);
@@ -5012,6 +5052,7 @@ function defineAsyncTask() {
 		#funcTypeIsAsync = false;
 		#syncCall = false;
 		#returnResultTypeIdx = null;
+		#returnStringEncoding = null;
 		#parentSubtask = null;
 		#errHandling;
 		#returnLowerFns = null;
@@ -5059,6 +5100,7 @@ function defineAsyncTask() {
 			if (opts.getCalleeParamsFn) this.#getCalleeParamsFn = opts.getCalleeParamsFn;
 			if (opts.parentSubtask) this.#parentSubtask = opts.parentSubtask;
 			if (opts.errHandling) this.#errHandling = opts.errHandling;
+			if (opts.stringEncoding) this.#returnStringEncoding = opts.stringEncoding;
 		}
 		taskState() {
 			return this.#state;
@@ -5188,6 +5230,10 @@ function defineAsyncTask() {
 		}
 		getReturnMemory() {
 			return this.#memory;
+		}
+		/** The string encoding of the lift, which `task.return` must match (null if unknown). */
+		getReturnStringEncoding() {
+			return this.#returnStringEncoding;
 		}
 		setReturnMemory(m) {
 			if (m === null) return;
@@ -5570,7 +5616,7 @@ function defineAsyncTask() {
 		}
 		cancel(args) {
 			DEBUG: debugLog("[AsyncTask#cancel()] args", {});
-			if (this.taskState() !== TASK_CANCEL_DELIVERED) throw new Error("`task.cancel` called by task which has not been cancelled");
+			if (this.taskState() !== TASK_CANCEL_DELIVERED) throw new this.#context.RuntimeError("`task.cancel` called by task which has not been cancelled");
 			this.validateResourceBorrowScope();
 			this.cancelled = true;
 			this.onResolve(args?.error ?? null);
@@ -5683,7 +5729,7 @@ function defineAsyncTask() {
 			});
 			if (this.#state === TASK_RESOLVED) {
 				if (this.#errored !== null) throw this.#errored;
-				throw new Error(`(component [${this.#componentIdx}]) task [${this.#id}]  is already resolved (did you forget to wait for an import?)`);
+				throw new this.#context.RuntimeError(TASK_ALREADY_RESOLVED);
 			}
 			this.validateResourceBorrowScope();
 			this.#state = TASK_RESOLVED;
@@ -6249,7 +6295,7 @@ function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = f
 	const subtask = state.handles.get(subtaskRep);
 	if (!(subtask instanceof _context.AsyncSubtask)) throw new _context.RuntimeError("missing/invalid subtask [" + subtaskRep + "] specified for cancel in component instance");
 	if (subtask.resolveDelivered()) throw new _context.RuntimeError("`subtask.cancel` called after terminal status delivered");
-	if (!isAsync && subtask.waitable().isInSet()) throw new _context.RuntimeError("cannot synchronously cancel a subtask that is in a waitable set");
+	if (subtask.waitable().isInSet()) throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
 	const finishCancel = () => {
 		if (subtask.hasPendingEvent()) subtask.getPendingEvent();
 		if (!subtask.resolveDelivered()) subtask.deliverResolve();
@@ -6267,19 +6313,19 @@ function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = f
 				const { taskID } = readTaskRegister(_context.registers, componentIdx);
 				const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 				if (!taskMeta || !taskMeta.task) throw new Error("invalid/missing async task");
-				return taskMeta.task.waitUntil({
+				return waitSynchronously(subtask.waitable(), taskMeta.task.waitUntil({
 					cancellable: false,
 					readyFn: () => subtask.isResolved()
-				}).then(finishCancel);
+				})).then(finishCancel);
 			});
 		}
 		const { taskID } = readTaskRegister(_context.registers, componentIdx);
 		const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 		if (!taskMeta || !taskMeta.task) throw new Error("invalid/missing async task");
-		return taskMeta.task.waitUntil({
+		return waitSynchronously(subtask.waitable(), taskMeta.task.waitUntil({
 			cancellable: false,
 			readyFn: () => subtask.isResolved()
-		}).then(finishCancel);
+		})).then(finishCancel);
 	}
 	let cancellationWillCompleteAsync = false;
 	if (!subtask.isResolved()) {
@@ -6302,10 +6348,10 @@ function subtaskCancel(_context, componentIdx, isAsync, subtaskRep, slowOnly = f
 			const { taskID } = readTaskRegister(_context.registers, componentIdx);
 			const taskMeta = getCurrentTask(_context, componentIdx, taskID);
 			if (!taskMeta || !taskMeta.task) throw new Error("invalid/missing async task");
-			return taskMeta.task.waitUntil({
+			return waitSynchronously(subtask.waitable(), taskMeta.task.waitUntil({
 				cancellable: false,
 				readyFn: () => subtask.isResolved()
-			}).then(finishCancel);
+			})).then(finishCancel);
 		}
 	}
 	return finishCancel();
@@ -8098,7 +8144,7 @@ function futureWrite(_context, ctx, futureEndWaitableIdx, ptr) {
 	const task = taskMeta.task;
 	if (!task) throw new Error("missing task in metadata during future operation");
 	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave");
-	if (!task.mayBlock() && !isAsync) throw new Error("only tasks that may block may call future.futureWrite");
+	if (!task.mayBlock() && !isAsync) throw new _context.RuntimeError("cannot block a synchronous task before returning");
 	const futureEnd = getFutureEnd(_context.ends, {
 		tableIdx: futureTableIdx,
 		futureEndWaitableIdx
@@ -8110,6 +8156,7 @@ function futureWrite(_context, ctx, futureEndWaitableIdx, ptr) {
 		throw new _context.RuntimeError(message);
 	}
 	if (!futureEnd.isIdleState()) throw new _context.RuntimeError("cannot have concurrent operations active on a future/stream");
+	if (!isAsync && futureEnd.isInSet()) throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
 	if (futureEnd.hasPendingEvent()) {
 		const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
 		if (code !== _context.events.FUTURE_WRITE) throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_WRITE)`);
@@ -8131,7 +8178,7 @@ function futureWrite(_context, ctx, futureEndWaitableIdx, ptr) {
 			return asyncBlockedCode;
 		} else {
 			futureEnd.setCopyState(_context.Base.CopyState.SYNC_COPYING);
-			return task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }).then((completed) => {
+			return waitSynchronously(futureEnd.getWaitable(), task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() })).then((completed) => {
 				if (!completed || !futureEnd.hasPendingEvent()) throw task.isErrored() ?? new _context.RuntimeError("synchronous future operation interrupted before completion");
 				const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
 				if (code !== _context.events.FUTURE_WRITE) throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_WRITE)`);
@@ -8162,7 +8209,7 @@ function futureRead(_context, ctx, futureEndWaitableIdx, ptr) {
 	const task = taskMeta.task;
 	if (!task) throw new Error("missing task in metadata during future operation");
 	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave");
-	if (!task.mayBlock() && !isAsync) throw new Error("only tasks that may block may call future.futureRead");
+	if (!task.mayBlock() && !isAsync) throw new _context.RuntimeError("cannot block a synchronous task before returning");
 	const futureEnd = getFutureEnd(_context.ends, {
 		tableIdx: futureTableIdx,
 		futureEndWaitableIdx
@@ -8174,6 +8221,7 @@ function futureRead(_context, ctx, futureEndWaitableIdx, ptr) {
 		throw new _context.RuntimeError(message);
 	}
 	if (!futureEnd.isIdleState()) throw new _context.RuntimeError("cannot have concurrent operations active on a future/stream");
+	if (!isAsync && futureEnd.isInSet()) throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
 	if (futureEnd.hasPendingEvent()) {
 		const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
 		if (code !== _context.events.FUTURE_READ) throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_READ)`);
@@ -8195,7 +8243,7 @@ function futureRead(_context, ctx, futureEndWaitableIdx, ptr) {
 			return asyncBlockedCode;
 		} else {
 			futureEnd.setCopyState(_context.Base.CopyState.SYNC_COPYING);
-			return task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }).then((completed) => {
+			return waitSynchronously(futureEnd.getWaitable(), task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() })).then((completed) => {
 				if (!completed || !futureEnd.hasPendingEvent()) throw task.isErrored() ?? new _context.RuntimeError("synchronous future operation interrupted before completion");
 				const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
 				if (code !== _context.events.FUTURE_READ) throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_READ)`);
@@ -8227,6 +8275,7 @@ function futureCancelRead(_context, ctx, futureEndWaitableIdx) {
 	if (!futureEnd) throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx}]`);
 	if (!(futureEnd instanceof _context.FutureEnd)) throw new _context.RuntimeError("invalid future end, expected value of type [FutureReadableEnd]");
 	if (!futureEnd.isCopying()) throw new _context.RuntimeError("future end is not copying, cannot cancel");
+	if (futureEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
 	futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 	const finishCancel = () => {
 		const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
@@ -8241,7 +8290,7 @@ function futureCancelRead(_context, ctx, futureEndWaitableIdx) {
 			if (isAsync) return asyncBlockedCode;
 			const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
 			if (!taskMeta?.task) throw new Error("missing current task while cancelling future");
-			return taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }).then(finishCancel);
+			return waitSynchronously(futureEnd.getWaitable(), taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() })).then(finishCancel);
 		}
 	}
 	return finishCancel();
@@ -8264,6 +8313,7 @@ function futureCancelWrite(_context, ctx, futureEndWaitableIdx) {
 	if (!futureEnd) throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx}]`);
 	if (!(futureEnd instanceof _context.FutureEnd)) throw new _context.RuntimeError("invalid future end, expected value of type [FutureWritableEnd]");
 	if (!futureEnd.isCopying()) throw new _context.RuntimeError("future end is not copying, cannot cancel");
+	if (futureEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
 	futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 	const finishCancel = () => {
 		const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
@@ -8278,7 +8328,7 @@ function futureCancelWrite(_context, ctx, futureEndWaitableIdx) {
 			if (isAsync) return asyncBlockedCode;
 			const taskMeta = getCurrentTask(_context.taskLookup, componentIdx);
 			if (!taskMeta?.task) throw new Error("missing current task while cancelling future");
-			return taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }).then(finishCancel);
+			return waitSynchronously(futureEnd.getWaitable(), taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() })).then(finishCancel);
 		}
 	}
 	return finishCancel();
@@ -10047,7 +10097,7 @@ function initializeStreamEndClass(_context) {
 					const task = taskMeta.task;
 					if (!task) throw new Error("missing task task from task meta");
 					const streamEnd = this;
-					return task.suspendUntil({ readyFn: () => streamEnd.hasPendingEvent() }).then(async () => {
+					return waitSynchronously(this.#waitable, task.suspendUntil({ readyFn: () => streamEnd.hasPendingEvent() })).then(async () => {
 						if (deferSyncFinish) await Promise.resolve();
 						if (!injectedWritePromise) return finishCopy();
 						return injectedWritePromise.then((cleanupFn) => {
@@ -11047,6 +11097,7 @@ function streamCopy(_context, direction, ctx, streamEndWaitableIdx, ptr, count) 
 		const message = streamEnd.isWritable() ? "cannot write to stream after being notified that the readable end dropped" : "cannot read from stream after being notified that the writable end dropped";
 		throw new _context.RuntimeError(message);
 	}
+	if (!isAsync && streamEnd.isInSet()) throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
 	const memory = getMemoryFn?.();
 	_context.ManagedBuffer.validateGuestBuffer(memory, ptr, count, elemMeta ?? streamEnd.getElemMeta());
 	if (syncFastOnly && !streamEnd.hasPendingEvent() && !streamEnd.isPeerDropped() && !streamEnd.hasPendingBuffer()) return 4294967294;
@@ -11090,6 +11141,7 @@ function streamCancel(_context, direction, ctx, streamEndWaitableIdx) {
 	});
 	if (!(streamEnd instanceof _context.StreamEnd)) throw new Error(`invalid stream end, expected value of type [${direction.end}]`);
 	if (!streamEnd.isCopying()) throw new _context.RuntimeError("stream end is not copying, cannot cancel");
+	if (streamEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
 	streamEnd.setCopyState(_context.StreamEnd.CopyState.CANCELLING_COPY);
 	const finishCancel = () => {
 		const event = streamEnd.getPendingEvent();
@@ -11113,7 +11165,7 @@ function streamCancel(_context, direction, ctx, streamEndWaitableIdx) {
 			if (!taskMeta) throw new Error("missing current task metadata while cancelling a stream copy");
 			const task = taskMeta.task;
 			if (!task) throw new Error("missing task while cancelling a stream copy");
-			return task.suspendUntil({ readyFn: () => streamEnd.hasPendingEvent() }).then(finishCancel);
+			return waitSynchronously(streamEnd.getWaitable(), task.suspendUntil({ readyFn: () => streamEnd.hasPendingEvent() })).then(finishCancel);
 		}
 	}
 	return finishCancel();
