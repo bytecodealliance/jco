@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 9e941c33a4d13e04bd3c5098567e37852ed73f6e
+// generated from commit 25ddf8a96ffd052a3262cdcc6c658bd6a23fa3ef
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -602,7 +602,8 @@ const initializeStoreAsyncState = () => ({
 	deadlockCheck: null,
 	pendingHostOperations: 0,
 	hostWakeupScheduled: false,
-	idleWaiters: /* @__PURE__ */ new Set()
+	idleWaiters: /* @__PURE__ */ new Set(),
+	syncCalls: []
 });
 const initializeComponentAsyncStates = () => /* @__PURE__ */ new Map();
 const initializeCoreTrapMessages = (messages) => new Map(Object.entries(messages));
@@ -637,8 +638,10 @@ function checkForDeadlock(context) {
 			exitedTasks.add(task);
 			unresolvedRoots.add(task.getRootTask());
 		}
+		const syncCall = storeAsyncState.syncCalls.at(-1);
+		if (syncCall !== void 0 && !syncCall.task.isResolvedState()) unresolvedRoots.add(syncCall.task.getRootTask());
 		if (unresolvedRoots.size === 0) return;
-		const err = new RuntimeError("wasm trap: deadlock detected: event loop cannot make further progress");
+		const err = new RuntimeError(syncCall === void 0 ? "wasm trap: deadlock detected: event loop cannot make further progress" : "cannot block a synchronous task before returning");
 		err.deadlockDetail = {
 			pendingHostOperations: storeAsyncState.pendingHostOperations,
 			suspendedTasks: [...suspendedTasks].map((task) => ({
@@ -1181,7 +1184,7 @@ function defineComponentAsyncState() {
 		}
 		isThreadReady(thread) {
 			const meta = this.#suspendedThreadsByRef.get(thread);
-			return !!meta && !meta.suspended && (meta.thread.isRejected() || meta.readyFn());
+			return !!meta && !meta.suspended && this.suspendedThreadReady(thread);
 		}
 		suspendedThreadReady(thread) {
 			const meta = this.#suspendedThreadsByRef.get(thread);
@@ -1189,6 +1192,7 @@ function defineComponentAsyncState() {
 			if (!meta.readyFn) throw new Error(`suspended thread [${thread.id()}] is missing a readiness function`);
 			if (this.isTrapped() || meta.thread.isRejected()) return true;
 			if (!meta.readyFn()) return false;
+			if (!meta.thread.isImplicit()) return true;
 			const task = meta.thread.task();
 			return !task.needsExclusiveLock() || !this.isExclusivelyLocked() || this.exclusivelyLockedBy(task.id());
 		}
@@ -1201,8 +1205,26 @@ function defineComponentAsyncState() {
 		hasPendingSchedulerWork() {
 			if (this.#pendingTaskStarts > 0) return true;
 			if (this.#lockHandoffScheduled) return true;
+			if (this.#heldBySyncCall()) return false;
 			for (const meta of this.#suspendedThreadsByRef.values()) if (this.suspendedThreadReady(meta.thread)) return true;
 			return false;
+		}
+		beginSyncCall(task) {
+			this.#context.deadlock.storeAsyncState.syncCalls.push({
+				componentIdx: this.#componentIdx,
+				task
+			});
+		}
+		endSyncCall(task) {
+			const syncCalls = this.#context.deadlock.storeAsyncState.syncCalls;
+			const idx = syncCalls.findIndex((call) => call.task === task);
+			if (idx === -1) return;
+			syncCalls.splice(idx, 1);
+			for (const state of this.#context.deadlock.asyncState.values()) if (state.hasPendingSchedulerWork()) state.runTickLoop();
+		}
+		#heldBySyncCall() {
+			const top = this.#context.deadlock.storeAsyncState.syncCalls.at(-1);
+			return top !== void 0 && top.componentIdx !== this.#componentIdx;
 		}
 		stop() {
 			this.#tickLoop?.();
@@ -1229,6 +1251,7 @@ function defineComponentAsyncState() {
 			this.#tickLoop = onNextMacrotask(run);
 		}
 		tick() {
+			const held = this.#heldBySyncCall();
 			for (const [thread, meta] of this.#suspendedThreadsByRef) {
 				if (!meta || !meta.readyFn) throw new Error(`missing/invalid thread meta despite thread [${thread.id()}] being present`);
 				if (this.isTrapped() || meta.thread.isRejected()) {
@@ -1236,7 +1259,7 @@ function defineComponentAsyncState() {
 					this.resumeThread(thread);
 					return TICK_RESUMED;
 				}
-				if (!this.suspendedThreadReady(thread)) continue;
+				if (held || !this.suspendedThreadReady(thread)) continue;
 				DEBUG: debugLog("[ComponentAsyncState#tick()] resuming thread via tick", {
 					threadID: thread.id(),
 					componentIdx: this.#componentIdx
@@ -2902,7 +2925,15 @@ const suspendingImport = (context, componentIdx, fn, syncOnly = false, switchesT
 			}
 			return result;
 		}
-		const settled = (async () => fn.apply(null, args))();
+		let started;
+		try {
+			started = fn.apply(null, args);
+		} catch (error) {
+			currentTaskMeta[componentIdx] = saved;
+			if (!switchesTask) currentTaskMeta.current = saved;
+			throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
+		}
+		const settled = (async () => started)();
 		const resumption = promiseWithResolvers();
 		/** Restore this stack's task, then let the stack resume. */
 		const resume = (deliver) => resumeInTurn(currentTaskMeta, () => {
@@ -4942,6 +4973,7 @@ function defineAsyncTask() {
 		#calleeIsAsync = null;
 		#admissionTicket = null;
 		#funcTypeIsAsync = false;
+		#syncCall = false;
 		#returnResultTypeIdx = null;
 		#parentSubtask = null;
 		#errHandling;
@@ -5193,6 +5225,25 @@ function defineAsyncTask() {
 		setFuncTypeIsAsync(v) {
 			this.#funcTypeIsAsync = v;
 		}
+		/**
+		* Record that this task is a call of a non-async-typed guest function,
+		* in progress until the task resolves. Until then, only threads of its
+		* instance are scheduled, and a block with none of them ready traps
+		* (Canonical ABI `canon_lift`).
+		*/
+		beginSyncCall() {
+			if (this.#syncCall || this.#funcTypeIsAsync || this.#componentIdx === -1 || this.isResolvedState()) return;
+			this.#syncCall = true;
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).beginSyncCall(this);
+		}
+		#beginGuestSyncCall() {
+			if (this.#callingWasmExport) this.beginSyncCall();
+		}
+		#endSyncCall() {
+			if (!this.#syncCall) return;
+			this.#syncCall = false;
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endSyncCall(this);
+		}
 		setReturnResultTypeIdx(v) {
 			this.#returnResultTypeIdx = v;
 		}
@@ -5227,6 +5278,7 @@ function defineAsyncTask() {
 					});
 				}
 			}
+			this.#beginGuestSyncCall();
 			return true;
 		}
 		tryEnter() {
@@ -5238,6 +5290,7 @@ function defineAsyncTask() {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (this.isSync()) {
 				this.#entered = true;
+				this.#beginGuestSyncCall();
 				return true;
 			}
 			if (cstate.hasBackpressure()) return null;
@@ -5252,6 +5305,7 @@ function defineAsyncTask() {
 				return false;
 			}
 			this.#entered = true;
+			this.#beginGuestSyncCall();
 			return true;
 		}
 		async enter(opts) {
@@ -5271,6 +5325,7 @@ function defineAsyncTask() {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (this.isSync()) {
 				this.#entered = true;
+				this.#beginGuestSyncCall();
 				if (this.#isManualAsync) {
 					if (this.needsExclusiveLock()) await cstate.acquireExclusiveLock(this.#id);
 				}
@@ -5336,6 +5391,7 @@ function defineAsyncTask() {
 				return false;
 			}
 			this.#entered = true;
+			this.#beginGuestSyncCall();
 			return this.#entered;
 		}
 		isRunningState() {
@@ -5484,6 +5540,7 @@ function defineAsyncTask() {
 			this.cancelled = true;
 			this.onResolve(args?.error ?? null);
 			this.#state = TASK_RESOLVED;
+			this.#endSyncCall();
 			if (!this.#entered) this.notifyProgress();
 		}
 		onResolve(taskValue) {
@@ -5595,6 +5652,7 @@ function defineAsyncTask() {
 			}
 			this.validateResourceBorrowScope();
 			this.#state = TASK_RESOLVED;
+			this.#endSyncCall();
 			switch (results.length) {
 				case 0:
 					this.onResolve(void 0);
@@ -5620,6 +5678,7 @@ function defineAsyncTask() {
 				taskID: this.#id
 			});
 			this.endFirstSlice();
+			this.#endSyncCall();
 			if (this.#exited) throw new Error("task has already exited");
 			this.validateResourceBorrowScope();
 			const state = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
@@ -6565,6 +6624,7 @@ function symmetricSyncGuestCallEnter(_context, callerComponentIdx, calleeIsAsync
 			previousTaskMayBlock: _context.mayBlock.value
 		});
 		_context.mayBlock.value = newTask.mayBlock() ? 1 : 0;
+		newTask.beginSyncCall();
 		DEBUG: debugLog("[_symmetricSyncGuestCallEnter()] finished preparing", {
 			callerComponentIdx,
 			calleeComponentIdx,
@@ -6629,6 +6689,7 @@ function defineAsyncThread() {
 		#task;
 		#state;
 		#startFn = null;
+		#implicit;
 		storage = [0, 0];
 		constructor(context, opts) {
 			this.#context = context;
@@ -6640,6 +6701,11 @@ function defineAsyncThread() {
 				this.#startFn = opts.startFn;
 				this.#state = THREAD_NOT_STARTED;
 			} else this.#state = THREAD_RUNNING;
+			this.#implicit = !opts.startFn;
+		}
+		/** Whether this is its task's implicit thread (not made by `thread.new-indirect`). */
+		isImplicit() {
+			return this.#implicit;
 		}
 		id() {
 			return this.#id;
