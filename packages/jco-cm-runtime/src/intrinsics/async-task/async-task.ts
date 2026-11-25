@@ -618,6 +618,14 @@ function defineAsyncTask() {
             getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endEntry(this.#id);
         }
         /**
+         * @deprecated Former name of `endInitialInvocation`, still called by
+         * bindings from jco-transpile 0.24.0 and earlier. Remove in the next
+         * breaking release.
+         */
+        endFirstSlice() {
+            this.endInitialInvocation();
+        }
+        /**
          * The task's thread blocked: its initial invocation is over, and so is the
          * initial invocation of each caller that waits on it through a synchronous
          * lowering, since that caller's thread blocks with it (Canonical ABI
