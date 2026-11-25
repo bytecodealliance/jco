@@ -60,9 +60,13 @@ function defineRepTable() {
             DEBUG: debugLog('[RepTable#insert()] args', { val, target: this.target });
             const freeIdx = this.#data[0] as number;
             if (freeIdx === 0) {
+                // (Canonical ABI `Table.add`)
+                const rep = this.#data.length >> 1;
+                if (rep > MAX_LENGTH) {
+                    throw new this.#context.RuntimeError('handle table full');
+                }
                 this.#data.push(val);
                 this.#data.push(null);
-                const rep = (this.#data.length >> 1) - 1;
                 DEBUG: debugLog('[RepTable#insert()] inserted', { val, target: this.target, rep });
                 this.#size += 1;
                 return rep;

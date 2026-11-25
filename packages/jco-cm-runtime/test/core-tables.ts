@@ -47,6 +47,26 @@ test.concurrent.each([false, true])('rep tables reject indices past their end (s
     expect(table.get(second)).toEqual({ value: 2 });
 });
 
+// Canonical ABI `Table.add`: an index past `Table.MAX_LENGTH` (2 ** 28 - 1) traps.
+test.concurrent('rep tables trap once full', () => {
+    const { core, resource } = create();
+    const MAX_LENGTH = 2 ** 28 - 1;
+
+    const table = new core.RepTable<number>();
+    // (a sparse array: the next index is MAX_LENGTH, the last one allowed)
+    table.data().length = MAX_LENGTH * 2;
+    expect(table.insert(1)).toBe(MAX_LENGTH);
+    expect(() => table.insert(2)).toThrow(new WebAssembly.RuntimeError('handle table full'));
+    expect(table.get(MAX_LENGTH)).toBe(1);
+
+    const space = resource.getHandleIndexSpace(0);
+    const shared = new core.RepTable<number>({ space });
+    space.next = MAX_LENGTH;
+    expect(shared.insert(1)).toBe(MAX_LENGTH);
+    expect(() => shared.insert(2)).toThrow(new WebAssembly.RuntimeError('handle table full'));
+    expect(shared.size()).toBe(1);
+});
+
 test.concurrent('rep table lookup traps use the selected realm and preserve falsy entries', () => {
     class Trap extends Error {}
     const { core } = create({ platform: { WebAssembly: { RuntimeError: Trap } } });

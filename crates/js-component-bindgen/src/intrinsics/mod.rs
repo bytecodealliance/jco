@@ -1031,9 +1031,11 @@ impl Intrinsic {
                             {debug_log_fn}('[{rep_table_class}#insert()] args', {{ val, target: this.target }});
                             const freeIdx = this.#data[0];
                             if (freeIdx === 0) {{
+                                // (Canonical ABI `Table.add`)
+                                const rep = this.#data.length >> 1;
+                                if (rep > 2 ** 28 - 1) {{ throw new {runtime_error_class}('handle table full'); }}
                                 this.#data.push(val);
                                 this.#data.push(null);
-                                const rep = (this.#data.length >> 1) - 1;
                                 {debug_log_fn}('[{rep_table_class}#insert()] inserted', {{ val, target: this.target, rep }});
                                 this.#size += 1;
                                 return rep;

@@ -6,6 +6,8 @@ import type { ResourceModule, ResourceHandleTables, ResourceTable } from '../run
 // Handle `h` lives at `[h * 2, h * 2 + 1]`: `h << 1` would wrap at 2 ** 31 and alias a live entry.
 const RESOURCE_TABLE_FLAG = 1 << 30;
 const RESOURCE_TABLE_OWN = 2 ** 32;
+// Canonical ABI `Table.MAX_LENGTH`: `Table.add` traps rather than use a higher index.
+const MAX_HANDLE_INDEX = 2 ** 28 - 1;
 
 export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => {
     const scope = table[handle * 2];
@@ -38,7 +40,13 @@ export const getHandleIndexSpace: ResourceModule['getHandleIndexSpace'] = (space
             next: 1,
             free: [],
             alloc() {
-                return this.free.length > 0 ? this.free.pop()! : this.next++;
+                if (this.free.length > 0) {
+                    return this.free.pop()!;
+                }
+                if (this.next > MAX_HANDLE_INDEX) {
+                    throw new WebAssembly.RuntimeError('handle table full');
+                }
+                return this.next++;
             },
             release(index) {
                 this.free.push(index);
