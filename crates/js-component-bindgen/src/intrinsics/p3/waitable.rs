@@ -2,6 +2,7 @@
 
 use super::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::p3::WAITABLE_SYNC_IN_SET;
 use crate::intrinsics::p3::host::HostIntrinsic;
 use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
@@ -373,6 +374,10 @@ impl WaitableIntrinsic {
                         componentIdx() {{ return this.#componentIdx; }}
                         isInSet() {{ return this.#waitableSet !== null; }}
 
+                        // Whether a synchronous built-in is blocked waiting on this waitable.
+                        hasSyncWaiter() {{ return this.#hasSyncWaiter; }}
+                        setSyncWaiter(value) {{ this.#hasSyncWaiter = value; }}
+
                         idx() {{ return this.#idx; }}
                         setIdx(idx) {{
                             if (idx === 0) {{ throw new Error("waitable idx cannot be zero"); }}
@@ -734,6 +739,10 @@ impl WaitableIntrinsic {
                         const waitable = waitableObj.getWaitable ? waitableObj.getWaitable() : waitableObj;
                         if (!(waitable instanceof {waitable_class})) {{
                             throw new {runtime_error_class}("handle does not name a waitable");
+                        }}
+                        // A waitable set must not take the event a synchronous built-in is waiting for.
+                        if (waitable.hasSyncWaiter()) {{
+                            throw new {runtime_error_class}({WAITABLE_SYNC_IN_SET:?});
                         }}
 
                         const waitableSet = waitableSetRep === 0 ? null : state.handles.get(waitableSetRep);

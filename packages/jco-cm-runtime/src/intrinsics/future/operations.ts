@@ -19,6 +19,7 @@ import { getErrorPayload, disposeHostValue } from '../core.js';
 import { getOrCreateAsyncState, trackHostOperation } from '../component.js';
 import { getCurrentTask } from '../async-task/task-operations.js';
 import { asyncBlockedCode } from '../async-task.js';
+import { WAITABLE_SYNC_IN_SET, waitSynchronously } from '../sync-waiter.js';
 import { createFuture, getFutureEnd, removeFutureEndFromTable, addFutureEndToTable } from './state.js';
 
 /**
@@ -142,6 +143,9 @@ export function futureWrite(
     if (!futureEnd.isIdleState()) {
         throw new _context.RuntimeError('cannot have concurrent operations active on a future/stream');
     }
+    if (!isAsync && futureEnd.isInSet()) {
+        throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
+    }
 
     if (futureEnd.hasPendingEvent()) {
         const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
@@ -170,28 +174,29 @@ export function futureWrite(
             return asyncBlockedCode;
         } else {
             futureEnd.setCopyState(_context.Base.CopyState.SYNC_COPYING);
-            return task
-                .suspendUntil({
+            return waitSynchronously(
+                futureEnd.getWaitable(),
+                task.suspendUntil({
                     readyFn: () => futureEnd.hasPendingEvent(),
-                })
-                .then((completed) => {
-                    // The wait is resumed without the copy's event when the
-                    // task is torn down (e.g. the store trapped meanwhile).
-                    if (!completed || !futureEnd.hasPendingEvent()) {
-                        throw (
-                            task.isErrored() ??
-                            new _context.RuntimeError('synchronous future operation interrupted before completion')
-                        );
-                    }
-                    const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
-                    if (code !== _context.events.FUTURE_WRITE) {
-                        throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_WRITE)`);
-                    }
-                    if (index !== futureEnd.waitableIdx()) {
-                        throw new Error('mismatched future end index');
-                    }
-                    return payload;
-                });
+                }),
+            ).then((completed) => {
+                // The wait is resumed without the copy's event when the
+                // task is torn down (e.g. the store trapped meanwhile).
+                if (!completed || !futureEnd.hasPendingEvent()) {
+                    throw (
+                        task.isErrored() ??
+                        new _context.RuntimeError('synchronous future operation interrupted before completion')
+                    );
+                }
+                const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
+                if (code !== _context.events.FUTURE_WRITE) {
+                    throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_WRITE)`);
+                }
+                if (index !== futureEnd.waitableIdx()) {
+                    throw new Error('mismatched future end index');
+                }
+                return payload;
+            });
         }
     }
 
@@ -273,6 +278,9 @@ export function futureRead(
     if (!futureEnd.isIdleState()) {
         throw new _context.RuntimeError('cannot have concurrent operations active on a future/stream');
     }
+    if (!isAsync && futureEnd.isInSet()) {
+        throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
+    }
 
     if (futureEnd.hasPendingEvent()) {
         const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
@@ -301,28 +309,29 @@ export function futureRead(
             return asyncBlockedCode;
         } else {
             futureEnd.setCopyState(_context.Base.CopyState.SYNC_COPYING);
-            return task
-                .suspendUntil({
+            return waitSynchronously(
+                futureEnd.getWaitable(),
+                task.suspendUntil({
                     readyFn: () => futureEnd.hasPendingEvent(),
-                })
-                .then((completed) => {
-                    // The wait is resumed without the copy's event when the
-                    // task is torn down (e.g. the store trapped meanwhile).
-                    if (!completed || !futureEnd.hasPendingEvent()) {
-                        throw (
-                            task.isErrored() ??
-                            new _context.RuntimeError('synchronous future operation interrupted before completion')
-                        );
-                    }
-                    const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
-                    if (code !== _context.events.FUTURE_READ) {
-                        throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_READ)`);
-                    }
-                    if (index !== futureEnd.waitableIdx()) {
-                        throw new Error('mismatched future end index');
-                    }
-                    return payload;
-                });
+                }),
+            ).then((completed) => {
+                // The wait is resumed without the copy's event when the
+                // task is torn down (e.g. the store trapped meanwhile).
+                if (!completed || !futureEnd.hasPendingEvent()) {
+                    throw (
+                        task.isErrored() ??
+                        new _context.RuntimeError('synchronous future operation interrupted before completion')
+                    );
+                }
+                const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent()!;
+                if (code !== _context.events.FUTURE_READ) {
+                    throw new Error(`mismatched event code [${code}] (expected ASYNC_EVENT_CODE.FUTURE_READ)`);
+                }
+                if (index !== futureEnd.waitableIdx()) {
+                    throw new Error('mismatched future end index');
+                }
+                return payload;
+            });
         }
     }
 
@@ -368,6 +377,12 @@ export function futureCancelRead(
     if (!futureEnd.isCopying()) {
         throw new _context.RuntimeError('future end is not copying, cannot cancel');
     }
+    if (futureEnd.getWaitable().hasSyncWaiter()) {
+        throw new _context.RuntimeError('cannot cancel a copy that a synchronous operation is waiting on');
+    }
+    // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
+    // a waitable set. That check is held back: guests built with older wit-bindgen
+    // releases, including the prebuilt p3 fixtures, cancel this way.
 
     futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 
@@ -398,7 +413,10 @@ export function futureCancelRead(
             if (!taskMeta?.task) {
                 throw new Error('missing current task while cancelling future');
             }
-            return taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }).then(finishCancel);
+            return waitSynchronously(
+                futureEnd.getWaitable(),
+                taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }),
+            ).then(finishCancel);
         }
     }
 
@@ -436,6 +454,12 @@ export function futureCancelWrite(
     if (!futureEnd.isCopying()) {
         throw new _context.RuntimeError('future end is not copying, cannot cancel');
     }
+    if (futureEnd.getWaitable().hasSyncWaiter()) {
+        throw new _context.RuntimeError('cannot cancel a copy that a synchronous operation is waiting on');
+    }
+    // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
+    // a waitable set. That check is held back: guests built with older wit-bindgen
+    // releases, including the prebuilt p3 fixtures, cancel this way.
 
     futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 
@@ -466,7 +490,10 @@ export function futureCancelWrite(
             if (!taskMeta?.task) {
                 throw new Error('missing current task while cancelling future');
             }
-            return taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }).then(finishCancel);
+            return waitSynchronously(
+                futureEnd.getWaitable(),
+                taskMeta.task.suspendUntil({ readyFn: () => futureEnd.hasPendingEvent() }),
+            ).then(finishCancel);
         }
     }
 

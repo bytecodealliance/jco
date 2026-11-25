@@ -6,8 +6,8 @@ use crate::{
 };
 
 use super::{
-    CANNOT_LIFT_STREAM_IN_WAITABLE_SET, CANNOT_START_CONCURRENT_OPERATION,
-    async_task::AsyncTaskIntrinsic,
+    CANNOT_CANCEL_SYNC_WAITED_COPY, CANNOT_LIFT_STREAM_IN_WAITABLE_SET,
+    CANNOT_START_CONCURRENT_OPERATION, WAITABLE_SYNC_IN_SET, async_task::AsyncTaskIntrinsic,
 };
 
 /// This enum contains intrinsics that enable Stream
@@ -1209,9 +1209,11 @@ impl AsyncStreamIntrinsic {
                                      if (!task) {{ throw new Error('missing task task from task meta'); }}
 
                                      const streamEnd = this;
+                                     const waitable = this.getWaitable();
+                                     waitable.setSyncWaiter(true);
                                      return task.suspendUntil({{
                                          readyFn: () => streamEnd.hasPendingEvent(),
-                                     }}).then(async () => {{
+                                     }}).finally(() => waitable.setSyncWaiter(false)).then(async () => {{
                                          if (deferSyncFinish) {{ await Promise.resolve(); }}
                                          if (!injectedWritePromise) {{ return finishCopy(); }}
                                          return injectedWritePromise.then(cleanupFn => {{
@@ -2194,6 +2196,9 @@ impl AsyncStreamIntrinsic {
                                 : 'cannot read from stream after being notified that the writable end dropped';
                             throw new {runtime_error_class}(message);
                         }}
+                        if (!isAsync && streamEnd.isInSet()) {{
+                            throw new {runtime_error_class}({WAITABLE_SYNC_IN_SET:?});
+                        }}
 
                         // Validate before copy's early return for a dropped peer, too.
                         const memory = getMemoryFn?.();
@@ -2267,6 +2272,12 @@ impl AsyncStreamIntrinsic {
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
                         if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
+                        if (streamEnd.getWaitable().hasSyncWaiter()) {{
+                            throw new {runtime_error_class}({CANNOT_CANCEL_SYNC_WAITED_COPY:?});
+                        }}
+                        // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
+                        // a waitable set. That check is held back: guests built with older wit-bindgen
+                        // releases, including the prebuilt p3 fixtures, cancel this way.
 
                         streamEnd.setCopyState({stream_end_class}.CopyState.CANCELLING_COPY);
 
@@ -2295,9 +2306,11 @@ impl AsyncStreamIntrinsic {
                                 if (!taskMeta) {{ throw new Error('missing current task metadata while cancelling a stream copy'); }}
                                 const task = taskMeta.task;
                                 if (!task) {{ throw new Error('missing task while cancelling a stream copy'); }}
+                                const waitable = streamEnd.getWaitable();
+                                waitable.setSyncWaiter(true);
                                 return task.suspendUntil({{
                                     readyFn: () => streamEnd.hasPendingEvent(),
-                                }}).then(finishCancel);
+                                }}).finally(() => waitable.setSyncWaiter(false)).then(finishCancel);
                             }}
                         }}
 

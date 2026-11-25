@@ -17,6 +17,7 @@ import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 import { getCurrentTask } from '../async-task/task-operations.js';
 import { asyncBlockedCode } from '../async-task.js';
+import { WAITABLE_SYNC_IN_SET, waitSynchronously } from '../sync-waiter.js';
 import { createStream, getStreamEnd, removeStreamEndFromTable, addStreamEndToTable } from './state.js';
 
 /**
@@ -179,6 +180,9 @@ function streamCopy(
             : 'cannot read from stream after being notified that the writable end dropped';
         throw new _context.RuntimeError(message);
     }
+    if (!isAsync && streamEnd.isInSet()) {
+        throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
+    }
 
     // Validate before copy can return early for a dropped peer.
     const memory = getMemoryFn?.();
@@ -259,6 +263,12 @@ function streamCancel(
     if (!streamEnd.isCopying()) {
         throw new _context.RuntimeError('stream end is not copying, cannot cancel');
     }
+    if (streamEnd.getWaitable().hasSyncWaiter()) {
+        throw new _context.RuntimeError('cannot cancel a copy that a synchronous operation is waiting on');
+    }
+    // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
+    // a waitable set. That check is held back: guests built with older wit-bindgen
+    // releases, including the prebuilt p3 fixtures, cancel this way.
 
     streamEnd.setCopyState(_context.StreamEnd.CopyState.CANCELLING_COPY);
 
@@ -295,11 +305,12 @@ function streamCancel(
             if (!task) {
                 throw new Error('missing task while cancelling a stream copy');
             }
-            return task
-                .suspendUntil({
+            return waitSynchronously(
+                streamEnd.getWaitable(),
+                task.suspendUntil({
                     readyFn: () => streamEnd.hasPendingEvent(),
-                })
-                .then(finishCancel);
+                }),
+            ).then(finishCancel);
         }
     }
 

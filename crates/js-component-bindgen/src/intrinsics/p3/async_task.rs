@@ -4,6 +4,7 @@ use std::fmt::Write;
 
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
+use crate::intrinsics::p3::WAITABLE_SYNC_IN_SET;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
@@ -1120,8 +1121,9 @@ impl AsyncTaskIntrinsic {
                         if (subtask.resolveDelivered()) {{
                             throw new {runtime_error_class}('`subtask.cancel` called after terminal status delivered');
                         }}
-                        if (!isAsync && subtask.getWaitable().isInSet()) {{
-                            throw new {runtime_error_class}('cannot synchronously cancel a subtask that is in a waitable set');
+                        // Even an async cancel claims the resolution event, which a waitable set could otherwise take.
+                        if (subtask.getWaitable().isInSet()) {{
+                            throw new {runtime_error_class}({WAITABLE_SYNC_IN_SET:?});
                         }}
 
                         const finishCancel = () => {{
@@ -1132,6 +1134,16 @@ impl AsyncTaskIntrinsic {
                             if (!subtask.resolveDelivered()) {{ subtask.deliverResolve(); }}
 
                             return subtask.getStateNumber();
+                        }};
+
+                        // Block the current task until the subtask resolves, as its synchronous waiter.
+                        const waitForResolve = (task) => {{
+                            const waitable = subtask.getWaitable();
+                            waitable.setSyncWaiter(true);
+                            return task.waitUntil({{
+                                cancellable: false,
+                                readyFn: () => subtask.isResolved(),
+                            }}).finally(() => waitable.setSyncWaiter(false)).then(finishCancel);
                         }};
 
                         if (subtask.cancellationRequested()) {{
@@ -1149,20 +1161,14 @@ impl AsyncTaskIntrinsic {
                                     const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
                                     const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                                     if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
-                                    return taskMeta.task.waitUntil({{
-                                        cancellable: false,
-                                        readyFn: () => subtask.isResolved(),
-                                    }}).then(finishCancel);
+                                    return waitForResolve(taskMeta.task);
                                 }});
                             }}
 
                             const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
                             const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                             if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
-                            return taskMeta.task.waitUntil({{
-                                cancellable: false,
-                                readyFn: () => subtask.isResolved(),
-                            }}).then(finishCancel);
+                            return waitForResolve(taskMeta.task);
                         }}
 
                         let cancellationWillCompleteAsync = false;
@@ -1211,10 +1217,7 @@ impl AsyncTaskIntrinsic {
                                 const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
                                 const taskMeta = {current_task_get_fn}(componentIdx, taskID);
                                 if (!taskMeta || !taskMeta.task) {{ throw new Error('invalid/missing async task'); }}
-                                return taskMeta.task.waitUntil({{
-                                    cancellable: false,
-                                    readyFn: () => subtask.isResolved(),
-                                }}).then(finishCancel);
+                                return waitForResolve(taskMeta.task);
                             }}
                         }}
 

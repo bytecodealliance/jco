@@ -8,8 +8,8 @@ use crate::source::Source;
 use crate::uwriteln;
 
 use super::{
-    CANNOT_LIFT_FUTURE_IN_WAITABLE_SET, CANNOT_START_CONCURRENT_OPERATION,
-    async_task::AsyncTaskIntrinsic,
+    CANNOT_CANCEL_SYNC_WAITED_COPY, CANNOT_LIFT_FUTURE_IN_WAITABLE_SET,
+    CANNOT_START_CONCURRENT_OPERATION, WAITABLE_SYNC_IN_SET, async_task::AsyncTaskIntrinsic,
 };
 
 /// This enum contains intrinsics that enable Futures
@@ -1707,6 +1707,9 @@ impl AsyncFutureIntrinsic {
                         if (!futureEnd.isIdleState()) {{
                             throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
                         }}
+                        if (!isAsync && futureEnd.isInSet()) {{
+                            throw new {runtime_error_class}({WAITABLE_SYNC_IN_SET:?});
+                        }}
 
                         if (futureEnd.hasPendingEvent()) {{
                             const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
@@ -1733,9 +1736,11 @@ impl AsyncFutureIntrinsic {
                                 return {async_blocked_const};
                             }} else {{
                                 futureEnd.setCopyState({future_end_base_class}.CopyState.SYNC_COPYING);
+                                const waitable = futureEnd.getWaitable();
+                                waitable.setSyncWaiter(true);
                                 return task.suspendUntil({{
                                     readyFn: () => futureEnd.hasPendingEvent(),
-                                }}).then((completed) => {{
+                                }}).finally(() => waitable.setSyncWaiter(false)).then((completed) => {{
                                     // The wait is resumed without the copy's event when the
                                     // task is torn down (e.g. the store trapped meanwhile).
                                     if (!completed || !futureEnd.hasPendingEvent()) {{
@@ -1813,6 +1818,12 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         if (!futureEnd.isCopying()) {{ throw new {runtime_error_class}('future end is not copying, cannot cancel'); }}
+                        if (futureEnd.getWaitable().hasSyncWaiter()) {{
+                            throw new {runtime_error_class}({CANNOT_CANCEL_SYNC_WAITED_COPY:?});
+                        }}
+                        // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
+                        // a waitable set. That check is held back: guests built with older wit-bindgen
+                        // releases, including the prebuilt p3 fixtures, cancel this way.
 
                         futureEnd.setCopyState({future_end_class}.CopyState.CANCELLING_COPY);
 
@@ -1833,8 +1844,11 @@ impl AsyncFutureIntrinsic {
 
                                 const taskMeta = {current_task_get_fn}componentIdx);
                                 if (!taskMeta?.task) {{ throw new Error('missing current task while cancelling future'); }}
+                                const waitable = futureEnd.getWaitable();
+                                waitable.setSyncWaiter(true);
                                 return taskMeta.task
                                     .suspendUntil({{ readyFn: () => futureEnd.hasPendingEvent() }})
+                                    .finally(() => waitable.setSyncWaiter(false))
                                     .then(finishCancel);
                             }}
                         }}
