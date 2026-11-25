@@ -355,7 +355,7 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set(), syncCalls: [] }};"#
+                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set(), syncCalls: [], heldResumptions: [] }};"#
                 );
             }
 
@@ -1369,13 +1369,54 @@ impl ComponentIntrinsic {
                         }}
 
                         endSyncCall(task) {{
-                            const idx = {store_async_state}.syncCalls.findIndex((call) => call.task === task);
+                            const syncCalls = {store_async_state}.syncCalls;
+                            const idx = syncCalls.findIndex((call) => call.task === task);
                             if (idx === -1) {{ return; }}
-                            {store_async_state}.syncCalls.splice(idx, 1);
+                            syncCalls.splice(idx, 1);
+                            // Stacks held back by the call resume in the order their promises
+                            // settled, unless another sync call still holds them back.
+                            const top = syncCalls.at(-1);
+                            const held = {store_async_state}.heldResumptions;
+                            for (let i = 0; i < held.length; ) {{
+                                const {{ task: heldTask, resume }} = held[i];
+                                if (top !== undefined && !{component_async_state_class}.#isWithinSyncCall(heldTask, top)) {{
+                                    i++;
+                                    continue;
+                                }}
+                                held.splice(i, 1);
+                                resume();
+                            }}
                             // Instances held back by the call may run again.
                             for (const state of {async_state_map}.values()) {{
                                 if (state.hasPendingSchedulerWork()) {{ state.runTickLoop(); }}
                             }}
+                        }}
+
+                        // Whether a task runs on behalf of a sync call: it belongs to the call's
+                        // instance, or the call waits on it through synchronous lowerings (its
+                        // stack is part of the call's stack).
+                        static #isWithinSyncCall(task, call) {{
+                            let current = task;
+                            for (;;) {{
+                                if (current === call.task || current.componentIdx() === call.componentIdx) {{ return true; }}
+                                const subtask = current.getParentSubtask();
+                                if (!subtask || subtask.isAsync) {{ return false; }}
+                                current = subtask.getParentTask();
+                            }}
+                        }}
+
+                        // Resume a stack of this instance that waited on a promise of the
+                        // host. While a sync call into another instance is in progress, only
+                        // that instance runs (Canonical ABI `canon_lift`, `not ft.async_`):
+                        // the stack resumes once the call has returned.
+                        resumeWhenNotHeld(task, resume) {{
+                            const call = {store_async_state}.syncCalls.at(-1);
+                            if (call === undefined || task === null || task === undefined
+                                || {component_async_state_class}.#isWithinSyncCall(task, call)) {{
+                                resume();
+                                return;
+                            }}
+                            {store_async_state}.heldResumptions.push({{ task, resume }});
                         }}
 
                         // Whether a call of a non-async-typed function into another instance
@@ -1390,6 +1431,16 @@ impl ComponentIntrinsic {
                             this.#tickLoop = null;
                             this.abandonLockWaiters();
                             this.abandonEntrySlotWaiters();
+                            // Stacks held back by a sync call resume too, to observe the stop.
+                            const held = {store_async_state}.heldResumptions;
+                            for (let i = 0; i < held.length; ) {{
+                                if (held[i].task.componentIdx() !== this.#componentIdx) {{
+                                    i++;
+                                    continue;
+                                }}
+                                const [{{ resume }}] = held.splice(i, 1);
+                                resume();
+                            }}
                             for (const thread of [...this.#suspendedThreadsByRef.keys()]) {{
                                 this.resumeThread(thread);
                             }}

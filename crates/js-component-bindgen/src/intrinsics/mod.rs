@@ -1495,6 +1495,7 @@ impl Intrinsic {
                               }}
 
                               // A host import that returns a promise blocks the calling thread.
+                              const state = {get_or_create_async_state_fn}componentIdx);
                               if (callsHost && started !== null && typeof started === 'object' && typeof started.then === 'function') {{
                                   savedThread?.task.endFirstSliceOnBlock();
                               }}
@@ -1532,14 +1533,20 @@ impl Intrinsic {
                                   }});
                               }};
 
+                              // Resume once no sync call into another instance holds this
+                              // stack back.
+                              const release = (deliver) => {{
+                                  state.resumeWhenNotHeld(savedThread?.task, () => resume(deliver));
+                              }};
+
                               settled.then(
-                                  (result) => resume(() => {{
+                                  (result) => release(() => {{
                                       // The instance trapped while this stack was suspended: it
                                       // must not resume into guest code (Canonical ABI).
-                                      {get_or_create_async_state_fn}componentIdx).throwIfInterrupted();
+                                      state.throwIfInterrupted();
                                       return result;
                                   }}),
-                                  (err) => resume(() => {{ throw err; }}),
+                                  (err) => release(() => {{ throw err; }}),
                               );
                               return resumption;
                           }};
@@ -2363,6 +2370,15 @@ mod tests {
             state.contains("return top !== undefined && top.componentIdx !== this.#componentIdx;")
         );
         assert!(state.contains("if (held || !this.suspendedThreadReady(thread)) { continue; }"));
+        // Other instances' stacks resume from a host wait only once the call returns.
+        assert!(state.contains("resumeWhenNotHeld(task, resume) {"));
+        assert!(state.contains("STORE_ASYNC_STATE.heldResumptions.push({ task, resume });"));
+
+        let suspending = render_intrinsic_body(Intrinsic::SuspendingImportWrapperFn);
+        assert!(
+            suspending
+                .contains("state.resumeWhenNotHeld(savedThread?.task, () => resume(deliver));")
+        );
 
         let deadlock =
             render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::CheckForDeadlock));

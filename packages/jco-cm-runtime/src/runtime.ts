@@ -820,6 +820,7 @@ export interface ComponentAsyncState {
     readonly hasPendingSchedulerWork: () => boolean;
     readonly beginSyncCall: (task: ComponentTask) => void;
     readonly endSyncCall: (task: ComponentTask) => void;
+    readonly resumeWhenNotHeld: (task: ComponentTask | null | undefined, resume: () => void) => void;
     readonly stop: () => void;
     readonly runTickLoop: () => void;
     readonly tick: () => ComponentTickResult;
@@ -846,6 +847,11 @@ export interface ComponentStoreAsyncState {
      * is in progress, only threads of its callee instance are scheduled.
      */
     readonly syncCalls: ComponentSyncCall[];
+    /**
+     * Resumptions of stacks that a sync call into another instance holds back
+     * until it returns, in the order their promises settled.
+     */
+    readonly heldResumptions: { readonly task: ComponentTask; readonly resume: () => void }[];
 }
 /** A call of a non-async-typed function, in progress until its task resolves. */
 export interface ComponentSyncCall {
