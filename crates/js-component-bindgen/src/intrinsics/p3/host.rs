@@ -550,10 +550,10 @@ impl HostIntrinsic {
                         }};
 
                         const driveCallback = (callbackResult) => {{
-                            // If there was no callback function, we're dealing with a sync function
-                            // that was lifted as async without one, there is only the callee.
+                            // Without a callback the callee is a sync lift or a stackful async
+                            // lift, and there is only the core function to run.
                             if (!callbackFn) {{
-                                {debug_log_fn}("[{async_start_call_fn}()] no callback, resolving w/ callee result", {{
+                                {debug_log_fn}("[{async_start_call_fn}()] no callback, callee returned", {{
                                     taskID: preparedTask.id(),
                                     componentIdx: preparedTask.componentIdx(),
                                     preparedTask,
@@ -567,11 +567,15 @@ impl HostIntrinsic {
                                 if (preparedTask.needsExclusiveLock()) {{
                                     calleeComponentState.exclusiveRelease(preparedTask.id());
                                 }}
+                                // A sync lift resolves with the core function's results. A
+                                // stackful async lift resolves only through task.return; its
+                                // core return just exits the implicit thread.
+                                //
                                 // Cancellation can resolve the task while the
                                 // synchronous callee is still unwinding. Its
                                 // eventual return only ends the slice; it must
                                 // not publish a second resolution.
-                                if (!preparedTask.isResolved()) {{
+                                if (!calleeIsAsync && !preparedTask.isResolved()) {{
                                     preparedTask.resolve([callbackResult]);
                                 }}
                                 preparedTask.exit({{ skipExclusiveLockCheck: true }});
@@ -1006,16 +1010,17 @@ impl HostIntrinsic {
                                 preparedTask.endFirstSlice();
 
                                 if (!callbackFn) {{
-                                    // A sync lift returns its value here; a stackful async lift
-                                    // has already supplied it through task.return.
-                                    {debug_log_fn}('[{sync_start_call_fn}()] no callback, resolving w/ callee result', {{
+                                    // A sync lift returns its value here. A stackful async lift
+                                    // resolves only through task.return; its core return just
+                                    // exits the implicit thread.
+                                    {debug_log_fn}('[{sync_start_call_fn}()] no callback, callee returned', {{
                                         taskID: preparedTask.id(),
                                         componentIdx: preparedTask.componentIdx(),
                                     }});
                                     if (preparedTask.needsExclusiveLock()) {{
                                         calleeComponentState.exclusiveRelease(preparedTask.id());
                                     }}
-                                    if (!preparedTask.isResolved()) {{
+                                    if (!calleeIsAsync && !preparedTask.isResolved()) {{
                                         preparedTask.resolve(resultCount === 0 ? [] : [callbackResult]);
                                     }}
                                     preparedTask.exit({{ skipExclusiveLockCheck: true }});

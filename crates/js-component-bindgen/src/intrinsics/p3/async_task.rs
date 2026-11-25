@@ -1520,8 +1520,6 @@ impl AsyncTaskIntrinsic {
                 let post_return_trap_fn = render_args.intrinsic_call_prefix(Intrinsic::Component(
                     ComponentIntrinsic::PostReturnTrap,
                 ));
-                let record_trap_fn = render_args
-                    .intrinsic_call_prefix(Intrinsic::Component(ComponentIntrinsic::RecordTrap));
                 let future_value_class = render_args.require_intrinsic(Intrinsic::AsyncFuture(
                     AsyncFutureIntrinsic::FutureValueClass,
                 ));
@@ -1825,8 +1823,7 @@ impl AsyncTaskIntrinsic {
 
                         // Registers a newly-created thread as belonging to this task
                         // and assigns it its real, *component-instance-scoped* id
-                        // (`Task.register_thread` in the canonical ABI) -- threads
-                        // are addressed instance-wide (not per-task) so that a
+                        // -- threads are addressed instance-wide (not per-task) so that a
                         // thread of one task can target a thread of another, e.g.
                         // via `thread.resume-later`.
                         addThread(thread) {{
@@ -1844,23 +1841,24 @@ impl AsyncTaskIntrinsic {
                             return thread;
                         }}
 
-                        #checkThreadExit() {{
-                            if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {{
-                                const err = new {runtime_error_class}(`(component [${{this.#componentIdx}}]) task [${{this.#id}}] exited without resolution`);
-                                throw this.#componentIdx === -1 ? err : {record_trap_fn}this.#componentIdx, err);
-                            }}
-                        }}
-
-                        // Unregisters a thread that has finished running
-                        // (`Task.unregister_thread`), freeing its instance-scoped id.
+                        // Unregisters a thread that has finished running, freeing its
+                        // instance-scoped id.
                         removeThread(thread) {{
-                            this.#checkThreadExit();
                             this.settleCompletion();
-                            if (this.#componentIdx !== -1) {{
-                                const cstate = {get_or_create_async_state_fn}this.#componentIdx);
-                                cstate.threads.remove(thread.id());
-                            }}
+                            const cstate = this.#componentIdx === -1
+                                ? null
+                                : {get_or_create_async_state_fn}this.#componentIdx);
+                            cstate?.threads.remove(thread.id());
                             this.#threads = this.#threads.filter(t => t !== thread);
+
+                            // The last thread of a task may exit before the task resolves. That
+                            // is not a trap (Canonical ABI `Task.exit_implicit_thread`,
+                            // component-model#767): the task stays unresolved for good, and only
+                            // a caller that waits on it is affected.
+                            if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) {{
+                                cstate.noteUnresolvedExit(this);
+                            }}
+
                             if (this.#exited && this.#threads.length === 0) {{
                                 {clear_current_task_fn}(this.#componentIdx, this.#id);
                             }}
@@ -2524,6 +2522,12 @@ impl AsyncTaskIntrinsic {
                             // TODO: do cleanup here to reset the machinery so we can run again?
 
                             this.cancel({{ error: taskErr }});
+
+                            // A task whose threads all exited unresolved has no thread left to
+                            // settle its completion on exit, so settle it here.
+                            if (this.#exited && this.#threads.length === 0) {{
+                                this.#settleCompletionPromise();
+                            }}
                         }}
 
                         resolve(results) {{
@@ -2575,7 +2579,6 @@ impl AsyncTaskIntrinsic {
                             // Validate before publishing exit or running its handlers.
                             // Otherwise a failed exit leaves #exited true, so the driver
                             // cannot finish rejection cleanup and settle the host call.
-                            this.#checkThreadExit();
                             this.validateResourceBorrowScope();
 
                             // Host (-1) tasks have no component instance (and so no async
