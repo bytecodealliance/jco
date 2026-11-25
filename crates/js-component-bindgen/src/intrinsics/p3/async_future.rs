@@ -1688,7 +1688,7 @@ impl AsyncFutureIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         if (!task.mayBlock() && !isAsync) {{
-                            throw new Error('only tasks that may block may call future.{future_op_fn}');
+                            throw new {runtime_error_class}('cannot block a synchronous task before returning');
                         }}
 
                         const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});

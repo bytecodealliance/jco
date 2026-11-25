@@ -546,7 +546,7 @@ export function waitableSetDrop(context: WaitableSetDropContext, componentIdx: n
 
     const state = getOrCreateAsyncState(context.lookup, componentIdx);
     if (!state.mayLeave) {
-        throw new Error('component instance is not marked as may leave, cannot be cancelled');
+        throw new context.RuntimeError('component instance is not marked as may leave, cannot drop waitable set');
     }
 
     removeWaitableSet(context, { state, waitableSetRep });

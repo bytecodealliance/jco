@@ -655,6 +655,8 @@ impl WaitableIntrinsic {
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let remove_waitable_set_fn = render_args.require_intrinsic(Self::RemoveWaitableSet);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!("
                     function {waitable_set_drop_fn}(componentIdx, waitableSetRep) {{
                         {debug_log_fn}('[{waitable_set_drop_fn}()] args', {{ componentIdx, waitableSetRep }});
@@ -666,7 +668,9 @@ impl WaitableIntrinsic {
                         }}
 
                         const state = {get_or_create_async_state_fn}componentIdx);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{
+                            throw new {runtime_error_class}('component instance is not marked as may leave, cannot drop waitable set');
+                        }}
 
                         {remove_waitable_set_fn}({{ state, waitableSetRep }});
                     }}

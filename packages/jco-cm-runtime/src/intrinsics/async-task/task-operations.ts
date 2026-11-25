@@ -18,6 +18,9 @@ import { readTaskRegister, registerSlot, withCurrentTaskMeta } from '../task-con
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 
+/** Trap message for resolving a task twice, e.g. with a second `task.return` (Canonical ABI `Task.return_`). */
+export const TASK_ALREADY_RESOLVED = 'task has already resolved';
+
 // GetCurrentTask
 export function getCurrentTask<T extends TaskIdentity = AsyncTask>(
     _context: TaskLookupContext<T>,

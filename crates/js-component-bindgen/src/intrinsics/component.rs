@@ -900,7 +900,7 @@ impl ComponentIntrinsic {
                             }}
                             const newValue = this.getBackpressure() + 1;
                             if (newValue >= 2**16) {{
-                                throw new Error(`invalid new backpressure value [${{newValue}}], overflow`);
+                                throw new {runtime_error_class}('backpressure counter overflow');
                             }}
                             return this.setBackpressure(newValue);
                         }}

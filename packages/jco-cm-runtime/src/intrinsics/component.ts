@@ -508,7 +508,7 @@ function defineComponentAsyncState() {
             }
             const newValue = this.getBackpressure() + 1;
             if (newValue >= 2 ** 16) {
-                throw new Error(`invalid new backpressure value [${newValue}], overflow`);
+                throw new this.#context.RuntimeError('backpressure counter overflow');
             }
             return this.setBackpressure(newValue);
         }

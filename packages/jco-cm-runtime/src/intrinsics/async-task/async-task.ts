@@ -22,7 +22,7 @@ import { withCurrentTaskMeta, withCurrentTaskMetaAsync, readTaskRegister } from 
 import { getOrCreateAsyncState, postReturnTrap } from '../component.js';
 import { debugLog } from '../core/debug.js';
 import { coinFlip as _coinFlip } from '../core.js';
-import { clearCurrentThread } from './task-operations.js';
+import { clearCurrentThread, TASK_ALREADY_RESOLVED } from './task-operations.js';
 import { syncContextSlots } from './context.js';
 
 /** Stands in for a list that was never allocated. */
@@ -893,7 +893,7 @@ function defineAsyncTask() {
         cancel(args?: { error?: unknown }) {
             DEBUG: debugLog('[AsyncTask#cancel()] args', {});
             if (this.taskState() !== TASK_CANCEL_DELIVERED) {
-                throw new Error('`task.cancel` called by task which has not been cancelled');
+                throw new this.#context.RuntimeError('`task.cancel` called by task which has not been cancelled');
             }
             this.validateResourceBorrowScope();
             this.cancelled = true;
@@ -1053,9 +1053,7 @@ function defineAsyncTask() {
                 if (this.#errored !== null) {
                     throw this.#errored;
                 }
-                throw new Error(
-                    `(component [${this.#componentIdx}]) task [${this.#id}]  is already resolved (did you forget to wait for an import?)`,
-                );
+                throw new this.#context.RuntimeError(TASK_ALREADY_RESOLVED);
             }
             this.validateResourceBorrowScope();
             this.#state = TASK_RESOLVED;
