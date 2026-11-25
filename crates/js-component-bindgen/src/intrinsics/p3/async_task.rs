@@ -1316,6 +1316,7 @@ impl AsyncTaskIntrinsic {
                             getCalleeParamsFn,
                             resultPtr,
                             callingWasmExport,
+                            indexOnEntry,
                         }} = args;
                         if (componentIdx === undefined || componentIdx === null) {{
                             throw new Error('missing/invalid component instance index while starting task');
@@ -1343,11 +1344,12 @@ impl AsyncTaskIntrinsic {
 
                         // Every task starts with a single implicit thread, registered
                         // the same way as explicitly spawned ones (`thread.new-indirect`):
-                        // `addThread` assigns its real, instance-scoped id.
+                        // `addThread` assigns its real, instance-scoped id, unless the
+                        // thread is to be indexed once the task enters.
                         const newThread = newTask.addThread(new {thread_class}({{
                             componentIdx,
                             task: newTask,
-                        }}));
+                        }}), {{ indexOnEntry }});
                         const newThreadID = newThread.id();
 
                         // NOTE: do not track host tasks
@@ -1858,7 +1860,7 @@ impl AsyncTaskIntrinsic {
                         // -- threads are addressed instance-wide (not per-task) so that a
                         // thread of one task can target a thread of another, e.g.
                         // via `thread.resume-later`.
-                        addThread(thread) {{
+                        addThread(thread, opts) {{
                             // Host (-1) tasks model host-side import handling: there is no
                             // component instance behind them, so no instance thread table to
                             // register with (and none may be materialised on their behalf).
@@ -1867,10 +1869,23 @@ impl AsyncTaskIntrinsic {
                                 this.#threads.push(thread);
                                 return thread;
                             }}
+                            this.#threads.push(thread);
+                            if (!opts?.indexOnEntry) {{
+                                const cstate = {get_or_create_async_state_fn}this.#componentIdx);
+                                thread.setId(cstate.threads.insert(thread));
+                            }}
+                            return thread;
+                        }}
+
+                        // Canonical ABI `Task.enter_implicit_thread`: the implicit thread gets
+                        // its index in the instance's thread table once the task enters,
+                        // after any wait for backpressure or the exclusive lock, so a task
+                        // that is still waiting holds no index.
+                        #indexImplicitThread() {{
+                            const thread = this.defaultThread();
+                            if (this.#componentIdx === -1 || !thread || thread.hasIndex()) {{ return; }}
                             const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             thread.setId(cstate.threads.insert(thread));
-                            this.#threads.push(thread);
-                            return thread;
                         }}
 
                         // Unregisters a thread that has finished running, freeing its
@@ -1880,7 +1895,8 @@ impl AsyncTaskIntrinsic {
                             const cstate = this.#componentIdx === -1
                                 ? null
                                 : {get_or_create_async_state_fn}this.#componentIdx);
-                            cstate?.threads.remove(thread.id());
+                            // A task that never entered holds no index to release.
+                            if (cstate && thread.hasIndex()) {{ cstate.threads.remove(thread.id()); }}
                             this.#threads = this.#threads.filter(t => t !== thread);
 
                             // The last thread of a task may exit before the task resolves. That
@@ -2025,6 +2041,7 @@ impl AsyncTaskIntrinsic {
                                     }});
                                 }}
                             }}
+                            this.#indexImplicitThread();
                             this.#beginGuestSyncCall();
                             return true;
                         }}
@@ -2042,6 +2059,7 @@ impl AsyncTaskIntrinsic {
                             const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             if (!this.#isAsyncEntry()) {{
                                 this.#entered = true;
+                                this.#indexImplicitThread();
                                 this.#beginGuestSyncCall();
                                 return true;
                             }}
@@ -2057,6 +2075,7 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             this.#entered = true;
+                            this.#indexImplicitThread();
                             this.#beginGuestSyncCall();
                             return true;
                         }}
@@ -2127,6 +2146,7 @@ impl AsyncTaskIntrinsic {
                             // the exclusive lock, and enter immediately.
                             if (!this.#isAsyncEntry()) {{
                                 this.#entered = true;
+                                this.#indexImplicitThread();
                                 this.#beginGuestSyncCall();
                                 return this.#entered;
                             }}
@@ -2241,6 +2261,7 @@ impl AsyncTaskIntrinsic {
                             cstate.beginEntry(this.#id);
                             this.#holdsEntrySlot = true;
                             this.#entered = true;
+                            this.#indexImplicitThread();
                             this.#beginGuestSyncCall();
                             return this.#entered;
                         }}
@@ -2790,8 +2811,9 @@ impl AsyncTaskIntrinsic {
                         // *not* per task, since a thread of one task may be
                         // targeted (e.g. by `thread.resume-later`) by code
                         // running in a different task of the same instance.
-                        // Assigned post-construction by `Task#addThread()`, which
-                        // is the only code allowed to insert into the instance's
+                        // Assigned post-construction by `Task#addThread()`, or for an
+                        // implicit thread that waits to enter, once its task enters; the
+                        // task is the only code allowed to insert into the instance's
                         // thread table.
                         #id = null;
                         #componentIdx;
@@ -2828,6 +2850,8 @@ impl AsyncTaskIntrinsic {
                         isImplicit() {{ return this.#implicit; }}
 
                         id() {{ return this.#id; }}
+                        // Whether the thread has been given its index in the instance's thread table.
+                        hasIndex() {{ return this.#id !== null; }}
                         setId(id) {{
                             if (this.#id !== null) {{ throw new Error('thread id can only be assigned once'); }}
                             this.#id = id;

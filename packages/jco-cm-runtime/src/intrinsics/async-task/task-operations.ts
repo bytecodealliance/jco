@@ -80,6 +80,7 @@ export function createNewCurrentImplicitThread<T extends AsyncTask = AsyncTask>(
         getCalleeParamsFn,
         resultPtr,
         callingWasmExport,
+        indexOnEntry,
     } = args;
     if (componentIdx === undefined || componentIdx === null) {
         throw new Error('missing/invalid component instance index while starting task');
@@ -100,9 +101,9 @@ export function createNewCurrentImplicitThread<T extends AsyncTask = AsyncTask>(
         errHandling,
         callingWasmExport,
     });
-    const thread = newTask.addThread(new _context.AsyncThread({ componentIdx, task: newTask })) as ReturnType<
-        T['addThread']
-    >;
+    const thread = newTask.addThread(new _context.AsyncThread({ componentIdx, task: newTask }), {
+        indexOnEntry,
+    }) as ReturnType<T['addThread']>;
     const newTaskID = newTask.id();
     const newTaskMeta = { id: newTaskID, componentIdx, task: newTask };
     // NOTE: do not track host tasks

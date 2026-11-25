@@ -77,14 +77,15 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Threads (WASI P3)', 
         // Argument lowering may suspend (realloc) and let another task of the
         // same component run, which can overwrite and then clear the component's
         // ambient thread register. The reinstall before entering Wasm must
-        // therefore use the thread id the export's task was created with, never
+        // therefore use the thread id the export's task entered with, never
         // re-read the register.
         const source = await transpiledSource('stackful-lift.wat', 'thread-reinstall');
         assert.notInclude(source, '_getGlobalCurrentThreadMeta(task.componentIdx()).threadID');
         assert.match(
             source,
-            /(?:const|let) \{\s*task,\s*threadID\s*\} = createNewCurrentImplicitThread\((?:_jcoTaskCreateContext, )?\{/,
+            /(?:const|let) \{\s*task\s*\} = createNewCurrentImplicitThread\((?:_jcoTaskCreateContext, )?\{/,
         );
+        assert.match(source, /(?:const|let) threadID = task\.defaultThread\(\)\.id\(\);/);
         assert.match(
             source,
             /_withGlobalCurrentThreadMeta\((?:CURRENT_TASK_META, )?\{\s*taskID: task\.id\(\),\s*threadID,\s*componentIdx: task\.componentIdx\(\),\s*fn: \(\) => /,

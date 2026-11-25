@@ -32,8 +32,9 @@ function defineAsyncThread() {
         // *not* per task, since a thread of one task may be
         // targeted (e.g. by `thread.resume-later`) by code
         // running in a different task of the same instance.
-        // Assigned post-construction by `Task#addThread()`, which
-        // is the only code allowed to insert into the instance's
+        // Assigned post-construction by `Task#addThread()`, or for an
+        // implicit thread that waits to enter, once its task enters; the
+        // task is the only code allowed to insert into the instance's
         // thread table.
         #id: number | null = null;
         #componentIdx: number;
@@ -74,6 +75,10 @@ function defineAsyncThread() {
 
         id() {
             return this.#id!;
+        }
+        /** Whether the thread has been given its index in the instance's thread table. */
+        hasIndex() {
+            return this.#id !== null;
         }
         setId(id: number) {
             if (this.#id !== null) {

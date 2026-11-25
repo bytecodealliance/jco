@@ -516,6 +516,7 @@ function defineAsyncTask() {
                     });
                 }
             }
+            this.#indexImplicitThread();
             this.#beginGuestSyncCall();
             return true;
         }
@@ -530,6 +531,7 @@ function defineAsyncTask() {
             const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             if (!this.#isAsyncEntry()) {
                 this.#entered = true;
+                this.#indexImplicitThread();
                 this.#beginGuestSyncCall();
                 return true;
             }
@@ -547,6 +549,7 @@ function defineAsyncTask() {
                 return false;
             }
             this.#entered = true;
+            this.#indexImplicitThread();
             this.#beginGuestSyncCall();
             return true;
         }
@@ -589,6 +592,7 @@ function defineAsyncTask() {
             // the exclusive lock, and enter immediately.
             if (!this.#isAsyncEntry()) {
                 this.#entered = true;
+                this.#indexImplicitThread();
                 this.#beginGuestSyncCall();
                 return this.#entered;
             }
@@ -713,6 +717,7 @@ function defineAsyncTask() {
             cstate.beginEntry(this.#id);
             this.#holdsEntrySlot = true;
             this.#entered = true;
+            this.#indexImplicitThread();
             this.#beginGuestSyncCall();
             return this.#entered;
         }
@@ -1269,7 +1274,10 @@ function defineAsyncTask() {
             this.settleCompletion();
             const cstate =
                 this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-            cstate?.threads.remove(thread.id());
+            // A task that never entered holds no index to release.
+            if (cstate && thread.hasIndex()) {
+                cstate.threads.remove(thread.id());
+            }
             if (this.#threads[this.#threads.length - 1] === thread) {
                 this.#threads.pop();
             } else {
@@ -1290,7 +1298,7 @@ function defineAsyncTask() {
             }
         }
 
-        addThread(thread: AsyncThreadType) {
+        addThread(thread: AsyncThreadType, opts?: { indexOnEntry?: boolean }) {
             // Host (-1) tasks model host-side import handling: there is no
             // component instance behind them, so no instance thread table to
             // register with (and none may be materialised on their behalf).
@@ -1299,11 +1307,29 @@ function defineAsyncTask() {
                 this.#threads.push(thread);
                 return thread;
             }
+            this.#threads.push(thread);
+            if (!opts?.indexOnEntry) {
+                this.#insertThread(thread);
+            }
+            return thread;
+        }
+
+        #insertThread(thread: AsyncThreadType) {
             const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             thread.setId(cstate.threads.insert(thread));
-            this.#threads.push(thread);
             syncContextSlots(this.#context.registers);
-            return thread;
+        }
+
+        // Canonical ABI `Task.enter_implicit_thread`: the implicit thread gets
+        // its index in the instance's thread table once the task enters,
+        // after any wait for backpressure or the exclusive lock, so a task
+        // that is still waiting holds no index.
+        #indexImplicitThread() {
+            const thread = this.defaultThread();
+            if (this.#componentIdx === -1 || !thread || thread.hasIndex()) {
+                return;
+            }
+            this.#insertThread(thread);
         }
 
         calleeIsAsync() {
