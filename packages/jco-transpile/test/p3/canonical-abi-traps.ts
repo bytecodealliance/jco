@@ -447,6 +447,26 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    // Bit 31 of a live handle index must not alias the live entry (`rep << 1` wraps at 2 ** 31).
+    test.concurrent.each(['resumeAlias', 'wsDropAlias', 'repAlias', 'dropAlias'])(
+        'a handle index with bit 31 set traps rather than aliasing a live entry (%s)',
+        async (fn: string) => {
+            const { instance, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: `handle-index-high-bit-${fn}`,
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'handle-index-high-bit.wat'),
+                },
+            });
+            try {
+                const err = await rejection(Promise.resolve().then(() => instance[fn]()));
+                assert.instanceOf(err, WebAssembly.RuntimeError, `unexpected error: ${(err as Error).stack}`);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
     test.concurrent.each(['trapDec', 'trapWait'])(
         'a trap stops a call that was already queued to enter (%s)',
         async (fn: string) => {
