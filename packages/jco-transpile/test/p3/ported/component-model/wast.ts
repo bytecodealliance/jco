@@ -92,6 +92,8 @@ const WAST_TESTS: readonly WastTest[] = [
     })),
     // Jco-specific regression coverage is kept outside the upstream corpus.
     { relPath: '../jco/thread-handle-traps.wast' },
+    { relPath: '../jco/stackful-entry-behind-lock-waiter.wast' },
+    { relPath: '../jco/entry-follows-callee-lift.wast' },
 ];
 
 // These tests are ported from the component-model repo
