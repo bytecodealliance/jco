@@ -2541,7 +2541,7 @@ mod tests {
         let future = render_intrinsic_body(Intrinsic::AsyncFuture(
             AsyncFutureIntrinsic::GenFutureHostInjectFn,
         ));
-        assert!(future.contains("await _trackHostOperation(() => promise);"));
+        assert!(future.contains("await _trackHostOperation(() => promise, args.componentIdx);"));
 
         let stream = render_intrinsic_body(Intrinsic::AsyncStream(
             AsyncStreamIntrinsic::PendingValueQueueClass,

@@ -1146,7 +1146,7 @@ impl AsyncFutureIntrinsic {
                                   // canonical read must be able to return BLOCKED first.
                                   let injectedWritePromise;
                                   if (this.#hostInjectFn) {{
-                                      injectedWritePromise = this.#hostInjectFn({{ count: 1 }});
+                                      injectedWritePromise = this.#hostInjectFn({{ count: 1, componentIdx }});
                                   }}
 
                                   this._read({{
@@ -2079,7 +2079,8 @@ impl AsyncFutureIntrinsic {
 
                               let value;
                               try {{
-                                  value = await {track_host_operation}() => promise);
+                                  // (counted for the reading instance, whose threads it may make ready)
+                                  value = await {track_host_operation}() => promise, args.componentIdx);
                               }} catch (err) {{
                                   // The reader was dropped (and the promise disposed) while it was pending,
                                   // so a rejection (e.g. from handling disposal) has nowhere to go

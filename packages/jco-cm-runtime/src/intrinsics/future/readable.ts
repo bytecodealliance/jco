@@ -221,7 +221,7 @@ export function initializeFutureReadableEndClass(_context: FutureReadableClassCo
             // canonical read must be able to return BLOCKED first.
             let injectedWritePromise;
             if (this.#hostInjectFn) {
-                injectedWritePromise = this.#hostInjectFn({ count: 1 });
+                injectedWritePromise = this.#hostInjectFn({ count: 1, componentIdx });
             }
 
             this._read({

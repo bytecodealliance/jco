@@ -2347,7 +2347,8 @@ export interface FutureCopyOptions {
 }
 export type FutureCleanup = () => void;
 export interface FutureHostInjectFn {
-    (args: { count: number }): Promise<FutureCleanup>;
+    /** `componentIdx` is the instance reading the future, if known. */
+    (args: { count: number; componentIdx?: number }): Promise<FutureCleanup>;
     readonly drop?: () => unknown;
 }
 export interface FutureGuestCopyOptions {

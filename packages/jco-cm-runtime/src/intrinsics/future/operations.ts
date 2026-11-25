@@ -647,7 +647,7 @@ export function genFutureHostInjectFn(
     let done: boolean | undefined;
     let delivered = false;
 
-    const inject = async function generateFutureHostInject(args: { count: number }) {
+    const inject = async function generateFutureHostInject(args: Parameters<FutureHostInjectFn>[0]) {
         let { count } = args;
         if (count !== 1) {
             throw new Error('invalid count');
@@ -669,7 +669,8 @@ export function genFutureHostInjectFn(
 
         let value;
         try {
-            value = await trackHostOperation(_context.tracking, () => promise);
+            // (counted for the reading instance, whose threads it may make ready)
+            value = await trackHostOperation(_context.tracking, () => promise, args.componentIdx);
         } catch (err) {
             // The reader was dropped (and the promise disposed) while it was pending,
             // so a rejection (e.g. from handling disposal) has nowhere to go
