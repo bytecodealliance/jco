@@ -1206,7 +1206,7 @@ impl ComponentIntrinsic {
 
                         suspendTask(args) {{
                             const {{ task, ...opts }} = args;
-                            task.endFirstSlice();
+                            task.endFirstSliceOnBlock();
                             return this.suspendThread({{ thread: task.defaultThread(), ...opts }});
                         }}
 

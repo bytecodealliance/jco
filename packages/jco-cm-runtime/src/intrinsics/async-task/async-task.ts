@@ -617,6 +617,24 @@ function defineAsyncTask() {
             this.#holdsEntrySlot = false;
             getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endEntry(this.#id);
         }
+        /**
+         * The task's thread blocked: its first slice is over, and so is the
+         * first slice of each caller that waits on it through a synchronous
+         * lowering, since that caller's thread blocks with it (Canonical ABI
+         * `canon_lower`, whose synchronous caller waits once the callee's
+         * thread has blocked).
+         */
+        endFirstSliceOnBlock() {
+            let task: AsyncTaskType = this;
+            for (;;) {
+                task.endFirstSlice();
+                const subtask = task.getParentSubtask();
+                if (!subtask || subtask.isAsync) {
+                    return;
+                }
+                task = subtask.getParentTask();
+            }
+        }
         // Whether entry into this task's instance is subject to backpressure
         // and, when the task needs it, the exclusive lock. In the Canonical ABI
         // (`Task.enter_implicit_thread`) that is decided by the callee's
