@@ -1471,6 +1471,12 @@ export interface AsyncTask extends ComponentTask, WaitableTask {
     readonly getReturnMemoryIdx: () => number | null | undefined;
     readonly setReturnMemoryIdx: (idx: number | null | undefined) => void;
     readonly getReturnMemory: () => RuntimeMemory | null | undefined;
+    /**
+     * The memory named by the task's lift, which a memory named by
+     * `task.return` must be: null if the lift names none, undefined if unknown.
+     */
+    readonly getLiftMemory: () => RuntimeMemory | null | undefined;
+    readonly setLiftMemory: (memory: RuntimeMemory | null) => void;
     readonly getReturnStringEncoding: () => string | null;
     readonly setReturnMemory: (memory: RuntimeMemory | null | undefined) => void;
     readonly setReturnLowerFns: (fns: TaskLowerFn[]) => void;

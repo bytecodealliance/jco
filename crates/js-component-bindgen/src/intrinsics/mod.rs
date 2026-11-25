@@ -2915,7 +2915,7 @@ mod tests {
         let task_return =
             render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
         assert!(task_return.contains(
-            "throw new WebAssemblyRuntimeError('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');"
+            "throw new WebAssemblyRuntimeError('task.return memory does not match the lift memory');"
         ));
 
         for intrinsic in [
@@ -2947,7 +2947,7 @@ mod tests {
             ".mayLeave) {",
             "if (!task.calleeIsAsync()) {",
             "ctx.resultTypeIdx !== expectedResultType",
-            "expectedMemoryIdx !== memoryIdx",
+            "memory !== liftMemory",
             "expectedStringEncoding !== stringEncoding",
             "if (task.isResolvedState()) {",
             "task.validateResourceBorrowScope();",

@@ -673,10 +673,13 @@ impl AsyncTaskIntrinsic {
                         if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {{
                             throw new {runtime_error_class}('task.return result type does not match the function type');
                         }}
-                        const expectedMemoryIdx = task.getReturnMemoryIdx();
-                        if (typeof expectedMemoryIdx === 'number' && typeof memoryIdx === 'number' && expectedMemoryIdx !== memoryIdx) {{
-                            {debug_log_fn}("[{task_return_fn}()] mismatched memory indices", {{ expectedMemoryIdx, memoryIdx }});
-                            throw new {runtime_error_class}('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
+                        // `LiftOptions.equal` compares memories as instances: different indices
+                        // may name the same memory. A `task.return` naming no memory is accepted,
+                        // as the component-model tests (`async/big-interleaving-test.wast`) expect.
+                        const liftMemory = task.getLiftMemory();
+                        if (memory != null && liftMemory !== undefined && memory !== liftMemory) {{
+                            {debug_log_fn}("[{task_return_fn}()] mismatched memories", {{ memoryIdx, liftMemory }});
+                            throw new {runtime_error_class}('task.return memory does not match the lift memory');
                         }}
                         const expectedStringEncoding = task.getReturnStringEncoding();
                         if (expectedStringEncoding && stringEncoding && expectedStringEncoding !== stringEncoding) {{
@@ -1608,6 +1611,9 @@ impl AsyncTaskIntrinsic {
 
                         #memoryIdx = null;
                         #memory = null;
+                        // The memory named by the task's lift, which a memory named by
+                        // `task.return` must be: null if the lift names none, undefined if unknown.
+                        #liftMemory = undefined;
 
                         #callbackFn = null;
                         #callbackFnName = null;
@@ -1836,6 +1842,9 @@ impl AsyncTaskIntrinsic {
                             if (m === null) {{ return; }}
                             this.#memory = m;
                         }}
+
+                        getLiftMemory() {{ return this.#liftMemory; }}
+                        setLiftMemory(m) {{ this.#liftMemory = m; }}
 
                         setReturnLowerFns(fns) {{ this.#returnLowerFns = fns; }}
                         getReturnLowerFns() {{ return this.#returnLowerFns; }}

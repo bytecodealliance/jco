@@ -78,6 +78,7 @@ function defineAsyncTask() {
         #resolveExitPromise: (() => void) | undefined;
         #memoryIdx: number | null | undefined = null;
         #memory: RuntimeMemory | null | undefined = null;
+        #liftMemory: RuntimeMemory | null | undefined = undefined;
         #callbackFn: TaskCallback | null = null;
         #callbackFnName: string | null | undefined = null;
         #postReturnFn: TaskPostReturn | null = null;
@@ -339,6 +340,12 @@ function defineAsyncTask() {
         /** The string encoding of the lift, which `task.return` must match (null if unknown). */
         getReturnStringEncoding() {
             return this.#returnStringEncoding;
+        }
+        getLiftMemory() {
+            return this.#liftMemory;
+        }
+        setLiftMemory(m: RuntimeMemory | null) {
+            this.#liftMemory = m;
         }
         setReturnMemory(m: RuntimeMemory | null | undefined) {
             if (m === null) {
