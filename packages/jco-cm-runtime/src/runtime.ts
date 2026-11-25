@@ -860,9 +860,10 @@ export interface ComponentStoreAsyncState {
     pendingHostOperations: number;
     /**
      * The pending host operations by the instance they were started for
-     * (`-1` when that is not known).
+     * (`-1` when that is not known). Only instances with pending host
+     * operations have an entry; `null` until the first one starts.
      */
-    readonly hostOperationsByComponent: Map<number, number>;
+    hostOperationsByComponent: Map<number, number> | null;
     /**
      * Calls of non-async-typed functions in progress, innermost last. While one
      * is in progress, only threads of its callee instance are scheduled.
