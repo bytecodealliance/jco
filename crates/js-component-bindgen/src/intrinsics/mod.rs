@@ -2059,7 +2059,8 @@ mod tests {
         assert!(yield_.contains("if (!task.mayBlock()) {"));
         assert!(yield_.contains(".runTickLoop();"));
         assert!(yield_.contains("return thread.suspend({"));
-        assert!(yield_.contains(".then(keepGoing => keepGoing ? 0 : 1)"));
+        assert!(yield_.contains(".then(() => 0)"));
+        assert!(!yield_.contains("? 1 : 0"));
         assert!(!yield_.contains("await "));
 
         let thread_new =
@@ -2685,6 +2686,195 @@ mod tests {
             assert!(busy_check < removal, "busy validation must precede removal");
             assert!(!source.contains("streamEnd.isCopying() || streamEnd.hasPendingEvent()"));
             assert!(source.contains("if (removedStreamEnd !== streamEnd) {"));
+        }
+    }
+
+    #[test]
+    fn sync_waitable_operations_trap_for_waitables_in_sets() {
+        let in_set_trap = "throw new WebAssemblyRuntimeError(\"waitable cannot be used synchronously while added to a waitable set\");";
+        let sync_waiter_trap = "throw new WebAssemblyRuntimeError(\"cannot cancel a copy that a synchronous operation is waiting on\");";
+
+        for intrinsic in [
+            Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead),
+            Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite),
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead),
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            assert!(source.contains("End.isInSet()) {"), "{intrinsic:?}");
+            assert!(source.contains("if (!isAsync && "), "{intrinsic:?}");
+            assert!(source.contains(in_set_trap), "{intrinsic:?}");
+        }
+
+        for intrinsic in [
+            Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelRead),
+            Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamCancelWrite),
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelRead),
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelWrite),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            // (held back: older wit-bindgen guests cancel synchronously while in a set)
+            assert!(!source.contains(in_set_trap), "{intrinsic:?}");
+            assert!(source.contains(sync_waiter_trap), "{intrinsic:?}");
+            // The synchronous wait is visible to `waitable.join` until it ends.
+            assert!(
+                source.contains("waitable.setSyncWaiter(true);"),
+                "{intrinsic:?}"
+            );
+            assert!(
+                source.contains(".finally(() => waitable.setSyncWaiter(false))"),
+                "{intrinsic:?}"
+            );
+        }
+
+        // Synchronous copies mark their waitable the same way.
+        for intrinsic in [
+            Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead),
+            Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite),
+            Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel),
+        ] {
+            let source = render_intrinsic_body(intrinsic);
+            assert!(
+                source.contains("waitable.setSyncWaiter(true);"),
+                "{intrinsic:?}"
+            );
+            assert!(
+                source.contains(".finally(() => waitable.setSyncWaiter(false))"),
+                "{intrinsic:?}"
+            );
+        }
+
+        let join = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableJoin));
+        let sync_waiter_check = join
+            .find("if (waitable.hasSyncWaiter()) {")
+            .expect("waitable.join should reject a waitable with a sync waiter");
+        assert!(sync_waiter_check < join.find("waitable.join(waitableSet);").unwrap());
+        assert!(join.contains(in_set_trap));
+
+        // Even an async `subtask.cancel` traps for a subtask in a set.
+        let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
+        assert!(cancel.contains("if (subtask.getWaitable().isInSet()) {"));
+        assert!(!cancel.contains("!isAsync && subtask.getWaitable().isInSet()"));
+        assert!(cancel.contains(in_set_trap));
+    }
+
+    #[test]
+    fn async_builtin_traps_poison_the_instance() {
+        // Only a `WebAssembly.RuntimeError` marks the instance as trapped.
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+        assert!(
+            state.contains("throw new WebAssemblyRuntimeError('backpressure counter overflow');")
+        );
+
+        let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+        assert!(task.contains(
+            "throw new WebAssemblyRuntimeError('`task.cancel` called by task which has not been cancelled');"
+        ));
+        assert!(task.contains("throw new WebAssemblyRuntimeError(\"task has already resolved\");"));
+
+        for intrinsic in [
+            AsyncFutureIntrinsic::FutureRead,
+            AsyncFutureIntrinsic::FutureWrite,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncFuture(intrinsic));
+            assert!(
+                source.contains(
+                    "throw new WebAssemblyRuntimeError('cannot block a synchronous task before returning');"
+                ),
+                "{intrinsic:?}"
+            );
+        }
+
+        let drop = render_intrinsic_body(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop));
+        assert!(drop.contains(
+            "throw new WebAssemblyRuntimeError('component instance is not marked as may leave, cannot drop waitable set');"
+        ));
+
+        let task_return =
+            render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
+        assert!(task_return.contains(
+            "throw new WebAssemblyRuntimeError('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');"
+        ));
+
+        for intrinsic in [
+            AsyncTaskIntrinsic::UnpackCallbackResult,
+            AsyncTaskIntrinsic::DriverLoop,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncTask(intrinsic));
+            assert!(
+                source.contains("unsupported callback code"),
+                "{intrinsic:?}"
+            );
+            assert!(
+                !source.contains("throw new Error(`Unrecognized"),
+                "{intrinsic:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn task_return_checks_precede_result_delivery() {
+        let source = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskReturn));
+        let delivery = source
+            .find("subtaskCallMetadata.returnFn.apply(")
+            .expect("task.return should deliver through the fused return fn");
+        for check in [
+            ".mayLeave) {",
+            "if (!task.calleeIsAsync()) {",
+            "ctx.resultTypeIdx !== expectedResultType",
+            "expectedMemoryIdx !== memoryIdx",
+            "expectedStringEncoding !== stringEncoding",
+            "if (task.isResolvedState()) {",
+            "task.validateResourceBorrowScope();",
+        ] {
+            let position = source
+                .find(check)
+                .unwrap_or_else(|| panic!("missing check {check}"));
+            assert!(
+                position < delivery,
+                "{check} must run before results are delivered"
+            );
+        }
+    }
+
+    #[test]
+    fn task_cancel_checks_the_lift_options() {
+        let source = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::TaskCancel));
+        assert!(source.contains("if (!task.calleeIsAsync()) {"));
+        assert!(source.contains(
+            "throw new WebAssemblyRuntimeError('task.cancel requires an async canonical lift');"
+        ));
+        assert!(!source.contains("task.sync"));
+    }
+
+    #[test]
+    fn callback_codes_above_wait_trap() {
+        let source = render_intrinsic_body(Intrinsic::AsyncTask(
+            AsyncTaskIntrinsic::UnpackCallbackResult,
+        ));
+        assert!(source.contains("if (eventCode > 2) {"));
+        assert!(source.contains(
+            "throw new WebAssemblyRuntimeError('unsupported callback code: ' + eventCode);"
+        ));
+    }
+
+    #[test]
+    fn suspend_and_yield_builtins_return_zero() {
+        for intrinsic in [
+            AsyncTaskIntrinsic::ThreadYield,
+            AsyncTaskIntrinsic::ThreadSuspend,
+            AsyncTaskIntrinsic::ThreadSuspendThenResume,
+            AsyncTaskIntrinsic::ThreadYieldThenResume,
+            AsyncTaskIntrinsic::ThreadSuspendThenPromote,
+            AsyncTaskIntrinsic::ThreadYieldThenPromote,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncTask(intrinsic));
+            assert!(!source.contains("? 0 : 1"), "{intrinsic:?}");
+            assert!(!source.contains("? 1 : 0"), "{intrinsic:?}");
+            assert!(!source.contains("isCancellable"), "{intrinsic:?}");
         }
     }
 

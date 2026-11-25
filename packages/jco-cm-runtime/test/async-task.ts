@@ -131,6 +131,9 @@ test.concurrent('task registers use explicit selected-realm globals and per-stor
     expect(a.asyncTask.AsyncSubtask).not.toBe(b.asyncTask.AsyncSubtask);
     expect(a.asyncTask.tasksByComponent).not.toBe(b.asyncTask.tasksByComponent);
     expect(() => a.asyncTask.unpackCallbackResult(4)).toThrow(realm.RuntimeError);
+    // Canonical ABI `unpack_callback_result`: only EXIT, YIELD and WAIT exist.
+    expect(() => a.asyncTask.unpackCallbackResult((17 << 4) | 3)).toThrow(realm.RuntimeError);
+    expect(() => a.asyncTask.unpackCallbackResult(3)).toThrow('unsupported callback code');
     expect(a.asyncTask.unpackCallbackResult((17 << 4) | 2)).toEqual([2, 17]);
     const minimal = create({ platform: { WebAssembly: { RuntimeError: realm.RuntimeError } } });
     expect(minimal.asyncTask.tasksByComponent.size).toBe(0);
@@ -211,6 +214,95 @@ test.concurrent('task.return checks types and borrows, then publishes before cal
         expect(() => t.addBorrowedHandle()).toThrow('exited resource scope');
         finish(t);
         await t.exitPromise();
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('task.return traps before delivering results to the caller', () => {
+    const s = setup();
+    try {
+        const [caller, callerID] = s.asyncTask.createNewCurrentTask({ componentIdx: 1, isAsync: true });
+        const delivered: unknown[][] = [];
+        const subtask = caller.createSubtask({
+            componentIdx: 1,
+            isAsync: true,
+            callMetadata: {
+                callerThreadID: caller.defaultThread().id(),
+                resultPtr: 8,
+                returnFn: (...args: unknown[]) => {
+                    delivered.push(args);
+                },
+            },
+        });
+        const [t, id] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true, stringEncoding: 'utf16' });
+        subtask.onStart();
+        t.setParentSubtask(subtask);
+        t.setCalleeIsAsync(true);
+        t.setReturnMemoryIdx(0);
+        const ctx = {
+            componentIdx: 0,
+            getMemoryFn: () => undefined,
+            memoryIdx: 0,
+            stringEncoding: 'utf16',
+            liftFns: [],
+        };
+        const taskReturn = (overrides: object = {}) =>
+            s.core.withCurrentTaskMeta({
+                taskID: id,
+                threadID: t.defaultThread().id(),
+                componentIdx: 0,
+                fn: () => s.asyncTask.taskReturn({ ...ctx, ...overrides }, 42),
+            });
+
+        // Canonical ABI `canon_task_return`: the options must equal the lift's.
+        expect(() => taskReturn({ memoryIdx: 1 })).toThrow(s.core.RuntimeError);
+        expect(() => taskReturn({ stringEncoding: 'utf8' })).toThrow('string encoding');
+        expect(() => taskReturn({ stringEncoding: 'utf8' })).toThrow(s.core.RuntimeError);
+        const state = s.component.getOrCreateAsyncState(0);
+        state.mayLeave = false;
+        expect(() => taskReturn()).toThrow(s.core.RuntimeError);
+        state.mayLeave = true;
+        // `Task.return_`: no borrows may remain.
+        t.addBorrowedHandle();
+        expect(() => taskReturn()).toThrow('borrow handles still remain');
+        t.removeBorrowedHandle();
+        expect(delivered).toEqual([]);
+
+        taskReturn();
+        expect(delivered).toEqual([[42, 8]]);
+        // `Task.return_`: a task resolves at most once.
+        expect(() => taskReturn()).toThrow(s.core.RuntimeError);
+        expect(() => taskReturn()).toThrow('task has already resolved');
+        expect(delivered).toHaveLength(1);
+        expect(callerID).toBe(caller.id());
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('task.cancel requires an async lift and a delivered cancellation', () => {
+    const s = setup();
+    try {
+        const [t, id] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        const taskCancel = () =>
+            s.core.withCurrentTaskMeta({
+                taskID: id,
+                threadID: t.defaultThread().id(),
+                componentIdx: 0,
+                fn: () => s.asyncTask.taskCancel(0),
+            });
+
+        // Canonical ABI `canon_task_cancel` checks the lift options.
+        t.setCalleeIsAsync(false);
+        expect(taskCancel).toThrow(s.core.RuntimeError);
+        expect(taskCancel).toThrow('task.cancel requires an async canonical lift');
+
+        // `Task.cancel`: only after the cancellation was delivered.
+        t.setCalleeIsAsync(true);
+        expect(taskCancel).toThrow(s.core.RuntimeError);
+        expect(taskCancel).toThrow('has not been cancelled');
+        finish(t);
     } finally {
         s.cleanup();
     }
@@ -751,6 +843,32 @@ test.concurrent('canonical yield suspends even when its readiness predicate is a
             fn: () => s.asyncTask.asyncYield({ componentIdx: 0 }),
         });
         expect(state.isTaskSuspended(t.id())).toBe(true);
+        expect(state.tick()).toBe('resumed');
+        expect(await yielded).toBe(0);
+        finish(t);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('yield returns 0 after its task was cancelled', async () => {
+    const s = setup();
+    try {
+        const state = s.state();
+        const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        expect(t.tryEnter()).toBe(true);
+        t.requestCancellation();
+        expect(t.deliverPendingCancel({ cancellable: true })).toBe(true);
+        t.cancel();
+        expect(t.isCancelled()).toBe(true);
+
+        // Canonical ABI `canon_thread_yield` always returns 0.
+        const yielded = s.core.withCurrentTaskMetaAsync({
+            taskID: t.id(),
+            threadID: t.defaultThread().id(),
+            componentIdx: 0,
+            fn: () => s.asyncTask.asyncYield({ componentIdx: 0, isCancellable: true }),
+        });
         expect(state.tick()).toBe('resumed');
         expect(await yielded).toBe(0);
         finish(t);

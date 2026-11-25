@@ -421,3 +421,37 @@ test.concurrent('join and removal reject foreign constructors and duck-typed han
     set.decrementNumWaiting();
     waitable.removeWaitableSet({ state, waitableSetRep: setRep });
 });
+
+test.concurrent('waitable.join traps for a waitable with a synchronous waiter', () => {
+    class RuntimeError extends Error {}
+    const { waitable, component } = create({ platform: { WebAssembly: { RuntimeError } } });
+    const state = component.getOrCreateAsyncState(0);
+    const setRep = waitable.waitableSetNew(0);
+    const w = new waitable.Waitable({});
+    const wRep = state.handles.insert(w);
+
+    // Canonical ABI `canon_waitable_join`: a set must not take a synchronous waiter's event.
+    w.setSyncWaiter(true);
+    const join = () => waitable.waitableJoin(0, wRep, setRep);
+    expect(join).toThrow(RuntimeError);
+    expect(join).toThrow('waitable cannot be used synchronously while added to a waitable set');
+    expect(w.isInSet()).toBe(false);
+
+    w.setSyncWaiter(false);
+    join();
+    expect(w.isInSet()).toBe(true);
+});
+
+test.concurrent('waitable-set.drop traps with a RuntimeError when the instance may not leave', () => {
+    class RuntimeError extends Error {}
+    const t = task();
+    const { waitable, component } = create({
+        platform: { WebAssembly: { RuntimeError } },
+        waitableContext: { taskLookup: lookupTask(t.value) },
+    });
+    const state = component.getOrCreateAsyncState(0);
+    const setRep = waitable.waitableSetNew(0);
+    state.mayLeave = false;
+    expect(() => waitable.waitableSetDrop(0, setRep)).toThrow(RuntimeError);
+    expect(state.handles.get(setRep)).toBeInstanceOf(waitable.WaitableSet);
+});
