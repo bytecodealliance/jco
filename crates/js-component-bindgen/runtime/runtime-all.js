@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit cf21f9bc134661d7d554602be866997ed2009c0f
+// generated from commit e2ddf1b8c2045e2e375c41f26c1e430a026550eb
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -601,6 +601,7 @@ const initializeStoreTrap = (onTrap = null) => ({
 const initializeStoreAsyncState = () => ({
 	deadlockCheck: null,
 	pendingHostOperations: 0,
+	hostOperationsByComponent: null,
 	hostWakeupScheduled: false,
 	idleWaiters: /* @__PURE__ */ new Set(),
 	syncCalls: [],
@@ -651,50 +652,111 @@ function attachDeadlockDetail(err, pendingHostOperations, suspendedTasks, exited
 	};
 }
 function checkForDeadlock(context) {
-	const { RuntimeError, storeAsyncState, storeTrap, asyncState } = context;
+	const { storeAsyncState, storeTrap, asyncState } = context;
 	if (storeAsyncState.deadlockCheck !== null || storeTrap.error !== null) return;
 	storeAsyncState.deadlockCheck = setTimeout(() => {
 		storeAsyncState.deadlockCheck = null;
-		if (storeTrap.error !== null || storeAsyncState.pendingHostOperations > 0) return;
-		const suspendedTasks = /* @__PURE__ */ new Set();
-		for (const state of asyncState.values()) {
-			if (state.hasPendingSchedulerWork()) {
-				state.runTickLoop();
-				return;
-			}
-			for (const meta of state.suspendedTaskMetas()) suspendedTasks.add(meta.task);
+		if (storeTrap.error !== null) return;
+		if (currentSyncCall(storeAsyncState) !== void 0) {
+			checkSyncCallBlocked(context);
+			return;
 		}
-		const unresolvedRoots = /* @__PURE__ */ new Set();
-		for (const task of suspendedTasks) {
-			const root = task.getRootTask();
-			if (!root.isResolvedState()) unresolvedRoots.add(root);
+		if (storeAsyncState.pendingHostOperations > 0) return;
+		for (const state of asyncState.values()) if (state.hasPendingSchedulerWork()) {
+			state.runTickLoop();
+			return;
 		}
-		const exitedTasks = /* @__PURE__ */ new Set();
-		for (const state of asyncState.values()) for (const task of state.unresolvedExitedTasks()) {
-			exitedTasks.add(task);
-			unresolvedRoots.add(task.getRootTask());
-		}
-		const syncCall = storeAsyncState.syncCalls.at(-1);
-		if (syncCall !== void 0 && !syncCall.task.isResolvedState()) unresolvedRoots.add(syncCall.task.getRootTask());
-		if (unresolvedRoots.size === 0) return;
-		const err = new RuntimeError(syncCall === void 0 ? "wasm trap: deadlock detected: event loop cannot make further progress" : "cannot block a synchronous task before returning");
-		attachDeadlockDetail(err, storeAsyncState.pendingHostOperations, suspendedTasks, exitedTasks, unresolvedRoots);
-		storeTrap.error = err;
-		for (const root of unresolvedRoots) {
-			root.setErrored(err);
-			root.reject(err);
-		}
-		for (const task of [...suspendedTasks, ...exitedTasks]) if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {
-			task.setErrored(err);
-			task.reject(err);
-		}
-		for (const state of asyncState.values()) state.markTrapped(err);
-		for (const state of asyncState.values()) {
-			state.abandonLockWaiters();
-			state.abandonEntrySlotWaiters();
-		}
-		for (const state of asyncState.values()) state.runTickLoop();
+		trapBlockedStore(context, void 0);
 	}, 0);
+}
+/**
+* The innermost call of a non-async-typed function in progress, if any.
+*
+* @param storeAsyncState - the async state of the store
+* @returns the call, unless there is none or its task has settled
+*/
+function currentSyncCall(storeAsyncState) {
+	const call = storeAsyncState.syncCalls.at(-1);
+	if (call === void 0 || call.task.isResolvedState() || call.task.isRejected()) return;
+	return call;
+}
+/**
+* Trap a call of a non-async-typed function that can no longer go on.
+*
+* In the Canonical ABI (`canon_lift`, `not ft.async_`), whenever a thread of
+* such a call blocks or exits without switching to another thread, the call
+* resumes a ready thread of its instance, and traps if there is none. The
+* decision is taken where the thread blocks, so this runs as each thread
+* within the call blocks or exits, and when the deadlock check runs.
+*
+* The call goes on while:
+* - a thread of its instance is ready;
+* - a stack within the call has not blocked: it is running, about to resume,
+*   or in a host call (the host is still running on that stack);
+* - host work its instance started is pending, which may make one of its
+*   threads ready (the host may complete it at any time).
+*
+* Threads of other instances are never candidates, ready or not: only those
+* of the call's instance may be resumed while it is in progress.
+*
+* @param context - the deadlock context of the store
+* @returns whether the call trapped
+*/
+function checkSyncCallBlocked(context) {
+	const { storeAsyncState, storeTrap, asyncState } = context;
+	if (storeTrap.error !== null || storeTrap.stopped) return false;
+	const call = currentSyncCall(storeAsyncState);
+	if (call === void 0) return false;
+	const hostOperations = storeAsyncState.hostOperationsByComponent;
+	if (hostOperations?.has(call.componentIdx) || hostOperations?.has(-1)) return false;
+	for (const state of asyncState.values()) {
+		if (state.componentIdx() === call.componentIdx && state.hasSyncCallCandidate()) return false;
+		if (state.hasRunningStackWithin(call)) return false;
+	}
+	trapBlockedStore(context, call);
+	return true;
+}
+/**
+* Trap the store because it cannot make progress, failing every unresolved
+* task that waits.
+*
+* @param context - the deadlock context of the store
+* @param syncCall - the call of a non-async-typed function that blocked, when
+*   that is why the store cannot make progress
+*/
+function trapBlockedStore(context, syncCall) {
+	const { RuntimeError, storeAsyncState, storeTrap, asyncState } = context;
+	const suspendedTasks = /* @__PURE__ */ new Set();
+	for (const state of asyncState.values()) for (const meta of state.suspendedTaskMetas()) suspendedTasks.add(meta.task);
+	const unresolvedRoots = /* @__PURE__ */ new Set();
+	for (const task of suspendedTasks) {
+		const root = task.getRootTask();
+		if (!root.isResolvedState()) unresolvedRoots.add(root);
+	}
+	const exitedTasks = /* @__PURE__ */ new Set();
+	for (const state of asyncState.values()) for (const task of state.unresolvedExitedTasks()) {
+		exitedTasks.add(task);
+		unresolvedRoots.add(task.getRootTask());
+	}
+	if (syncCall !== void 0) unresolvedRoots.add(syncCall.task.getRootTask());
+	if (unresolvedRoots.size === 0) return;
+	const err = new RuntimeError(syncCall === void 0 ? "wasm trap: deadlock detected: event loop cannot make further progress" : "cannot block a synchronous task before returning");
+	attachDeadlockDetail(err, storeAsyncState.pendingHostOperations, suspendedTasks, exitedTasks, unresolvedRoots);
+	storeTrap.error = err;
+	for (const root of unresolvedRoots) {
+		root.setErrored(err);
+		root.reject(err);
+	}
+	for (const task of [...suspendedTasks, ...exitedTasks]) if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {
+		task.setErrored(err);
+		task.reject(err);
+	}
+	for (const state of asyncState.values()) state.markTrapped(err);
+	for (const state of asyncState.values()) {
+		state.abandonLockWaiters();
+		state.abandonEntrySlotWaiters();
+	}
+	for (const state of asyncState.values()) state.runTickLoop();
 }
 /**
 * Whether a task runs on behalf of a sync call: it belongs to the call's
@@ -714,7 +776,16 @@ function isWithinSyncCall(task, call) {
 		current = subtask.getParentTask();
 	}
 }
-function trackHostOperation(context, operation) {
+/**
+* Count a host operation as pending until it settles.
+*
+* @param context - the host operation context of the store
+* @param operation - starts the operation
+* @param componentIdx - the instance the operation is for, if known: the one
+*   whose threads its completion may make ready
+* @returns the result of the operation
+*/
+function trackHostOperation(context, operation, componentIdx) {
 	const { storeAsyncState, asyncState, symbolDispose, storeTrap } = context;
 	if (storeTrap.stopped) throw storeTrap.error;
 	const result = operation();
@@ -723,6 +794,9 @@ function trackHostOperation(context, operation) {
 		return result;
 	}
 	storeAsyncState.pendingHostOperations++;
+	const owner = componentIdx ?? -1;
+	const byComponent = storeAsyncState.hostOperationsByComponent ??= /* @__PURE__ */ new Map();
+	byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);
 	let rejectStopped;
 	const stopped = new Promise((_, reject) => {
 		rejectStopped = reject;
@@ -732,6 +806,9 @@ function trackHostOperation(context, operation) {
 	const tracked = Promise.race([result, stopped]).finally(() => {
 		storeTrap.stopWaiters.delete(rejectStopped);
 		storeAsyncState.pendingHostOperations--;
+		const remaining = (byComponent.get(owner) ?? 0) - 1;
+		if (remaining > 0) byComponent.set(owner, remaining);
+		else byComponent.delete(owner);
 		if (storeAsyncState.pendingHostOperations < 0) throw new Error("negative pending host operation count");
 		if (!storeAsyncState.hostWakeupScheduled) {
 			storeAsyncState.hostWakeupScheduled = true;
@@ -1214,7 +1291,7 @@ function defineComponentAsyncState() {
 			return meta;
 		}
 		suspendThread(args) {
-			const { thread, readyFn, cancellable, onResume, suspended = false } = args;
+			const { thread, readyFn, cancellable, onResume, suspended = false, switching = false } = args;
 			DEBUG: debugLog("[ComponentAsyncState#suspendThread()]", {
 				threadID: thread.id(),
 				taskID: thread.taskID(),
@@ -1245,6 +1322,7 @@ function defineComponentAsyncState() {
 			thread.notifyProgress();
 			this.runTickLoop();
 			checkForDeadlock(this.#context.deadlock);
+			if (!switching) this.checkSyncCallBlocked();
 			return promise;
 		}
 		resumeThread(thread) {
@@ -1290,6 +1368,35 @@ function defineComponentAsyncState() {
 			if (this.#heldBySyncCall()) return false;
 			for (const meta of this.#suspendedThreadsByRef.values()) if (this.suspendedThreadReady(meta.thread)) return true;
 			return false;
+		}
+		hasSyncCallCandidate() {
+			for (const thread of this.#suspendedThreadsByRef.keys()) {
+				if (!thread.hasIndex()) continue;
+				if (this.suspendedThreadReady(thread)) return true;
+			}
+			return false;
+		}
+		hasRunningStackWithin(call) {
+			if (this.#pendingTaskStarts > 0 || this.#lockHandoffScheduled) return true;
+			const data = this.threads.data();
+			for (let i = 2; i < data.length; i += 2) {
+				const thread = data[i];
+				if (thread === null || typeof thread !== "object") continue;
+				if (this.#suspendedThreadsByRef.has(thread) || !isWithinSyncCall(thread.task(), call)) continue;
+				const callee = thread.awaitedCallee();
+				if (callee !== null && !this.#calleeLetsCallerRun(callee)) continue;
+				return true;
+			}
+			return false;
+		}
+		#calleeLetsCallerRun(callee) {
+			if (callee.isResolvedState() || callee.isRejected()) return true;
+			if (callee.hasEntered()) return false;
+			for (const state of this.#context.deadlock.asyncState.values()) if (state.componentIdx() === callee.componentIdx()) return !state.isTaskSuspended(callee.id());
+			return true;
+		}
+		checkSyncCallBlocked() {
+			return checkSyncCallBlocked(this.#context.deadlock);
 		}
 		beginSyncCall(task) {
 			this.#context.deadlock.storeAsyncState.syncCalls.push({
@@ -2031,7 +2138,8 @@ function threadSuspendThenResume(_context, ctx, threadIdx) {
 	const suspension = thread.suspend({
 		cancellable: false,
 		suspended: true,
-		readyFn: () => false
+		readyFn: () => false,
+		switching: true
 	});
 	cstate.resumeThread(other);
 	return suspension.then(() => 0);
@@ -2050,7 +2158,8 @@ function threadYieldThenResume(_context, ctx, threadIdx) {
 	const suspension = thread.suspend({
 		cancellable: false,
 		suspended: false,
-		readyFn: () => true
+		readyFn: () => true,
+		switching: true
 	});
 	cstate.resumeThread(other);
 	return suspension.then(() => 0);
@@ -2071,7 +2180,8 @@ function threadSuspendThenPromote(_context, ctx, threadIdx) {
 		const suspension = thread.suspend({
 			cancellable: false,
 			suspended: true,
-			readyFn: () => false
+			readyFn: () => false,
+			switching: true
 		});
 		cstate.resumeThread(other);
 		return suspension.then(() => 0);
@@ -2094,7 +2204,8 @@ function threadYieldThenPromote(_context, ctx, threadIdx) {
 		const suspension = thread.suspend({
 			cancellable: false,
 			suspended: false,
-			readyFn: () => true
+			readyFn: () => true,
+			switching: true
 		});
 		cstate.resumeThread(other);
 		return suspension.then(() => 0);
@@ -3744,6 +3855,8 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 	if (!subtask) throw new Error("missing subtask from prepare during sync start call");
 	if (calleeComponentIdx !== preparedTask.componentIdx()) throw new Error(`meta callee idx [${calleeComponentIdx}] != current task idx [${preparedTask.componentIdx()}] during sync start call`);
 	const savedCallerTaskMeta = readTaskRegister(_context.registers, callerComponentIdx);
+	const callerThread = savedCallerTaskMeta ? getCurrentThread(_context, callerComponentIdx, savedCallerTaskMeta.threadID, savedCallerTaskMeta.taskID)?.thread : void 0;
+	callerThread?.setAwaitedCallee(preparedTask);
 	try {
 		const callbackFn = getCallbackFn();
 		preparedTask.setCallbackFn(callbackFn, "callback_" + callbackIdx);
@@ -3865,6 +3978,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 		});
 		return flatResult;
 	} finally {
+		callerThread?.setAwaitedCallee(null);
 		if (savedCallerTaskMeta) setCurrentTaskMeta(_context.registers, {
 			taskID: savedCallerTaskMeta.taskID,
 			threadID: savedCallerTaskMeta.threadID,
@@ -5637,6 +5751,9 @@ function defineAsyncTask() {
 		isExited() {
 			return this.#exited;
 		}
+		hasEntered() {
+			return this.#entered;
+		}
 		async waitUntil(opts) {
 			const { readyFn, cancellable } = opts;
 			DEBUG: debugLog("[AsyncTask#waitUntil()] args", {
@@ -6006,6 +6123,7 @@ function defineAsyncTask() {
 			else this.#threads = this.#threads.filter((t) => t !== thread);
 			syncContextSlots(this.#context.registers);
 			if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) cstate.noteUnresolvedExit(this);
+			cstate?.checkSyncCallBlocked();
 			if (this.#exited && this.#threads.length === 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
 		}
 		addThread(thread, opts) {
@@ -6934,6 +7052,7 @@ function defineAsyncThread() {
 		#state;
 		#startFn = null;
 		#implicit;
+		#awaitedCallee = null;
 		storage = [0, 0];
 		constructor(context, opts) {
 			this.#context = context;
@@ -6953,6 +7072,18 @@ function defineAsyncThread() {
 		}
 		id() {
 			return this.#id;
+		}
+		/**
+		* The callee task this thread waits on through a synchronous lowering.
+		* Until the callee settles, the thread is blocked on it (Canonical ABI
+		* `canon_lower`), even though its stack waits on the callee rather
+		* than in the scheduler.
+		*/
+		awaitedCallee() {
+			return this.#awaitedCallee;
+		}
+		setAwaitedCallee(task) {
+			this.#awaitedCallee = task;
 		}
 		/** Whether the thread has been given its index in the instance's thread table. */
 		hasIndex() {
@@ -8593,7 +8724,7 @@ function genFutureHostInjectFn(_context, genArgs) {
 		};
 		let value;
 		try {
-			value = await trackHostOperation(_context.tracking, () => promise);
+			value = await trackHostOperation(_context.tracking, () => promise, args.componentIdx);
 		} catch (err) {
 			if (hostWriteEnd.isPeerDropped()) return () => {};
 			if (!hostWriteEnd.getElemMeta().payloadTypeName?.startsWith("Result(")) {
@@ -9264,7 +9395,7 @@ function trackGuestWaitOnHost(context, meta) {
 	if (meta.endHostWait || context.storeTrap.stopped) return;
 	const { promise, resolve } = promiseWithResolvers();
 	meta.endHostWait = resolve;
-	Promise.resolve(trackHostOperation(context, () => promise)).catch(emptyFunc);
+	Promise.resolve(trackHostOperation(context, () => promise, meta.componentIdx)).catch(emptyFunc);
 }
 
 //#endregion
@@ -9580,7 +9711,10 @@ function initializeFutureReadableEndClass(_context) {
 				this.setPendingEvent(() => futureEvent(res));
 			};
 			let injectedWritePromise;
-			if (this.#hostInjectFn) injectedWritePromise = this.#hostInjectFn({ count: 1 });
+			if (this.#hostInjectFn) injectedWritePromise = this.#hostInjectFn({
+				count: 1,
+				componentIdx
+			});
 			this._read({
 				buffer,
 				onCopyDoneFn,
@@ -11513,4 +11647,4 @@ function streamTransfer(_context, srcStreamWaitableIdx, srcTableIdx, destTableId
 }
 
 //#endregion
-export { CM_RUNTIME_API_VERSION as runtimeExport0, callDestructor as runtimeExport1, tableCreateBorrow as runtimeExport10, initializeSymbolResourceRep as runtimeExport100, initializeTaskRegisters as runtimeExport101, instantiateCore as runtimeExport102, lookupMemories as runtimeExport103, promiseWithResolvers as runtimeExport104, registerMemory as runtimeExport105, setCurrentTaskMeta as runtimeExport106, suspendingImport as runtimeExport107, throwInvalidBool as runtimeExport108, throwUninitialized as runtimeExport109, tableCreateOwn as runtimeExport11, typeCheckAsyncFn as runtimeExport110, typeCheckValidI32 as runtimeExport111, withCurrentTaskMeta as runtimeExport112, withCurrentTaskMetaAsync as runtimeExport113, backpressureDec as runtimeExport114, backpressureInc as runtimeExport115, checkForDeadlock as runtimeExport116, checkIdle as runtimeExport117, checkMayLeave as runtimeExport118, getOrCreateAsyncState as runtimeExport119, tableEnsureBorrowDrop as runtimeExport12, guardMayLeave as runtimeExport120, guardPostReturn as runtimeExport121, guardTrap as runtimeExport122, initializeCallTracking as runtimeExport123, initializeComponentAsyncStateClass as runtimeExport124, initializeComponentAsyncStates as runtimeExport125, initializeCoreTrapMessages as runtimeExport126, initializeInstanceFlags as runtimeExport127, initializeStoreAsyncState as runtimeExport128, initializeStoreTrap as runtimeExport129, tableFlag as runtimeExport13, normalizeCoreTrap as runtimeExport130, postReturnTrap as runtimeExport131, recordTrap as runtimeExport132, reportTrap as runtimeExport133, setAllError as runtimeExport134, stopInstance as runtimeExport135, trackHostOperation as runtimeExport136, whenIdle as runtimeExport137, initializeWaitableClass as runtimeExport138, initializeWaitableSetClass as runtimeExport139, tableGet as runtimeExport14, removeWaitableSet as runtimeExport140, waitableJoin as runtimeExport141, waitableSetDrop as runtimeExport142, waitableSetNew as runtimeExport143, waitableSetPoll as runtimeExport144, waitableSetWait as runtimeExport145, errCtxCreateLocalHandle as runtimeExport146, errCtxDebugMessage as runtimeExport147, errCtxDrop as runtimeExport148, errCtxGetLocalTable as runtimeExport149, tableOwn as runtimeExport15, errCtxGlobalRefCountAdd as runtimeExport150, errCtxNew as runtimeExport151, errCtxReserveGlobalRep as runtimeExport152, errCtxTransfer as runtimeExport153, initializeErrorContextTableRegistrations as runtimeExport154, initializeGlobalErrorContextTableClass as runtimeExport155, initializeLocalErrorContextTables as runtimeExport156, asyncBlockedCode as runtimeExport157, asyncYield as runtimeExport158, clearCurrentTask as runtimeExport159, tableRemove as runtimeExport16, clearCurrentThread as runtimeExport160, contextGet as runtimeExport161, contextSet as runtimeExport162, contextSlotAccessor as runtimeExport163, createNewCurrentImplicitThread as runtimeExport164, createNewCurrentTask as runtimeExport165, currentThreadOrThrow as runtimeExport166, driverLoop as runtimeExport167, getCurrentTask as runtimeExport168, getCurrentThread as runtimeExport169, transferBorrow as runtimeExport17, guardCannotLeave as runtimeExport170, initializeAsyncBlockingCallDepth as runtimeExport171, initializeAsyncSubtaskClass as runtimeExport172, initializeAsyncTaskClass as runtimeExport173, initializeAsyncThreadClass as runtimeExport174, initializeCurrentComponentIdxs as runtimeExport175, initializeCurrentTaskIds as runtimeExport176, initializeCurrentTaskMayBlock as runtimeExport177, initializeSymmetricSyncGuestCallStack as runtimeExport178, initializeTasksByComponent as runtimeExport179, transferBorrowValidLifting as runtimeExport18, initializeThreadStartChecks as runtimeExport180, lowerImport as runtimeExport181, lowerImportBackwardsCompat as runtimeExport182, subtaskCancel as runtimeExport183, subtaskDrop as runtimeExport184, symmetricSyncGuestCallEnter as runtimeExport185, symmetricSyncGuestCallExit as runtimeExport186, taskCancel as runtimeExport187, taskReturn as runtimeExport188, threadIndex as runtimeExport189, transferOwn as runtimeExport19, threadNewIndirect as runtimeExport190, threadResumeLater as runtimeExport191, threadSuspend as runtimeExport192, threadSuspendThenPromote as runtimeExport193, threadSuspendThenResume as runtimeExport194, threadYieldThenPromote as runtimeExport195, threadYieldThenResume as runtimeExport196, unpackCallbackResult as runtimeExport197, asyncStartCall as runtimeExport198, prepareCall as runtimeExport199, getHandleIndexSpace as runtimeExport2, f32ToI32 as runtimeExport20, storeEventInComponentMemory as runtimeExport200, syncStartCall as runtimeExport201, decodeUtf8 as runtimeExport202, initializeLiftVariant as runtimeExport203, liftFlatBool as runtimeExport204, liftFlatBorrow as runtimeExport205, liftFlatChar as runtimeExport206, liftFlatEnum as runtimeExport207, liftFlatErrorContext as runtimeExport208, liftFlatFlags as runtimeExport209, f64ToI64 as runtimeExport21, liftFlatFloat32 as runtimeExport210, liftFlatFloat64 as runtimeExport211, liftFlatFuture as runtimeExport212, liftFlatList as runtimeExport213, liftFlatMap as runtimeExport214, liftFlatOption as runtimeExport215, liftFlatOwn as runtimeExport216, liftFlatRecord as runtimeExport217, liftFlatResult as runtimeExport218, liftFlatS16 as runtimeExport219, i32ToChar as runtimeExport22, liftFlatS32 as runtimeExport220, liftFlatS64 as runtimeExport221, liftFlatS8 as runtimeExport222, liftFlatStream as runtimeExport223, liftFlatStringAny as runtimeExport224, liftFlatStringUTF16 as runtimeExport225, liftFlatStringUTF8 as runtimeExport226, liftFlatTuple as runtimeExport227, liftFlatU16 as runtimeExport228, liftFlatU32 as runtimeExport229, i32ToF32 as runtimeExport23, liftFlatU64 as runtimeExport230, liftFlatU8 as runtimeExport231, liftFlatVariant as runtimeExport232, lowerFlatBool as runtimeExport233, lowerFlatBorrow as runtimeExport234, lowerFlatChar as runtimeExport235, lowerFlatEnum as runtimeExport236, lowerFlatErrorContext as runtimeExport237, lowerFlatFlags as runtimeExport238, lowerFlatFloat32 as runtimeExport239, i64ToF64 as runtimeExport24, lowerFlatFloat64 as runtimeExport240, lowerFlatFuture as runtimeExport241, lowerFlatList as runtimeExport242, lowerFlatMap as runtimeExport243, lowerFlatOption as runtimeExport244, lowerFlatOwn as runtimeExport245, lowerFlatRecord as runtimeExport246, lowerFlatResult as runtimeExport247, lowerFlatS16 as runtimeExport248, lowerFlatS32 as runtimeExport249, initializeBitcast32 as runtimeExport25, lowerFlatS64 as runtimeExport250, lowerFlatS8 as runtimeExport251, lowerFlatStream as runtimeExport252, lowerFlatStringAny as runtimeExport253, lowerFlatStringUTF16 as runtimeExport254, lowerFlatStringUTF8 as runtimeExport255, lowerFlatTuple as runtimeExport256, lowerFlatU16 as runtimeExport257, lowerFlatU32 as runtimeExport258, lowerFlatU64 as runtimeExport259, initializeBitcast64 as runtimeExport26, lowerFlatU8 as runtimeExport260, lowerFlatVariant as runtimeExport261, addFutureEndToTable as runtimeExport262, createFuture as runtimeExport263, futureCancelRead as runtimeExport264, futureCancelWrite as runtimeExport265, futureDropReadable as runtimeExport266, futureDropWritable as runtimeExport267, futureNew as runtimeExport268, futureNewFromLift as runtimeExport269, isValidNumericPrimitive as runtimeExport27, futureRead as runtimeExport270, futureTransfer as runtimeExport271, futureWrite as runtimeExport272, genFutureHostInjectFn as runtimeExport273, getFutureEnd as runtimeExport274, initializeFutureEndClass as runtimeExport275, initializeFutureReadableEndClass as runtimeExport276, initializeFutureTables as runtimeExport277, initializeFutureValueClass as runtimeExport278, initializeFutureWritableEndClass as runtimeExport279, mergeInt64 as runtimeExport28, initializeFutures as runtimeExport280, initializeHostFutureClass as runtimeExport281, initializeInternalFutureClass as runtimeExport282, initializeNestedFutureSymbol as runtimeExport283, isFutureLowerableObject as runtimeExport284, removeFutureEndFromTable as runtimeExport285, addStreamEndToTable as runtimeExport286, createStream as runtimeExport287, genReadFnFromLowerableStream as runtimeExport288, genStreamHostInjectFn as runtimeExport289, requireValidNumericPrimitive as runtimeExport29, getStreamEnd as runtimeExport290, initializeExternalStreamClass as runtimeExport291, initializeHostStreamClass as runtimeExport292, initializeInternalStreamClass as runtimeExport293, initializePendingValueQueueClass as runtimeExport294, initializeStreamEndClass as runtimeExport295, initializeStreamReadableEndClass as runtimeExport296, initializeStreamTables as runtimeExport297, initializeStreamWritableEndClass as runtimeExport298, initializeStreams as runtimeExport299, initializeCallBorrows as runtimeExport3, splitInt64 as runtimeExport30, isStreamLowerableObject as runtimeExport300, removeStreamEndFromTable as runtimeExport301, streamCancelRead as runtimeExport302, streamCancelWrite as runtimeExport303, streamDropReadable as runtimeExport304, streamDropWritable as runtimeExport305, streamNew as runtimeExport306, streamNewFromLift as runtimeExport307, streamRead as runtimeExport308, streamTransfer as runtimeExport309, toInt16 as runtimeExport31, streamWrite as runtimeExport310, toInt32 as runtimeExport32, toInt64 as runtimeExport33, toInt8 as runtimeExport34, toResultString as runtimeExport35, toString as runtimeExport36, toUint16 as runtimeExport37, toUint32 as runtimeExport38, toUint64 as runtimeExport39, initializeCurrentBorrows as runtimeExport4, toUint8 as runtimeExport40, conditionalSuspendingHostImport as runtimeExport41, dataView as runtimeExport42, emptyFunc as runtimeExport43, initializeDataViewCache as runtimeExport44, maybeSyncGenerator as runtimeExport45, compactUtf16Decode as runtimeExport46, compactUtf16Encode as runtimeExport47, initializeUtf16Decoder as runtimeExport48, initializeUtf16Encoding as runtimeExport49, initializeHandleIndexSpaces as runtimeExport5, initializeUtf8Decoder as runtimeExport50, initializeUtf8Encoder as runtimeExport51, utf16Encode as runtimeExport52, utf16EncodeAsync as runtimeExport53, utf16ValidatingCopy as runtimeExport54, utf8Encode as runtimeExport55, utf8EncodeAsync as runtimeExport56, validateGuestChar as runtimeExport57, validateHostChar as runtimeExport58, globalThisIdlProxy as runtimeExport59, initializeHandleTables as runtimeExport6, initializeWebIdlProxyCache as runtimeExport60, base64Compile as runtimeExport61, clampGuest as runtimeExport62, clearCurrentTaskMeta as runtimeExport63, coinFlip as runtimeExport64, conditionalSuspending1I32ToI32 as runtimeExport65, conditionalSuspending2I32ToI32 as runtimeExport66, conditionalSuspending3I32ToI32 as runtimeExport67, conditionalSuspending3I32ToVoid as runtimeExport68, debugLog as runtimeExport69, initializeResourceScopeCounter as runtimeExport7, disposeHostValue as runtimeExport70, fetchCompile as runtimeExport71, finalizationRegistryCreate as runtimeExport72, getCurrentTaskMeta as runtimeExport73, getErrorPayload as runtimeExport74, getErrorPayloadString as runtimeExport75, i32Max as runtimeExport76, i32Min as runtimeExport77, initializeAsyncDeterminism as runtimeExport78, initializeAsyncEventCodes as runtimeExport79, initializeResourceScopeTasks as runtimeExport8, initializeAsyncFunctionConstructor as runtimeExport80, initializeBufferManager as runtimeExport81, initializeBufferManagerClass as runtimeExport82, initializeComponentErrorClass as runtimeExport83, initializeComponentMemoryMap as runtimeExport84, initializeConditionalSuspendingWasm as runtimeExport85, initializeEndianness as runtimeExport86, initializeFactTrapMessages as runtimeExport87, initializeFileCompileCache as runtimeExport88, initializeHasOwnProperty as runtimeExport89, initializeScopeId as runtimeExport9, initializeManagedBufferClass as runtimeExport90, initializeReadableStream as runtimeExport91, initializeRepTableClass as runtimeExport92, initializeRuntimeErrorConstructor as runtimeExport93, initializeSymbolAsyncIterator as runtimeExport94, initializeSymbolCabiDispose as runtimeExport95, initializeSymbolCabiLower as runtimeExport96, initializeSymbolDispose as runtimeExport97, initializeSymbolIterator as runtimeExport98, initializeSymbolResourceHandle as runtimeExport99 };
+export { CM_RUNTIME_API_VERSION as runtimeExport0, callDestructor as runtimeExport1, tableCreateBorrow as runtimeExport10, initializeSymbolResourceRep as runtimeExport100, initializeTaskRegisters as runtimeExport101, instantiateCore as runtimeExport102, lookupMemories as runtimeExport103, promiseWithResolvers as runtimeExport104, registerMemory as runtimeExport105, setCurrentTaskMeta as runtimeExport106, suspendingImport as runtimeExport107, throwInvalidBool as runtimeExport108, throwUninitialized as runtimeExport109, tableCreateOwn as runtimeExport11, typeCheckAsyncFn as runtimeExport110, typeCheckValidI32 as runtimeExport111, withCurrentTaskMeta as runtimeExport112, withCurrentTaskMetaAsync as runtimeExport113, backpressureDec as runtimeExport114, backpressureInc as runtimeExport115, checkForDeadlock as runtimeExport116, checkIdle as runtimeExport117, checkMayLeave as runtimeExport118, checkSyncCallBlocked as runtimeExport119, tableEnsureBorrowDrop as runtimeExport12, getOrCreateAsyncState as runtimeExport120, guardMayLeave as runtimeExport121, guardPostReturn as runtimeExport122, guardTrap as runtimeExport123, initializeCallTracking as runtimeExport124, initializeComponentAsyncStateClass as runtimeExport125, initializeComponentAsyncStates as runtimeExport126, initializeCoreTrapMessages as runtimeExport127, initializeInstanceFlags as runtimeExport128, initializeStoreAsyncState as runtimeExport129, tableFlag as runtimeExport13, initializeStoreTrap as runtimeExport130, normalizeCoreTrap as runtimeExport131, postReturnTrap as runtimeExport132, recordTrap as runtimeExport133, reportTrap as runtimeExport134, setAllError as runtimeExport135, stopInstance as runtimeExport136, trackHostOperation as runtimeExport137, whenIdle as runtimeExport138, initializeWaitableClass as runtimeExport139, tableGet as runtimeExport14, initializeWaitableSetClass as runtimeExport140, removeWaitableSet as runtimeExport141, waitableJoin as runtimeExport142, waitableSetDrop as runtimeExport143, waitableSetNew as runtimeExport144, waitableSetPoll as runtimeExport145, waitableSetWait as runtimeExport146, errCtxCreateLocalHandle as runtimeExport147, errCtxDebugMessage as runtimeExport148, errCtxDrop as runtimeExport149, tableOwn as runtimeExport15, errCtxGetLocalTable as runtimeExport150, errCtxGlobalRefCountAdd as runtimeExport151, errCtxNew as runtimeExport152, errCtxReserveGlobalRep as runtimeExport153, errCtxTransfer as runtimeExport154, initializeErrorContextTableRegistrations as runtimeExport155, initializeGlobalErrorContextTableClass as runtimeExport156, initializeLocalErrorContextTables as runtimeExport157, asyncBlockedCode as runtimeExport158, asyncYield as runtimeExport159, tableRemove as runtimeExport16, clearCurrentTask as runtimeExport160, clearCurrentThread as runtimeExport161, contextGet as runtimeExport162, contextSet as runtimeExport163, contextSlotAccessor as runtimeExport164, createNewCurrentImplicitThread as runtimeExport165, createNewCurrentTask as runtimeExport166, currentThreadOrThrow as runtimeExport167, driverLoop as runtimeExport168, getCurrentTask as runtimeExport169, transferBorrow as runtimeExport17, getCurrentThread as runtimeExport170, guardCannotLeave as runtimeExport171, initializeAsyncBlockingCallDepth as runtimeExport172, initializeAsyncSubtaskClass as runtimeExport173, initializeAsyncTaskClass as runtimeExport174, initializeAsyncThreadClass as runtimeExport175, initializeCurrentComponentIdxs as runtimeExport176, initializeCurrentTaskIds as runtimeExport177, initializeCurrentTaskMayBlock as runtimeExport178, initializeSymmetricSyncGuestCallStack as runtimeExport179, transferBorrowValidLifting as runtimeExport18, initializeTasksByComponent as runtimeExport180, initializeThreadStartChecks as runtimeExport181, lowerImport as runtimeExport182, lowerImportBackwardsCompat as runtimeExport183, subtaskCancel as runtimeExport184, subtaskDrop as runtimeExport185, symmetricSyncGuestCallEnter as runtimeExport186, symmetricSyncGuestCallExit as runtimeExport187, taskCancel as runtimeExport188, taskReturn as runtimeExport189, transferOwn as runtimeExport19, threadIndex as runtimeExport190, threadNewIndirect as runtimeExport191, threadResumeLater as runtimeExport192, threadSuspend as runtimeExport193, threadSuspendThenPromote as runtimeExport194, threadSuspendThenResume as runtimeExport195, threadYieldThenPromote as runtimeExport196, threadYieldThenResume as runtimeExport197, unpackCallbackResult as runtimeExport198, asyncStartCall as runtimeExport199, getHandleIndexSpace as runtimeExport2, f32ToI32 as runtimeExport20, prepareCall as runtimeExport200, storeEventInComponentMemory as runtimeExport201, syncStartCall as runtimeExport202, decodeUtf8 as runtimeExport203, initializeLiftVariant as runtimeExport204, liftFlatBool as runtimeExport205, liftFlatBorrow as runtimeExport206, liftFlatChar as runtimeExport207, liftFlatEnum as runtimeExport208, liftFlatErrorContext as runtimeExport209, f64ToI64 as runtimeExport21, liftFlatFlags as runtimeExport210, liftFlatFloat32 as runtimeExport211, liftFlatFloat64 as runtimeExport212, liftFlatFuture as runtimeExport213, liftFlatList as runtimeExport214, liftFlatMap as runtimeExport215, liftFlatOption as runtimeExport216, liftFlatOwn as runtimeExport217, liftFlatRecord as runtimeExport218, liftFlatResult as runtimeExport219, i32ToChar as runtimeExport22, liftFlatS16 as runtimeExport220, liftFlatS32 as runtimeExport221, liftFlatS64 as runtimeExport222, liftFlatS8 as runtimeExport223, liftFlatStream as runtimeExport224, liftFlatStringAny as runtimeExport225, liftFlatStringUTF16 as runtimeExport226, liftFlatStringUTF8 as runtimeExport227, liftFlatTuple as runtimeExport228, liftFlatU16 as runtimeExport229, i32ToF32 as runtimeExport23, liftFlatU32 as runtimeExport230, liftFlatU64 as runtimeExport231, liftFlatU8 as runtimeExport232, liftFlatVariant as runtimeExport233, lowerFlatBool as runtimeExport234, lowerFlatBorrow as runtimeExport235, lowerFlatChar as runtimeExport236, lowerFlatEnum as runtimeExport237, lowerFlatErrorContext as runtimeExport238, lowerFlatFlags as runtimeExport239, i64ToF64 as runtimeExport24, lowerFlatFloat32 as runtimeExport240, lowerFlatFloat64 as runtimeExport241, lowerFlatFuture as runtimeExport242, lowerFlatList as runtimeExport243, lowerFlatMap as runtimeExport244, lowerFlatOption as runtimeExport245, lowerFlatOwn as runtimeExport246, lowerFlatRecord as runtimeExport247, lowerFlatResult as runtimeExport248, lowerFlatS16 as runtimeExport249, initializeBitcast32 as runtimeExport25, lowerFlatS32 as runtimeExport250, lowerFlatS64 as runtimeExport251, lowerFlatS8 as runtimeExport252, lowerFlatStream as runtimeExport253, lowerFlatStringAny as runtimeExport254, lowerFlatStringUTF16 as runtimeExport255, lowerFlatStringUTF8 as runtimeExport256, lowerFlatTuple as runtimeExport257, lowerFlatU16 as runtimeExport258, lowerFlatU32 as runtimeExport259, initializeBitcast64 as runtimeExport26, lowerFlatU64 as runtimeExport260, lowerFlatU8 as runtimeExport261, lowerFlatVariant as runtimeExport262, addFutureEndToTable as runtimeExport263, createFuture as runtimeExport264, futureCancelRead as runtimeExport265, futureCancelWrite as runtimeExport266, futureDropReadable as runtimeExport267, futureDropWritable as runtimeExport268, futureNew as runtimeExport269, isValidNumericPrimitive as runtimeExport27, futureNewFromLift as runtimeExport270, futureRead as runtimeExport271, futureTransfer as runtimeExport272, futureWrite as runtimeExport273, genFutureHostInjectFn as runtimeExport274, getFutureEnd as runtimeExport275, initializeFutureEndClass as runtimeExport276, initializeFutureReadableEndClass as runtimeExport277, initializeFutureTables as runtimeExport278, initializeFutureValueClass as runtimeExport279, mergeInt64 as runtimeExport28, initializeFutureWritableEndClass as runtimeExport280, initializeFutures as runtimeExport281, initializeHostFutureClass as runtimeExport282, initializeInternalFutureClass as runtimeExport283, initializeNestedFutureSymbol as runtimeExport284, isFutureLowerableObject as runtimeExport285, removeFutureEndFromTable as runtimeExport286, addStreamEndToTable as runtimeExport287, createStream as runtimeExport288, genReadFnFromLowerableStream as runtimeExport289, requireValidNumericPrimitive as runtimeExport29, genStreamHostInjectFn as runtimeExport290, getStreamEnd as runtimeExport291, initializeExternalStreamClass as runtimeExport292, initializeHostStreamClass as runtimeExport293, initializeInternalStreamClass as runtimeExport294, initializePendingValueQueueClass as runtimeExport295, initializeStreamEndClass as runtimeExport296, initializeStreamReadableEndClass as runtimeExport297, initializeStreamTables as runtimeExport298, initializeStreamWritableEndClass as runtimeExport299, initializeCallBorrows as runtimeExport3, splitInt64 as runtimeExport30, initializeStreams as runtimeExport300, isStreamLowerableObject as runtimeExport301, removeStreamEndFromTable as runtimeExport302, streamCancelRead as runtimeExport303, streamCancelWrite as runtimeExport304, streamDropReadable as runtimeExport305, streamDropWritable as runtimeExport306, streamNew as runtimeExport307, streamNewFromLift as runtimeExport308, streamRead as runtimeExport309, toInt16 as runtimeExport31, streamTransfer as runtimeExport310, streamWrite as runtimeExport311, toInt32 as runtimeExport32, toInt64 as runtimeExport33, toInt8 as runtimeExport34, toResultString as runtimeExport35, toString as runtimeExport36, toUint16 as runtimeExport37, toUint32 as runtimeExport38, toUint64 as runtimeExport39, initializeCurrentBorrows as runtimeExport4, toUint8 as runtimeExport40, conditionalSuspendingHostImport as runtimeExport41, dataView as runtimeExport42, emptyFunc as runtimeExport43, initializeDataViewCache as runtimeExport44, maybeSyncGenerator as runtimeExport45, compactUtf16Decode as runtimeExport46, compactUtf16Encode as runtimeExport47, initializeUtf16Decoder as runtimeExport48, initializeUtf16Encoding as runtimeExport49, initializeHandleIndexSpaces as runtimeExport5, initializeUtf8Decoder as runtimeExport50, initializeUtf8Encoder as runtimeExport51, utf16Encode as runtimeExport52, utf16EncodeAsync as runtimeExport53, utf16ValidatingCopy as runtimeExport54, utf8Encode as runtimeExport55, utf8EncodeAsync as runtimeExport56, validateGuestChar as runtimeExport57, validateHostChar as runtimeExport58, globalThisIdlProxy as runtimeExport59, initializeHandleTables as runtimeExport6, initializeWebIdlProxyCache as runtimeExport60, base64Compile as runtimeExport61, clampGuest as runtimeExport62, clearCurrentTaskMeta as runtimeExport63, coinFlip as runtimeExport64, conditionalSuspending1I32ToI32 as runtimeExport65, conditionalSuspending2I32ToI32 as runtimeExport66, conditionalSuspending3I32ToI32 as runtimeExport67, conditionalSuspending3I32ToVoid as runtimeExport68, debugLog as runtimeExport69, initializeResourceScopeCounter as runtimeExport7, disposeHostValue as runtimeExport70, fetchCompile as runtimeExport71, finalizationRegistryCreate as runtimeExport72, getCurrentTaskMeta as runtimeExport73, getErrorPayload as runtimeExport74, getErrorPayloadString as runtimeExport75, i32Max as runtimeExport76, i32Min as runtimeExport77, initializeAsyncDeterminism as runtimeExport78, initializeAsyncEventCodes as runtimeExport79, initializeResourceScopeTasks as runtimeExport8, initializeAsyncFunctionConstructor as runtimeExport80, initializeBufferManager as runtimeExport81, initializeBufferManagerClass as runtimeExport82, initializeComponentErrorClass as runtimeExport83, initializeComponentMemoryMap as runtimeExport84, initializeConditionalSuspendingWasm as runtimeExport85, initializeEndianness as runtimeExport86, initializeFactTrapMessages as runtimeExport87, initializeFileCompileCache as runtimeExport88, initializeHasOwnProperty as runtimeExport89, initializeScopeId as runtimeExport9, initializeManagedBufferClass as runtimeExport90, initializeReadableStream as runtimeExport91, initializeRepTableClass as runtimeExport92, initializeRuntimeErrorConstructor as runtimeExport93, initializeSymbolAsyncIterator as runtimeExport94, initializeSymbolCabiDispose as runtimeExport95, initializeSymbolCabiLower as runtimeExport96, initializeSymbolDispose as runtimeExport97, initializeSymbolIterator as runtimeExport98, initializeSymbolResourceHandle as runtimeExport99 };
