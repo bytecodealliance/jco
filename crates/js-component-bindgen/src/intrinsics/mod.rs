@@ -2281,8 +2281,9 @@ mod tests {
             task[remove_start..remove_end].contains("const cstate = this.#componentIdx === -1")
         );
         assert!(
-            task[remove_start..remove_end]
-                .contains("if (cstate && thread.hasIndex()) { cstate.threads.remove(thread.id()); }")
+            task[remove_start..remove_end].contains(
+                "if (cstate && thread.hasIndex()) { cstate.threads.remove(thread.id()); }"
+            )
         );
 
         let exit_start = task.find("exit(args) {").unwrap();
