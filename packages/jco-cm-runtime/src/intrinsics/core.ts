@@ -247,8 +247,21 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
             }
             return result;
         }
-        // Invocation stays inside the async function to preserve JSPI scheduling.
-        const settled = (async () => fn.apply(null, args))();
+        // A built-in that traps before blocking traps the calling stack at
+        // once, rather than suspending it with a rejected promise that lets
+        // the caller of a not-yet-blocked callee carry on first.
+        let started: ReturnType<typeof fn>;
+        try {
+            started = fn.apply(null, args);
+        } catch (error) {
+            currentTaskMeta[componentIdx] = saved;
+            if (!switchesTask) {
+                currentTaskMeta.current = saved;
+            }
+            throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
+        }
+        // A result that is not a promise still suspends, as JSPI scheduling expects.
+        const settled = (async () => started)();
 
         // The suspended stack resumes in a later job than the one which
         // settles the promise returned here. The registers must still name
