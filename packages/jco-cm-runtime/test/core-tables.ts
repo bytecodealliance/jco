@@ -52,7 +52,9 @@ test.concurrent('rep table lookup traps use the selected realm and preserve fals
     const { core } = create({ platform: { WebAssembly: { RuntimeError: Trap } } });
     const table = new core.RepTable<number>();
     expect(() => table.get(0)).toThrow(Trap);
+    expect(() => table.contains(0)).toThrow(Trap);
     expect(() => table.contains(0)).toThrow('cannot be 0');
+    expect(() => table.remove(0)).toThrow(Trap);
     const id = table.insert(0);
     expect(table.contains(id)).toBe(false);
     expect(table.get(id)).toBe(0);

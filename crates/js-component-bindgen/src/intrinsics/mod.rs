@@ -1063,7 +1063,7 @@ impl Intrinsic {
 
                         contains(rep) {{
                             {debug_log_fn}('[{rep_table_class}#contains()] args', {{ rep, target: this.target }});
-                            if (rep === 0) {{ throw new Error('invalid resource rep during contains, (cannot be 0)'); }}
+                            if (rep === 0) {{ throw new {runtime_error_class}('invalid resource rep during contains, (cannot be 0)'); }}
 
                             const baseIdx = this.#slot(rep);
                             if (baseIdx < 0) {{ return false; }}
@@ -1073,7 +1073,7 @@ impl Intrinsic {
 
                         remove(rep) {{
                             {debug_log_fn}('[{rep_table_class}#remove()] args', {{ rep, target: this.target }});
-                            if (rep === 0) {{ throw new Error('invalid resource rep during remove, (cannot be 0)'); }}
+                            if (rep === 0) {{ throw new {runtime_error_class}('invalid resource rep during remove, (cannot be 0)'); }}
                             const baseIdx = this.#slot(rep);
                             if (baseIdx < 0) {{
                                 throw new {runtime_error_class}(`unknown handle index ${{rep >>> 0}}`);
