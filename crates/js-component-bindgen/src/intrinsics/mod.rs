@@ -1492,20 +1492,50 @@ impl Intrinsic {
                                   throw {record_trap_fn}componentIdx, err, convertsRangeErrors);
                               }}
 
-                              return (async () => {{
-                                  try {{
-                                      const result = await started;
+                              // A result that is not a promise still suspends, as JSPI scheduling expects.
+                              const settled = (async () => started)();
+
+                              // The suspended stack resumes in a later job than the one which
+                              // settles the promise returned here. The registers must still name
+                              // this stack's task when it does, so stacks resume one at a time.
+                              let resolveResumption;
+                              let rejectResumption;
+                              const resumption = new Promise((resolve, reject) => {{
+                                  resolveResumption = resolve;
+                                  rejectResumption = reject;
+                              }});
+
+                              // Restore this stack's task and let the stack resume, once every
+                              // stack resumed before it has run. Were two stacks released in the
+                              // same turn, the second would restore its task before the first had
+                              // continued, and the first would run as the second's task.
+                              const resume = (deliver) => {{
+                                  const previous = {global_current_thread_meta_obj}.resumed ?? Promise.resolve();
+                                  {global_current_thread_meta_obj}.resumed = previous.then(() => {{
+                                      {global_current_thread_meta_obj}[componentIdx] = saved;
+                                      if (!switchesTask) {{ {global_current_thread_meta_obj}.current = saved; }}
+                                      try {{
+                                          resolveResumption(deliver());
+                                      }} catch (err) {{
+                                          rejectResumption({record_trap_fn}componentIdx, err, convertsRangeErrors));
+                                      }}
+                                      // The engine reacts to the promise before this does, so the stack
+                                      // has run until it suspended again or returned by the time this
+                                      // settles.
+                                      return resumption.then(() => {{}}, () => {{}});
+                                  }});
+                              }};
+
+                              settled.then(
+                                  (result) => resume(() => {{
                                       // The instance trapped while this stack was suspended: it
                                       // must not resume into guest code (Canonical ABI).
                                       {get_or_create_async_state_fn}componentIdx).throwIfInterrupted();
                                       return result;
-                                  }} catch (err) {{
-                                      throw {record_trap_fn}componentIdx, err, convertsRangeErrors);
-                                  }} finally {{
-                                      {global_current_thread_meta_obj}[componentIdx] = saved;
-                                      if (!switchesTask) {{ {global_current_thread_meta_obj}.current = saved; }}
-                                  }}
-                              }})();
+                                  }}),
+                                  (err) => resume(() => {{ throw err; }}),
+                              );
+                              return resumption;
                           }};
                       }}
                     "#,
@@ -1831,10 +1861,35 @@ mod tests {
         assert!(source.contains(
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
-        assert!(source.contains("return (async () => {"));
         assert!(source.contains("started = fn.apply(null, args);"));
-        assert!(source.contains("const result = await started;"));
+        assert!(source.contains("const settled = (async () => started)();"));
         assert!(source.contains("CURRENT_TASK_META[componentIdx] = saved;"));
+    }
+
+    #[test]
+    fn suspending_import_resumes_suspended_stacks_one_at_a_time() {
+        let source = render_intrinsic_body(Intrinsic::SuspendingImportWrapperFn);
+
+        // A stack restores its task only once every stack released before it
+        // has run, and it is released after its task is restored.
+        let chain = source
+            .find("const previous = CURRENT_TASK_META.resumed ?? Promise.resolve();")
+            .expect("resumption is chained after earlier ones");
+        let restore = source[chain..]
+            .find("CURRENT_TASK_META[componentIdx] = saved;")
+            .expect("the task is restored in turn")
+            + chain;
+        let release = source[restore..]
+            .find("resolveResumption(deliver());")
+            .expect("the stack is released after its task is restored")
+            + restore;
+        let next = source[release..]
+            .find("return resumption.then(() => {}, () => {});")
+            .expect("the next stack waits for this one to run");
+        assert!(next > 0);
+        assert!(source.contains("CURRENT_TASK_META.resumed = previous.then(() => {"));
+        assert!(source.contains("return resumption;"));
+        assert!(!source.contains("const result = await started;"));
     }
 
     #[test]
