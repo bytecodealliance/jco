@@ -164,11 +164,11 @@ export function threadResumeLater(_context: ThreadControlContext, ctx: { compone
     }
     const thread = threadHandle === 0 ? undefined : cstate.threads.get(threadHandle >>> 0);
     if (!thread) {
-        throw new _context.RuntimeError(`unknown handle index ${threadHandle}`);
+        throw new _context.RuntimeError(`unknown handle index ${threadHandle >>> 0}`);
     }
 
     if (!cstate.markThreadReady(thread)) {
-        throw new _context.RuntimeError(`thread [${threadHandle}] is not suspended, cannot resume-later`);
+        throw new _context.RuntimeError(`thread [${threadHandle >>> 0}] is not suspended, cannot resume-later`);
     }
 }
 

@@ -293,7 +293,7 @@ impl ResourceIntrinsic {
                     // would wrap at 2 ** 31 and alias a live entry)
                     // Zero reps are valid; freed entries are identified by the scope flag.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
-                        throw new {runtime_error}(`unknown handle index ${{handle}}`);
+                        throw new {runtime_error}(`unknown handle index ${{handle >>> 0}}`);
                     }}
                     return {{ rep, scope, own }};
                 }}
@@ -329,7 +329,7 @@ impl ResourceIntrinsic {
                     const rep = own ? val - {own_flag} : val;
                     // A borrowed entry can store zero without being freed.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
-                        throw new {runtime_error}(`unknown handle index ${{handle}}`);
+                        throw new {runtime_error}(`unknown handle index ${{handle >>> 0}}`);
                     }}
                     if (own && scope !== 0) {{
                         throw new {runtime_error}('cannot remove owned resource while borrowed');

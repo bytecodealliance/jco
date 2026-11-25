@@ -117,7 +117,7 @@ export function driverLoop(
                     // (an invalid index traps, like `waitable-set.wait`)
                     wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
                     if (!(wset instanceof _context.WaitableSet)) {
-                        throw new _context.RuntimeError(`unknown handle index ${waitableSetRep}`);
+                        throw new _context.RuntimeError(`unknown handle index ${waitableSetRep >>> 0}`);
                     }
                     DEBUG: debugLog('[_driverLoop()] waiting for event', {
                         fnName,
