@@ -792,6 +792,10 @@ impl AsyncTaskIntrinsic {
                 );
             }
 
+            // The suspend and yield built-ins never deliver cancellation and always
+            // return 0 (Canonical ABI `canon_thread_suspend`, `canon_thread_yield` and
+            // their `-then-resume` and `-then-promote` forms): cancellation reaches a
+            // task only through its callback event loop.
             Self::ThreadYield => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let thread_yield_fn = self.name();
@@ -804,7 +808,7 @@ impl AsyncTaskIntrinsic {
                     "
                     function {thread_yield_fn}(ctx) {{
                         {debug_log_fn}('[{thread_yield_fn}()] args', {{ ctx }});
-                        const {{ componentIdx, isCancellable }} = ctx;
+                        const {{ componentIdx }} = ctx;
                         const {{ thread, task }} = {current_thread_or_throw_fn}(componentIdx);
 
                         // A nonblocking task cannot suspend its Wasm stack. The
@@ -812,7 +816,7 @@ impl AsyncTaskIntrinsic {
                         // another thread, so take that synchronous fast path here.
                         if (!task.mayBlock()) {{
                             {get_or_create_async_state_fn}componentIdx).runTickLoop();
-                            return isCancellable && thread.isCancelled() ? 1 : 0;
+                            return 0;
                         }}
 
                         // A canonical thread.yield must give the scheduler a chance to
@@ -824,7 +828,7 @@ impl AsyncTaskIntrinsic {
                             // callback thread is parked in its event loop.
                             cancellable: false,
                             readyFn: () => true,
-                        }}).then(keepGoing => keepGoing ? 0 : 1);
+                        }}).then(() => 0);
                     }}
                 "
                 ));
@@ -859,15 +863,15 @@ impl AsyncTaskIntrinsic {
                     "
                     async function {thread_suspend_fn}(ctx) {{
                         {debug_log_fn}('[{thread_suspend_fn}()] args', {{ ctx }});
-                        const {{ componentIdx, isCancellable }} = ctx;
+                        const {{ componentIdx }} = ctx;
                         const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
-                        const keepGoing = await thread.suspend({{
-                            cancellable: isCancellable,
+                        await thread.suspend({{
+                            cancellable: false,
                             suspended: true,
                             readyFn: () => false,
                         }});
-                        return keepGoing ? 0 : 1;
+                        return 0;
                     }}
                 "
                 ));
@@ -1023,8 +1027,8 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!(
                     "
                     function {fn_name}(ctx, threadIdx) {{
-                        const {{ componentIdx, isCancellable }} = ctx;
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, threadIdx }});
+                        const {{ componentIdx }} = ctx;
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, threadIdx }});
                         const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
                         const cstate = {get_or_create_async_state_fn}componentIdx);
@@ -1034,13 +1038,13 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         const suspension = thread.suspend({{
-                            cancellable: isCancellable,
+                            cancellable: false,
                             suspended: {self_suspended},
                             readyFn: {self_ready_fn},
                         }});
                         cstate.resumeThread(other);
 
-                        return suspension.then(keepGoing => keepGoing ? 0 : 1);
+                        return suspension.then(() => 0);
                     }}
                 "
                 ));
@@ -1076,8 +1080,8 @@ impl AsyncTaskIntrinsic {
                 output.push_str(&format!(
                     "
                     function {fn_name}(ctx, threadIdx) {{
-                        const {{ componentIdx, isCancellable }} = ctx;
-                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, isCancellable, threadIdx }});
+                        const {{ componentIdx }} = ctx;
+                        {debug_log_fn}('[{fn_name}()] args', {{ componentIdx, threadIdx }});
                         const {{ thread }} = {current_thread_or_throw_fn}(componentIdx);
 
                         const cstate = {get_or_create_async_state_fn}componentIdx);
@@ -1093,12 +1097,12 @@ impl AsyncTaskIntrinsic {
 
                         if (cstate.isThreadReady(other)) {{
                             const suspension = thread.suspend({{
-                                cancellable: isCancellable,
+                                cancellable: false,
                                 suspended: {self_suspended},
                                 readyFn: {self_ready_fn},
                             }});
                             cstate.resumeThread(other);
-                            return suspension.then(keepGoing => keepGoing ? 0 : 1);
+                            return suspension.then(() => 0);
                         }}
 
                         return {fallback_fn}(ctx);

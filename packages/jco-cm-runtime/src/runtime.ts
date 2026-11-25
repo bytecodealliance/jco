@@ -1389,6 +1389,7 @@ export interface ThreadControlContext extends ThreadLookupContext, TrapContext {
 }
 export interface ThreadOperationOptions {
     componentIdx: number;
+    /** Ignored: the suspend and yield built-ins are never cancellable. */
     isCancellable?: boolean;
 }
 export interface ThreadStartPlatform {

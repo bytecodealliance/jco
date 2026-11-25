@@ -37,10 +37,15 @@ export function currentThreadOrThrow(context: ThreadLookupContext, componentIdx:
     return thread;
 }
 
+// The suspend and yield built-ins below never deliver cancellation and always
+// return 0 (Canonical ABI `canon_thread_suspend`, `canon_thread_yield` and their
+// `-then-resume` and `-then-promote` forms): cancellation reaches a task only
+// through its callback event loop.
+
 /** Implements `canon thread.yield`. */
 export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationOptions) {
     DEBUG: debugLog('[asyncYield()] args', { ctx });
-    const { componentIdx, isCancellable } = ctx;
+    const { componentIdx } = ctx;
     const { thread, task } = currentThreadOrThrow(_context, componentIdx);
 
     // A nonblocking task cannot suspend its Wasm stack. The
@@ -48,7 +53,7 @@ export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationO
     // another thread, so take that synchronous fast path here.
     if (!task.mayBlock()) {
         getOrCreateAsyncState(_context.lookup, componentIdx).runTickLoop();
-        return isCancellable && thread.isCancelled() ? 1 : 0;
+        return 0;
     }
 
     // A canonical thread.yield must give the scheduler a chance to
@@ -62,7 +67,7 @@ export function asyncYield(_context: ThreadControlContext, ctx: ThreadOperationO
             cancellable: false,
             readyFn: () => true,
         })
-        .then((keepGoing) => (keepGoing ? 0 : 1));
+        .then(() => 0);
 }
 
 /** Implements `canon thread.index`. */
@@ -77,15 +82,15 @@ export function threadIndex(_context: ThreadLookupContext, componentIdx: number)
 /** Implements `canon thread.suspend`. */
 export async function threadSuspend(_context: ThreadControlContext, ctx: ThreadOperationOptions) {
     DEBUG: debugLog('[threadSuspend()] args', { ctx });
-    const { componentIdx, isCancellable } = ctx;
+    const { componentIdx } = ctx;
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
-    const keepGoing = await thread.suspend({
-        cancellable: isCancellable,
+    await thread.suspend({
+        cancellable: false,
         suspended: true,
         readyFn: () => false,
     });
-    return keepGoing ? 0 : 1;
+    return 0;
 }
 
 /** Implements `canon thread.new-indirect`. */
@@ -173,8 +178,8 @@ export function threadSuspendThenResume(
     ctx: ThreadOperationOptions,
     threadIdx: number,
 ) {
-    const { componentIdx, isCancellable } = ctx;
-    DEBUG: debugLog('[threadSuspendThenResume()] args', { componentIdx, isCancellable, threadIdx });
+    const { componentIdx } = ctx;
+    DEBUG: debugLog('[threadSuspendThenResume()] args', { componentIdx, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -184,19 +189,19 @@ export function threadSuspendThenResume(
     }
 
     const suspension = thread.suspend({
-        cancellable: isCancellable,
+        cancellable: false,
         suspended: true,
         readyFn: () => false,
     });
     cstate.resumeThread(other);
 
-    return suspension.then((keepGoing) => (keepGoing ? 0 : 1));
+    return suspension.then(() => 0);
 }
 
 /** Implements `canon thread.yield-then-resume`. */
 export function threadYieldThenResume(_context: ThreadControlContext, ctx: ThreadOperationOptions, threadIdx: number) {
-    const { componentIdx, isCancellable } = ctx;
-    DEBUG: debugLog('[threadYieldThenResume()] args', { componentIdx, isCancellable, threadIdx });
+    const { componentIdx } = ctx;
+    DEBUG: debugLog('[threadYieldThenResume()] args', { componentIdx, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -206,13 +211,13 @@ export function threadYieldThenResume(_context: ThreadControlContext, ctx: Threa
     }
 
     const suspension = thread.suspend({
-        cancellable: isCancellable,
+        cancellable: false,
         suspended: false,
         readyFn: () => true,
     });
     cstate.resumeThread(other);
 
-    return suspension.then((keepGoing) => (keepGoing ? 0 : 1));
+    return suspension.then(() => 0);
 }
 
 /** Implements `canon thread.suspend-then-promote`. */
@@ -221,8 +226,8 @@ export function threadSuspendThenPromote(
     ctx: ThreadOperationOptions,
     threadIdx: number,
 ) {
-    const { componentIdx, isCancellable } = ctx;
-    DEBUG: debugLog('[threadSuspendThenPromote()] args', { componentIdx, isCancellable, threadIdx });
+    const { componentIdx } = ctx;
+    DEBUG: debugLog('[threadSuspendThenPromote()] args', { componentIdx, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -238,12 +243,12 @@ export function threadSuspendThenPromote(
 
     if (cstate.isThreadReady(other)) {
         const suspension = thread.suspend({
-            cancellable: isCancellable,
+            cancellable: false,
             suspended: true,
             readyFn: () => false,
         });
         cstate.resumeThread(other);
-        return suspension.then((keepGoing) => (keepGoing ? 0 : 1));
+        return suspension.then(() => 0);
     }
 
     return threadSuspend(_context, ctx);
@@ -251,8 +256,8 @@ export function threadSuspendThenPromote(
 
 /** Implements `canon thread.yield-then-promote`. */
 export function threadYieldThenPromote(_context: ThreadControlContext, ctx: ThreadOperationOptions, threadIdx: number) {
-    const { componentIdx, isCancellable } = ctx;
-    DEBUG: debugLog('[threadYieldThenPromote()] args', { componentIdx, isCancellable, threadIdx });
+    const { componentIdx } = ctx;
+    DEBUG: debugLog('[threadYieldThenPromote()] args', { componentIdx, threadIdx });
     const { thread } = currentThreadOrThrow(_context, componentIdx);
 
     const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
@@ -268,12 +273,12 @@ export function threadYieldThenPromote(_context: ThreadControlContext, ctx: Thre
 
     if (cstate.isThreadReady(other)) {
         const suspension = thread.suspend({
-            cancellable: isCancellable,
+            cancellable: false,
             suspended: false,
             readyFn: () => true,
         });
         cstate.resumeThread(other);
-        return suspension.then((keepGoing) => (keepGoing ? 0 : 1));
+        return suspension.then(() => 0);
     }
 
     return asyncYield(_context, ctx);
