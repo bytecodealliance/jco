@@ -133,7 +133,18 @@ pub enum WaitableIntrinsic {
 impl WaitableIntrinsic {
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
-        []
+        // Reserved so that an export named e.g. `waitable-set-wait` is not
+        // bound as a local that shadows the intrinsic its trampolines call.
+        [
+            Self::RemoveWaitableSet.name(),
+            Self::WaitableSetNew.name(),
+            Self::WaitableSetWait.name(),
+            Self::WaitableSetPoll.name(),
+            Self::WaitableSetDrop.name(),
+            Self::WaitableJoin.name(),
+            Self::WaitableSetClass.name(),
+            Self::WaitableClass.name(),
+        ]
     }
 
     /// Get the name for the intrinsic
