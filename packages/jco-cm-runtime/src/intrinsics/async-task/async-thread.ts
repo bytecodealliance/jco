@@ -40,6 +40,7 @@ function defineAsyncThread() {
         #task: AsyncTaskType;
         #state: 'not-started' | 'running' | 'completed';
         #startFn: (() => unknown) | null = null;
+        #implicit: boolean;
         storage = [0, 0];
 
         constructor(context: AsyncThreadClassContext, opts: AsyncThreadOptions) {
@@ -63,6 +64,12 @@ function defineAsyncThread() {
             } else {
                 this.#state = THREAD_RUNNING;
             }
+            this.#implicit = !opts.startFn;
+        }
+
+        /** Whether this is its task's implicit thread (not made by `thread.new-indirect`). */
+        isImplicit() {
+            return this.#implicit;
         }
 
         id() {
