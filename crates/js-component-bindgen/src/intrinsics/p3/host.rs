@@ -310,6 +310,8 @@ impl HostIntrinsic {
             Self::AsyncStartCall => {
                 let report_trap_fn = render_args
                     .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::ReportTrap));
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let async_start_call_fn = render_args.require_intrinsic(Self::AsyncStartCall);
                 let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
@@ -541,6 +543,16 @@ impl HostIntrinsic {
                             // subtask.getParentTask().reject(err);
 
                             subtask.getParentTask().setErrored(err);
+
+                            // A trap ends the whole call tree, so a caller blocked on this subtask
+                            // must fail with it rather than wait for an event that never comes.
+                            if (err instanceof {runtime_error_class}) {{
+                                const rootTask = subtask.getParentTask().getRootTask();
+                                if (!rootTask.isResolvedState()) {{
+                                    rootTask.setErrored(err);
+                                    rootTask.reject(err);
+                                }}
+                            }}
 
                             // Release the enter()-acquired per-slice hold: the driver
                             // loop that would normally pair it never starts.
