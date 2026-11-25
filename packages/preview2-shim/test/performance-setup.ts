@@ -2,4 +2,4 @@
 // of the Node.js filesystem for preopens that are created without their own.
 import { filesystem } from "@bytecodealliance/preview2-shim";
 
-filesystem._setPerformance({ mainThreadFilesystem: true });
+filesystem._setPerformance({ mainThreadFilesystem: true, cacheDirectoryPaths: true });

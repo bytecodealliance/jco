@@ -154,6 +154,10 @@ suite("Run performance options", () => {
     test("sets the requested preview2-shim performance options", () => {
         const setup = getPerformanceSetup({ perfMainThreadFilesystem: true });
         assert.include(setup, '_setPerformance({"mainThreadFilesystem":true})');
+        assert.include(
+            getPerformanceSetup({ perfMainThreadFilesystem: true, perfCacheDirectoryPaths: true }),
+            '_setPerformance({"mainThreadFilesystem":true,"cacheDirectoryPaths":true})',
+        );
     });
 
     const componentPath = fileURLToPath(new URL("./fixtures/components/hello_stdout.component.wasm", import.meta.url));

@@ -22,6 +22,8 @@ export interface GetSandboxSetupArgs {
 export interface GetPerformanceSetupArgs {
     /** Operate on regular files with synchronous `node:fs` calls on the main thread. */
     perfMainThreadFilesystem?: boolean;
+    /** Resolve the host path of each preopen and opened directory once. */
+    perfCacheDirectoryPaths?: boolean;
 }
 
 interface RunComponentOptions extends GetSandboxSetupArgs, GetPerformanceSetupArgs {
@@ -520,6 +522,7 @@ async function runComponent(
 export function getPerformanceSetup(opts: GetPerformanceSetupArgs): string {
     const performance = {
         ...(opts.perfMainThreadFilesystem ? { mainThreadFilesystem: true } : {}),
+        ...(opts.perfCacheDirectoryPaths ? { cacheDirectoryPaths: true } : {}),
     };
     if (Object.keys(performance).length === 0) {
         return "";

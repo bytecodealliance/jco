@@ -111,6 +111,8 @@ class Descriptor extends WasiResource implements IDescriptor {
      * False only below the unbounded Windows preopen, whose paths are not resolved.
      */
     #fullPathResolved = false;
+    // The resolved #hostPreopen, kept only with cacheDirectoryPaths.
+    #realBasePath: string | undefined;
     #virtualDirectory = false;
     private _id = 0;
 
@@ -781,7 +783,16 @@ class Descriptor extends WasiResource implements IDescriptor {
 
         let baseResolved: string;
         try {
-            baseResolved = realHostPath(base);
+            // A failed resolution is not kept: the directory may appear later.
+            // A descriptor opened below a preopen resolves its path every time,
+            // so that the check below sees a symlink put in that path since.
+            if (this.#performanceOptions.cacheDirectoryPaths && !this.#fullPathResolved) {
+                baseResolved = this.#realBasePath ??= realHostPath(base);
+            } else {
+                // Nothing kept from a time the option was on may be used later.
+                this.#realBasePath = undefined;
+                baseResolved = realHostPath(base);
+            }
         } catch (error) {
             throw convertFsError(error);
         }

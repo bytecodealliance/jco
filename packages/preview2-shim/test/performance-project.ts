@@ -1,7 +1,7 @@
 // Runs only in the "performance" test project, whose setup file turns the
 // `performance` options on by default. If that default stopped reaching the
 // suites, they would pass while testing the I/O worker a second time.
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -39,6 +39,27 @@ test("the performance project runs with the options on", () => {
     try {
         writeFileSync(join(directory, "which.txt"), "here");
         assert.deepStrictEqual(readWhich(directory), { contents: "here", servedByWorker: false });
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
+
+test.skipIf(process.platform === "win32")("the performance project caches directory paths", () => {
+    const directory = mkdtempSync(join(tmpdir(), "jco-p2-performance-project-"));
+    try {
+        const link = join(directory, "current");
+        const targets = ["first", "second"].map((name) => {
+            const target = mkdtempSync(join(directory, `${name}-`));
+            writeFileSync(join(target, "which.txt"), name);
+            return target;
+        });
+        symlinkSync(targets[0], link);
+        const root = filesystem._createPreopenDescriptor(link) as unknown as Descriptor;
+        assert.strictEqual(root.statAt({}, "which.txt").size, 5n);
+        rmSync(link);
+        symlinkSync(targets[1], link);
+        // "second" is six bytes long: the path found first is still the one in use.
+        assert.strictEqual(root.statAt({}, "which.txt").size, 5n);
     } finally {
         rmSync(directory, { recursive: true, force: true });
     }
