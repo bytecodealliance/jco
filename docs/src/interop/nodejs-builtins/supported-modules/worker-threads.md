@@ -69,7 +69,7 @@ currently prevents the real-worker component test from running.
 Messages and `workerData` cross WIT using a structured-value graph. It preserves
 plain records, sparse arrays, cycles, shared references, `undefined`, bigints,
 special numbers, Map, Set, Date, RegExp, ArrayBuffer and typed-array/DataView
-slices. Buffer arrives as Uint8Array, as in native worker messaging.
+views. Buffer arrives as Uint8Array, as in native worker messaging.
 
 Functions and symbols cannot be cloned. Accessor properties, custom prototypes,
 Error objects, SharedArrayBuffer, native handles and transfer lists are explicitly

@@ -41,7 +41,7 @@ function bytes(value: unknown): Uint8Array {
   return new Uint8Array(value.buffer, value.byteOffset, value.byteLength);
 }
 
-function slice(value: unknown, offset: unknown, length: unknown): Uint8Array {
+function byteRange(value: unknown, offset: unknown, length: unknown): Uint8Array {
   const buffer = bytes(value);
   const start = (offset as number) >>> 0;
   const size = (length as number) >>> 0;
@@ -67,7 +67,7 @@ export function normalizeSend(
 ): { data: Uint8Array; port?: number; address?: string; callback?: SendCallback } {
   if (!isConnected) {
     if (address || (port && typeof port !== "function")) {
-      buffer = slice(buffer, offset, length);
+      buffer = byteRange(buffer, offset, length);
     } else {
       callback = port;
       port = offset;
@@ -75,7 +75,7 @@ export function normalizeSend(
     }
   } else {
     if (typeof length === "number") {
-      buffer = slice(buffer, offset, length);
+      buffer = byteRange(buffer, offset, length);
       if (typeof port === "function") {
         callback = port;
         port = undefined;

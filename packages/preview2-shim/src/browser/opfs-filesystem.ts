@@ -180,7 +180,7 @@ function joinLockPath(base: string, segment: string): string {
 }
 
 /**
- * The slice of `LockManager` this adapter needs - narrow enough to fake in tests or other hosts.
+ * The subset of `LockManager` this adapter needs - narrow enough to fake in tests or other hosts.
  *
  * @see https://developer.mozilla.org/en-US/docs/Web/API/LockManager
  */

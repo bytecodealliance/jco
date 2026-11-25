@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { setup, event } from "./helpers/setup.js";
 import { BlockList } from "../../../../../../src/wasi/0.2.x/node/24.x.x/net/block-list.js";
 
-test("datagrams preserve empty, vector, binary and sliced payloads over real UDP", async () => {
+test("datagrams preserve empty, vector, binary and offset payloads over real UDP", async () => {
   const dgram = setup();
   const server = dgram.createSocket("udp4");
   const client = dgram.createSocket("udp4");
