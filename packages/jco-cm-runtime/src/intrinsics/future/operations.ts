@@ -124,7 +124,7 @@ export function futureWrite(
     }
 
     if (!task.mayBlock() && !isAsync) {
-        throw new Error('only tasks that may block may call future.futureWrite');
+        throw new _context.RuntimeError('cannot block a synchronous task before returning');
     }
 
     const futureEnd = getFutureEnd(_context.ends, { tableIdx: futureTableIdx, futureEndWaitableIdx });
@@ -259,7 +259,7 @@ export function futureRead(
     }
 
     if (!task.mayBlock() && !isAsync) {
-        throw new Error('only tasks that may block may call future.futureRead');
+        throw new _context.RuntimeError('cannot block a synchronous task before returning');
     }
 
     const futureEnd = getFutureEnd(_context.ends, { tableIdx: futureTableIdx, futureEndWaitableIdx });

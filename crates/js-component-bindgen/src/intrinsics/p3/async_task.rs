@@ -12,6 +12,9 @@ use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
+/// Trap for resolving a task twice, e.g. with a second `task.return` (Canonical ABI `Task.return_`).
+const TASK_ALREADY_RESOLVED: &str = "task has already resolved";
+
 /// Render the statements that bind `storage` to the context slots which `context.get` and
 /// `context.set` act on, for a built-in called with `ctx`.
 ///
@@ -2411,7 +2414,7 @@ impl AsyncTaskIntrinsic {
                         cancel(args) {{
                             {debug_log_fn}('[{task_class}#cancel()] args', {{ }});
                             if (this.taskState() !== {task_class}.State.CANCEL_DELIVERED) {{
-                                throw new Error('`task.cancel` called by task which has not been cancelled');
+                                throw new {runtime_error_class}('`task.cancel` called by task which has not been cancelled');
                             }}
                             this.validateResourceBorrowScope();
                             this.cancelled = true;
@@ -2573,7 +2576,7 @@ impl AsyncTaskIntrinsic {
 
                             if (this.#state === {task_class}.State.RESOLVED) {{
                                 if (this.#errored !== null) {{ throw this.#errored; }}
-                                throw new Error(`(component [${{this.#componentIdx}}]) task [${{this.#id}}]  is already resolved (did you forget to wait for an import?)`);
+                                throw new {runtime_error_class}({TASK_ALREADY_RESOLVED:?});
                             }}
 
                             this.validateResourceBorrowScope();
