@@ -1869,10 +1869,9 @@ impl AsyncFutureIntrinsic {
                         if (futureEnd.getWaitable().hasSyncWaiter()) {{
                             throw new {runtime_error_class}({CANNOT_CANCEL_SYNC_WAITED_COPY:?});
                         }}
-                        // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
-                        // a waitable set. That check is held back: wit-bindgen releases before 0.59, which
-                        // built most of the prebuilt p3 fixtures, cancel their inter-task wakeup stream read
-                        // synchronously before removing it from the task's waitable set.
+                        if (!isAsync && futureEnd.isInSet()) {{
+                            throw new {runtime_error_class}({WAITABLE_SYNC_IN_SET:?});
+                        }}
 
                         futureEnd.setCopyState({future_end_class}.CopyState.CANCELLING_COPY);
 
