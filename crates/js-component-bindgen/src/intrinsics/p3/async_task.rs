@@ -633,6 +633,9 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
                 let with_global_current_thread_meta_fn =
                     render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
 
                 output.push_str(&format!(r#"
                     function {task_return_fn}(ctx) {{
@@ -656,18 +659,35 @@ impl AsyncTaskIntrinsic {
 
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing current task in metadata'); }}
+
+                        // Canonical ABI `canon_task_return` and `Task.return_`: every check runs
+                        // before any result is delivered to the caller.
+                        if (!{get_or_create_async_state_fn}componentIdx).mayLeave) {{
+                            throw new {runtime_error_class}('cannot leave component instance');
+                        }}
                         // JSPI wrapping does not change the canonical lift option.
                         if (!task.calleeIsAsync()) {{
                             throw new {runtime_error_class}('task.return requires an async canonical lift');
                         }}
-                        task.validateResourceBorrowScope();
-
-                        // Canonical ABI `canon_task_return`: the result type must be the one of
-                        // the task's function type.
                         const expectedResultType = task.returnResultTypeIdx();
                         if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {{
                             throw new {runtime_error_class}('task.return result type does not match the function type');
                         }}
+                        const expectedMemoryIdx = task.getReturnMemoryIdx();
+                        if (typeof expectedMemoryIdx === 'number' && typeof memoryIdx === 'number' && expectedMemoryIdx !== memoryIdx) {{
+                            {debug_log_fn}("[{task_return_fn}()] mismatched memory indices", {{ expectedMemoryIdx, memoryIdx }});
+                            throw new {runtime_error_class}('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
+                        }}
+                        const expectedStringEncoding = task.getReturnStringEncoding();
+                        if (expectedStringEncoding && stringEncoding && expectedStringEncoding !== stringEncoding) {{
+                            throw new {runtime_error_class}(
+                                `task.return string encoding [${{stringEncoding}}] does not match task [${{expectedStringEncoding}}]`,
+                            );
+                        }}
+                        if (task.isResolvedState()) {{
+                            throw task.isErrored() ?? new {runtime_error_class}({TASK_ALREADY_RESOLVED:?});
+                        }}
+                        task.validateResourceBorrowScope();
 
                         {debug_log_fn}('[{task_return_fn}()] args', {{
                             componentIdx,
@@ -706,12 +726,6 @@ impl AsyncTaskIntrinsic {
                             subtaskCallMetadata.returnFnCalled = true;
                             task.resolve([]);
                             return;
-                        }}
-
-                        const expectedMemoryIdx = task.getReturnMemoryIdx();
-                        if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {{
-                            {debug_log_fn}("[{task_return_fn}()] mismatched memory indices", {{ expectedMemoryIdx, memoryIdx }});
-                            throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
                         }}
 
                         task.callbackFnIdx = callbackFnIdx;
@@ -1805,6 +1819,8 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         getReturnMemory() {{ return this.#memory; }}
+                        // The string encoding of the lift, which `task.return` must match (null if unknown).
+                        getReturnStringEncoding() {{ return this.#stringEncoding ?? null; }}
                         setReturnMemory(m) {{
                             if (m === null) {{ return; }}
                             this.#memory = m;
