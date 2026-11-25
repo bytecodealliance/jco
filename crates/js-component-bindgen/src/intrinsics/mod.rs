@@ -2420,7 +2420,7 @@ mod tests {
         ));
         assert!(check.contains("state.hasSyncCallCandidate()"));
         assert!(check.contains("state.hasRunningStackWithin(call)"));
-        assert!(check.contains("hostOperations.get(call.componentIdx)"));
+        assert!(check.contains("hostOperations?.has(call.componentIdx)"));
         assert!(check.contains("_trapBlockedStore(call);"));
 
         // Host work counts for the instance it is for.
@@ -2428,6 +2428,7 @@ mod tests {
             render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::TrackHostOperation));
         assert!(tracker.contains("function _trackHostOperation(operation, componentIdx) {"));
         assert!(tracker.contains("byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);"));
+        assert!(tracker.contains("hostOperationsByComponent ??= new Map()"));
     }
 
     #[test]

@@ -368,7 +368,7 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, hostOperationsByComponent: new Map(), idleWaiters: new Set(), syncCalls: [], heldResumptions: [] }};"#
+                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, hostOperationsByComponent: null, idleWaiters: new Set(), syncCalls: [], heldResumptions: [] }};"#
                 );
             }
 
@@ -438,7 +438,7 @@ impl ComponentIntrinsic {
                         if (call === undefined || call.task.isResolvedState() || call.task.isRejected()) {{ return false; }}
                         const hostOperations = {store_async_state}.hostOperationsByComponent;
                         // (host work of an unknown instance may be the call's)
-                        if ((hostOperations.get(call.componentIdx) ?? 0) > 0 || (hostOperations.get(-1) ?? 0) > 0) {{
+                        if (hostOperations?.has(call.componentIdx) || hostOperations?.has(-1)) {{
                             return false;
                         }}
                         for (const state of {async_state_map}.values()) {{
@@ -557,7 +557,8 @@ impl ComponentIntrinsic {
 
                         {store_async_state}.pendingHostOperations++;
                         const owner = componentIdx ?? -1;
-                        const byComponent = {store_async_state}.hostOperationsByComponent;
+                        // (allocated on first use, so a store without host work pays nothing for it)
+                        const byComponent = ({store_async_state}.hostOperationsByComponent ??= new Map());
                         byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);
                         let rejectStopped;
                         const stopped = new Promise((_, reject) => {{ rejectStopped = reject; }});

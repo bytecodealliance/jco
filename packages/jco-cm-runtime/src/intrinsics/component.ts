@@ -41,7 +41,7 @@ export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTr
 export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncState'] = () => ({
     deadlockCheck: null,
     pendingHostOperations: 0,
-    hostOperationsByComponent: new Map(),
+    hostOperationsByComponent: null,
     hostWakeupScheduled: false,
     idleWaiters: new Set(),
     syncCalls: [],
@@ -184,7 +184,7 @@ export function checkSyncCallBlocked(context: ComponentDeadlockContext) {
     }
     const hostOperations = storeAsyncState.hostOperationsByComponent;
     // (host work of an unknown instance may be the call's)
-    if ((hostOperations.get(call.componentIdx) ?? 0) > 0 || (hostOperations.get(-1) ?? 0) > 0) {
+    if (hostOperations?.has(call.componentIdx) || hostOperations?.has(-1)) {
         return false;
     }
     for (const state of asyncState.values()) {
@@ -327,7 +327,8 @@ export function trackHostOperation<T>(
 
     storeAsyncState.pendingHostOperations++;
     const owner = componentIdx ?? -1;
-    const byComponent = storeAsyncState.hostOperationsByComponent;
+    // (allocated on first use, so a store without host work pays nothing for it)
+    const byComponent = (storeAsyncState.hostOperationsByComponent ??= new Map());
     byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);
     let rejectStopped!: (error: unknown) => void;
     const stopped = new Promise<never>((_, reject) => {
