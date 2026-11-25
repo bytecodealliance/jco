@@ -324,6 +324,22 @@ test.concurrent('a component trap wakes suspended threads with a failed resume r
     }
 });
 
+test.concurrent('promotion does not treat a parked thread as ready while another task holds the lock', () => {
+    const { component } = create();
+    try {
+        const state = component.getOrCreateAsyncState(0);
+        const parked = task(1n);
+        state.suspendThread({ thread: parked.thread, readyFn: () => true, cancellable: true });
+        expect(state.isThreadReady(parked.thread)).toBe(true);
+        state.exclusiveLock(2n);
+        expect(state.isThreadReady(parked.thread)).toBe(false);
+        state.exclusiveRelease(2n);
+        expect(state.isThreadReady(parked.thread)).toBe(true);
+    } finally {
+        clearDeadlockCheck(component);
+    }
+});
+
 test.concurrent('threads made by thread.new-indirect do not wait for the exclusive lock', () => {
     const { component } = create();
     try {

@@ -909,9 +909,12 @@ function defineComponentAsyncState() {
             return this.#suspendedThreadsByRef.get(thread)?.suspended ?? false;
         }
 
+        // Readiness as `thread.{suspend,yield}-then-promote` sees it: the same
+        // condition the scheduler uses, including the exclusive lock (Canonical
+        // ABI `Thread.ready`, whose callback readiness waits for the lock).
         isThreadReady(thread: ComponentThread) {
             const meta = this.#suspendedThreadsByRef.get(thread);
-            return !!meta && !meta.suspended && (meta.thread.isRejected() || meta.readyFn());
+            return !!meta && !meta.suspended && this.suspendedThreadReady(thread);
         }
 
         suspendedThreadReady(thread: ComponentThread) {
