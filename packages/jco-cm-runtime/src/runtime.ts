@@ -859,6 +859,13 @@ export interface ComponentDeadlockDetail {
         state: unknown;
         rootTaskID: bigint;
     }[];
+    /** Tasks whose threads all exited before they resolved. */
+    exitedTasks: {
+        taskID: bigint;
+        componentIdx: number;
+        state: unknown;
+        rootTaskID: bigint;
+    }[];
     unresolvedRootTaskIDs: bigint[];
 }
 

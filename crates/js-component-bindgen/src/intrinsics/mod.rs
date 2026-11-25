@@ -2406,6 +2406,7 @@ mod tests {
         assert!(check.contains("componentIdx: task.componentIdx(),"));
         assert!(check.contains("state: task.taskState(),"));
         assert!(check.contains("rootTaskID: task.getRootTask().id(),"));
+        assert!(check.contains("exitedTasks: [...exitedTasks].map(describeTask),"));
         assert!(check.contains("unresolvedRootTaskIDs:"));
     }
 
