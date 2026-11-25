@@ -1777,6 +1777,14 @@ mod tests {
     }
 
     #[test]
+    fn waitable_intrinsic_names_are_reserved() {
+        let names: Vec<_> = Intrinsic::get_global_names().into_iter().collect();
+        for name in ["waitableSetWait", "waitableSetPoll", "waitableJoin"] {
+            assert!(names.contains(&name), "{name} is not reserved");
+        }
+    }
+
+    #[test]
     fn suspending_import_preserves_sync_results_and_rejects_disallowed_blocking() {
         let source = render_intrinsic_body(Intrinsic::SuspendingImportWrapperFn);
 
