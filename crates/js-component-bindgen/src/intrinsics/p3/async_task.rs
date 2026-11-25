@@ -1252,13 +1252,17 @@ impl AsyncTaskIntrinsic {
                 );
                 let get_global_current_thread_meta_fn =
                     render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                let runtime_error_class =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
                 output.push_str(&format!("
                     function {task_cancel_fn}(componentIdx) {{
                         {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx }});
 
                         const state = {get_or_create_async_state_fn}componentIdx);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{
+                            throw new {runtime_error_class}('component instance is not marked as may leave, cannot be cancelled');
+                        }}
 
                         const {{ taskID }} = {get_global_current_thread_meta_fn}componentIdx);
 
@@ -1268,8 +1272,9 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        if (task.sync && !task.alwaysTaskReturn) {{
-                            throw new Error('cannot cancel sync tasks without always task return set');
+                        // Canonical ABI `canon_task_cancel`: only an async-lifted task can be cancelled.
+                        if (!task.calleeIsAsync()) {{
+                            throw new {runtime_error_class}('task.cancel requires an async canonical lift');
                         }}
 
                         task.cancel();
