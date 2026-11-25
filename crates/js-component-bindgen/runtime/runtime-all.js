@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 25ddf8a96ffd052a3262cdcc6c658bd6a23fa3ef
+// generated from commit 9231cd0f0e6537d9f1a75d69c29b56a43893b6a7
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -662,8 +662,10 @@ function checkForDeadlock(context) {
 			task.reject(err);
 		}
 		for (const state of asyncState.values()) state.markTrapped(err);
-		for (const state of asyncState.values()) state.abandonLockWaiters();
-		for (const state of asyncState.values()) state.abandonAdmissionWaiters();
+		for (const state of asyncState.values()) {
+			state.abandonLockWaiters();
+			state.abandonEntrySlotWaiters();
+		}
 		for (const state of asyncState.values()) state.runTickLoop();
 	}, 0);
 }
@@ -782,7 +784,10 @@ function defineComponentAsyncState() {
 		#syncImportWait = promiseWithResolvers();
 		#lockHolderTaskID = null;
 		#lockWaiters = [];
-		#admissionQueue = [];
+		#numWaitingToEnter = 0;
+		#enteringTaskID = null;
+		#entrySlotWaiters = [];
+		#entrySlotTurnTaskID = null;
 		#lockHandoffScheduled = false;
 		#pendingTaskStarts = 0;
 		#suspendedThreadsByRef = /* @__PURE__ */ new Map();
@@ -988,30 +993,62 @@ function defineComponentAsyncState() {
 				});
 			});
 		}
-		takeAdmissionTicket(taskID) {
-			const ticket = {
-				taskID,
-				...promiseWithResolvers()
-			};
-			this.#admissionQueue.push(ticket);
-			return ticket;
+		numWaitingToEnter() {
+			return this.#numWaitingToEnter;
 		}
-		hasPendingAdmissions() {
-			return this.#admissionQueue.length > 0;
+		addWaitingToEnter() {
+			this.#numWaitingToEnter++;
 		}
-		waitForAdmissionTurn(ticket) {
-			if (this.#admissionQueue[0] === ticket) return;
-			return ticket.promise;
+		removeWaitingToEnter() {
+			if (this.#numWaitingToEnter === 0) throw new Error("unexpectedly negative number of tasks waiting to enter");
+			this.#numWaitingToEnter--;
 		}
-		releaseAdmissionTicket(ticket) {
-			const idx = this.#admissionQueue.indexOf(ticket);
-			if (idx === -1) return;
-			this.#admissionQueue.splice(idx, 1);
-			if (idx === 0 && this.#admissionQueue.length > 0) this.#admissionQueue[0].resolve();
+		hasEnteringTask() {
+			return this.#enteringTaskID !== null;
 		}
-		abandonAdmissionWaiters() {
-			const tickets = this.#admissionQueue.splice(0);
-			for (const ticket of tickets) ticket.resolve();
+		entrySlotBusy(taskID) {
+			if (this.#enteringTaskID !== null) return true;
+			if (this.#entrySlotTurnTaskID !== null) return this.#entrySlotTurnTaskID !== taskID;
+			return this.#entrySlotWaiters.length > 0;
+		}
+		waitForEntrySlotTurn(taskID) {
+			return new Promise((resolve) => {
+				this.#entrySlotWaiters.push({
+					taskID,
+					resolve
+				});
+			});
+		}
+		passEntrySlotTurn(taskID) {
+			if (this.#entrySlotTurnTaskID !== taskID) return false;
+			this.#entrySlotTurnTaskID = null;
+			this.#handOffEntrySlot();
+			return true;
+		}
+		#handOffEntrySlot() {
+			if (this.#enteringTaskID !== null || this.#entrySlotTurnTaskID !== null) return;
+			const next = this.#entrySlotWaiters.shift();
+			if (!next) {
+				if (this.#suspendedThreadsByRef.size > 0) this.runTickLoop();
+				return;
+			}
+			this.#entrySlotTurnTaskID = next.taskID;
+			next.resolve();
+		}
+		abandonEntrySlotWaiters() {
+			this.#entrySlotTurnTaskID = null;
+			for (const waiter of this.#entrySlotWaiters.splice(0)) waiter.resolve();
+		}
+		beginEntry(taskID) {
+			if (this.#enteringTaskID !== null) throw new Error(`task [${taskID}] cannot enter component [${this.#componentIdx}] while task [${this.#enteringTaskID}] is entering`);
+			if (this.#entrySlotTurnTaskID === taskID) this.#entrySlotTurnTaskID = null;
+			this.#enteringTaskID = taskID;
+		}
+		endEntry(taskID) {
+			if (this.#enteringTaskID !== taskID) return false;
+			this.#enteringTaskID = null;
+			this.#handOffEntrySlot();
+			return true;
 		}
 		abandonLockWaiters() {
 			const waiters = this.#lockWaiters.splice(0);
@@ -1230,7 +1267,7 @@ function defineComponentAsyncState() {
 			this.#tickLoop?.();
 			this.#tickLoop = null;
 			this.abandonLockWaiters();
-			this.abandonAdmissionWaiters();
+			this.abandonEntrySlotWaiters();
 			for (const thread of [...this.#suspendedThreadsByRef.keys()]) this.resumeThread(thread);
 		}
 		runTickLoop() {
@@ -3629,7 +3666,6 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 			if (preparedTask.isCancelled()) return;
 			throw new Error("callee task failed to start during sync start call");
 		}
-		if (preparedTask.needsExclusiveLock()) await calleeComponentState.acquireExclusiveLock(preparedTask.id());
 		let jspiCallee;
 		if (callee._cachedPromising) jspiCallee = callee._cachedPromising;
 		else {
@@ -3638,6 +3674,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 		}
 		const failCalleeLifecycle = (err) => {
 			DEBUG: debugLog("[_syncStartCall()] callee lifecycle failed", { err });
+			preparedTask.endFirstSlice();
 			if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
 			preparedTask.setErrored(err);
 			if (!preparedTask.isResolvedState()) preparedTask.reject(err);
@@ -4971,7 +5008,7 @@ function defineAsyncTask() {
 		#postReturnFn = null;
 		#getCalleeParamsFn = null;
 		#calleeIsAsync = null;
-		#admissionTicket = null;
+		#holdsEntrySlot = false;
 		#funcTypeIsAsync = false;
 		#syncCall = false;
 		#returnResultTypeIdx = null;
@@ -5288,17 +5325,13 @@ function defineAsyncTask() {
 				return false;
 			}
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-			if (this.isSync()) {
+			if (!this.#isAsyncEntry()) {
 				this.#entered = true;
 				this.#beginGuestSyncCall();
 				return true;
 			}
-			if (cstate.hasBackpressure()) return null;
-			if (cstate.hasPendingAdmissions()) return null;
-			if (this.needsExclusiveLock()) {
-				if (cstate.isExclusivelyLocked()) return null;
-				cstate.exclusiveLock(this.#id);
-			}
+			if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) return null;
+			if (this.needsExclusiveLock()) cstate.exclusiveLock(this.#id);
 			if (this.deliverPendingCancel({ cancellable: true })) {
 				cstate.exclusiveRelease(this.#id);
 				this.cancel();
@@ -5323,73 +5356,75 @@ function defineAsyncTask() {
 				return false;
 			}
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-			if (this.isSync()) {
+			if (!this.#isAsyncEntry()) {
 				this.#entered = true;
 				this.#beginGuestSyncCall();
-				if (this.#isManualAsync) {
-					if (this.needsExclusiveLock()) await cstate.acquireExclusiveLock(this.#id);
-				}
 				return this.#entered;
 			}
-			const ticket = cstate.takeAdmissionTicket(this.#id);
-			this.#admissionTicket = ticket;
 			let entered = false;
 			try {
-				entered = await this.#enterQueued(cstate, ticket);
+				entered = await this.#enterImplicitThread(cstate);
 				return entered;
 			} finally {
 				if (!entered) this.endFirstSlice();
 			}
 		}
 		endFirstSlice() {
-			const ticket = this.#admissionTicket;
-			if (ticket === null) return;
-			this.#admissionTicket = null;
-			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).releaseAdmissionTicket(ticket);
+			if (!this.#holdsEntrySlot) return;
+			this.#holdsEntrySlot = false;
+			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endEntry(this.#id);
 		}
-		async #enterQueued(cstate, ticket) {
-			await cstate.waitForAdmissionTurn(ticket);
+		#isAsyncEntry() {
+			return this.#componentIdx !== -1 && this.#callingWasmExport && this.#funcTypeIsAsync;
+		}
+		#mayEnter(cstate) {
+			if (cstate.entrySlotBusy(this.#id) || cstate.hasBackpressure()) return false;
+			return !this.needsExclusiveLock() || !cstate.isExclusivelyLocked();
+		}
+		async #enterImplicitThread(cstate) {
+			if (cstate.numWaitingToEnter() === 0 && cstate.entrySlotBusy(this.#id)) await cstate.waitForEntrySlotTurn(this.#id);
+			try {
+				return await this.#enterImplicitThreadOnTurn(cstate);
+			} finally {
+				cstate.passEntrySlotTurn(this.#id);
+			}
+		}
+		async #enterImplicitThreadOnTurn(cstate) {
 			if (this.isResolvedState() || this.isCancelled()) return false;
-			while (true) {
-				if (cstate.hasBackpressure()) {
-					cstate.addBackpressureWaiter();
-					const result = await this.waitUntil({
-						readyFn: () => {
-							return !cstate.hasBackpressure();
-						},
-						cancellable: true
-					});
-					cstate.removeBackpressureWaiter();
-					if (!result || this.isCancelled()) {
-						if (!this.isResolvedState()) this.cancel();
-						return false;
-					}
+			let keepGoing = true;
+			if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) {
+				cstate.passEntrySlotTurn(this.#id);
+				cstate.addWaitingToEnter();
+				try {
+					do
+						keepGoing = await this.waitUntil({
+							readyFn: () => this.#mayEnter(cstate),
+							cancellable: true
+						});
+					while (keepGoing && !this.isResolvedState() && !this.isCancelled() && !this.#mayEnter(cstate));
+				} finally {
+					cstate.removeWaitingToEnter();
 				}
-				if (this.needsExclusiveLock()) {
-					await cstate.acquireExclusiveLock(this.#id);
-					if (cstate.hasBackpressure()) {
-						cstate.exclusiveRelease(this.#id);
-						continue;
-					}
+				if (this.isResolvedState() || this.isCancelled()) return false;
+				if (!keepGoing && this.#state === TASK_CANCEL_DELIVERED) {
+					this.cancel();
+					return false;
 				}
-				break;
 			}
 			try {
 				cstate.throwIfInterrupted();
 			} catch (err) {
-				cstate.exclusiveRelease(this.#id);
 				this.setErrored(err);
 				return false;
 			}
-			if (this.isResolvedState() || this.isCancelled()) {
-				cstate.exclusiveRelease(this.#id);
-				return false;
-			}
+			if (!keepGoing) return false;
 			if (this.deliverPendingCancel({ cancellable: true })) {
-				cstate.exclusiveRelease(this.#id);
 				this.cancel();
 				return false;
 			}
+			if (this.needsExclusiveLock()) cstate.exclusiveLock(this.#id);
+			cstate.beginEntry(this.#id);
+			this.#holdsEntrySlot = true;
 			this.#entered = true;
 			this.#beginGuestSyncCall();
 			return this.#entered;
@@ -5703,7 +5738,10 @@ function defineAsyncTask() {
 			if (this.#componentIdx === -1) return false;
 			if (!this.#callingWasmExport) return false;
 			if (!this.#funcTypeIsAsync) return false;
-			return !this.#isAsync || this.hasCallback() || this.#calleeIsAsync === false;
+			return !this.#liftIsAsync() || this.hasCallback();
+		}
+		#liftIsAsync() {
+			return this.#calleeIsAsync ?? this.#isAsync;
 		}
 		createSubtask(args) {
 			DEBUG: debugLog("[AsyncTask#createSubtask()] args", args);
