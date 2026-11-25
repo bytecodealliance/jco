@@ -812,4 +812,52 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
             await cleanup();
         }
     });
+
+    // Only a `WebAssembly.RuntimeError` poisons the instance: a trap raised while
+    // the guest runs must make a later call into it trap too. Each case gets its
+    // own instance.
+    test.concurrent.each([
+        { fn: 'backpressureOverflow', message: /backpressure counter overflow/ },
+        { fn: 'taskCancelUndelivered', message: /`task\.cancel` called by task which has not been cancelled/ },
+        { fn: 'taskCancelSyncLift', message: /task\.cancel requires an async canonical lift/ },
+        { fn: 'taskReturnTwice', message: /task has already resolved/ },
+        { fn: 'taskReturnOtherMemory', message: /task\.return memory \[\d+\] does not match task \[\d+\]/ },
+        { fn: 'taskReturnUtf16', message: /task\.return string encoding \[utf16\] does not match task \[utf8\]/ },
+        { fn: 'waitableSetDropInPostReturn', message: /may leave|cannot leave/ },
+    ])('$fn traps and poisons the instance', async ({ fn, message }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: `async-builtin-traps-${fn}`,
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'async-builtin-traps.wat'),
+            },
+        });
+        try {
+            const err = await rejection(Promise.resolve().then(() => instance[fn]()));
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, message);
+
+            const later = await rejection(Promise.resolve().then(() => instance.ok()));
+            assert.instanceOf(later, WebAssembly.RuntimeError);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('a callback code above WAIT traps', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'async-builtin-traps-callback-code',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'async-builtin-traps.wat'),
+            },
+        });
+        try {
+            const err = await rejection(Promise.resolve().then(() => instance.callbackCode3()));
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /unsupported callback code: 3/);
+        } finally {
+            await cleanup();
+        }
+    });
 });

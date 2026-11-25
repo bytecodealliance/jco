@@ -53,7 +53,7 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
     'async/trap-if-sync-and-waitable-set.wast': {
-        skip: 'synchronous waitable operations do not reject handles belonging to a waitable set',
+        skip: 'synchronous stream/future cancels of an end in a waitable set do not trap yet',
     },
     'async/validate-task-return.wast': {
         skip: 'the pinned validator accepts task.return results containing borrow types',
