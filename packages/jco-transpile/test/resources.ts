@@ -194,6 +194,83 @@ suite('resources', () => {
         },
     );
 
+    // Bit 31 of a live handle index must not alias the live entry when it is lifted
+    // as a borrow or own of a host resource (Canonical ABI `Table.get`).
+    test.each(['inline', 'external'] as const)(
+        'host resource handles with bit 31 set trap when lifted (%s runtime)',
+        async (runtime) => {
+            const cmRuntimeEsModule =
+                runtime === 'external' ? new URL('../../jco-cm-runtime/dist/', import.meta.url).href : undefined;
+            class Thing {
+                constructor(readonly value: number) {}
+            }
+            const observed: Thing[] = [];
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    name: 'host-resource-handle-high-bit',
+                    path: fileURLToPath(
+                        new URL(
+                            './fixtures/components/runtime/host-resource-handle-high-bit.component.wat',
+                            import.meta.url,
+                        ),
+                    ),
+                    imports: {
+                        'test:high-bit/api': { Thing },
+                        observe: {
+                            default: (thing: Thing) => {
+                                observed.push(thing);
+                                return thing.value;
+                            },
+                        },
+                    },
+                },
+                jco: { transpile: { extraArgs: { cmRuntimeEsModule } } },
+            });
+            try {
+                // A valid handle lifts to the host object.
+                assert.strictEqual(instance.inspect(new Thing(42)), 42);
+                assert.strictEqual(observed.length, 1);
+
+                assert.throws(() => instance.inspectAlias(new Thing(7)), WebAssembly.RuntimeError);
+                assert.strictEqual(observed.length, 1, 'the host import must not see the aliased handle');
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
+    test.each(['inline', 'external'] as const)(
+        'returning a host resource handle with bit 31 set traps (%s runtime)',
+        async (runtime) => {
+            const cmRuntimeEsModule =
+                runtime === 'external' ? new URL('../../jco-cm-runtime/dist/', import.meta.url).href : undefined;
+            class Thing {
+                constructor(readonly value: number) {}
+            }
+            const { instance, cleanup } = await setupAsyncTest({
+                component: {
+                    name: 'host-resource-handle-high-bit-own',
+                    path: fileURLToPath(
+                        new URL(
+                            './fixtures/components/runtime/host-resource-handle-high-bit.component.wat',
+                            import.meta.url,
+                        ),
+                    ),
+                    imports: {
+                        'test:high-bit/api': { Thing },
+                        observe: { default: (thing: Thing) => thing.value },
+                    },
+                },
+                jco: { transpile: { extraArgs: { cmRuntimeEsModule } } },
+            });
+            try {
+                assert.throws(() => instance.roundtripAlias(new Thing(7)), WebAssembly.RuntimeError);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
     // Ensure trampoline code is called on external object with relevant `this`.
     // see: https://github.com/bytecodealliance/jco/issues/1313
     test('simple imported resource call', async () => {
@@ -258,7 +335,7 @@ suite('resources', () => {
         );
         assert.notMatch(
             source,
-            /rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]{0,300}?handleTable\d+\[\(handle\d+ << 1\) \+ 1\]/,
+            /rscTableRemove\((?:_jcoResourceRemoveContext, )?handleTable\d+, handle\d+\);[\s\S]{0,300}?handleTable\d+\[handle\d+ \* 2 \+ 1\]/,
             'explicit disposal must not read a representation from a removed handle-table entry',
         );
         assert.notMatch(
