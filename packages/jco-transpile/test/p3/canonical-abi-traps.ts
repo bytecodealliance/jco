@@ -824,6 +824,8 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         { fn: 'taskReturnOtherMemory', message: /task\.return memory \[\d+\] does not match task \[\d+\]/ },
         { fn: 'taskReturnUtf16', message: /task\.return string encoding \[utf16\] does not match task \[utf8\]/ },
         { fn: 'waitableSetDropInPostReturn', message: /may leave|cannot leave/ },
+        // (raised by the callback loop, after the core function returned)
+        { fn: 'callbackCode3', message: /unsupported callback code: 3/ },
     ])('$fn traps and poisons the instance', async ({ fn, message }) => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
@@ -839,23 +841,6 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
 
             const later = await rejection(Promise.resolve().then(() => instance.ok()));
             assert.instanceOf(later, WebAssembly.RuntimeError);
-        } finally {
-            await cleanup();
-        }
-    });
-
-    test.concurrent('a callback code above WAIT traps', async () => {
-        const { instance, cleanup } = await setupAsyncTest({
-            asyncMode: 'jspi',
-            component: {
-                name: 'async-builtin-traps-callback-code',
-                path: join(P3_COMPONENT_FIXTURES_DIR, 'async-builtin-traps.wat'),
-            },
-        });
-        try {
-            const err = await rejection(Promise.resolve().then(() => instance.callbackCode3()));
-            assert.instanceOf(err, WebAssembly.RuntimeError);
-            assert.match((err as Error).message, /unsupported callback code: 3/);
         } finally {
             await cleanup();
         }
