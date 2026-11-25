@@ -86,6 +86,7 @@ function defineAsyncTask() {
         #calleeIsAsync: boolean | null = null;
         #admissionTicket: AdmissionTicket | null = null;
         #funcTypeIsAsync = false;
+        #syncCall = false;
         #returnResultTypeIdx: number | null = null;
         #parentSubtask: AsyncSubtaskType | null = null;
         #errHandling: unknown;
@@ -425,16 +426,43 @@ function defineAsyncTask() {
             }
             return this.#getCalleeParamsFn();
         }
-        // Legacy manually-async exports are sync-typed in the component
-        // but use JSPI precisely so their guest stack may suspend.
-        // Canonical ABI: only sync-typed callees may not block (`canon_lift`);
-        // an async-lifted callee may, even when called through a sync lowering.
+        // Whether this task's stack can suspend at all. Legacy manually-async
+        // exports are sync-typed in the component but use JSPI precisely so
+        // their guest stack may suspend. A sync-typed task whose stack can
+        // suspend decides whether it may block when it blocks: it traps only
+        // if none of its instance's threads is ready (see `beginSyncCall`).
         mayBlock() {
             return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync;
         }
         // (an async-typed function may block however it was lifted)
         setFuncTypeIsAsync(v: boolean) {
             this.#funcTypeIsAsync = v;
+        }
+        /**
+         * Record that this task is a call of a non-async-typed guest function,
+         * in progress until the task resolves. Until then, only threads of its
+         * instance are scheduled, and a block with none of them ready traps
+         * (Canonical ABI `canon_lift`).
+         */
+        beginSyncCall() {
+            if (this.#syncCall || this.#funcTypeIsAsync || this.#componentIdx === -1 || this.isResolvedState()) {
+                return;
+            }
+            this.#syncCall = true;
+            getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).beginSyncCall(this);
+        }
+        // Tasks entered for host-side import handling are not guest calls.
+        #beginGuestSyncCall() {
+            if (this.#callingWasmExport) {
+                this.beginSyncCall();
+            }
+        }
+        #endSyncCall() {
+            if (!this.#syncCall) {
+                return;
+            }
+            this.#syncCall = false;
+            getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endSyncCall(this);
         }
         // The interned result type of the task's function (checked by `task.return`)
         setReturnResultTypeIdx(v: number | null) {
@@ -481,6 +509,7 @@ function defineAsyncTask() {
                     });
                 }
             }
+            this.#beginGuestSyncCall();
             return true;
         }
         tryEnter() {
@@ -494,6 +523,7 @@ function defineAsyncTask() {
             const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             if (this.isSync()) {
                 this.#entered = true;
+                this.#beginGuestSyncCall();
                 return true;
             }
             if (cstate.hasBackpressure()) {
@@ -515,6 +545,7 @@ function defineAsyncTask() {
                 return false;
             }
             this.#entered = true;
+            this.#beginGuestSyncCall();
             return true;
         }
         async enter(opts?: { isHost?: boolean }) {
@@ -556,6 +587,7 @@ function defineAsyncTask() {
             // tracking and immediately enter.
             if (this.isSync()) {
                 this.#entered = true;
+                this.#beginGuestSyncCall();
 
                 // TODO(breaking): remove once manually-specifying async fns is removed
                 // It is currently possible for an actually sync export to be specified
@@ -664,6 +696,7 @@ function defineAsyncTask() {
                 return false;
             }
             this.#entered = true;
+            this.#beginGuestSyncCall();
             return this.#entered;
         }
         isRunningState() {
@@ -860,6 +893,7 @@ function defineAsyncTask() {
             // host-driven rejection path (see `reject()`).
             this.onResolve(args?.error ?? null);
             this.#state = TASK_RESOLVED;
+            this.#endSyncCall();
             // A task cancelled before entry has no driver loop that can
             // report its exit. Entered tasks notify after releasing their
             // component slice in `exit()`.
@@ -1016,6 +1050,7 @@ function defineAsyncTask() {
             }
             this.validateResourceBorrowScope();
             this.#state = TASK_RESOLVED;
+            this.#endSyncCall();
             switch (results.length) {
                 case 0:
                     this.onResolve(undefined);
@@ -1042,6 +1077,7 @@ function defineAsyncTask() {
             });
 
             this.endFirstSlice();
+            this.#endSyncCall();
             if (this.#exited) {
                 throw new Error('task has already exited');
             }

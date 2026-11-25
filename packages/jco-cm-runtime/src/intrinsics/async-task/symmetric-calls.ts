@@ -87,6 +87,7 @@ export function symmetricSyncGuestCallEnter(
             previousTaskMayBlock: (_context.mayBlock as TaskMutableRegister).value,
         });
         (_context.mayBlock as TaskMutableRegister).value = newTask.mayBlock() ? 1 : 0;
+        newTask.beginSyncCall();
         DEBUG: debugLog('[_symmetricSyncGuestCallEnter()] finished preparing', {
             callerComponentIdx,
             calleeComponentIdx,

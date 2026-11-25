@@ -43,6 +43,7 @@ export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncSta
     pendingHostOperations: 0,
     hostWakeupScheduled: false,
     idleWaiters: new Set(),
+    syncCalls: [],
 });
 export const initializeComponentAsyncStates: ComponentModule['initializeComponentAsyncStates'] = () => new Map();
 export const initializeCoreTrapMessages: ComponentModule['initializeCoreTrapMessages'] = (messages) =>
@@ -98,11 +99,24 @@ export function checkForDeadlock(context: ComponentDeadlockContext) {
                 unresolvedRoots.add(task.getRootTask());
             }
         }
+
+        // With a call of a non-async-typed function in progress, nothing but
+        // its instance's threads may run until it returns, so running out of
+        // ready threads is that call blocking with none to switch to (Canonical
+        // ABI `canon_lift`), rather than a deadlock of the event loop.
+        const syncCall = storeAsyncState.syncCalls.at(-1);
+        if (syncCall !== undefined && !syncCall.task.isResolvedState()) {
+            unresolvedRoots.add(syncCall.task.getRootTask());
+        }
         if (unresolvedRoots.size === 0) {
             return;
         }
 
-        const err = new RuntimeError('wasm trap: deadlock detected: event loop cannot make further progress');
+        const err = new RuntimeError(
+            syncCall === undefined
+                ? 'wasm trap: deadlock detected: event loop cannot make further progress'
+                : 'cannot block a synchronous task before returning',
+        );
         // Which tasks were waiting, and on whose behalf. The message stays
         // exactly what the Canonical ABI calls for, so this rides alongside
         // it: a deadlock reported from a real program is otherwise a bare
@@ -954,12 +968,46 @@ function defineComponentAsyncState() {
             if (this.#lockHandoffScheduled) {
                 return true;
             }
+            if (this.#heldBySyncCall()) {
+                return false;
+            }
             for (const meta of this.#suspendedThreadsByRef.values()) {
                 if (this.suspendedThreadReady(meta.thread)) {
                     return true;
                 }
             }
             return false;
+        }
+
+        // Calls of non-async-typed functions (Canonical ABI `canon_lift` with
+        // `not ft.async_`) are tracked store-wide, innermost last. Until such a
+        // call's task resolves, the spec resumes only ready threads of the
+        // callee's instance, and traps if there are none; nothing else in the
+        // store runs.
+        beginSyncCall(task: ComponentTask) {
+            this.#context.deadlock.storeAsyncState.syncCalls.push({ componentIdx: this.#componentIdx, task });
+        }
+
+        endSyncCall(task: ComponentTask) {
+            const syncCalls = this.#context.deadlock.storeAsyncState.syncCalls;
+            const idx = syncCalls.findIndex((call) => call.task === task);
+            if (idx === -1) {
+                return;
+            }
+            syncCalls.splice(idx, 1);
+            // Instances held back by the call may run again.
+            for (const state of this.#context.deadlock.asyncState.values()) {
+                if (state.hasPendingSchedulerWork()) {
+                    state.runTickLoop();
+                }
+            }
+        }
+
+        // Whether a call of a non-async-typed function into another instance
+        // is in progress, so that this instance's threads may not be resumed.
+        #heldBySyncCall() {
+            const top = this.#context.deadlock.storeAsyncState.syncCalls.at(-1);
+            return top !== undefined && top.componentIdx !== this.#componentIdx;
         }
 
         stop() {
@@ -987,6 +1035,13 @@ function defineComponentAsyncState() {
                     return;
                 }
                 if (result === TICK_IDLE) {
+                    // While a synchronous call into another instance is in
+                    // progress, this loop waits for it to end (`endSyncCall`
+                    // restarts it) instead of polling.
+                    if (this.#heldBySyncCall()) {
+                        this.#tickLoop = null;
+                        return;
+                    }
                     checkForDeadlock(this.#context.deadlock);
                 }
                 // Let resumed microtasks drain before the next slice; otherwise poll at the idle cadence.
@@ -998,6 +1053,7 @@ function defineComponentAsyncState() {
         tick() {
             // (resuming returns immediately below, so the map is never
             // mutated while this loop is still iterating it)
+            const held = this.#heldBySyncCall();
             for (const [thread, meta] of this.#suspendedThreadsByRef) {
                 if (!meta || !meta.readyFn) {
                     throw new Error(`missing/invalid thread meta despite thread [${thread.id()}] being present`);
@@ -1009,7 +1065,7 @@ function defineComponentAsyncState() {
                     return TICK_RESUMED;
                 }
 
-                if (!this.suspendedThreadReady(thread)) {
+                if (held || !this.suspendedThreadReady(thread)) {
                     continue;
                 }
 
