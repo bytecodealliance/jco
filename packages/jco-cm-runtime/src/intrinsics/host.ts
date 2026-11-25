@@ -587,7 +587,15 @@ export function asyncStartCall(
 
         // Directly returned STARTED is not also delivered as an event, so
         // install the progress handler only after the state transition.
-        startSubtask();
+        // A trap while lowering the arguments (in the callee's `realloc`, say)
+        // fails a task that has entered: it releases what entry took, like a
+        // trap in the callee's initial invocation, and traps the caller.
+        try {
+            startSubtask();
+        } catch (err) {
+            handleCalleeError(err);
+            throw err;
+        }
         registerSubtaskProgress();
 
         if (callee._jcoMaySuspend === false) {
