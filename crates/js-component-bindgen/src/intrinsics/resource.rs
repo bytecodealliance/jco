@@ -212,6 +212,8 @@ impl ResourceIntrinsic {
             Self::GetHandleIndexSpace => {
                 let get_handle_index_space_fn = self.name();
                 let handle_index_spaces = render_args.require_intrinsic(Self::HandleIndexSpaces);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 uwriteln!(
                     output,
                     r#"
@@ -225,7 +227,12 @@ impl ResourceIntrinsic {
                             space = {{
                                 next: 1,
                                 free: [],
-                                alloc() {{ return this.free.length > 0 ? this.free.pop() : this.next++; }},
+                                alloc() {{
+                                    if (this.free.length > 0) {{ return this.free.pop(); }}
+                                    // (Canonical ABI `Table.add` traps past `Table.MAX_LENGTH`)
+                                    if (this.next > 2 ** 28 - 1) {{ throw new {runtime_error}('handle table full'); }}
+                                    return this.next++;
+                                }},
                                 release(idx) {{ this.free.push(idx); }},
                             }};
                             {handle_index_spaces}.set(key, space);
