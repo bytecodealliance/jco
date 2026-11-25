@@ -178,6 +178,8 @@ test.concurrent('a task whose threads all exited unresolved deadlocks its unreso
         expect(error.message).toContain('deadlock detected');
         expect(error.deadlockDetail.unresolvedRootTaskIDs).toEqual([1n]);
         expect(root.errors).toEqual([error]);
+        // A synchronous caller waits on the exited task itself, so it is rejected too.
+        expect(child.errors).toEqual([error]);
     } finally {
         clearDeadlockCheck(component);
     }
