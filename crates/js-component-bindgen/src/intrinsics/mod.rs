@@ -2153,7 +2153,9 @@ mod tests {
 
         let remove_start = task.find("removeThread(thread) {").unwrap();
         let remove_end = task.find("defaultThread() {").unwrap();
-        assert!(task[remove_start..remove_end].contains("const cstate = this.#componentIdx === -1"));
+        assert!(
+            task[remove_start..remove_end].contains("const cstate = this.#componentIdx === -1")
+        );
 
         let exit_start = task.find("exit(args) {").unwrap();
         let exit_end = task.find("needsExclusiveLock() {").unwrap();
