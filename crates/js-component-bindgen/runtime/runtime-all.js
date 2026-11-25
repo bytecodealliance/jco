@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 7a2bc912979cf14050863a9515f18b5fd6f88921
+// generated from commit 9e941c33a4d13e04bd3c5098567e37852ed73f6e
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -632,6 +632,11 @@ function checkForDeadlock(context) {
 			const root = task.getRootTask();
 			if (!root.isResolvedState()) unresolvedRoots.add(root);
 		}
+		const exitedTasks = /* @__PURE__ */ new Set();
+		for (const state of asyncState.values()) for (const task of state.unresolvedExitedTasks()) {
+			exitedTasks.add(task);
+			unresolvedRoots.add(task.getRootTask());
+		}
 		if (unresolvedRoots.size === 0) return;
 		const err = new RuntimeError("wasm trap: deadlock detected: event loop cannot make further progress");
 		err.deadlockDetail = {
@@ -649,7 +654,7 @@ function checkForDeadlock(context) {
 			root.setErrored(err);
 			root.reject(err);
 		}
-		for (const task of suspendedTasks) if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {
+		for (const task of [...suspendedTasks, ...exitedTasks]) if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {
 			task.setErrored(err);
 			task.reject(err);
 		}
@@ -778,6 +783,7 @@ function defineComponentAsyncState() {
 		#lockHandoffScheduled = false;
 		#pendingTaskStarts = 0;
 		#suspendedThreadsByRef = /* @__PURE__ */ new Map();
+		#unresolvedExits = /* @__PURE__ */ new Set();
 		#errored = null;
 		#trapped = false;
 		#trapError = null;
@@ -1091,6 +1097,31 @@ function defineComponentAsyncState() {
 				...meta,
 				task: meta.thread.task()
 			};
+		}
+		/**
+		* Record a task whose last thread exited before it resolved. Nothing
+		* can resolve it any more, so let the deadlock detector account for
+		* whoever waits on it.
+		*
+		* @param task - the unresolved task
+		*/
+		noteUnresolvedExit(task) {
+			this.#unresolvedExits.add(task);
+			checkForDeadlock(this.#context.deadlock);
+		}
+		/**
+		* Tasks whose threads all exited unresolved while their root task is
+		* still unresolved. Tasks under a resolved root are forgotten: no
+		* caller can be blocked on them any more.
+		*
+		* @returns the tasks still relevant to deadlock detection
+		*/
+		*unresolvedExitedTasks() {
+			for (const task of this.#unresolvedExits) {
+				const root = task.getRootTask();
+				if (root.isResolvedState() || root.isRejected()) this.#unresolvedExits.delete(task);
+				else yield task;
+			}
 		}
 		#removeSuspendedThreadMeta(thread) {
 			const meta = this.#suspendedThreadsByRef.get(thread);
@@ -3340,7 +3371,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 	};
 	const driveCallback = (callbackResult) => {
 		if (!callbackFn) {
-			DEBUG: debugLog("[_asyncStartCall()] no callback, resolving w/ callee result", {
+			DEBUG: debugLog("[_asyncStartCall()] no callback, callee returned", {
 				taskID: preparedTask.id(),
 				componentIdx: preparedTask.componentIdx(),
 				preparedTask,
@@ -3349,7 +3380,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 				callbackFn
 			});
 			if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
-			if (!preparedTask.isResolved()) preparedTask.resolve([callbackResult]);
+			if (!calleeIsAsync && !preparedTask.isResolved()) preparedTask.resolve([callbackResult]);
 			preparedTask.exit({ skipExclusiveLockCheck: true });
 			return;
 		}
@@ -3602,12 +3633,12 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 				});
 				preparedTask.endFirstSlice();
 				if (!callbackFn) {
-					DEBUG: debugLog("[_syncStartCall()] no callback, resolving w/ callee result", {
+					DEBUG: debugLog("[_syncStartCall()] no callback, callee returned", {
 						taskID: preparedTask.id(),
 						componentIdx: preparedTask.componentIdx()
 					});
 					if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
-					if (!preparedTask.isResolved()) preparedTask.resolve(resultCount === 0 ? [] : [callbackResult]);
+					if (!calleeIsAsync && !preparedTask.isResolved()) preparedTask.resolve(resultCount === 0 ? [] : [callbackResult]);
 					preparedTask.exit({ skipExclusiveLockCheck: true });
 					return;
 				}
@@ -5549,6 +5580,7 @@ function defineAsyncTask() {
 			this.#state = TASK_CANCEL_PENDING;
 			this.deliverPendingCancel({ cancellable: true });
 			this.cancel({ error: taskErr });
+			if (this.#exited && this.#threads.length === 0) this.#settleCompletionPromise();
 		}
 		resolve(results) {
 			DEBUG: debugLog("[AsyncTask#resolve()] args", {
@@ -5589,7 +5621,6 @@ function defineAsyncTask() {
 			});
 			this.endFirstSlice();
 			if (this.#exited) throw new Error("task has already exited");
-			this.#checkThreadExit();
 			this.validateResourceBorrowScope();
 			const state = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (!state && this.#componentIdx !== -1) throw new Error("missing async state for component [" + this.#componentIdx + "]");
@@ -5675,19 +5706,14 @@ function defineAsyncTask() {
 			return this.#threads[0];
 		}
 		removeThread(thread) {
-			this.#checkThreadExit();
 			this.settleCompletion();
-			if (this.#componentIdx !== -1) getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).threads.remove(thread.id());
+			const cstate = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+			cstate?.threads.remove(thread.id());
 			if (this.#threads[this.#threads.length - 1] === thread) this.#threads.pop();
 			else this.#threads = this.#threads.filter((t) => t !== thread);
 			syncContextSlots(this.#context.registers);
+			if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) cstate.noteUnresolvedExit(this);
 			if (this.#exited && this.#threads.length === 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
-		}
-		#checkThreadExit() {
-			if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {
-				const err = new this.#context.RuntimeError(`(component [${this.#componentIdx}]) task [${this.#id}] exited without resolution`);
-				throw this.#componentIdx === -1 ? err : recordTrap(this.#context.traps, this.#componentIdx, err);
-			}
 		}
 		addThread(thread) {
 			if (this.#componentIdx === -1) {
