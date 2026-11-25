@@ -96,7 +96,7 @@ export function lowerImport(
                 });
                 // The calling thread blocks until the host settles the call.
                 if (isPromiseLike(pending)) {
-                    task.endFirstSliceOnBlock();
+                    task.endInitialInvocationOnBlock();
                 }
                 await pending;
                 if (!subtask.isResolved()) {
@@ -192,7 +192,7 @@ export function lowerImport(
         return res;
     };
 
-    // Canonical async lowering returns status in the current guest slice.
+    // Canonical async lowering returns status in the current guest turn.
     // Start now so each trampoline captures its own subtask before the next import.
     if (isAsync) {
         try {

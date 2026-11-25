@@ -263,7 +263,7 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
         // A host import that returns a promise blocks the calling thread.
         const state = getOrCreateAsyncState(context.states, componentIdx);
         if (callsHost && isPromiseLike(started)) {
-            savedThread?.task.endFirstSliceOnBlock();
+            savedThread?.task.endInitialInvocationOnBlock();
         }
         // A result that is not a promise still suspends, as JSPI scheduling expects.
         const settled = (async () => started)();

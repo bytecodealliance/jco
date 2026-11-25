@@ -980,13 +980,13 @@ impl ComponentIntrinsic {
                             }}
                         }}
 
-                        // The per-slice mutual-exclusion lock for guest execution in this
-                        // component instance. Guest slices (callback invocations and
+                        // The per-turn mutual-exclusion lock for guest execution in this
+                        // component instance. Guest turns (callback invocations and
                         // sync-lifted bodies) must be atomic per component even across the
                         // JSPI suspensions jco introduces for host imports: wit-bindgen's
                         // executors publish per-task state in single linear-memory cells
                         // (the wasip3-task pointer, context-local storage discipline) that
-                        // an interleaved slice of the same component corrupts
+                        // an interleaved turn of the same component corrupts
                         //
                         // The lock is *owned*: acquisition records the holder task and
                         // release is a no-op for anyone else, so a task exiting can no
@@ -1056,7 +1056,7 @@ impl ComponentIntrinsic {
                         // The Canonical ABI runs an entered task until it first returns or
                         // blocks before anything else enters. A task entered through `enter()`
                         // runs only once that resolves, so it holds this slot until its first
-                        // slice ends, and later entries observe that slice's effects (e.g.
+                        // turn ends, and later entries observe that turn's effects (e.g.
                         // backpressure it set).
                         hasEnteringTask() {{ return this.#enteringTaskID !== null; }}
                         // Whether the slot keeps the given task from entering: another task
@@ -1067,7 +1067,7 @@ impl ComponentIntrinsic {
                             return this.#entrySlotWaiters.length > 0;
                         }}
                         // In the Canonical ABI, a call whose entry finds the slot held would
-                        // run after that entry's first slice, before any other thread of the
+                        // run after that entry's initial invocation, before any other thread of the
                         // instance. Tasks waiting only for the slot therefore get it in
                         // arrival order as soon as it is free, without going through the
                         // scheduler, which could resume other threads of the instance first.
@@ -1145,7 +1145,7 @@ impl ComponentIntrinsic {
                             }}
 
                             // Make the release observable before handing the lock to the next
-                            // asynchronous guest slice.
+                            // asynchronous guest turn.
                             //
                             // Release handlers may expose a lifted value whose consumer immediately
                             // performs a synchronous call on the same component; that call must run
@@ -1206,7 +1206,7 @@ impl ComponentIntrinsic {
 
                         suspendTask(args) {{
                             const {{ task, ...opts }} = args;
-                            task.endFirstSliceOnBlock();
+                            task.endInitialInvocationOnBlock();
                             return this.suspendThread({{ thread: task.defaultThread(), ...opts }});
                         }}
 
@@ -1462,7 +1462,7 @@ impl ComponentIntrinsic {
                                     // idle check both during the call and after it ends.
                                     {check_for_deadlock_fn}();
                                 }}
-                                // Let resumed microtasks drain before the next slice;
+                                // Let resumed microtasks drain before the next turn;
                                 // otherwise poll at the idle cadence.
                                 this.#tickLoop = result === {component_async_state_class}.TickResult.RESUMED
                                     ? {component_async_state_class}.#onNextMacrotask(run)

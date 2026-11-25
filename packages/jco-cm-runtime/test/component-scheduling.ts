@@ -114,7 +114,7 @@ test.concurrent('scheduler resumes one ready task per tick and respects lock own
         const resumed: bigint[] = [];
         const first = state.suspendTask({ task: a.value, readyFn: () => true, cancellable: false })!;
         state.suspendTask({ task: b.value, readyFn: () => true, cancellable: true, onResume: () => resumed.push(2n) });
-        expect(a.slices).toBe(1);
+        expect(a.initialInvocationEnds).toBe(1);
         expect(a.progress).toBe(1);
         expect(state.suspendedTaskCancellable(2n)).toBe(true);
         state.exclusiveLock(1n);
@@ -521,7 +521,7 @@ test.concurrent('threads made by thread.new-indirect do not wait for the exclusi
     }
 });
 
-// The tick loop's own scheduling: only setTimeout is faked, so a slice that runs without
+// The tick loop's own scheduling: only setTimeout is faked, so a turn that runs without
 // advancing the clock was scheduled on the next macrotask, not on a timer.
 function scriptedTicks(results: string[]) {
     const state = create().component.getOrCreateAsyncState(0);

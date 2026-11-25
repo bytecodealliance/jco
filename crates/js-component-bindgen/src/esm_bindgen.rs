@@ -35,7 +35,7 @@ pub struct EsmBindgen {
 }
 
 impl EsmBindgen {
-    /// add imported function binding, using a path slice starting with the import specifier as its
+    /// add imported function binding, using path segments starting with the import specifier as its
     /// first segment
     /// arbitrary nesting of interfaces is supported in order to support virtual WASI interfaces
     /// only two-level nesting supports serialization into imports currently

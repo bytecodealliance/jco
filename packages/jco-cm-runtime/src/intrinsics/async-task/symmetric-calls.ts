@@ -26,7 +26,7 @@ export function symmetricSyncGuestCallEnter(
     // The conditional JSPI trampoline probes this path before
     // invoking its Suspending fallback. Avoid creating either
     // task until the probe knows that entry can complete in the
-    // current Wasm slice.
+    // current Wasm turn.
     if (syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()) {
         return 0;
     }
@@ -95,7 +95,7 @@ export function symmetricSyncGuestCallEnter(
             newTaskID: newTask.id(),
         });
     };
-    // Take the callee's per-slice exclusive lock. Uncontended entry
+    // Take the callee's per-turn exclusive lock. Uncontended entry
     // stays fully synchronous (returning a non-promise means the
     // Suspending-wrapped trampoline does not suspend, so pure-sync
     // compositions keep working without WebAssembly.promising).

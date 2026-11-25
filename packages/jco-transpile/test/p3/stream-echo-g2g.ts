@@ -54,7 +54,7 @@ suite('guest->guest stream echo pumps', () => {
     // pump stays parked), and  make-echo then enters the same component
     // while it is still live.
     //
-    // Task entry must be governed by backpressure + the per-slice exclusive lock,
+    // Task entry must be governed by backpressure + the per-turn exclusive lock,
     // not serialized on the previous task's exit -- otherwise make-echo never runs,
     // the source's writer never finds a reader, and both components poll their waitable
     // sets forever.

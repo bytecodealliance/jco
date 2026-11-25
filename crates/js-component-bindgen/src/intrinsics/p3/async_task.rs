@@ -382,7 +382,7 @@ pub enum AsyncTaskIntrinsic {
     CurrentTaskMayBlock,
 
     /// Global counter tracking how many blocking (synchronous, non-async) callee
-    /// slices are currently executing on the JS stack. While it is non-zero, an
+    /// turns are currently executing on the JS stack. While it is non-zero, an
     /// async subtask started by the running callee originates from a blocking
     /// function and must enter synchronously (the caller cannot yield to observe
     /// or cancel it before it runs).
@@ -1670,10 +1670,10 @@ impl AsyncTaskIntrinsic {
                            this.#isManualAsync = opts?.isManualAsync ?? false;
                            this.#preserveFutureResult = opts?.preserveFutureResult ?? false;
                            this.#entryFnName = opts.entryFnName;
-                           // Tasks that execute guest slices (export calls, fused
+                           // Tasks that execute guest turns (export calls, fused
                            // callees) default to true; import-handler tasks pass false
                            // explicitly (they run host code nested inside the caller's
-                           // already-locked slice).
+                           // already-locked turn).
                            this.#callingWasmExport = opts?.callingWasmExport !== false;
 
                            const {{
@@ -1713,8 +1713,8 @@ impl AsyncTaskIntrinsic {
                                if (!this.#isAsync && !this.#isManualAsync) {{ return; }}
                                this.#completionValue = results;
                                this.#completionReady = true;
-                               // Publish after the current guest slice returns, so a trap
-                               // in that slice can still reject the call. Do not wait for
+                               // Publish after the current guest turn returns, so a trap
+                               // in that turn can still reject the call. Do not wait for
                                // task exit: detached work may require further host calls
                                // or consumption of a returned resource's stream.
                            }});
@@ -2029,7 +2029,7 @@ impl AsyncTaskIntrinsic {
                                     cstate.exclusiveLock(this.#id);
                                 }} else {{
                                     // A host-called sync export arriving while another
-                                    // task's slice holds the lock: synchronous entry
+                                    // task's turn holds the lock: synchronous entry
                                     // cannot wait, and historically this entry silently
                                     // stole the hold. Run without the lock instead --
                                     // the holder's bookkeeping stays intact and its
@@ -2136,7 +2136,7 @@ impl AsyncTaskIntrinsic {
                             // NOTE: concurrent task lifetimes within one component instance are
                             // permitted by the Component Model: entry is governed by the
                             // backpressure and exclusive-lock checks below (the lock is held per
-                            // execution slice, not for the task's lifetime).
+                            // execution turn, not for the task's lifetime).
                             //
                             // Serializing entire task lifetimes here (the former "execution slot" queue)
                             // deadlocks pipelines where a parked long-lived task's progress depends on a
@@ -2156,28 +2156,28 @@ impl AsyncTaskIntrinsic {
                                 entered = await this.#enterImplicitThread(cstate);
                                 return entered;
                             }} finally {{
-                                if (!entered) {{ this.endFirstSlice(); }}
+                                if (!entered) {{ this.endInitialInvocation(); }}
                             }}
                         }}
 
-                        // The first slice of this task ended (it returned, blocked or trapped):
+                        // The initial invocation of this task ended (it returned, blocked or trapped):
                         // the next entry into the instance may be admitted (Canonical ABI
                         // `Store.invoke` runs a call until it first blocks or returns).
-                        endFirstSlice() {{
+                        endInitialInvocation() {{
                             if (!this.#holdsEntrySlot) {{ return; }}
                             this.#holdsEntrySlot = false;
                             {get_or_create_async_state_fn}this.#componentIdx).endEntry(this.#id);
                         }}
 
-                        // The task's thread blocked: its first slice is over, and so is the
-                        // first slice of each caller that waits on it through a synchronous
+                        // The task's thread blocked: its initial invocation is over, and so is the
+                        // initial invocation of each caller that waits on it through a synchronous
                         // lowering, since that caller's thread blocks with it (Canonical ABI
                         // `canon_lower`, whose synchronous caller waits once the callee's
                         // thread has blocked).
-                        endFirstSliceOnBlock() {{
+                        endInitialInvocationOnBlock() {{
                             let task = this;
                             for (;;) {{
-                                task.endFirstSlice();
+                                task.endInitialInvocation();
                                 const subtask = task.getParentSubtask();
                                 if (subtask === null || subtask === undefined || subtask.isAsync) {{ return; }}
                                 task = subtask.getParentTask();
@@ -2208,7 +2208,7 @@ impl AsyncTaskIntrinsic {
                         async #enterImplicitThread(cstate) {{
                             // A task held back only by jco's entry slot is not waiting to
                             // enter in the Canonical ABI's sense: the slot stands for the
-                            // first slice of an entry the Canonical ABI would have run to
+                            // initial invocation of an entry the Canonical ABI would have run to
                             // completion already. It waits for its turn at the slot, then
                             // checks its own condition like any other entry.
                             if (cstate.numWaitingToEnter() === 0 && cstate.entrySlotBusy(this.#id)) {{
@@ -2270,8 +2270,8 @@ impl AsyncTaskIntrinsic {
                                 return false;
                             }}
 
-                            // The first slice runs under this hold, and the driver loop
-                            // releases and re-acquires it per slice thereafter.
+                            // The initial invocation runs under this hold, and the driver loop
+                            // releases and re-acquires it per turn thereafter.
                             if (this.needsExclusiveLock()) {{ cstate.exclusiveLock(this.#id); }}
                             cstate.beginEntry(this.#id);
                             this.#holdsEntrySlot = true;
@@ -2403,7 +2403,7 @@ impl AsyncTaskIntrinsic {
                                 : this.defaultThread();
                             if (!thread || thread.task() !== this) {{ throw new Error('invalid current thread for wait'); }}
                             // Suspending a core Wasm stack retains the task's exclusive
-                            // lock. Only a callback return releases it between slices.
+                            // lock. Only a callback return releases it between turns.
                             return thread.suspend({{ ...opts, releaseLock: false }});
                         }}
 
@@ -2487,7 +2487,7 @@ impl AsyncTaskIntrinsic {
                             this.#endSyncCall();
                             // A task cancelled before entry has no driver loop that can
                             // report its exit. Entered tasks notify after releasing their
-                            // component slice in `exit()`.
+                            // component turn in `exit()`.
                             if (!this.#entered) {{ this.notifyProgress(); }}
                         }}
 
@@ -2671,7 +2671,7 @@ impl AsyncTaskIntrinsic {
                                 taskID: this.#id,
                             }});
 
-                            this.endFirstSlice();
+                            this.endInitialInvocation();
                             this.#endSyncCall();
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
@@ -2696,7 +2696,7 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             // Ownership-checked: releases only this task's own hold (a
-                            // task exiting while another task's slice holds the lock no
+                            // task exiting while another task's turn holds the lock no
                             // longer clears the foreign hold).
                             if (state) {{ state.exclusiveRelease(this.#id); }}
                             this.notifyProgress();
@@ -2723,8 +2723,8 @@ impl AsyncTaskIntrinsic {
                             // calls from unrelated guest components would contend spuriously.
                             if (this.#componentIdx === -1) {{ return false; }}
                             // Import-handler tasks (CallInterface) run host code nested
-                            // inside the calling guest slice, which already holds the
-                            // lock; only tasks that execute guest slices need it.
+                            // inside the calling guest turn, which already holds the
+                            // lock; only tasks that execute guest turns need it.
                             if (!this.#callingWasmExport) {{ return false; }}
                             // Automatic backpressure only applies to async function
                             // types. A sync-typed call may run ready callback threads
@@ -2888,7 +2888,7 @@ impl AsyncTaskIntrinsic {
                         async suspend(opts) {{
                             const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             const task = this.#task;
-                            task.endFirstSliceOnBlock();
+                            task.endInitialInvocationOnBlock();
                             task.settleCompletion();
                             const {{ cancellable, readyFn, releaseLock = false }} = opts;
                             if (task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
@@ -3016,7 +3016,7 @@ impl AsyncTaskIntrinsic {
                         target;
                         isAsync;
                         isManualAsync;
-                        // One execution slice awaited by the conditional cancel trampoline.
+                        // One execution turn awaited by the conditional cancel trampoline.
                         cancelProgress = null;
 
                         constructor(args) {{
@@ -3199,7 +3199,7 @@ impl AsyncTaskIntrinsic {
                             // Starting a nested operation is a task execution boundary.
                             // In particular, a cancellation handler may synchronously
                             // enter an import which then suspends in the host.  Wake a
-                            // supertask that is driving one cancellation slice so an
+                            // supertask that is driving one cancellation turn so an
                             // async `subtask.cancel` can report BLOCKED without waiting
                             // for that nested operation to finish.
                             this.#parentTask.notifyProgress();
@@ -3846,7 +3846,7 @@ impl AsyncTaskIntrinsic {
                                     }});
                                     // The calling thread blocks until the host settles the call.
                                     if (pending !== null && typeof pending === 'object' && typeof pending.then === 'function') {{
-                                        task.endFirstSliceOnBlock();
+                                        task.endInitialInvocationOnBlock();
                                     }}
                                     await pending;
                                     if (!subtask.isResolved()) {{
@@ -3945,7 +3945,7 @@ impl AsyncTaskIntrinsic {
                         }};
 
                         // Canonical async lowering returns a status in the current guest
-                        // slice. Start the trampoline now so it captures this subtask
+                        // turn. Start the trampoline now so it captures this subtask
                         // before another import is issued; only its host result is async.
                         if (isAsync) {{
                             try {{
@@ -4351,7 +4351,7 @@ impl AsyncTaskIntrinsic {
                         // The conditional JSPI trampoline probes this path before
                         // invoking its Suspending fallback. Avoid creating either
                         // task until the probe knows that entry can complete in the
-                        // current Wasm slice.
+                        // current Wasm turn.
                         if (syncOnly && calleeIsAsync && cstate.isExclusivelyLocked()) {{
                             return 0;
                         }}
@@ -4429,7 +4429,7 @@ impl AsyncTaskIntrinsic {
                             }});
                         }};
 
-                        // Take the callee's per-slice exclusive lock. Uncontended entry
+                        // Take the callee's per-turn exclusive lock. Uncontended entry
                         // stays fully synchronous (returning a non-promise means the
                         // Suspending-wrapped trampoline does not suspend, so pure-sync
                         // compositions keep working without WebAssembly.promising).

@@ -181,7 +181,7 @@ test.concurrent('a post-return keeps its own context slots and may leave again o
     }
 });
 
-test.concurrent('eager direct callee returns in the same slice and restores blocking depth', () => {
+test.concurrent('eager direct callee returns in the same turn and restores blocking depth', () => {
     const s = setup();
     try {
         const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });

@@ -20,10 +20,10 @@ function within<T>(value: Promise<T>, ms: number): Promise<T | 'timed out'> {
     return Promise.race([value, timeout]).finally(() => clearTimeout(timer));
 }
 
-suite('blocked first slice', () => {
-    // The WAST fixture `stackful-entry-behind-blocked-slice.wast` covers a first
-    // slice blocked in a call to another component.
-    test.concurrent('a stackful call enters while a first slice waits on an async host import', async () => {
+suite('blocked initial invocation', () => {
+    // The WAST fixture `stackful-entry-behind-blocked-invocation.wast` covers an initial
+    // invocation blocked in a call to another component.
+    test.concurrent('a stackful call enters while an initial invocation waits on an async host import', async () => {
         let release!: () => void;
         const waiting = new Promise<void>((resolve) => {
             release = resolve;

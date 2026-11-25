@@ -467,7 +467,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
             },
         });
         try {
-            // Back to back: the second call queues behind the first task's slice.
+            // Back to back: the second call queues behind the first task's turn.
             const settled = Promise.allSettled([instance.run(), instance.run()]);
             const outcomes = await Promise.race([
                 settled,
@@ -630,7 +630,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         });
         try {
             // Back to back: the stackful probe is queued behind the first call,
-            // whose first slice sets the backpressure the probe must wait for.
+            // whose initial invocation sets the backpressure the probe must wait for.
             const [first, probe] = await Promise.all([instance.setBackpressure(), instance.probe()]);
             assert.strictEqual(first, 100);
             assert.strictEqual(probe, 1, 'the probe entered only after the backpressure was cleared');

@@ -1,4 +1,4 @@
-//! The callee must finish its slice after task.return before this caller resumes.
+//! The callee must finish its turn after task.return before this caller resumes.
 mod bindings {
     use super::Component;
     wit_bindgen::generate!({

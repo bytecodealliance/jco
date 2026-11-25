@@ -58,7 +58,7 @@ extern "C" fn return_then_import() -> u32 {
         start_work(10, RESULTS[0].as_ptr());
     }
     bindings::progress(1);
-    0 // EXIT: the host import must not interrupt this guest slice.
+    0 // EXIT: the host import must not interrupt this guest turn.
 }
 
 #[cfg(target_arch = "wasm32")]

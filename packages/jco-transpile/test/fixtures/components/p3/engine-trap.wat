@@ -1,6 +1,6 @@
 ;; A trap raised by the engine inside wasm itself (`unreachable`), not by a
 ;; built-in, also stops a call that was already queued to enter: the next
-;; call is admitted only once the previous one's first slice ended, by which
+;; call is admitted only once the previous one's initial invocation ended, by which
 ;; time its trap has been recorded.
 (component
   (import "progress" (func $progress (param "step" u32)))

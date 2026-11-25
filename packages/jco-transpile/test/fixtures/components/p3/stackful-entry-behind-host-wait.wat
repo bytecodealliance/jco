@@ -1,6 +1,6 @@
-;; A stackful call enters an instance while another task's first slice is
+;; A stackful call enters an instance while another task's initial invocation is
 ;; blocked in a synchronously lowered call to an async host import. Once that
-;; first slice blocks it has ended (`Store.invoke` runs a call until it first
+;; initial invocation blocks it has ended (`Store.invoke` runs a call until it first
 ;; blocks or returns), and the stackful call needs neither the exclusive lock
 ;; nor the end of backpressure (Canonical ABI `Task.enter_implicit_thread`).
 ;; Here only the stackful call lets the host import return.
@@ -17,7 +17,7 @@
     (import "" "release" (func $release))
     (import "" "task.return" (func $task-return))
 
-    ;; Sync-lifted: holds the lock through its first slice, which blocks in
+    ;; Sync-lifted: holds the lock through its initial invocation, which blocks in
     ;; the call to `wait`.
     (func (export "hold")
       (call $wait))

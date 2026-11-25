@@ -684,8 +684,8 @@ export interface ComponentTask {
     readonly isRejected: () => boolean;
     readonly isCancelled: () => boolean;
     readonly needsExclusiveLock: () => boolean;
-    readonly endFirstSlice: () => void;
-    readonly endFirstSliceOnBlock: () => void;
+    readonly endInitialInvocation: () => void;
+    readonly endInitialInvocationOnBlock: () => void;
     readonly notifyProgress: () => void;
     readonly setErrored: (error: unknown) => void;
     readonly reject: (error: unknown) => void;

@@ -1,4 +1,4 @@
-;; A call into a stackful export made right after a call whose first slice
+;; A call into a stackful export made right after a call whose initial invocation
 ;; sets backpressure must not enter until the backpressure is cleared: the
 ;; next call is admitted only once the previous one returned or blocked
 ;; (Canonical ABI `Store.invoke` / `Task.enter_implicit_thread`).

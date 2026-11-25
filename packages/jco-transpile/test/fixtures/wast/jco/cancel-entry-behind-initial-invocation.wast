@@ -1,15 +1,15 @@
 ;; A call cancelled before it started never runs, even when it was waiting for
-;; another entry's first slice to end rather than for its own condition
+;; another entry's initial invocation to end rather than for its own condition
 ;; (Canonical ABI `Task.request_cancellation` in the `INITIAL` state).
 ;;
 ;; $C calls into $A:
 ;; 1. `set-backpressure` makes `hold` wait to enter; `clear-backpressure` then
 ;;    lets it in.
-;; 2. `hold` (sync-lifted, so holding the lock) enters and, in its first slice,
+;; 2. `hold` (sync-lifted, so holding the lock) enters and, in its initial invocation,
 ;;    makes a sync-lowered call to $D's `block`, which blocks until `release`.
 ;; 3. `never-runs` (callback-lifted) needs the lock, so it waits to enter, and
 ;;    is cancelled before it starts.
-;; 4. `release` lets `hold` return, ending its first slice.
+;; 4. `release` lets `hold` return, ending its initial invocation.
 (component definition $Test
   (component $D
     (core module $Memory (memory (export "mem") 1))
@@ -91,7 +91,7 @@
       (func (export "set-backpressure") (call $backpressure.inc))
       (func (export "clear-backpressure") (call $backpressure.dec))
 
-      ;; Sync-lifted: holds the lock through its first slice, which blocks in
+      ;; Sync-lifted: holds the lock through its initial invocation, which blocks in
       ;; the call to `block`.
       (func (export "hold") (call $block))
 

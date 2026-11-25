@@ -1497,7 +1497,7 @@ impl Intrinsic {
                               // A host import that returns a promise blocks the calling thread.
                               const state = {get_or_create_async_state_fn}componentIdx);
                               if (callsHost && started !== null && typeof started === 'object' && typeof started.then === 'function') {{
-                                  savedThread?.task.endFirstSliceOnBlock();
+                                  savedThread?.task.endInitialInvocationOnBlock();
                               }}
                               // A result that is not a promise still suspends, as JSPI scheduling expects.
                               const settled = (async () => started)();
