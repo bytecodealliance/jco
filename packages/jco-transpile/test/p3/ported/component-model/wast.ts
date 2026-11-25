@@ -52,21 +52,12 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         // artifacts need additional reentrance/threading support.
         artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
-    'async/during-sync-call-blocking-ops.wast': {
-        skip: 'blocking waitable operations reject synchronous calls even with a ready helper thread',
-    },
     'async/during-sync-call-exclusive-resume.wast': {
         skip: 'exiting the last ready thread reports deadlock instead of the synchronous blocking trap',
     },
     'async/exit-without-resolving.wast': {
         // canonical-abi-traps.ts covers all three cases, expecting deadlock for the synchronous one.
         skip: 'a synchronous caller blocked on an exited callee reports deadlock instead of the synchronous blocking trap',
-    },
-    'async/during-sync-call-no-sibling-resume.wast': {
-        skip: 'synchronous call scheduling incorrectly resumes a sibling task thread',
-    },
-    'async/switch-to-ready-callback.wast': {
-        skip: 'resume built-ins enter ready callback threads instead of rejecting non-suspended targets',
     },
     'async/trap-if-sync-and-waitable-set.wast': {
         skip: 'synchronous waitable operations do not reject handles belonging to a waitable set',
@@ -96,7 +87,8 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         skip: 'the pinned wast parser does not support stream.forward/future.forward',
     },
     'async/trap-if-block-and-sync.wast': {
-        skip: 'requires stackful async support',
+        // https://github.com/bytecodealliance/jco/issues/2537
+        skip: 'callback codes above 2 do not trap with "unsupported callback code"',
     },
 };
 
