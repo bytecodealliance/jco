@@ -762,7 +762,7 @@ impl HostIntrinsic {
                         }}
 
                         // A callee that trapped while it ran synchronously (for example
-                        // one that exited without `task.return`) traps its caller as well,
+                        // one that executed `unreachable`) traps its caller as well,
                         // as in the Canonical ABI: the call does not return a subtask
                         // state that implies a cancellation nobody requested.
                         const calleeTrap = preparedTask.isErrored() ?? subtask.getParentTask().isErrored();
