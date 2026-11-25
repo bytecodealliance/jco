@@ -366,6 +366,47 @@ test.concurrent('an async-lowered call into a sync-lifted, async-typed export ne
     }
 });
 
+test.concurrent('an entry cancelled while waiting for the entry slot never enters', async () => {
+    const s = setup({ asyncDeterminism: 'deterministic' });
+    try {
+        const state = s.state();
+        const asyncTask = (calleeIsAsync: boolean) => {
+            const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+            t.setFuncTypeIsAsync(true);
+            t.setCalleeIsAsync(calleeIsAsync);
+            return t;
+        };
+
+        // The holder's first slice has not ended yet.
+        const holder = asyncTask(false);
+        expect(await holder.enter()).toBe(true);
+        expect(state.hasEnteringTask()).toBe(true);
+
+        // Both wait for their turn at the slot, not through the scheduler.
+        const cancelled = asyncTask(true);
+        const cancelledEntered = cancelled.enter();
+        const next = asyncTask(true);
+        const nextEntered = next.enter();
+        await Promise.resolve();
+        expect(state.numWaitingToEnter()).toBe(0);
+
+        cancelled.requestCancellation();
+        expect(cancelled.isCancelled()).toBe(true);
+
+        // The cancelled entry passes its turn on without entering.
+        holder.endFirstSlice();
+        expect(await cancelledEntered).toBe(false);
+        expect(await nextEntered).toBe(true);
+        expect(state.hasEnteringTask()).toBe(true);
+        next.endFirstSlice();
+        expect(state.hasEnteringTask()).toBe(false);
+        finish(next);
+        finish(holder);
+    } finally {
+        s.cleanup();
+    }
+});
+
 test.concurrent('cancellation before entry retires the task without executing guest code', async () => {
     const s = setup();
     try {

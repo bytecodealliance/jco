@@ -643,6 +643,11 @@ function defineAsyncTask() {
             }
         }
         async #enterImplicitThreadOnTurn(cstate: ComponentAsyncState) {
+            // Cancelled before it started while it waited for its turn at the
+            // entry slot: the task was retired already and must not run.
+            if (this.isResolvedState() || this.isCancelled()) {
+                return false;
+            }
             let keepGoing = true;
             if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) {
                 // This task waits through the scheduler, so other entries
