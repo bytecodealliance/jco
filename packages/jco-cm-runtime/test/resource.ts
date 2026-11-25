@@ -6,7 +6,7 @@ import { CM_RUNTIME_API_VERSION, type ResourceModule } from '../src/runtime.js';
 const TABLE_FLAG = 1 << 30;
 const TABLE_OWN = 2 ** 32;
 const context = { RuntimeError: WebAssembly.RuntimeError };
-const { tableGet } = resource satisfies ResourceModule;
+const { tableGet, tableRemove } = resource satisfies ResourceModule;
 
 suite('resource intrinsics', () => {
     test.concurrent('reads owned and borrowed entries without changing the table', () => {
@@ -21,6 +21,9 @@ suite('resource intrinsics', () => {
         { name: 'freed entry', table: [TABLE_FLAG, 0, TABLE_FLAG, 42], handle: 1 },
         { name: 'missing index', table: [TABLE_FLAG, 0], handle: 4 },
         { name: 'hole for another handle kind', table: [TABLE_FLAG, 0, , , 7, 42], handle: 1 },
+        // Bit 31 must not alias the live entry the low 31 bits name, as a u32 or a signed i32.
+        { name: 'u32 index past 2 ** 31', table: [TABLE_FLAG, 0, 0, 42 + TABLE_OWN], handle: 0x80000001 },
+        { name: 'i32 index past 2 ** 31', table: [TABLE_FLAG, 0, 0, 42 + TABLE_OWN], handle: 0x80000001 | 0 },
     ])('traps for $name in the selected realm', ({ table, handle }) => {
         class CustomRuntimeError extends Error {}
         // Sparse arrays have undefined holes at runtime, just like out-of-bounds reads.
@@ -29,6 +32,14 @@ suite('resource intrinsics', () => {
             CustomRuntimeError,
         );
         expect(() => tableGet(context, sparseTable, handle)).toThrow(`unknown handle index ${handle}`);
+    });
+
+    test.concurrent.each([0x80000001, 0x80000001 | 0])('removing index %i traps and keeps entry 1', (handle) => {
+        const table = Object.assign([TABLE_FLAG, 0, 0, 42 + TABLE_OWN], { _createdReps: new Set<number>() });
+        // The trap comes before the index space or scope tasks are touched.
+        const removeContext = context as unknown as Parameters<typeof tableRemove>[0];
+        expect(() => tableRemove(removeContext, table, handle)).toThrow(`unknown handle index ${handle}`);
+        expect(tableGet(context, table, 1)).toEqual({ rep: 42, scope: 0, own: true });
     });
 
     test.concurrent('uses only the explicit context, including reentrant table reads', () => {
