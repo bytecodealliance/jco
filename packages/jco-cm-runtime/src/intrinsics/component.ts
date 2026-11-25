@@ -884,7 +884,7 @@ function defineComponentAsyncState() {
 
         suspendTask(args: SuspendTaskOptions) {
             const { task, ...opts } = args;
-            task.endFirstSlice();
+            task.endFirstSliceOnBlock();
             return this.suspendThread({ thread: task.defaultThread(), ...opts });
         }
 

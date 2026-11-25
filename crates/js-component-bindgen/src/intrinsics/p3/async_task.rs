@@ -2169,6 +2169,21 @@ impl AsyncTaskIntrinsic {
                             {get_or_create_async_state_fn}this.#componentIdx).endEntry(this.#id);
                         }}
 
+                        // The task's thread blocked: its first slice is over, and so is the
+                        // first slice of each caller that waits on it through a synchronous
+                        // lowering, since that caller's thread blocks with it (Canonical ABI
+                        // `canon_lower`, whose synchronous caller waits once the callee's
+                        // thread has blocked).
+                        endFirstSliceOnBlock() {{
+                            let task = this;
+                            for (;;) {{
+                                task.endFirstSlice();
+                                const subtask = task.getParentSubtask();
+                                if (subtask === null || subtask === undefined || subtask.isAsync) {{ return; }}
+                                task = subtask.getParentTask();
+                            }}
+                        }}
+
                         // Whether entry into this task's instance is subject to backpressure
                         // and, when the task needs it, the exclusive lock. In the Canonical ABI
                         // (`Task.enter_implicit_thread`) that is decided by the callee's
@@ -2873,7 +2888,7 @@ impl AsyncTaskIntrinsic {
                         async suspend(opts) {{
                             const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             const task = this.#task;
-                            task.endFirstSlice();
+                            task.endFirstSliceOnBlock();
                             task.settleCompletion();
                             const {{ cancellable, readyFn, releaseLock = false }} = opts;
                             if (task.deliverPendingCancel({{ cancellable }})) {{ return false; }}
@@ -3823,12 +3838,17 @@ impl AsyncTaskIntrinsic {
                             const {{ promise, resolve, reject }} = {promise_with_resolvers_fn}();
                             queueMicrotask(async () => {{
                                 try {{
-                                    await {with_global_current_thread_meta_async_fn}{{
+                                    const pending = {with_global_current_thread_meta_async_fn}{{
                                         taskID: task.id(),
                                         threadID,
                                         componentIdx: task.componentIdx(),
                                         fn: () => importFn(...params),
                                     }});
+                                    // The calling thread blocks until the host settles the call.
+                                    if (pending !== null && typeof pending === 'object' && typeof pending.then === 'function') {{
+                                        task.endFirstSliceOnBlock();
+                                    }}
+                                    await pending;
                                     if (!subtask.isResolved()) {{
                                         await task.suspendUntil({{ readyFn: () => subtask.isResolved() }});
                                     }}

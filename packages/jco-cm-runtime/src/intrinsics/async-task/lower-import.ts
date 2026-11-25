@@ -3,7 +3,7 @@ import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
 import { readTaskRegister, withCurrentTaskMetaAsync, withCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask } from './task-operations.js';
-import { promiseWithResolvers } from '../core/promises.js';
+import { isPromiseLike, promiseWithResolvers } from '../core/promises.js';
 
 // LowerImport
 export function lowerImport(
@@ -88,12 +88,17 @@ export function lowerImport(
         const { promise, resolve, reject } = promiseWithResolvers();
         queueMicrotask(async () => {
             try {
-                await withCurrentTaskMetaAsync(_context.registers, {
+                const pending = withCurrentTaskMetaAsync(_context.registers, {
                     taskID: task.id(),
                     threadID,
                     componentIdx: task.componentIdx(),
                     fn: () => importFn(...params),
                 });
+                // The calling thread blocks until the host settles the call.
+                if (isPromiseLike(pending)) {
+                    task.endFirstSliceOnBlock();
+                }
+                await pending;
                 if (!subtask.isResolved()) {
                     await task.suspendUntil({ readyFn: () => subtask.isResolved() });
                 }

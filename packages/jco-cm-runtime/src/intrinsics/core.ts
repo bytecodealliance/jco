@@ -260,6 +260,10 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
             }
             throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
         }
+        // A host import that returns a promise blocks the calling thread.
+        if (callsHost && isPromiseLike(started)) {
+            savedThread?.task.endFirstSliceOnBlock();
+        }
         // A result that is not a promise still suspends, as JSPI scheduling expects.
         const settled = (async () => started)();
 

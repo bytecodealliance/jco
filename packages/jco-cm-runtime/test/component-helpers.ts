@@ -100,6 +100,9 @@ export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
         endFirstSlice: () => {
             slices++;
         },
+        endFirstSliceOnBlock: () => {
+            slices++;
+        },
         notifyProgress: () => {
             progress++;
         },
