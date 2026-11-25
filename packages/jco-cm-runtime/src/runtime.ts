@@ -724,12 +724,6 @@ export interface SuspendedThread {
 export interface SuspendedTask extends SuspendedThread {
     task: ComponentTask;
 }
-export interface AdmissionTicket {
-    taskID: bigint;
-    promise: Promise<void>;
-    readonly resolve: () => void;
-    readonly reject: (reason?: unknown) => void;
-}
 export interface WaitableEvent {
     code: number;
     payload0: number;
@@ -789,11 +783,12 @@ export interface ComponentAsyncState {
     readonly exclusivelyLockedBy: (taskID: bigint) => boolean;
     readonly exclusiveLock: (taskID: bigint) => void;
     readonly acquireExclusiveLock: (taskID: bigint) => Promise<void> | undefined;
-    readonly takeAdmissionTicket: (taskID: bigint) => AdmissionTicket;
-    readonly hasPendingAdmissions: () => boolean;
-    readonly waitForAdmissionTurn: (ticket: AdmissionTicket) => Promise<void> | undefined;
-    readonly releaseAdmissionTicket: (ticket: AdmissionTicket) => void;
-    readonly abandonAdmissionWaiters: () => void;
+    readonly numWaitingToEnter: () => number;
+    readonly addWaitingToEnter: () => void;
+    readonly removeWaitingToEnter: () => void;
+    readonly hasEnteringTask: () => boolean;
+    readonly beginEntry: (taskID: bigint) => void;
+    readonly endEntry: (taskID: bigint) => boolean;
     readonly abandonLockWaiters: () => void;
     readonly cancelExclusiveLockWaiter: (taskID: bigint) => boolean;
     readonly exclusiveRelease: (taskID: bigint) => boolean;

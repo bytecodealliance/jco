@@ -237,22 +237,129 @@ test.concurrent('callback execution uses the task register and preserves the syn
     }
 });
 
-test.concurrent('queued async entry waits for backpressure and retires its admission ticket', async () => {
+test.concurrent('queued async entry waits for backpressure and holds the entry until its first slice ends', async () => {
     const s = setup({ asyncDeterminism: 'deterministic' });
     try {
         const state = s.state();
         state.setBackpressure(1);
         const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        t.setFuncTypeIsAsync(true);
         expect(t.tryEnter()).toBeNull();
         const entered = t.enter();
         await Promise.resolve();
         expect(state.isTaskSuspended(t.id())).toBe(true);
-        expect(state.hasPendingAdmissions()).toBe(false);
+        expect(state.numWaitingToEnter()).toBe(1);
         state.setBackpressure(0);
         state.tick();
         expect(await entered).toBe(true);
+        expect(state.numWaitingToEnter()).toBe(0);
+        expect(state.hasEnteringTask()).toBe(true);
         t.endFirstSlice();
-        expect(state.hasPendingAdmissions()).toBe(false);
+        expect(state.hasEnteringTask()).toBe(false);
+        finish(t);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('a stackful entry is not held behind an entry waiting for the exclusive lock', async () => {
+    const s = setup({ asyncDeterminism: 'deterministic' });
+    try {
+        const state = s.state();
+        // Another task's slice holds the lock while it waits.
+        state.exclusiveLock(99n);
+
+        const [locking] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        locking.setFuncTypeIsAsync(true);
+        locking.setCalleeIsAsync(false);
+        expect(locking.needsExclusiveLock()).toBe(true);
+        const lockingEntered = locking.enter();
+        await Promise.resolve();
+        expect(state.numWaitingToEnter()).toBe(1);
+
+        const [stackful] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        stackful.setFuncTypeIsAsync(true);
+        stackful.setCalleeIsAsync(true);
+        expect(stackful.needsExclusiveLock()).toBe(false);
+        // Another task is waiting to enter, so this one waits once too...
+        expect(stackful.tryEnter()).toBeNull();
+        const stackfulEntered = stackful.enter();
+        await Promise.resolve();
+        expect(state.numWaitingToEnter()).toBe(2);
+        // ...and then only for its own condition, which ignores the lock.
+        expect(state.tick()).toBe('resumed');
+        expect(await stackfulEntered).toBe(true);
+        expect(state.numWaitingToEnter()).toBe(1);
+        expect(state.exclusivelyLockedBy(99n)).toBe(true);
+        stackful.endFirstSlice();
+
+        state.exclusiveRelease(99n);
+        expect(state.tick()).toBe('resumed');
+        expect(await lockingEntered).toBe(true);
+        expect(state.numWaitingToEnter()).toBe(0);
+        expect(state.exclusivelyLockedBy(locking.id())).toBe(true);
+        locking.endFirstSlice();
+        finish(stackful);
+        finish(locking);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('a sync-lowered call into a stackful export waits for backpressure but not the lock', async () => {
+    const s = setup({ asyncDeterminism: 'deterministic' });
+    try {
+        const state = s.state();
+        // The caller lowered the call synchronously; the callee is lifted
+        // async without a callback.
+        const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: false });
+        t.setFuncTypeIsAsync(true);
+        t.setCalleeIsAsync(true);
+        expect(t.needsExclusiveLock()).toBe(false);
+
+        state.setBackpressure(1);
+        const entered = t.enter();
+        await Promise.resolve();
+        expect(state.isTaskSuspended(t.id())).toBe(true);
+        state.setBackpressure(0);
+        state.tick();
+        expect(await entered).toBe(true);
+        expect(state.isExclusivelyLocked()).toBe(false);
+        t.endFirstSlice();
+        finish(t);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('an async-lowered call into a sync-typed function ignores backpressure', () => {
+    const s = setup({ asyncDeterminism: 'deterministic' });
+    try {
+        const state = s.state();
+        state.setBackpressure(1);
+        const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        t.setFuncTypeIsAsync(false);
+        t.setCalleeIsAsync(false);
+        expect(t.needsExclusiveLock()).toBe(false);
+        expect(t.tryEnter()).toBe(true);
+        expect(state.numWaitingToEnter()).toBe(0);
+        expect(state.isExclusivelyLocked()).toBe(false);
+        finish(t);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('an async-lowered call into a sync-lifted, async-typed export needs the lock', () => {
+    const s = setup({ asyncDeterminism: 'deterministic' });
+    try {
+        const state = s.state();
+        const [t] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
+        t.setFuncTypeIsAsync(true);
+        t.setCalleeIsAsync(false);
+        expect(t.needsExclusiveLock()).toBe(true);
+        expect(t.tryEnter()).toBe(true);
+        expect(state.exclusivelyLockedBy(t.id())).toBe(true);
         finish(t);
     } finally {
         s.cleanup();

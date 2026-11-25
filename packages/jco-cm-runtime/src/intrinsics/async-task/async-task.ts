@@ -7,7 +7,6 @@ import type {
     RuntimeMemory,
     TaskCallback,
     TaskPostReturn,
-    AdmissionTicket,
     AsyncSubtask as AsyncSubtaskType,
     TaskLowerFn,
     ResourceTable,
@@ -84,7 +83,7 @@ function defineAsyncTask() {
         #postReturnFn: TaskPostReturn | null = null;
         #getCalleeParamsFn: (() => unknown[]) | null = null;
         #calleeIsAsync: boolean | null = null;
-        #admissionTicket: AdmissionTicket | null = null;
+        #holdsEntrySlot = false;
         #funcTypeIsAsync = false;
         #syncCall = false;
         #returnResultTypeIdx: number | null = null;
@@ -521,22 +520,17 @@ function defineAsyncTask() {
                 return false;
             }
             const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-            if (this.isSync()) {
+            if (!this.#isAsyncEntry()) {
                 this.#entered = true;
                 this.#beginGuestSyncCall();
                 return true;
             }
-            if (cstate.hasBackpressure()) {
-                return null;
-            }
-            // Entries already queued for this instance go first.
-            if (cstate.hasPendingAdmissions()) {
+            // Canonical ABI `Task.enter_implicit_thread`: while other tasks
+            // wait to enter, a new entry waits at least once as well.
+            if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) {
                 return null;
             }
             if (this.needsExclusiveLock()) {
-                if (cstate.isExclusivelyLocked()) {
-                    return null;
-                }
                 cstate.exclusiveLock(this.#id);
             }
             if (this.deliverPendingCancel({ cancellable: true })) {
@@ -583,36 +577,19 @@ function defineAsyncTask() {
             // deadlocks pipelines where a parked long-lived task's progress depends on a
             // later entry into the same component.
 
-            // If a task is synchronous then we can avoid component-relevant
-            // tracking and immediately enter.
-            if (this.isSync()) {
+            // Calls to sync-typed functions are not subject to backpressure or
+            // the exclusive lock, and enter immediately.
+            if (!this.#isAsyncEntry()) {
                 this.#entered = true;
                 this.#beginGuestSyncCall();
-
-                // TODO(breaking): remove once manually-specifying async fns is removed
-                // It is currently possible for an actually sync export to be specified
-                // as async via JSPI
-                if (this.#isManualAsync) {
-                    if (this.needsExclusiveLock()) {
-                        await cstate.acquireExclusiveLock(this.#id);
-                    }
-                }
-
                 return this.#entered;
             }
 
-            // Enter in the order the calls were made: queue behind every
-            // earlier entry into this instance, whatever it waits for.
-            const ticket = cstate.takeAdmissionTicket(this.#id);
-            this.#admissionTicket = ticket;
             let entered = false;
             try {
-                entered = await this.#enterQueued(cstate, ticket);
+                entered = await this.#enterImplicitThread(cstate);
                 return entered;
             } finally {
-                // An entered task keeps the slot until its first slice ends
-                // (`endFirstSlice`): the next call is admitted once this one
-                // returned, blocked or trapped, as `Store.invoke` runs a call.
                 if (!entered) {
                     this.endFirstSlice();
                 }
@@ -622,79 +599,87 @@ function defineAsyncTask() {
         // the next entry into the instance may be admitted (Canonical ABI
         // `Store.invoke` runs a call until it first blocks or returns).
         endFirstSlice() {
-            const ticket = this.#admissionTicket;
-            if (ticket === null) {
+            if (!this.#holdsEntrySlot) {
                 return;
             }
-            this.#admissionTicket = null;
-            getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).releaseAdmissionTicket(ticket);
+            this.#holdsEntrySlot = false;
+            getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endEntry(this.#id);
         }
-        async #enterQueued(cstate: ComponentAsyncState, ticket: AdmissionTicket) {
-            await cstate.waitForAdmissionTurn(ticket);
-            // Cancelled before it started while it was queued: the task was
-            // retired already and must not park in a wait as a dead entry.
-            if (this.isResolvedState() || this.isCancelled()) {
+        // Whether entry into this task's instance is subject to backpressure
+        // and, when the task needs it, the exclusive lock. In the Canonical ABI
+        // (`Task.enter_implicit_thread`) that is decided by the callee's
+        // function type alone, not by how the caller lowered the call.
+        #isAsyncEntry() {
+            return this.#componentIdx !== -1 && this.#callingWasmExport && this.#funcTypeIsAsync;
+        }
+        // The condition an entering task waits for (Canonical ABI
+        // `has_backpressure`), plus jco's entry slot (see `beginEntry`). A
+        // stackful task does not need the exclusive lock, so it does not wait
+        // for it.
+        #mayEnter(cstate: ComponentAsyncState) {
+            if (cstate.hasEnteringTask() || cstate.hasBackpressure()) {
                 return false;
             }
-            // Wait until there is no backpressure *and* the exclusive lock (if
-            // needed) is ours. Backpressure can be set while we wait for the
-            // lock (by the task holding it), so it's checked again once the lock
-            // is acquired, as the Canonical ABI's `enter_implicit_thread` waits
-            // for both together.
-            while (true) {
-                if (cstate.hasBackpressure()) {
-                    cstate.addBackpressureWaiter();
-                    const result = await this.waitUntil({
-                        readyFn: () => {
-                            return !cstate.hasBackpressure();
-                        },
-                        cancellable: true,
-                    });
-                    cstate.removeBackpressureWaiter();
-                    if (!result || this.isCancelled()) {
-                        if (!this.isResolvedState()) {
-                            this.cancel();
-                        }
-                        return false;
-                    }
+            return !this.needsExclusiveLock() || !cstate.isExclusivelyLocked();
+        }
+        // Canonical ABI `Task.enter_implicit_thread`. A task waits when it may
+        // not enter yet or other tasks are already waiting to; it then waits
+        // only for its own condition, so it is never held behind a waiting task
+        // that needs the exclusive lock when it does not need the lock itself.
+        async #enterImplicitThread(cstate: ComponentAsyncState) {
+            let keepGoing = true;
+            if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) {
+                cstate.addWaitingToEnter();
+                try {
+                    // Another entry may run between this task becoming ready and
+                    // resuming, so the condition is checked again once resumed.
+                    do {
+                        keepGoing = await this.waitUntil({
+                            readyFn: () => this.#mayEnter(cstate),
+                            cancellable: true,
+                        });
+                    } while (keepGoing && !this.isResolvedState() && !this.isCancelled() && !this.#mayEnter(cstate));
+                } finally {
+                    cstate.removeWaitingToEnter();
                 }
-                // Acquire the per-slice exclusive lock (FIFO-queued when
-                // contended); the first slice runs under this hold and the
-                // driver loop releases/re-acquires it per slice thereafter.
-                if (this.needsExclusiveLock()) {
-                    await cstate.acquireExclusiveLock(this.#id);
-                    if (cstate.hasBackpressure()) {
-                        cstate.exclusiveRelease(this.#id);
-                        continue;
-                    }
+                // Cancelled before it started while it waited: the task was
+                // retired already.
+                if (this.isResolvedState() || this.isCancelled()) {
+                    return false;
                 }
-                break;
+                if (!keepGoing && this.#state === TASK_CANCEL_DELIVERED) {
+                    this.cancel();
+                    return false;
+                }
             }
+
             // The store may have trapped (e.g. a deadlock was detected) while
             // this task waited to enter: it must not run, and its call fails
             // with that trap.
             try {
                 cstate.throwIfInterrupted();
             } catch (err) {
-                cstate.exclusiveRelease(this.#id);
                 this.setErrored(err);
                 return false;
             }
-            // Cancellation-before-start may resolve this task while its
-            // queued lock acquisition is still pending. Acquiring the lock
-            // does not make the already-resolved task runnable again.
-            if (this.isResolvedState() || this.isCancelled()) {
-                cstate.exclusiveRelease(this.#id);
+            if (!keepGoing) {
                 return false;
             }
-            // Cancellation can be requested while entry is waiting for
-            // backpressure or its exclusive lock. Do not execute the guest
-            // after acquiring a lock for a task that should no longer start.
+
+            // Cancellation can be requested while entry is waiting. Do not
+            // execute the guest for a task that should no longer start.
             if (this.deliverPendingCancel({ cancellable: true })) {
-                cstate.exclusiveRelease(this.#id);
                 this.cancel();
                 return false;
             }
+
+            // The first slice runs under this hold, and the driver loop
+            // releases and re-acquires it per slice thereafter.
+            if (this.needsExclusiveLock()) {
+                cstate.exclusiveLock(this.#id);
+            }
+            cstate.beginEntry(this.#id);
+            this.#holdsEntrySlot = true;
             this.#entered = true;
             this.#beginGuestSyncCall();
             return this.#entered;
@@ -1146,10 +1131,16 @@ function defineAsyncTask() {
             if (!this.#funcTypeIsAsync) {
                 return false;
             }
-            // A sync-lifted callee cannot be reentered until the whole
-            // stackful call returns. This is the Component Model's
-            // automatic-backpressure rule for async-lowered calls.
-            return !this.#isAsync || this.hasCallback() || this.#calleeIsAsync === false;
+            // Canonical ABI `Task.needs_exclusive`: a sync-lifted or
+            // callback-lifted callee needs the lock, a stackful one does not.
+            // This depends on the callee's lift options, not on how the caller
+            // lowered the call.
+            return !this.#liftIsAsync() || this.hasCallback();
+        }
+        // Whether the callee was lifted async. Tasks that are not told the
+        // lift options separately were created with them.
+        #liftIsAsync() {
+            return this.#calleeIsAsync ?? this.#isAsync;
         }
         createSubtask(args: CreateSubtaskOptions) {
             DEBUG: debugLog('[AsyncTask#createSubtask()] args', args);
