@@ -256,6 +256,98 @@ suite("Node filesystem performance options", () => {
     });
 });
 
+suite("Directory path caching", () => {
+    const CACHED = { performance: { cacheDirectoryPaths: true } };
+
+    /**
+     * Read `which.txt` through a preopen.
+     *
+     * @param root - the preopen
+     * @returns the file's contents
+     */
+    function which(root: Descriptor): string {
+        const file = root.openAt({}, "which.txt", {}, { read: true });
+        try {
+            return decoder.decode(file.read(100n, 0n)[0]);
+        } finally {
+            drop(file);
+        }
+    }
+
+    test.skipIf(isWindows)(
+        "a preopen behind a repointed symlink is followed unless its path is cached",
+        () => {
+            const first = createDirectory();
+            const second = createDirectory();
+            writeFileSync(join(first, "which.txt"), "first");
+            writeFileSync(join(second, "which.txt"), "second");
+            const link = join(createDirectory(), "current");
+            symlinkSync(first, link);
+
+            const plain = filesystem._createPreopenDescriptor(link) as unknown as Descriptor;
+            const cached = filesystem._createPreopenDescriptor(
+                link,
+                CACHED,
+            ) as unknown as Descriptor;
+            assert.strictEqual(which(plain), "first");
+            assert.strictEqual(which(cached), "first");
+
+            rmSync(link);
+            symlinkSync(second, link);
+            assert.strictEqual(which(plain), "second");
+            assert.strictEqual(which(cached), "first");
+            assert.strictEqual(cached.statAt({}, "which.txt").size, 5n);
+        },
+    );
+
+    test("a preopen that does not exist yet is resolved once it does", () => {
+        const later = join(createDirectory(), "later");
+        const cached = filesystem._createPreopenDescriptor(later, CACHED) as unknown as Descriptor;
+        assert.strictEqual(
+            thrownBy(() => cached.statAt({}, "which.txt")),
+            "no-entry",
+        );
+
+        mkdirSync(later);
+        writeFileSync(join(later, "which.txt"), "later");
+        assert.strictEqual(which(cached), "later");
+    });
+
+    test.skipIf(isWindows)("turning the option off forgets what was cached", () => {
+        const first = createDirectory();
+        const second = createDirectory();
+        writeFileSync(join(first, "which.txt"), "first");
+        writeFileSync(join(second, "which.txt"), "second");
+        const link = join(createDirectory(), "current");
+        symlinkSync(first, link);
+        const root = filesystem._createPreopenDescriptor(link) as unknown as Descriptor;
+
+        filesystem._setPerformance({ cacheDirectoryPaths: true });
+        assert.strictEqual(which(root), "first");
+        rmSync(link);
+        symlinkSync(second, link);
+        assert.strictEqual(which(root), "first");
+
+        filesystem._setPerformance({});
+        assert.strictEqual(which(root), "second");
+        filesystem._setPerformance({ cacheDirectoryPaths: true });
+        assert.strictEqual(which(root), "second");
+    });
+
+    test("an opened directory resolves paths with the option of its preopen", () => {
+        const [root, directory] = createRoot(CACHED);
+        const nested = root.openAt({}, "nested", { directory: true }, { read: true });
+        assert.strictEqual(nested.statAt({}, "inner.txt").type, "regular-file");
+        writeFileSync(join(directory, "nested", "added.txt"), "added");
+        assert.strictEqual(nested.statAt({}, "added.txt").size, 5n);
+        assert.strictEqual(
+            thrownBy(() => nested.statAt({}, "../file.txt")),
+            "not-permitted",
+        );
+        drop(nested);
+    });
+});
+
 suite("Main-thread filesystem: what stays in the I/O worker", () => {
     test.skipIf(isWindows)("a character device is opened in the worker", () => {
         const root = filesystem._createPreopenDescriptor(

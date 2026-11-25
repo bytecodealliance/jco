@@ -365,6 +365,7 @@ program
         "--perf-main-thread-filesystem",
         "Operate on regular files on the main thread instead of in the WASI I/O worker (WASI 0.2 only)",
     )
+    .option("--perf-cache-directory-paths", "Resolve the host path of each preopened directory once (WASI 0.2 only)")
     .addOption(
         new Option("--jco-import-bindings [mode]", "bindings mode for imports")
             .choices(["js", "optimized", "hybrid", "direct-optimized"])
@@ -429,6 +430,7 @@ program
         "--perf-main-thread-filesystem",
         "Operate on regular files on the main thread instead of in the WASI I/O worker (WASI 0.2 only)",
     )
+    .option("--perf-cache-directory-paths", "Resolve the host path of each preopened directory once (WASI 0.2 only)")
     .argument("[args...]", "Any CLI arguments for the component")
     .action(
         asyncAction(async function serve(cmd: string, args: string[], opts: any, command: any) {
