@@ -79,10 +79,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'async/forward.wast': {
         skip: 'the pinned wast parser does not support stream.forward/future.forward',
     },
-    'async/trap-if-block-and-sync.wast': {
-        // https://github.com/bytecodealliance/jco/issues/2537
-        skip: 'callback codes above 2 do not trap with "unsupported callback code"',
-    },
 };
 
 const WAST_TESTS: readonly WastTest[] = [
