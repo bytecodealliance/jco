@@ -809,6 +809,8 @@ export interface ComponentAsyncState {
     readonly suspendedTaskCancellable: (taskID: bigint) => boolean;
     readonly isTaskSuspended: (taskID: bigint) => boolean;
     readonly suspendedTaskMetas: () => IterableIterator<SuspendedTask>;
+    readonly noteUnresolvedExit: (task: ComponentTask) => void;
+    readonly unresolvedExitedTasks: () => IterableIterator<ComponentTask>;
     readonly addPendingTaskStart: () => void;
     readonly removePendingTaskStart: () => void;
     readonly hasPendingSchedulerWork: () => boolean;
