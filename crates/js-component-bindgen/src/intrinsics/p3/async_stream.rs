@@ -1581,6 +1581,13 @@ impl AsyncStreamIntrinsic {
                             this.#trackHostWait();
                         }}
 
+                        // Record that the host no longer holds an end of this stream (it was
+                        // lowered back into a guest).
+                        clearHostHeld() {{
+                            this.#pendingBufferMeta.hostHeld = false;
+                            this.#trackHostWait();
+                        }}
+
                         // A guest copy pending on a stream whose other end the host holds can
                         // only be completed by the host, whenever it reads, writes or drops
                         // that end: count it like a host operation, so the deadlock check
@@ -1782,6 +1789,16 @@ impl AsyncStreamIntrinsic {
 
                         setRep(rep) {{ this.#rep = rep; }}
                         getStreamEndWaitableIdx() {{ return this.#streamEndWaitableIdx; }}
+
+                        // Hand the end back to the guest it was lifted from: only the guest
+                        // can complete a copy on it now.
+                        returnToGuest() {{
+                            {get_stream_end_fn}({{
+                                tableIdx: this.#streamTableIdx,
+                                streamEndWaitableIdx: this.#streamEndWaitableIdx,
+                            }}).clearHostHeld();
+                            return this.#streamEndWaitableIdx;
+                        }}
 
                         createUserStream() {{
                            if (this.#rep === null) {{ throw new Error("unexpectedly missing rep for host stream"); }}

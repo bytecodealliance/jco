@@ -603,6 +603,12 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
             this.#trackHostWait();
         }
 
+        /** Record that the host no longer holds an end of this stream (it was lowered back into a guest). */
+        clearHostHeld() {
+            this.#pendingBufferMeta.hostHeld = false;
+            this.#trackHostWait();
+        }
+
         #trackHostWait() {
             trackGuestWaitOnHost(_context.tracking, this.#pendingBufferMeta);
         }

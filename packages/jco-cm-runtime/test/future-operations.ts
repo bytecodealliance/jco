@@ -258,6 +258,23 @@ test.concurrent('host injection delivers a promise once and balances host operat
     pair.readEnd.drop();
 });
 
+// A guest copy on a host-held future counts as a host operation, until the
+// host lowers its end back into the guest: then nothing but the guest can
+// complete the copy, and the deadlock check must see that.
+test.concurrent('lowering a host-held end back into the guest stops counting its copy as a host operation', async () => {
+    const s = create(),
+        state = s.addTable(0, 2),
+        pair = future.createFuture(s.creation, state, { tableIdx: 2, elemMeta: scalar });
+    pair.readEnd.markHostHeld();
+    pair.writeEnd.setPendingBufferMeta({ componentIdx: 0, buffer: {} as never, isWrite: true, onCopyDoneFn: () => {} });
+    expect(s.component.storeAsyncState.pendingHostOperations).toBe(1);
+    pair.readEnd.clearHostHeld();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(s.component.storeAsyncState.pendingHostOperations).toBe(0);
+    pair.writeEnd.resetPendingBufferMeta();
+    pair.readEnd.drop();
+});
+
 test.concurrent('future predicate accepts native promises and awaitables and rejects null without a store', () => {
     const Value = future.initializeFutureValueClass(Symbol.dispose);
     expect(future.isFutureLowerableObject(null)).toBe(false);

@@ -788,7 +788,7 @@ export function lowerFlatFuture(_context: LowerFutureContext, meta: LowerFutureM
             if (!hostFuture) {
                 throw new Error(`missing host future with global rep [${globalRep}]`);
             }
-            waitableIdx = (hostFuture as HostFuture).getFutureEndWaitableIdx();
+            waitableIdx = (hostFuture as HostFuture).returnToGuest();
         } else {
             const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
             if (!cstate) {
@@ -852,7 +852,7 @@ export function lowerFlatStream(_context: LowerStreamContext, meta: LowerStreamM
                 if (!hostStream) {
                     throw new Error(`missing host stream with global rep [${globalRep}]`);
                 }
-                waitableIdx = (hostStream as HostStream).getStreamEndWaitableIdx();
+                waitableIdx = (hostStream as HostStream).returnToGuest();
             } else {
                 const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
                 if (!cstate) {

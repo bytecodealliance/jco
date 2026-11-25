@@ -6,7 +6,14 @@ export function create() {
     const selected = createComponent();
     const { core, component, lookup } = selected;
     const FutureValue = future.initializeFutureValueClass(core.symbolDispose);
-    const FutureEnd = future.initializeFutureEndClass(core.asyncEventCode);
+    const tracking = {
+        RuntimeError: core.RuntimeError,
+        storeTrap: component.storeTrap,
+        storeAsyncState: component.storeAsyncState,
+        asyncState: component.asyncState,
+        symbolDispose: core.symbolDispose,
+    };
+    const FutureEnd = future.initializeFutureEndClass(core.asyncEventCode, tracking);
     const common = {
         RuntimeError: core.RuntimeError,
         FutureEnd,
@@ -31,13 +38,7 @@ export function create() {
         nestedSymbol,
         hasOwnProperty: core.hasOwnProperty,
         disposeSymbol: core.symbolDispose,
-        tracking: {
-            RuntimeError: core.RuntimeError,
-            storeTrap: component.storeTrap,
-            storeAsyncState: component.storeAsyncState,
-            asyncState: component.asyncState,
-            symbolDispose: core.symbolDispose,
-        },
+        tracking,
     };
     const HostFuture = future.initializeHostFutureClass({ RuntimeError: core.RuntimeError, lookup, ends });
     return {
