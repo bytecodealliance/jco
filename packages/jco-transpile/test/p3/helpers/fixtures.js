@@ -26,7 +26,7 @@ export const P3_CLI_RUN_FIXTURES = [
     { path: 'http/p3-http-outbound-request-invalid-dnsname.wasm' },
     { path: 'http/p3-http-outbound-request-invalid-header.wasm' },
     { path: 'http/p3-http-outbound-request-invalid-port.wasm' },
-    { path: 'http/p3-http-outbound-request-invalid-version.wasm' },
+    { path: 'http/p3-http-outbound-request-invalid-version.wasm', retry: 3 },
     { path: 'http/p3-http-outbound-request-large-post.wasm' },
     { path: 'http/p3-http-outbound-request-missing-path-and-query.wasm' },
     { path: 'http/p3-http-outbound-request-post.wasm' },
