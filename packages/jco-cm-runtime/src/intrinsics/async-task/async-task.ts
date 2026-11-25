@@ -20,7 +20,7 @@ import type {
 } from '../../runtime.js';
 import { promiseWithResolvers } from '../core/promises.js';
 import { withCurrentTaskMeta, withCurrentTaskMetaAsync, readTaskRegister } from '../task-context.js';
-import { getOrCreateAsyncState, postReturnTrap, recordTrap } from '../component.js';
+import { getOrCreateAsyncState, postReturnTrap } from '../component.js';
 import { debugLog } from '../core/debug.js';
 import { coinFlip as _coinFlip } from '../core.js';
 import { clearCurrentThread } from './task-operations.js';
@@ -992,6 +992,12 @@ function defineAsyncTask() {
             this.deliverPendingCancel({ cancellable: true });
             // TODO: do cleanup here to reset the machinery so we can run again?
             this.cancel({ error: taskErr });
+
+            // A task whose threads all exited unresolved has no thread left to
+            // settle its completion on exit, so settle it here.
+            if (this.#exited && this.#threads.length === 0) {
+                this.#settleCompletionPromise();
+            }
         }
         resolve(results: unknown[]) {
             DEBUG: debugLog('[AsyncTask#resolve()] args', {
@@ -1043,7 +1049,6 @@ function defineAsyncTask() {
             // Validate before publishing exit or running its handlers.
             // Otherwise a failed exit leaves #exited true, so the driver
             // cannot finish rejection cleanup and settle the host call.
-            this.#checkThreadExit();
             this.validateResourceBorrowScope();
 
             // Host (-1) tasks have no component instance (and so no async
@@ -1204,29 +1209,27 @@ function defineAsyncTask() {
         }
 
         removeThread(thread: AsyncThreadType) {
-            this.#checkThreadExit();
             this.settleCompletion();
-            if (this.#componentIdx !== -1) {
-                const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-                cstate.threads.remove(thread.id());
-            }
+            const cstate =
+                this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
+            cstate?.threads.remove(thread.id());
             if (this.#threads[this.#threads.length - 1] === thread) {
                 this.#threads.pop();
             } else {
                 this.#threads = this.#threads.filter((t) => t !== thread);
             }
             syncContextSlots(this.#context.registers);
+
+            // The last thread of a task may exit before the task resolves. That
+            // is not a trap (Canonical ABI `Task.exit_implicit_thread`,
+            // component-model#767): the task stays unresolved for good, and only
+            // a caller that waits on it is affected.
+            if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) {
+                cstate.noteUnresolvedExit(this);
+            }
+
             if (this.#exited && this.#threads.length === 0) {
                 clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
-            }
-        }
-
-        #checkThreadExit() {
-            if (this.#threads.length === 1 && !this.isResolvedState() && !this.isRejected()) {
-                const err = new this.#context.RuntimeError(
-                    `(component [${this.#componentIdx}]) task [${this.#id}] exited without resolution`,
-                );
-                throw this.#componentIdx === -1 ? err : recordTrap(this.#context.traps, this.#componentIdx, err);
             }
         }
 

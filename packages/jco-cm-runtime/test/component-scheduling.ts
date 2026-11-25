@@ -165,6 +165,41 @@ test.concurrent('deadlock traps the whole store and releases lock and admission 
     }
 });
 
+test.concurrent('a task whose threads all exited unresolved deadlocks its unresolved root', async () => {
+    const { component } = create();
+    const state = component.getOrCreateAsyncState(0);
+    Object.defineProperty(state, 'runTickLoop', { value: async () => {} });
+    try {
+        const root = task(1n);
+        const child = task(2n, 0, root.value);
+        state.noteUnresolvedExit(child.value);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const error = component.storeTrap.error as Error & { deadlockDetail: ComponentDeadlockDetail };
+        expect(error.message).toContain('deadlock detected');
+        expect(error.deadlockDetail.unresolvedRootTaskIDs).toEqual([1n]);
+        expect(root.errors).toEqual([error]);
+    } finally {
+        clearDeadlockCheck(component);
+    }
+});
+
+test.concurrent('a task that exited unresolved under a resolved root is not a deadlock', async () => {
+    const { component } = create();
+    const state = component.getOrCreateAsyncState(0);
+    Object.defineProperty(state, 'runTickLoop', { value: async () => {} });
+    try {
+        const root = task(1n);
+        const child = task(2n, 0, root.value);
+        root.value.reject(null);
+        state.noteUnresolvedExit(child.value);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(component.storeTrap.error).toBeNull();
+        expect([...state.unresolvedExitedTasks()]).toEqual([]);
+    } finally {
+        clearDeadlockCheck(component);
+    }
+});
+
 test.concurrent('pending host operations defer deadlock detection until settlement', async () => {
     const { component, core } = create();
     const state = component.getOrCreateAsyncState(0);

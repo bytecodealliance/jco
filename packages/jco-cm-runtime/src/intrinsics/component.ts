@@ -89,6 +89,15 @@ export function checkForDeadlock(context: ComponentDeadlockContext) {
                 unresolvedRoots.add(root);
             }
         }
+        // A task whose threads have all exited unresolved is not pending work:
+        // it can never run again. Whoever waits on it is blocked for good.
+        const exitedTasks = new Set<ComponentTask>();
+        for (const state of asyncState.values()) {
+            for (const task of state.unresolvedExitedTasks()) {
+                exitedTasks.add(task);
+                unresolvedRoots.add(task.getRootTask());
+            }
+        }
         if (unresolvedRoots.size === 0) {
             return;
         }
@@ -114,7 +123,9 @@ export function checkForDeadlock(context: ComponentDeadlockContext) {
             root.setErrored(err);
             root.reject(err);
         }
-        for (const task of suspendedTasks) {
+        // Exited tasks are rejected too: a synchronous caller waits on the
+        // callee task itself, not on its own root.
+        for (const task of [...suspendedTasks, ...exitedTasks]) {
             if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {
                 task.setErrored(err);
                 task.reject(err);
@@ -324,6 +335,7 @@ function defineComponentAsyncState() {
         #pendingTaskStarts = 0;
 
         #suspendedThreadsByRef = new Map<ComponentThread, SuspendedThread>();
+        #unresolvedExits = new Set<ComponentTask>();
         #errored: unknown = null;
         #trapped = false;
         #trapError: unknown = null;
@@ -795,6 +807,36 @@ function defineComponentAsyncState() {
         *suspendedTaskMetas() {
             for (const meta of this.#suspendedThreadsByRef.values()) {
                 yield { ...meta, task: meta.thread.task() };
+            }
+        }
+
+        /**
+         * Record a task whose last thread exited before it resolved. Nothing
+         * can resolve it any more, so let the deadlock detector account for
+         * whoever waits on it.
+         *
+         * @param task - the unresolved task
+         */
+        noteUnresolvedExit(task: ComponentTask) {
+            this.#unresolvedExits.add(task);
+            checkForDeadlock(this.#context.deadlock);
+        }
+
+        /**
+         * Tasks whose threads all exited unresolved while their root task is
+         * still unresolved. Tasks under a resolved root are forgotten: no
+         * caller can be blocked on them any more.
+         *
+         * @returns the tasks still relevant to deadlock detection
+         */
+        *unresolvedExitedTasks() {
+            for (const task of this.#unresolvedExits) {
+                const root = task.getRootTask();
+                if (root.isResolvedState() || root.isRejected()) {
+                    this.#unresolvedExits.delete(task);
+                } else {
+                    yield task;
+                }
             }
         }
 
