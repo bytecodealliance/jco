@@ -343,6 +343,11 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> RuntimeImport {
             ComponentContextIntrinsic::CheckForDeadlock,
             RuntimeImportKind::Call,
         ),
+        CheckSyncCallBlocked => (
+            "checkSyncCallBlocked",
+            ComponentContextIntrinsic::CheckForDeadlock,
+            RuntimeImportKind::Call,
+        ),
         TrackHostOperation => (
             "trackHostOperation",
             ComponentContextIntrinsic::TrackHostOperation,

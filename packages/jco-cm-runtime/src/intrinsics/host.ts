@@ -16,6 +16,7 @@ import { readTaskRegister, setCurrentTaskMeta, withCurrentTaskMeta, withCurrentT
 import { lookupMemories } from './core.js';
 import { getOrCreateAsyncState } from './component.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './async-task/task-operations.js';
+import { getCurrentThread } from './async-task/thread-operations.js';
 import { driverLoop } from './async-task/driver.js';
 export function prepareCall(
     _context: HostPrepareContext,
@@ -782,6 +783,14 @@ export async function syncStartCall(
     // time and restore it before the caller resumes (the same
     // discipline as the suspending-import wrapper).
     const savedCallerTaskMeta = readTaskRegister(_context.registers, callerComponentIdx);
+    // Until the callee settles, the caller's thread is blocked on it
+    // (Canonical ABI `canon_lower`): a sync call in progress must not count it
+    // as running.
+    const callerThread = savedCallerTaskMeta
+        ? getCurrentThread(_context, callerComponentIdx, savedCallerTaskMeta.threadID, savedCallerTaskMeta.taskID)
+              ?.thread
+        : undefined;
+    callerThread?.setAwaitedCallee(preparedTask);
     try {
         const callbackFn = getCallbackFn();
         preparedTask.setCallbackFn(callbackFn, 'callback_' + callbackIdx);
@@ -979,6 +988,7 @@ export async function syncStartCall(
         });
         return flatResult;
     } finally {
+        callerThread?.setAwaitedCallee(null);
         if (savedCallerTaskMeta) {
             setCurrentTaskMeta(_context.registers, {
                 taskID: savedCallerTaskMeta.taskID,

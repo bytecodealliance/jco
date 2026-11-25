@@ -28,5 +28,5 @@ export function trackGuestWaitOnHost(context: ComponentHostOperationContext, met
     const { promise, resolve } = promiseWithResolvers<void>();
     meta.endHostWait = resolve;
     // Stopping the store settles the operation: nothing waits on it.
-    Promise.resolve(trackHostOperation(context, () => promise)).catch(emptyFunc);
+    Promise.resolve(trackHostOperation(context, () => promise, meta.componentIdx)).catch(emptyFunc);
 }

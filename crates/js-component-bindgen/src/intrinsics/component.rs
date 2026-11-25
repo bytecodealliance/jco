@@ -12,6 +12,10 @@ use crate::source::Source;
 use crate::uwriteln;
 use wasmtime_environ::Trap;
 
+/// The function that traps a store which cannot make progress, rendered with
+/// [`ComponentIntrinsic::CheckSyncCallBlocked`].
+const TRAP_BLOCKED_STORE_FN: &str = "_trapBlockedStore";
+
 /// This enum contains intrinsics that manage per-component state
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ComponentIntrinsic {
@@ -51,6 +55,13 @@ pub enum ComponentIntrinsic {
 
     /// Schedule a store-wide deadlock check after queued guest work has drained.
     CheckForDeadlock,
+
+    /// Trap a call of a non-async-typed function that blocked with no thread to switch to.
+    ///
+    /// ```ts
+    /// function _checkSyncCallBlocked(): boolean;
+    /// ```
+    CheckSyncCallBlocked,
 
     /// Track a possibly asynchronous host operation as an external wake source.
     TrackHostOperation,
@@ -137,6 +148,7 @@ impl ComponentIntrinsic {
             "_whenIdle",
             "_checkIdle",
             "_isIdle",
+            TRAP_BLOCKED_STORE_FN,
             "CALL_TRACKING",
             // Reserved so that an export named e.g. `backpressure-inc` is not
             // bound as a local that shadows the intrinsic its trampolines call.
@@ -158,6 +170,7 @@ impl ComponentIntrinsic {
             Self::CallTracking => "CALL_TRACKING",
             Self::GlobalStoreAsyncState => "STORE_ASYNC_STATE",
             Self::CheckForDeadlock => "_checkForDeadlock",
+            Self::CheckSyncCallBlocked => "_checkSyncCallBlocked",
             Self::TrackHostOperation => "_trackHostOperation",
             Self::NormalizeCoreTrap => "_normalizeCoreTrap",
             Self::PostReturnTrap => "_postReturnTrap",
@@ -355,12 +368,50 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set(), syncCalls: [], heldResumptions: [] }};"#
+                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, hostOperationsByComponent: new Map(), idleWaiters: new Set(), syncCalls: [], heldResumptions: [] }};"#
                 );
             }
 
             Self::CheckForDeadlock => {
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
+                let check_sync_call_blocked_fn =
+                    render_args.require_intrinsic(Self::CheckSyncCallBlocked);
+                let trap_blocked_store_fn = TRAP_BLOCKED_STORE_FN;
+                let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
+                let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
+                output.push_str(&format!(
+                    r#"
+                    function {check_for_deadlock_fn}() {{
+                        if ({store_async_state}.deadlockCheck !== null || {store_trap}.error !== null) {{ return; }}
+                        {store_async_state}.deadlockCheck = setTimeout(() => {{
+                            {store_async_state}.deadlockCheck = null;
+                            if ({store_trap}.error !== null) {{ return; }}
+                            // A call of a non-async-typed function decides for itself whether it
+                            // can go on: host work of the instances it holds back cannot help it.
+                            const syncCall = {store_async_state}.syncCalls.at(-1);
+                            if (syncCall !== undefined && !syncCall.task.isResolvedState() && !syncCall.task.isRejected()) {{
+                                {check_sync_call_blocked_fn}();
+                                return;
+                            }}
+                            if ({store_async_state}.pendingHostOperations > 0) {{ return; }}
+                            for (const state of {async_state_map}.values()) {{
+                                if (state.hasPendingSchedulerWork()) {{
+                                    state.runTickLoop();
+                                    return;
+                                }}
+                            }}
+                            {trap_blocked_store_fn}(undefined);
+                        }}, 0);
+                    }}
+                    "#,
+                ));
+            }
+
+            Self::CheckSyncCallBlocked => {
+                let check_sync_call_blocked_fn =
+                    render_args.require_intrinsic(Self::CheckSyncCallBlocked);
+                let trap_blocked_store_fn = TRAP_BLOCKED_STORE_FN;
                 let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
                 let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
@@ -368,93 +419,115 @@ impl ComponentIntrinsic {
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 output.push_str(&format!(
                     r#"
-                    function {check_for_deadlock_fn}() {{
-                        if ({store_async_state}.deadlockCheck !== null || {store_trap}.error !== null) {{ return; }}
-                        {store_async_state}.deadlockCheck = setTimeout(() => {{
-                            {store_async_state}.deadlockCheck = null;
-                            if ({store_trap}.error !== null || {store_async_state}.pendingHostOperations > 0) {{ return; }}
+                    // Trap a call of a non-async-typed function that can no longer go on.
+                    //
+                    // In the Canonical ABI (`canon_lift`, `not ft.async_`), whenever a thread of
+                    // such a call blocks or exits without switching to another thread, the call
+                    // resumes a ready thread of its instance, and traps if there is none. The
+                    // decision is taken where the thread blocks, so this runs as each thread
+                    // within the call blocks or exits, and when the deadlock check runs.
+                    //
+                    // The call goes on while a thread of its instance is ready; while a stack
+                    // within the call has not blocked (it is running, about to resume, or in a
+                    // host call, where the host is still running on it); or while host work its
+                    // instance started is pending, which may make one of its threads ready.
+                    // Threads of other instances are never candidates.
+                    function {check_sync_call_blocked_fn}() {{
+                        if ({store_trap}.error !== null || {store_trap}.stopped) {{ return false; }}
+                        const call = {store_async_state}.syncCalls.at(-1);
+                        if (call === undefined || call.task.isResolvedState() || call.task.isRejected()) {{ return false; }}
+                        const hostOperations = {store_async_state}.hostOperationsByComponent;
+                        // (host work of an unknown instance may be the call's)
+                        if ((hostOperations.get(call.componentIdx) ?? 0) > 0 || (hostOperations.get(-1) ?? 0) > 0) {{
+                            return false;
+                        }}
+                        for (const state of {async_state_map}.values()) {{
+                            if (state.componentIdx() === call.componentIdx && state.hasSyncCallCandidate()) {{ return false; }}
+                            if (state.hasRunningStackWithin(call)) {{ return false; }}
+                        }}
+                        {trap_blocked_store_fn}(call);
+                        return true;
+                    }}
 
-                            const suspendedTasks = new Set();
-                            for (const state of {async_state_map}.values()) {{
-                                if (state.hasPendingSchedulerWork()) {{
-                                    state.runTickLoop();
-                                    return;
-                                }}
-                                for (const meta of state.suspendedTaskMetas()) {{
-                                    suspendedTasks.add(meta.task);
-                                }}
+                    // Trap the store because it cannot make progress, failing every unresolved
+                    // task that waits. `syncCall` is the call of a non-async-typed function that
+                    // blocked, when that is why the store cannot make progress.
+                    function {trap_blocked_store_fn}(syncCall) {{
+                        const suspendedTasks = new Set();
+                        for (const state of {async_state_map}.values()) {{
+                            for (const meta of state.suspendedTaskMetas()) {{
+                                suspendedTasks.add(meta.task);
                             }}
+                        }}
 
-                            const unresolvedRoots = new Set();
-                            for (const task of suspendedTasks) {{
-                                const root = task.getRootTask();
-                                if (!root.isResolvedState()) {{ unresolvedRoots.add(root); }}
+                        const unresolvedRoots = new Set();
+                        for (const task of suspendedTasks) {{
+                            const root = task.getRootTask();
+                            if (!root.isResolvedState()) {{ unresolvedRoots.add(root); }}
+                        }}
+                        // A task whose threads have all exited unresolved is not pending work:
+                        // it can never run again. Whoever waits on it is blocked for good.
+                        const exitedTasks = new Set();
+                        for (const state of {async_state_map}.values()) {{
+                            for (const task of state.unresolvedExitedTasks()) {{
+                                exitedTasks.add(task);
+                                unresolvedRoots.add(task.getRootTask());
                             }}
-                            // A task whose threads have all exited unresolved is not pending work:
-                            // it can never run again. Whoever waits on it is blocked for good.
-                            const exitedTasks = new Set();
-                            for (const state of {async_state_map}.values()) {{
-                                for (const task of state.unresolvedExitedTasks()) {{
-                                    exitedTasks.add(task);
-                                    unresolvedRoots.add(task.getRootTask());
-                                }}
-                            }}
+                        }}
 
-                            // With a call of a non-async-typed function in progress, nothing but
-                            // its instance's threads may run until it returns, so running out of
-                            // ready threads is that call blocking with none to switch to (Canonical
-                            // ABI `canon_lift`), rather than a deadlock of the event loop.
-                            const syncCall = {store_async_state}.syncCalls.at(-1);
-                            if (syncCall !== undefined && !syncCall.task.isResolvedState()) {{
-                                unresolvedRoots.add(syncCall.task.getRootTask());
-                            }}
-                            if (unresolvedRoots.size === 0) {{ return; }}
+                        // With a call of a non-async-typed function in progress, nothing but
+                        // its instance's threads may run until it returns, so running out of
+                        // ready threads is that call blocking with none to switch to (Canonical
+                        // ABI `canon_lift`), rather than a deadlock of the event loop.
+                        if (syncCall !== undefined) {{
+                            unresolvedRoots.add(syncCall.task.getRootTask());
+                        }}
+                        if (unresolvedRoots.size === 0) {{ return; }}
 
-                            const err = new {runtime_error_class}(
-                                syncCall === undefined
-                                    ? 'wasm trap: deadlock detected: event loop cannot make further progress'
-                                    : 'cannot block a synchronous task before returning'
-                            );
-                            // Which tasks were waiting, and on whose behalf. The message stays
-                            // exactly what the Canonical ABI calls for, so this rides alongside
-                            // it: a deadlock reported from a real program is otherwise a bare
-                            // sentence, and the state that produced it is gone by the time
-                            // anyone reads the failure.
-                            const describeTask = (task) => ({{
-                                taskID: task.id(),
-                                componentIdx: task.componentIdx(),
-                                state: task.taskState(),
-                                rootTaskID: task.getRootTask().id(),
-                            }});
-                            err.deadlockDetail = {{
-                                pendingHostOperations: {store_async_state}.pendingHostOperations,
-                                suspendedTasks: [...suspendedTasks].map(describeTask),
-                                // (a task whose threads all exited unresolved is often what the
-                                // others wait on)
-                                exitedTasks: [...exitedTasks].map(describeTask),
-                                unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id()),
-                            }};
-                            {store_trap}.error = err;
-                            for (const root of unresolvedRoots) {{
-                                root.setErrored(err);
-                                root.reject(err);
+                        const err = new {runtime_error_class}(
+                            syncCall === undefined
+                                ? 'wasm trap: deadlock detected: event loop cannot make further progress'
+                                : 'cannot block a synchronous task before returning'
+                        );
+                        // Which tasks were waiting, and on whose behalf. The message stays
+                        // exactly what the Canonical ABI calls for, so this rides alongside
+                        // it: a deadlock reported from a real program is otherwise a bare
+                        // sentence, and the state that produced it is gone by the time
+                        // anyone reads the failure.
+                        const describeTask = (task) => ({{
+                            taskID: task.id(),
+                            componentIdx: task.componentIdx(),
+                            state: task.taskState(),
+                            rootTaskID: task.getRootTask().id(),
+                        }});
+                        err.deadlockDetail = {{
+                            pendingHostOperations: {store_async_state}.pendingHostOperations,
+                            suspendedTasks: [...suspendedTasks].map(describeTask),
+                            // (a task whose threads all exited unresolved is often what the
+                            // others wait on)
+                            exitedTasks: [...exitedTasks].map(describeTask),
+                            unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id()),
+                        }};
+                        {store_trap}.error = err;
+                        for (const root of unresolvedRoots) {{
+                            root.setErrored(err);
+                            root.reject(err);
+                        }}
+                        // Exited tasks are rejected too: a synchronous caller waits on the
+                        // callee task itself, not on its own root.
+                        for (const task of [...suspendedTasks, ...exitedTasks]) {{
+                            if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {{
+                                task.setErrored(err);
+                                task.reject(err);
                             }}
-                            // Exited tasks are rejected too: a synchronous caller waits on the
-                            // callee task itself, not on its own root.
-                            for (const task of [...suspendedTasks, ...exitedTasks]) {{
-                                if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {{
-                                    task.setErrored(err);
-                                    task.reject(err);
-                                }}
-                            }}
-                            // A deadlock is a trap of the whole store: no instance may be entered again.
-                            for (const state of {async_state_map}.values()) {{ state.markTrapped(err); }}
-                            for (const state of {async_state_map}.values()) {{
-                                state.abandonLockWaiters();
-                                state.abandonEntrySlotWaiters();
-                            }}
-                            for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
-                        }}, 0);
+                        }}
+                        // A deadlock is a trap of the whole store: no instance may be entered again.
+                        for (const state of {async_state_map}.values()) {{ state.markTrapped(err); }}
+                        for (const state of {async_state_map}.values()) {{
+                            state.abandonLockWaiters();
+                            state.abandonEntrySlotWaiters();
+                        }}
+                        for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                     }}
                     "#,
                 ));
@@ -470,7 +543,9 @@ impl ComponentIntrinsic {
                 let store = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 output.push_str(&format!(
                     r#"
-                    function {track_host_operation_fn}(operation) {{
+                    // `componentIdx` is the instance the operation is for, if known: the one
+                    // whose threads its completion may make ready.
+                    function {track_host_operation_fn}(operation, componentIdx) {{
                         if ({store}.stopped) {{ throw {store}.error; }}
                         const result = operation();
                         if (result === null ||
@@ -481,6 +556,9 @@ impl ComponentIntrinsic {
                         }}
 
                         {store_async_state}.pendingHostOperations++;
+                        const owner = componentIdx ?? -1;
+                        const byComponent = {store_async_state}.hostOperationsByComponent;
+                        byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);
                         let rejectStopped;
                         const stopped = new Promise((_, reject) => {{ rejectStopped = reject; }});
                         {store}.stopWaiters.add(rejectStopped);
@@ -488,6 +566,8 @@ impl ComponentIntrinsic {
                         const tracked = Promise.race([result, stopped]).finally(() => {{
                             {store}.stopWaiters.delete(rejectStopped);
                             {store_async_state}.pendingHostOperations--;
+                            const remaining = (byComponent.get(owner) ?? 0) - 1;
+                            if (remaining > 0) {{ byComponent.set(owner, remaining); }} else {{ byComponent.delete(owner); }}
                             if ({store_async_state}.pendingHostOperations < 0) {{
                                 throw new Error('negative pending host operation count');
                             }}
@@ -719,6 +799,8 @@ impl ComponentIntrinsic {
                 let instance_flags = render_args.require_intrinsic(Self::GlobalInstanceFlagsMap);
                 let store_trap = render_args.require_intrinsic(Self::GlobalStoreTrap);
                 let check_for_deadlock_fn = render_args.require_intrinsic(Self::CheckForDeadlock);
+                let check_sync_call_blocked_fn =
+                    render_args.require_intrinsic(Self::CheckSyncCallBlocked);
                 let cannot_enter_component = Trap::CannotEnterComponent.to_string();
                 let report_trap_fn = render_args.require_intrinsic(Self::ReportTrap);
                 let check_idle_fn = render_args.require_intrinsic(Self::CheckIdle);
@@ -1263,7 +1345,7 @@ impl ComponentIntrinsic {
                         }}
 
                         suspendThread(args) {{
-                            const {{ thread, readyFn, cancellable, onResume, suspended = false }} = args;
+                            const {{ thread, readyFn, cancellable, onResume, suspended = false, switching = false }} = args;
                             {debug_log_fn}('[{component_async_state_class}#suspendThread()]', {{
                                 threadID: thread.id(),
                                 taskID: thread.taskID(),
@@ -1297,6 +1379,10 @@ impl ComponentIntrinsic {
 
                             this.runTickLoop();
                             {check_for_deadlock_fn}();
+                            // A thread blocking returns control to a sync call in progress,
+                            // which goes on only if it can (Canonical ABI `canon_lift`). A
+                            // thread switching straight to another one does not.
+                            if (!switching) {{ this.checkSyncCallBlocked(); }}
 
                             return promise;
                         }}
@@ -1357,6 +1443,53 @@ impl ComponentIntrinsic {
                                 if (this.suspendedThreadReady(meta.thread)) {{ return true; }}
                             }}
                             return false;
+                        }}
+
+                        // A thread of this instance that a sync call into it may resume: a
+                        // ready thread of an entered task (Canonical ABI `canon_lift` picks
+                        // among the ready threads of `inst.threads`, which a task joins as it
+                        // enters). The thread of a task still waiting to enter is no candidate.
+                        hasSyncCallCandidate() {{
+                            for (const thread of this.#suspendedThreadsByRef.keys()) {{
+                                if (!thread.hasIndex()) {{ continue; }}
+                                if (this.suspendedThreadReady(thread)) {{ return true; }}
+                            }}
+                            return false;
+                        }}
+
+                        // Whether a stack of this instance within the sync call has not
+                        // blocked: it runs, is about to resume, or is in a host call. Such a
+                        // stack is still running in the Canonical ABI, so the call has not yet
+                        // reached the point where it decides whether to trap.
+                        hasRunningStackWithin(call) {{
+                            // A task start or lock handoff in flight runs guest code next.
+                            if (this.#pendingTaskStarts > 0 || this.#lockHandoffScheduled) {{ return true; }}
+                            const data = this.threads.data();
+                            for (let i = 2; i < data.length; i += 2) {{
+                                const thread = data[i];
+                                if (thread === null || typeof thread !== 'object') {{ continue; }}
+                                if (this.#suspendedThreadsByRef.has(thread)) {{ continue; }}
+                                if (!{component_async_state_class}.#isWithinSyncCall(thread.task(), call)) {{ continue; }}
+                                const callee = thread.awaitedCallee();
+                                if (callee !== null && !this.#calleeLetsCallerRun(callee)) {{ continue; }}
+                                return true;
+                            }}
+                            return false;
+                        }}
+
+                        // Whether a thread that waits on a callee through a synchronous
+                        // lowering is about to resume or runs the callee's code. Once the
+                        // callee has entered, its own threads tell whether it still runs. A
+                        // callee that waits to enter through the scheduler is blocked.
+                        #calleeLetsCallerRun(callee) {{
+                            if (callee.isResolvedState() || callee.isRejected()) {{ return true; }}
+                            if (callee.hasEntered()) {{ return false; }}
+                            const state = {async_state_map}.get(callee.componentIdx());
+                            return state === undefined || !state.isTaskSuspended(callee.id());
+                        }}
+
+                        checkSyncCallBlocked() {{
+                            return {check_sync_call_blocked_fn}();
                         }}
 
                         // Calls of non-async-typed functions (Canonical ABI `canon_lift` with

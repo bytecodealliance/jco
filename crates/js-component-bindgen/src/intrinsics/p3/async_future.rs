@@ -860,7 +860,7 @@ impl AsyncFutureIntrinsic {
                             }}
                             if (meta.endHostWait || {store}.stopped) {{ return; }}
                             const hostWait = new Promise((resolve) => {{ meta.endHostWait = resolve; }});
-                            Promise.resolve({track_host_operation}() => hostWait)).catch(() => {{}});
+                            Promise.resolve({track_host_operation}() => hostWait, meta.componentIdx)).catch(() => {{}});
                         }}
 
                         resetPendingBufferMeta() {{

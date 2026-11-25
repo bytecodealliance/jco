@@ -683,6 +683,8 @@ export interface ComponentTask {
     readonly isResolvedState: () => boolean;
     readonly isRejected: () => boolean;
     readonly isCancelled: () => boolean;
+    /** Whether the task has entered its instance (Canonical ABI `Task.enter_implicit_thread`). */
+    readonly hasEntered: () => boolean;
     readonly needsExclusiveLock: () => boolean;
     readonly endInitialInvocation: () => void;
     /** @deprecated Use `endInitialInvocation`; kept for bindings from jco-transpile 0.24.0 and earlier. */
@@ -709,6 +711,10 @@ export interface ComponentThread {
     readonly notifyProgress: () => void;
     /** Whether this is its task's implicit thread, rather than one made by `thread.new-indirect`. */
     readonly isImplicit: () => boolean;
+    /** The callee task this thread waits on through a synchronous lowering, if any. */
+    readonly awaitedCallee: () => ComponentTask | null;
+    /** Whether the thread has been given its index in the instance's thread table. */
+    readonly hasIndex: () => boolean;
 }
 export interface SuspendThreadOptions {
     thread: ComponentThread;
@@ -716,6 +722,8 @@ export interface SuspendThreadOptions {
     cancellable: boolean;
     onResume?: (keepGoing: boolean) => void;
     suspended?: boolean;
+    /** Whether control switches straight to another thread rather than returning to a scheduler. */
+    switching?: boolean;
 }
 export interface SuspendedThread {
     thread: ComponentThread;
@@ -820,6 +828,12 @@ export interface ComponentAsyncState {
     readonly addPendingTaskStart: () => void;
     readonly removePendingTaskStart: () => void;
     readonly hasPendingSchedulerWork: () => boolean;
+    /** Whether a thread of this instance may be resumed by a sync call into it (Canonical ABI `canon_lift`). */
+    readonly hasSyncCallCandidate: () => boolean;
+    /** Whether a stack of this instance within the sync call has not blocked. */
+    readonly hasRunningStackWithin: (call: ComponentSyncCall) => boolean;
+    /** Trap the sync call in progress if it cannot go on (see `checkSyncCallBlocked`). */
+    readonly checkSyncCallBlocked: () => boolean;
     readonly beginSyncCall: (task: ComponentTask) => void;
     readonly endSyncCall: (task: ComponentTask) => void;
     readonly resumeWhenNotHeld: (task: ComponentTask | null | undefined, resume: () => void) => void;
@@ -844,6 +858,11 @@ export interface ComponentStoreAsyncState {
     // Opaque host timer handle, kept portable between Node and browsers.
     deadlockCheck: unknown | null;
     pendingHostOperations: number;
+    /**
+     * The pending host operations by the instance they were started for
+     * (`-1` when that is not known).
+     */
+    readonly hostOperationsByComponent: Map<number, number>;
     /**
      * Calls of non-async-typed functions in progress, innermost last. While one
      * is in progress, only threads of its callee instance are scheduled.
@@ -1011,9 +1030,11 @@ export interface ComponentModule {
         context: ComponentAsyncStateContext,
     ) => ComponentAsyncStateConstructor;
     readonly checkForDeadlock: (context: ComponentDeadlockContext) => void;
+    readonly checkSyncCallBlocked: (context: ComponentDeadlockContext) => boolean;
     readonly trackHostOperation: <T>(
         context: ComponentHostOperationContext,
         operation: () => T,
+        componentIdx?: number | null,
     ) => T | Promise<Awaited<T>>;
     readonly normalizeCoreTrap: <T>(context: ComponentNormalizeTrapContext, error: T) => T;
     readonly checkMayLeave: (context: ComponentMayLeaveContext, componentIdx: number) => void;
@@ -1267,6 +1288,8 @@ export interface TaskSuspendOptions {
     suspended?: boolean;
     readonly readyFn: () => boolean;
     cancellable?: boolean;
+    /** Whether control switches straight to another thread rather than returning to a scheduler. */
+    switching?: boolean;
 }
 
 export type TaskCallback = ((...args: number[]) => number | Promise<number>) & {
@@ -1384,8 +1407,6 @@ export interface AsyncThreadOptions {
 export interface AsyncThread extends ComponentThread {
     storage: number[];
     readonly setId: (id: number) => void;
-    /** Whether the thread has been given its index in the instance's thread table. */
-    readonly hasIndex: () => boolean;
     readonly task: () => AsyncTask;
     readonly taskID: () => bigint;
     readonly state: () => 'not-started' | 'running' | 'completed';
@@ -1396,6 +1417,8 @@ export interface AsyncThread extends ComponentThread {
     readonly getParentSubtask: () => AsyncSubtask | null;
     readonly suspend: (options: TaskSuspendOptions & { releaseLock?: boolean }) => Promise<boolean>;
     readonly start: () => void;
+    /** Record the callee task this thread waits on through a synchronous lowering (`null` once it no longer does). */
+    readonly setAwaitedCallee: (task: ComponentTask | null) => void;
 }
 export interface AsyncThreadConstructor {
     new (options: AsyncThreadOptions): AsyncThread;

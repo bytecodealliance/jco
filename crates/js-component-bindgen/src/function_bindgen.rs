@@ -2665,7 +2665,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   const hostRet = {callee_fn_js}({callee_args_js});
                                   subtask?.setHostPendingResult(hostRet);
                                   return hostRet;
-                              }}),
+                              }}, {component_idx_expr}),
                           }})
                         "#,
                     )
@@ -2675,7 +2675,7 @@ impl Bindgen for FunctionBindgen<'_> {
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
                               threadID,
-                              fn: () => {track_host_operation}() => {callee_fn_js}({callee_args_js})),
+                              fn: () => {track_host_operation}() => {callee_fn_js}({callee_args_js}), {component_idx_expr}),
                           }})
                         "#,
                     )
