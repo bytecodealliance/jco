@@ -67,6 +67,43 @@ test.concurrent('the entry slot admits one task at a time and waiting entries ar
     expect(state.hasEnteringTask()).toBe(false);
 });
 
+test.concurrent('tasks waiting for the entry slot get it in arrival order, ahead of later entries', async () => {
+    const state = create().component.getOrCreateAsyncState(0);
+    const turns: bigint[] = [];
+    expect(state.entrySlotBusy(1n)).toBe(false);
+    state.beginEntry(1n);
+    expect(state.entrySlotBusy(2n)).toBe(true);
+    const second = state.waitForEntrySlotTurn(2n).then(() => turns.push(2n));
+    const third = state.waitForEntrySlotTurn(3n).then(() => turns.push(3n));
+    state.endEntry(1n);
+    // The slot is handed to the first waiter at once: a new entry and the
+    // waiter behind it find it busy, the waiter holding the turn does not.
+    expect(state.entrySlotBusy(4n)).toBe(true);
+    expect(state.entrySlotBusy(3n)).toBe(true);
+    expect(state.entrySlotBusy(2n)).toBe(false);
+    await second;
+    state.beginEntry(2n);
+    state.endEntry(2n);
+    await third;
+    expect(turns).toEqual([2n, 3n]);
+    // A task that does not enter on its turn passes it on.
+    expect(state.passEntrySlotTurn(4n)).toBe(false);
+    expect(state.passEntrySlotTurn(3n)).toBe(true);
+    expect(state.entrySlotBusy(4n)).toBe(false);
+});
+
+test.concurrent('abandoned entry slot waiters resume without the slot', async () => {
+    const state = create().component.getOrCreateAsyncState(0);
+    state.beginEntry(1n);
+    const waiter = state.waitForEntrySlotTurn(2n);
+    state.abandonEntrySlotWaiters();
+    await waiter;
+    expect(state.hasEnteringTask()).toBe(true);
+    expect(state.entrySlotBusy(2n)).toBe(true);
+    state.endEntry(1n);
+    expect(state.entrySlotBusy(2n)).toBe(false);
+});
+
 test.concurrent('scheduler resumes one ready task per tick and respects lock ownership', async () => {
     const { component } = create();
     const state = component.getOrCreateAsyncState(0);
