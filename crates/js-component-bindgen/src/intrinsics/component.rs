@@ -1351,10 +1351,10 @@ impl ComponentIntrinsic {
                                     return;
                                 }}
                                 if (result === {component_async_state_class}.TickResult.IDLE) {{
-                                    // While a synchronous call into another instance is in
-                                    // progress, this loop waits for it to end (`endSyncCall`
-                                    // restarts it) instead of polling.
-                                    if (this.#heldBySyncCall()) {{ this.#tickLoop = null; return; }}
+                                    // This also runs while a synchronous call into another
+                                    // instance holds this one back: the loop keeps polling, so
+                                    // that it notices readiness and takes part in the store-wide
+                                    // idle check both during the call and after it ends.
                                     {check_for_deadlock_fn}();
                                 }}
                                 // Let resumed microtasks drain before the next slice;
