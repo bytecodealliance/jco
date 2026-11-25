@@ -823,40 +823,6 @@ export async function syncStartCall(
             }
         });
 
-        const started = await preparedTask.enter();
-        if (!started) {
-            if (preparedTask.isCancelled()) {
-                return undefined;
-            }
-            throw new Error('callee task failed to start during sync start call');
-        }
-
-        // Canonical ABI `canon_lift`: the arguments are lowered once the task
-        // has entered and its implicit thread has an index. Lowering them may
-        // run the callee's code, under the callee's register.
-        const threadID = preparedTask.defaultThread().id();
-        const initialResult = withCurrentTaskMeta(_context.registers, {
-            taskID: preparedTask.id(),
-            threadID,
-            componentIdx: preparedTask.componentIdx(),
-            fn: () => subtask.onStart({ startFnParams: params }),
-        });
-        const startRes =
-            initialResult === undefined ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
-        if (startRes.length !== paramCount) {
-            throw new Error(
-                `unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`,
-            );
-        }
-
-        let jspiCallee;
-        if (callee._cachedPromising) {
-            jspiCallee = callee._cachedPromising;
-        } else {
-            callee._cachedPromising = _context.platform!.promising!(callee);
-            jspiCallee = callee._cachedPromising;
-        }
-
         const failCalleeLifecycle = (err: unknown) => {
             DEBUG: debugLog('[_syncStartCall()] callee lifecycle failed', { err });
             preparedTask.endFirstSlice();
@@ -885,6 +851,48 @@ export async function syncStartCall(
             }
             throw err;
         };
+
+        const started = await preparedTask.enter();
+        if (!started) {
+            if (preparedTask.isCancelled()) {
+                return undefined;
+            }
+            throw new Error('callee task failed to start during sync start call');
+        }
+
+        // Canonical ABI `canon_lift`: the arguments are lowered once the task
+        // has entered and its implicit thread has an index. Lowering them may
+        // run the callee's code, under the callee's register.
+        const threadID = preparedTask.defaultThread().id();
+        // A trap while lowering them (in the callee's `realloc`, say) fails a
+        // task that has entered: it releases what entry took, like a trap in
+        // the callee's first slice.
+        let initialResult: unknown;
+        try {
+            initialResult = withCurrentTaskMeta(_context.registers, {
+                taskID: preparedTask.id(),
+                threadID,
+                componentIdx: preparedTask.componentIdx(),
+                fn: () => subtask.onStart({ startFnParams: params }),
+            });
+        } catch (err) {
+            failCalleeLifecycle(err);
+        }
+        const startRes =
+            initialResult === undefined ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
+        if (startRes.length !== paramCount) {
+            throw new Error(
+                `unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`,
+            );
+        }
+
+        let jspiCallee;
+        if (callee._cachedPromising) {
+            jspiCallee = callee._cachedPromising;
+        } else {
+            callee._cachedPromising = _context.platform!.promising!(callee);
+            jspiCallee = callee._cachedPromising;
+        }
 
         // Invocation begins immediately and runs through its first JSPI
         // suspension while the callee owns component entry. Keep driving that
