@@ -3,12 +3,13 @@ import { getCurrentTask, createNewCurrentImplicitThread } from './async-task/tas
 import type { ResourceModule, ResourceHandleTables, ResourceTable } from '../runtime.js';
 
 // Bit 30 of a scope marks a freed entry. An owned entry stores its u32 rep plus 2 ** 32.
+// Handle `h` lives at `[h * 2, h * 2 + 1]`: `h << 1` would wrap at 2 ** 31 and alias a live entry.
 const RESOURCE_TABLE_FLAG = 1 << 30;
 const RESOURCE_TABLE_OWN = 2 ** 32;
 
 export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => {
-    const scope = table[handle << 1];
-    const value = table[(handle << 1) + 1];
+    const scope = table[handle * 2];
+    const value = table[handle * 2 + 1];
     const own = value >= RESOURCE_TABLE_OWN;
     const rep = own ? value - RESOURCE_TABLE_OWN : value;
     // A freed or never allocated index has no entry in this table: its index may
@@ -52,26 +53,26 @@ export const tableCreateBorrow: ResourceModule['tableCreateBorrow'] = (spaces, t
         throw new Error('missing scopeId');
     }
     const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
-    table[handle << 1] = scopeId;
-    table[(handle << 1) + 1] = rep >>> 0;
+    table[handle * 2] = scopeId;
+    table[handle * 2 + 1] = rep >>> 0;
     return handle;
 };
 export const tableCreateOwn: ResourceModule['tableCreateOwn'] = (spaces, table, rep) => {
     rep >>>= 0;
     table._createdReps.add(rep);
     const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
-    table[handle << 1] = 0;
-    table[(handle << 1) + 1] = rep + RESOURCE_TABLE_OWN;
+    table[handle * 2] = 0;
+    table[handle * 2 + 1] = rep + RESOURCE_TABLE_OWN;
     return handle;
 };
 export const tableEnsureBorrowDrop: ResourceModule['tableEnsureBorrowDrop'] = (table, handle, scope) => {
-    if (table[handle << 1] === scope) {
+    if (table[handle * 2] === scope) {
         throw new TypeError('Resource borrow was not dropped at end of call');
     }
 };
 export const tableRemove: ResourceModule['tableRemove'] = (context, table, handle) => {
-    const scope = table[handle << 1];
-    const value = table[(handle << 1) + 1];
+    const scope = table[handle * 2];
+    const value = table[handle * 2 + 1];
     const own = value >= RESOURCE_TABLE_OWN;
     const rep = own ? value - RESOURCE_TABLE_OWN : value;
     if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
@@ -81,8 +82,8 @@ export const tableRemove: ResourceModule['tableRemove'] = (context, table, handl
         throw new context.RuntimeError('cannot remove owned resource while borrowed');
     }
     const borrowTask = own ? undefined : context.scopeTasks.get(scope);
-    table[handle << 1] = RESOURCE_TABLE_FLAG;
-    table[(handle << 1) + 1] = 0;
+    table[handle * 2] = RESOURCE_TABLE_FLAG;
+    table[handle * 2 + 1] = 0;
     getHandleIndexSpace(context.indexSpaces, table._componentIdx ?? table).release(handle);
     borrowTask?.removeBorrowedHandle();
     return { rep, scope, own };
@@ -103,7 +104,7 @@ export const transferBorrow: ResourceModule['transferBorrow'] = (context, handle
     const meta = componentIdx === undefined ? undefined : readTaskRegister(context.taskLookup.registers, componentIdx);
     const borrowTask = meta ? getCurrentTask(context.taskLookup, componentIdx!, meta.taskID)?.task : undefined;
     if (borrowTask && own) {
-        fromTable[handle << 1]++;
+        fromTable[handle * 2]++;
         borrowTask.addResourceLender(fromTable, handle);
     }
     if (toTable._createdReps.has(rep)) {

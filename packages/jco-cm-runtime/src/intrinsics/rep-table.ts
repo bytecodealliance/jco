@@ -2,6 +2,9 @@ import type { HandleIndexSpace, RepTableConstructor, TrapContext } from '../runt
 import { debugLog } from './core/debug.js';
 import { withConstructorStatics } from './core/shared-class.js';
 
+// Canonical ABI `Table.MAX_LENGTH`: no index above it names an entry.
+const MAX_LENGTH = 2 ** 28 - 1;
+
 function defineRepTable() {
     return class RepTable<T = unknown> {
         #context: TrapContext;
@@ -31,11 +34,26 @@ function defineRepTable() {
             return this.#data;
         }
 
+        /**
+         * Find the slot of `rep` in `#data`, or -1 if `rep` is outside the table
+         * (Canonical ABI `Table.get`). `rep << 1` would wrap at 2 ** 31 and alias a live entry.
+         *
+         * @param rep - the index to look up
+         * @returns the index of the entry's value in `#data`, or -1
+         */
+        #slot(rep: number): number {
+            if (!Number.isInteger(rep) || rep <= 0 || rep > MAX_LENGTH) {
+                return -1;
+            }
+            const idx = rep * 2;
+            return idx < this.#data.length ? idx : -1;
+        }
+
         insert(val: T): number {
             if (this.#space !== null) {
                 const rep = this.#space.alloc();
-                this.#data[rep << 1] = val;
-                this.#data[(rep << 1) + 1] = null;
+                this.#data[rep * 2] = val;
+                this.#data[rep * 2 + 1] = null;
                 this.#size += 1;
                 return rep;
             }
@@ -49,7 +67,7 @@ function defineRepTable() {
                 this.#size += 1;
                 return rep;
             }
-            const placementIdx = freeIdx << 1;
+            const placementIdx = freeIdx * 2;
             // The freelist is maintained internally; guest handle checks remain unconditional.
             SAFETY: if (this.#data[placementIdx] !== this.#store.free) {
                 throw new Error('corrupt rep table freelist: head does not point at a freed slot');
@@ -68,7 +86,10 @@ function defineRepTable() {
                 throw new this.#context.RuntimeError('invalid resource rep during get, (cannot be 0)');
             }
 
-            const baseIdx = rep << 1;
+            const baseIdx = this.#slot(rep);
+            if (baseIdx < 0) {
+                return undefined;
+            }
             const val = this.#data[baseIdx];
             if (val === this.#store.free) {
                 return undefined;
@@ -82,7 +103,10 @@ function defineRepTable() {
                 throw new Error('invalid resource rep during contains, (cannot be 0)');
             }
 
-            const baseIdx = rep << 1;
+            const baseIdx = this.#slot(rep);
+            if (baseIdx < 0) {
+                return false;
+            }
             const val = this.#data[baseIdx];
             return val !== this.#store.free && !!val;
         }
@@ -92,8 +116,11 @@ function defineRepTable() {
             if (rep === 0) {
                 throw new Error('invalid resource rep during remove, (cannot be 0)');
             }
+            const baseIdx = this.#slot(rep);
+            if (baseIdx < 0) {
+                throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
+            }
             if (this.#space !== null) {
-                const baseIdx = rep << 1;
                 const val = this.#data[baseIdx];
                 if (val === undefined || val === this.#store.free) {
                     throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
@@ -103,14 +130,6 @@ function defineRepTable() {
                 this.#size -= 1;
                 this.#space.release(rep);
                 return val as T;
-            }
-            if (this.#data.length === 2) {
-                throw new Error('invalid');
-            }
-
-            const baseIdx = rep << 1;
-            if (baseIdx >= this.#data.length) {
-                throw new Error(`invalid rep [${rep}] during remove, out of range`);
             }
             const val = this.#data[baseIdx];
             if (val === this.#store.free) {
@@ -133,7 +152,7 @@ function defineRepTable() {
             DEBUG: debugLog('[RepTable#clear()] args', { target: this.target });
             if (this.#space) {
                 for (let rep = 1; rep < this.#data.length / 2; rep++) {
-                    if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== this.#store.free) {
+                    if (this.#data[rep * 2 + 1] === null && this.#data[rep * 2] !== this.#store.free) {
                         this.#space.release(rep);
                     }
                 }

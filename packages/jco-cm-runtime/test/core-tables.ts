@@ -29,6 +29,24 @@ test.concurrent.each([false, true])('rep tables free, reuse, and clear entries (
     expect(table.insert({ value: 7 })).toBe(shared ? second : 1);
 });
 
+test.concurrent.each([false, true])('rep tables reject indices past their end (shared=%s)', (shared) => {
+    const { core, resource } = create();
+    const space = shared ? resource.getHandleIndexSpace(0) : undefined;
+    const table = new core.RepTable<{ value: number }>({ space });
+    const first = table.insert({ value: 1 });
+    const second = table.insert({ value: 2 });
+    // `rep << 1` wraps at 2 ** 31, so these used to alias the free-list head and the live entries.
+    const aliases = [0x80000000, first + 0x80000000, second + 0x80000000, (second + 0x80000000) | 0];
+    for (const rep of [...aliases, second + 1, 2 ** 28, 2 ** 32 + first, -1, 1.5]) {
+        expect(table.get(rep)).toBeUndefined();
+        expect(table.contains(rep)).toBe(false);
+        expect(() => table.remove(rep)).toThrow(WebAssembly.RuntimeError);
+    }
+    expect(table.size()).toBe(2);
+    expect(table.get(first)).toEqual({ value: 1 });
+    expect(table.get(second)).toEqual({ value: 2 });
+});
+
 test.concurrent('rep table lookup traps use the selected realm and preserve falsy entries', () => {
     class Trap extends Error {}
     const { core } = create({ platform: { WebAssembly: { RuntimeError: Trap } } });
