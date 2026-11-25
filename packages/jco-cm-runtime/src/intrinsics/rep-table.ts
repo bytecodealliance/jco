@@ -100,7 +100,7 @@ function defineRepTable() {
         contains(rep: number): boolean {
             DEBUG: debugLog('[RepTable#contains()] args', { rep, target: this.target });
             if (rep === 0) {
-                throw new Error('invalid resource rep during contains, (cannot be 0)');
+                throw new this.#context.RuntimeError('invalid resource rep during contains, (cannot be 0)');
             }
 
             const baseIdx = this.#slot(rep);
@@ -114,7 +114,7 @@ function defineRepTable() {
         remove(rep: number): T {
             DEBUG: debugLog('[RepTable#remove()] args', { rep, target: this.target });
             if (rep === 0) {
-                throw new Error('invalid resource rep during remove, (cannot be 0)');
+                throw new this.#context.RuntimeError('invalid resource rep during remove, (cannot be 0)');
             }
             const baseIdx = this.#slot(rep);
             if (baseIdx < 0) {
