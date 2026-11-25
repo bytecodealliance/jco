@@ -145,6 +145,9 @@ export function prepareCall(
             '/',
         ),
         stringEncoding: encoding,
+        // A task waiting to enter holds no thread index (Canonical ABI
+        // `Task.enter_implicit_thread`): the start call reads it once entered.
+        indexOnEntry: true,
     });
     newTask.setParentSubtask(subtask);
     // Whether the callee may block depends on the callee's function type
@@ -165,6 +168,8 @@ export function prepareCall(
         isAsync,
     };
 
+    // (the thread has no index until the task enters, so the register names
+    // no thread yet)
     setCurrentTaskMeta(_context.registers, {
         taskID: newTask.id(),
         threadID: newThread.id(),
@@ -187,7 +192,8 @@ export function asyncStartCall(
         throw new Error('missing global current task globalTaskMeta');
     }
     const taskID = globalTaskMeta.taskID;
-    const threadID = globalTaskMeta.threadID;
+    // The callee's implicit thread, which has an index once its task enters.
+    let threadID = globalTaskMeta.threadID;
 
     DEBUG: debugLog('[_asyncStartCall()] args', { args, componentIdx });
     const { getCallbackFn, callbackIdx, getPostReturnFn } = args;
@@ -570,6 +576,15 @@ export function asyncStartCall(
     // returning STARTED, matching the canonical ABI scheduling contract.
     const enteredSynchronously = preparedTask.tryEnter();
     if (enteredSynchronously === true) {
+        // The callee's register names its implicit thread from now on, as
+        // lowering the arguments may run the callee's code.
+        threadID = preparedTask.defaultThread().id();
+        setCurrentTaskMeta(_context.registers, {
+            taskID: preparedTask.id(),
+            threadID,
+            componentIdx: preparedTask.componentIdx(),
+        });
+
         // Directly returned STARTED is not also delivered as an event, so
         // install the progress handler only after the state transition.
         startSubtask();
@@ -632,6 +647,7 @@ export function asyncStartCall(
                     }
                     throw preparedTask.isErrored() ?? new Error('task failed to start');
                 }
+                threadID = preparedTask.defaultThread().id();
 
                 // PrepareCall installs the callee task before the eager
                 // path runs, but that metadata is gone by the time a
@@ -716,7 +732,6 @@ export async function syncStartCall(
         throw new Error('missing global current task meta during sync start call');
     }
     const taskID = globalTaskMeta.taskID;
-    const threadID = globalTaskMeta.threadID;
 
     DEBUG: debugLog('[_syncStartCall()] args', { args, paramCount, componentIdx });
     const { getCallbackFn, callbackIdx } = args;
@@ -808,21 +823,30 @@ export async function syncStartCall(
             }
         });
 
-        const initialResult = subtask.onStart({ startFnParams: params });
-        const startRes =
-            initialResult === undefined ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
-        if (startRes.length !== paramCount) {
-            throw new Error(
-                `unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`,
-            );
-        }
-
         const started = await preparedTask.enter();
         if (!started) {
             if (preparedTask.isCancelled()) {
                 return undefined;
             }
             throw new Error('callee task failed to start during sync start call');
+        }
+
+        // Canonical ABI `canon_lift`: the arguments are lowered once the task
+        // has entered and its implicit thread has an index. Lowering them may
+        // run the callee's code, under the callee's register.
+        const threadID = preparedTask.defaultThread().id();
+        const initialResult = withCurrentTaskMeta(_context.registers, {
+            taskID: preparedTask.id(),
+            threadID,
+            componentIdx: preparedTask.componentIdx(),
+            fn: () => subtask.onStart({ startFnParams: params }),
+        });
+        const startRes =
+            initialResult === undefined ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
+        if (startRes.length !== paramCount) {
+            throw new Error(
+                `unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`,
+            );
         }
 
         let jspiCallee;
