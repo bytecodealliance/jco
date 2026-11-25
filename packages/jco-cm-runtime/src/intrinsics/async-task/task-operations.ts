@@ -303,7 +303,7 @@ export function taskCancel(
     DEBUG: debugLog('[taskCancel()] args', { componentIdx });
     const state = getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!state.mayLeave) {
-        throw new Error('component instance is not marked as may leave, cannot be cancelled');
+        throw new _context.RuntimeError('component instance is not marked as may leave, cannot be cancelled');
     }
     const { taskID } = readTaskRegister(_context.registers, componentIdx)!;
     const taskMeta = getCurrentTask(_context, componentIdx, taskID);
@@ -314,8 +314,9 @@ export function taskCancel(
     if (!task) {
         throw new Error('invalid/missing async task');
     }
-    if (Reflect.get(task, 'sync') && !task.alwaysTaskReturn) {
-        throw new Error('cannot cancel sync tasks without always task return set');
+    // Canonical ABI `canon_task_cancel`: only an async-lifted task can be cancelled.
+    if (!task.calleeIsAsync()) {
+        throw new _context.RuntimeError('task.cancel requires an async canonical lift');
     }
     task.cancel();
 }
