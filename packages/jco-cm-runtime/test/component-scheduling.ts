@@ -185,6 +185,47 @@ test.concurrent('a task whose threads all exited unresolved deadlocks its unreso
     }
 });
 
+test.concurrent('a synchronous call holds back threads of other instances until it ends', () => {
+    const { component } = create();
+    const caller = component.getOrCreateAsyncState(0);
+    const callee = component.getOrCreateAsyncState(1);
+    Object.defineProperty(caller, 'runTickLoop', { value: () => {} });
+    Object.defineProperty(callee, 'runTickLoop', { value: () => {} });
+    try {
+        const sync = task(1n, 1);
+        const other = task(2n, 0);
+        const local = task(3n, 1);
+        other.unlock();
+        local.unlock();
+        const resumed: bigint[] = [];
+        caller.suspendThread({
+            thread: other.thread,
+            readyFn: () => true,
+            cancellable: false,
+            onResume: () => resumed.push(2n),
+        });
+        callee.suspendThread({
+            thread: local.thread,
+            readyFn: () => true,
+            cancellable: false,
+            onResume: () => resumed.push(3n),
+        });
+
+        callee.beginSyncCall(sync.value);
+        expect(caller.hasPendingSchedulerWork()).toBe(false);
+        expect(caller.tick()).toBe('idle');
+        expect(callee.tick()).toBe('resumed');
+        expect(resumed).toEqual([3n]);
+
+        callee.endSyncCall(sync.value);
+        expect(caller.hasPendingSchedulerWork()).toBe(true);
+        expect(caller.tick()).toBe('resumed');
+        expect(resumed).toEqual([3n, 2n]);
+    } finally {
+        clearDeadlockCheck(component);
+    }
+});
+
 test.concurrent('a task that exited unresolved under a resolved root is not a deadlock', async () => {
     const { component } = create();
     const state = component.getOrCreateAsyncState(0);
@@ -197,6 +238,29 @@ test.concurrent('a task that exited unresolved under a resolved root is not a de
         await new Promise((resolve) => setTimeout(resolve, 5));
         expect(component.storeTrap.error).toBeNull();
         expect([...state.unresolvedExitedTasks()]).toEqual([]);
+    } finally {
+        clearDeadlockCheck(component);
+    }
+});
+
+test.concurrent('a blocked synchronous call with no ready thread traps instead of deadlocking', async () => {
+    const { component } = create();
+    const state = component.getOrCreateAsyncState(0);
+    Object.defineProperty(state, 'runTickLoop', { value: () => {} });
+    try {
+        const sync = task(1n);
+        state.beginSyncCall(sync.value);
+        state.suspendThread({
+            thread: sync.thread,
+            suspended: true,
+            readyFn: () => false,
+            cancellable: false,
+            onResume() {},
+        });
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(component.storeTrap.error).toBeInstanceOf(WebAssembly.RuntimeError);
+        expect(component.storeTrap.error?.message).toBe('cannot block a synchronous task before returning');
+        expect(sync.errors).toEqual([component.storeTrap.error]);
     } finally {
         clearDeadlockCheck(component);
     }

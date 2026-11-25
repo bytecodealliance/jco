@@ -816,6 +816,8 @@ export interface ComponentAsyncState {
     readonly addPendingTaskStart: () => void;
     readonly removePendingTaskStart: () => void;
     readonly hasPendingSchedulerWork: () => boolean;
+    readonly beginSyncCall: (task: ComponentTask) => void;
+    readonly endSyncCall: (task: ComponentTask) => void;
     readonly stop: () => void;
     readonly runTickLoop: () => void;
     readonly tick: () => ComponentTickResult;
@@ -837,6 +839,16 @@ export interface ComponentStoreAsyncState {
     // Opaque host timer handle, kept portable between Node and browsers.
     deadlockCheck: unknown | null;
     pendingHostOperations: number;
+    /**
+     * Calls of non-async-typed functions in progress, innermost last. While one
+     * is in progress, only threads of its callee instance are scheduled.
+     */
+    readonly syncCalls: ComponentSyncCall[];
+}
+/** A call of a non-async-typed function, in progress until its task resolves. */
+export interface ComponentSyncCall {
+    readonly componentIdx: number;
+    readonly task: ComponentTask;
 }
 export interface ComponentDeadlockDetail {
     pendingHostOperations: number;
@@ -1447,6 +1459,7 @@ export interface AsyncTask extends ComponentTask, WaitableTask {
     readonly getCalleeParams: () => unknown[];
     readonly mayBlock: () => boolean;
     readonly setFuncTypeIsAsync: (value: boolean) => void;
+    readonly beginSyncCall: () => void;
     readonly setReturnResultTypeIdx: (value: number | null) => void;
     readonly returnResultTypeIdx: () => number | null;
     readonly mayEnter: (task: AsyncTask) => boolean;
