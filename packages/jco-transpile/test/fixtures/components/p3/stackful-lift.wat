@@ -1,6 +1,7 @@
 ;; An async lift without a callback (stackful) delivers its result only through
 ;; `task.return`: the core function has no results, and returning without
-;; having called `task.return` traps (Canonical ABI `Task.exit_implicit_thread`).
+;; having called `task.return` leaves the task unresolved (Canonical ABI
+;; `canon_lift`, component-model#767).
 (component
   (core module $libc (memory (export "mem") 1))
   (core instance $libc (instantiate $libc))

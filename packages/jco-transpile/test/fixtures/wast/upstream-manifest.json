@@ -5,7 +5,7 @@
     "fixtures": [
         {
             "name": "async/async-calls-sync.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/big-interleaving-test.wast",
@@ -13,307 +13,311 @@
         },
         {
             "name": "async/builtin-trap-poisons-instance.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cancel-and-exclusive-lock.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cancel-delivery.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cancel-not-delivered.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cancel-resumed-callback-switch.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cancel-stream.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cancel-subtask.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cancel-targeted-resume.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/closed-stream.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cross-abi-calls.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/cross-task-future.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/deadlock.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/dont-block-start.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/drop-cross-task-borrow.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/drop-stream.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/drop-subtask.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/drop-waitable-set.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/dtor-context-is-zero.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/during-sync-call-blocking-ops.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/during-sync-call-exclusive-resume.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/during-sync-call-may-block-if-other-ready-threads.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/during-sync-call-no-sibling-resume.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/during-sync-scheduling-candidates.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/empty-wait.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
+        },
+        {
+            "name": "async/exit-without-resolving.wast",
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/forward.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/future-completion-order.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/futures-must-write.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/idle-drop.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/partial-stream-copies.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/passing-resources.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/reentrance.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/same-component-stream-future.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/self-switch-traps.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/switch-to-ready-callback.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/sync-barges-in.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/sync-streams.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/trap-if-block-and-sync.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/trap-if-done.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/trap-if-sync-and-waitable-set.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/trap-if-transfer-in-waitable-set.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/validate-no-async-abi-for-sync-type.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/validate-no-stream-char.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/validate-task-return.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/wait-during-callback.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "async/zero-length.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "binary/binary.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "linking/link-time-virtualization.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "linking/shared-everything-dynamic-linking.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "linking/tags.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "linking/unit.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "resources/borrows.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "resources/handle-table.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "resources/multiple-resources.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/abi.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/annotated-names.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/attributes.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/core-modules.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/defined-types.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/extern-names.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/external-visibility.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/indicies.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/instantiation.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/kebab.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/map.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/max-value-size.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/outer-alias.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/resources.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "validation/version-suffix.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/alignment.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/concat.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/numerics.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/post-return.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/realloc.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/strings.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/transcode.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         },
         {
             "name": "values/variants.wast",
-            "revision": "c818a1925e1c7e3d3c8bdecf2fba070b4e737b03"
+            "revision": "585526aa1f2c7f76f07557d16e265dede38b3acb"
         }
     ]
 }

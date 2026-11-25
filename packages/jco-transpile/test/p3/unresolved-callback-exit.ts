@@ -6,7 +6,8 @@ import { WASIShim } from '@bytecodealliance/preview2-shim/instantiation';
 import { LOCAL_TEST_COMPONENTS_DIR } from '../common.js';
 import { composeCallerCallee, setupAsyncTest } from '../helpers.js';
 
-async function unresolvedExitTrap(call: () => unknown) {
+/** Asserts that `call` rejects promptly with the deadlock trap. */
+async function unresolvedExitDeadlock(call: () => unknown) {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
         const error = await Promise.race([
@@ -21,7 +22,7 @@ async function unresolvedExitTrap(call: () => unknown) {
             }),
         ]);
         assert.instanceOf(error, WebAssembly.RuntimeError);
-        assert.match(error.message, /without resolution/);
+        assert.match(error.message, /deadlock detected/);
     } finally {
         clearTimeout(timer);
     }
@@ -38,7 +39,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('unresolved callback 
             },
         });
         try {
-            await unresolvedExitTrap(() => instance[name]());
+            await unresolvedExitDeadlock(() => instance[name]());
             await expect(Promise.resolve().then(() => instance.returnThenExit())).rejects.toBeInstanceOf(
                 WebAssembly.RuntimeError,
             );
@@ -63,7 +64,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('unresolved callback 
         }
     });
 
-    test('a caller exiting with a moved-stream subtask STARTED traps instead of idling', async () => {
+    test('a caller exiting with a moved-stream subtask STARTED deadlocks instead of idling', async () => {
         const path = await composeCallerCallee({
             callerPath: join(LOCAL_TEST_COMPONENTS_DIR, 'unresolved-exit-g2g-caller.wasm'),
             calleePath: join(LOCAL_TEST_COMPONENTS_DIR, 'unresolved-exit-g2g-callee.wasm'),
@@ -81,7 +82,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('unresolved callback 
             },
         });
         try {
-            await unresolvedExitTrap(() => instance.run());
+            await unresolvedExitDeadlock(() => instance.run());
             assert.deepEqual(packed, [0x11], 'the subtask reuses the moved-out readable handle');
             await expect(Promise.resolve().then(() => instance.ok())).rejects.toBeInstanceOf(WebAssembly.RuntimeError);
         } finally {
