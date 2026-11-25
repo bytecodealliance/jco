@@ -126,6 +126,12 @@ export function initializeFutureEndClass(
             this.#trackHostWait();
         }
 
+        /** Record that the host no longer holds an end of this future (it was lowered back into a guest). */
+        clearHostHeld() {
+            this.#pendingBufferMeta.hostHeld = false;
+            this.#trackHostWait();
+        }
+
         #trackHostWait() {
             if (tracking) {
                 trackGuestWaitOnHost(tracking, this.#pendingBufferMeta);

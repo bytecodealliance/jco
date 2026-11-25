@@ -60,6 +60,20 @@ function defineHostFuture() {
             return this.#futureEndWaitableIdx;
         }
 
+        /**
+         * Hand the end back to the guest it was lifted from: only the guest
+         * can complete a copy on it now.
+         *
+         * @returns the end's waitable index in the guest
+         */
+        returnToGuest() {
+            getFutureEnd(this.#context.ends, {
+                tableIdx: this.#futureTableIdx,
+                futureEndWaitableIdx: this.#futureEndWaitableIdx,
+            })?.clearHostHeld();
+            return this.#futureEndWaitableIdx;
+        }
+
         createUserFuture() {
             if (this.#userFuture) {
                 return this.#userFuture;

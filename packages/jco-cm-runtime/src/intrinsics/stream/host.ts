@@ -59,6 +59,20 @@ function defineHostStream() {
             return this.#streamEndWaitableIdx;
         }
 
+        /**
+         * Hand the end back to the guest it was lifted from: only the guest
+         * can complete a copy on it now.
+         *
+         * @returns the end's waitable index in the guest
+         */
+        returnToGuest() {
+            getStreamEnd(this.#context.ends, {
+                tableIdx: this.#streamTableIdx,
+                streamEndWaitableIdx: this.#streamEndWaitableIdx,
+            }).clearHostHeld();
+            return this.#streamEndWaitableIdx;
+        }
+
         createUserStream() {
             if (this.#rep === null) {
                 throw new Error('unexpectedly missing rep for host stream');

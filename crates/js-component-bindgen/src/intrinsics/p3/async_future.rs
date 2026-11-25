@@ -704,6 +704,16 @@ impl AsyncFutureIntrinsic {
                         setRep(rep) {{ this.#rep = rep; }}
                         getFutureEndWaitableIdx() {{ return this.#futureEndWaitableIdx; }}
 
+                        // Hand the end back to the guest it was lifted from: only the guest
+                        // can complete a copy on it now.
+                        returnToGuest() {{
+                            {get_future_end_fn}({{
+                                tableIdx: this.#futureTableIdx,
+                                futureEndWaitableIdx: this.#futureEndWaitableIdx,
+                            }})?.clearHostHeld();
+                            return this.#futureEndWaitableIdx;
+                        }}
+
                         createUserFuture() {{
                            if (this.#userFuture) {{ return this.#userFuture; }}
                            if (this.#rep === null) {{ throw new Error("unexpectedly missing rep for host future"); }}
@@ -825,6 +835,13 @@ impl AsyncFutureIntrinsic {
                         // Record that the host holds an end of this future (it was lifted to the host).
                         markHostHeld() {{
                             this.#pendingBufferMeta.hostHeld = true;
+                            this.#trackHostWait();
+                        }}
+
+                        // Record that the host no longer holds an end of this future (it was
+                        // lowered back into a guest).
+                        clearHostHeld() {{
+                            this.#pendingBufferMeta.hostHeld = false;
                             this.#trackHostWait();
                         }}
 

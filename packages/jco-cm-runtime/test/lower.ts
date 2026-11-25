@@ -221,8 +221,13 @@ test.concurrent('lowering a lifted future writes its existing handle without cre
     const selected = createFuture();
     const { lookup } = selected;
     const resourceRep = Symbol();
+    let returned = 0;
     const rep = selected.futures.insert({
         getFutureEndWaitableIdx: () => 17,
+        returnToGuest: () => {
+            returned++;
+            return 17;
+        },
         setRep() {},
         createUserFuture: () => new selected.FutureValue(() => ({ value: 0 })),
     });
@@ -239,6 +244,8 @@ test.concurrent('lowering a lifted future writes its existing handle without cre
     expect(selected.futures.size()).toBe(1);
     const ctx = cursor(Object.assign(Promise.resolve(0), { [resourceRep]: rep }));
     expect(fn(ctx)).toBe(17);
+    // (the host no longer holds the end)
+    expect(returned).toBe(1);
     expect(selected.futures.size()).toBe(1);
     expect(new DataView(ctx.memory!.buffer).getUint32(0, true)).toBe(17);
 });

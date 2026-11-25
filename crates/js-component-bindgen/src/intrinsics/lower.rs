@@ -1167,7 +1167,7 @@ impl LowerIntrinsic {
                                 if (!hostFuture) {{
                                     throw new Error(`missing host future with global rep [${{globalRep}}]`);
                                 }}
-                                waitableIdx = hostFuture.getFutureEndWaitableIdx();
+                                waitableIdx = hostFuture.returnToGuest();
                             }} else {{
                                 const cstate = {get_or_create_async_state_fn}componentIdx);
                                 if (!cstate) {{
@@ -1262,7 +1262,7 @@ impl LowerIntrinsic {
                                     if (!hostStream) {{
                                         throw new Error(`missing host stream with global rep [${{globalRep}}]`);
                                     }}
-                                    waitableIdx = hostStream.getStreamEndWaitableIdx();
+                                    waitableIdx = hostStream.returnToGuest();
                                 }} else {{
                                     const cstate = {get_or_create_async_state_fn}componentIdx);
                                     if (!cstate) {{

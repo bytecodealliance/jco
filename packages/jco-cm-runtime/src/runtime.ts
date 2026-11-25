@@ -2269,6 +2269,8 @@ export interface FutureEndBase {
     readonly resetPendingBufferMeta: () => void;
     /** Record that the host holds an end of this future (it was lifted to the host). */
     readonly markHostHeld: () => void;
+    /** Record that the host no longer holds an end of this future (it was lowered back into a guest). */
+    readonly clearHostHeld: () => void;
     readonly getPendingBufferMeta: () => FuturePendingBufferMeta;
     readonly resetAndNotifyPending: (result: number) => void;
     readonly setPendingEvent: (fn: () => WaitableEvent) => void;
@@ -2424,6 +2426,8 @@ export interface HostFuture {
     readonly setRep: (rep: number) => void;
     readonly getFutureEndWaitableIdx: () => number;
     readonly createUserFuture: () => FutureValue;
+    /** Hand the end back to the guest it was lifted from. */
+    readonly returnToGuest: () => number;
 }
 export interface HostFutureConstructor {
     new (options: HostFutureOptions): HostFuture;
@@ -2738,6 +2742,8 @@ export interface StreamPayloadEnd {
     readonly resetPendingBufferMeta: () => void;
     /** Record that the host holds an end of this stream (it was lifted to the host). */
     readonly markHostHeld: () => void;
+    /** Record that the host no longer holds an end of this stream (it was lowered back into a guest). */
+    readonly clearHostHeld: () => void;
     readonly getPendingBufferMeta: () => StreamPendingBufferMeta;
     readonly hasPendingBuffer: () => boolean;
     readonly resetAndNotifyPending: (result: number) => void;
@@ -2815,6 +2821,8 @@ export interface HostStream {
     readonly setRep: (rep: number) => void;
     readonly getStreamEndWaitableIdx: () => number;
     readonly createUserStream: () => ExternalStream;
+    /** Hand the end back to the guest it was lifted from. */
+    readonly returnToGuest: () => number;
 }
 export interface HostStreamConstructor {
     new (args: HostStreamOptions): HostStream;
