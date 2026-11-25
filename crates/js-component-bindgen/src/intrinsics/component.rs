@@ -445,7 +445,10 @@ impl ComponentIntrinsic {
                             }}
                             // A deadlock is a trap of the whole store: no instance may be entered again.
                             for (const state of {async_state_map}.values()) {{ state.markTrapped(err); }}
-                            for (const state of {async_state_map}.values()) {{ state.abandonLockWaiters(); }}
+                            for (const state of {async_state_map}.values()) {{
+                                state.abandonLockWaiters();
+                                state.abandonEntrySlotWaiters();
+                            }}
                             for (const state of {async_state_map}.values()) {{ state.runTickLoop(); }}
                         }}, 0);
                     }}
@@ -739,6 +742,8 @@ impl ComponentIntrinsic {
                         #lockWaiters = [];
                         #numWaitingToEnter = 0;
                         #enteringTaskID = null;
+                        #entrySlotWaiters = [];
+                        #entrySlotTurnTaskID = null;
                         #lockHandoffScheduled = false;
                         #pendingTaskStarts = 0;
                         #parkedTasks = new Map();
@@ -1050,16 +1055,55 @@ impl ComponentIntrinsic {
                         // slice ends, and later entries observe that slice's effects (e.g.
                         // backpressure it set).
                         hasEnteringTask() {{ return this.#enteringTaskID !== null; }}
+                        // Whether the slot keeps the given task from entering: another task
+                        // holds it, or other tasks wait for it ahead of this one.
+                        entrySlotBusy(taskID) {{
+                            if (this.#enteringTaskID !== null) {{ return true; }}
+                            if (this.#entrySlotTurnTaskID !== null) {{ return this.#entrySlotTurnTaskID !== taskID; }}
+                            return this.#entrySlotWaiters.length > 0;
+                        }}
+                        // In the Canonical ABI, a call whose entry finds the slot held would
+                        // run after that entry's first slice, before any other thread of the
+                        // instance. Tasks waiting only for the slot therefore get it in
+                        // arrival order as soon as it is free, without going through the
+                        // scheduler, which could resume other threads of the instance first.
+                        // The returned promise resolves when it is the task's turn; the task
+                        // then enters (`beginEntry`) or passes the turn on (`passEntrySlotTurn`).
+                        waitForEntrySlotTurn(taskID) {{
+                            return new Promise((resolve) => {{ this.#entrySlotWaiters.push({{ taskID, resolve }}); }});
+                        }}
+                        passEntrySlotTurn(taskID) {{
+                            if (this.#entrySlotTurnTaskID !== taskID) {{ return false; }}
+                            this.#entrySlotTurnTaskID = null;
+                            this.#handOffEntrySlot();
+                            return true;
+                        }}
+                        #handOffEntrySlot() {{
+                            if (this.#enteringTaskID !== null || this.#entrySlotTurnTaskID !== null) {{ return; }}
+                            const next = this.#entrySlotWaiters.shift();
+                            if (!next) {{
+                                // Tasks waiting to enter through the scheduler may enter now.
+                                if (this.#suspendedThreadsByRef.size > 0) {{ this.runTickLoop(); }}
+                                return;
+                            }}
+                            this.#entrySlotTurnTaskID = next.taskID;
+                            next.resolve();
+                        }}
+                        abandonEntrySlotWaiters() {{
+                            this.#entrySlotTurnTaskID = null;
+                            for (const waiter of this.#entrySlotWaiters.splice(0)) {{ waiter.resolve(); }}
+                        }}
                         beginEntry(taskID) {{
                             if (this.#enteringTaskID !== null) {{
                                 throw new Error(`task [${{taskID}}] cannot enter component [${{this.#componentIdx}}] while task [${{this.#enteringTaskID}}] is entering`);
                             }}
+                            if (this.#entrySlotTurnTaskID === taskID) {{ this.#entrySlotTurnTaskID = null; }}
                             this.#enteringTaskID = taskID;
                         }}
                         endEntry(taskID) {{
                             if (this.#enteringTaskID !== taskID) {{ return false; }}
                             this.#enteringTaskID = null;
-                            if (this.#suspendedThreadsByRef.size > 0) {{ this.runTickLoop(); }}
+                            this.#handOffEntrySlot();
                             return true;
                         }}
 
@@ -1341,6 +1385,7 @@ impl ComponentIntrinsic {
                             this.#tickLoop?.();
                             this.#tickLoop = null;
                             this.abandonLockWaiters();
+                            this.abandonEntrySlotWaiters();
                             for (const thread of [...this.#suspendedThreadsByRef.keys()]) {{
                                 this.resumeThread(thread);
                             }}
