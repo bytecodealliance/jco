@@ -219,7 +219,7 @@ function defineAsyncTask() {
                 throw new this.#context.RuntimeError('borrow handles still remain at the end of the call');
             }
             for (const { table, handle } of this.#resourceLenders ?? NONE) {
-                const idx = handle << 1;
+                const idx = handle * 2;
                 const lendCount = table[idx];
                 if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2 ** 30) {
                     throw new Error('invalid resource lender state at scope exit');
