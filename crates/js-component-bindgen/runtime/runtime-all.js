@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit dcb44b2cebf54bbff73752129a70b0c7ad455d79
+// generated from commit 4da7edb9795811336fd49f251b5182f90192d89a
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1375,7 +1375,7 @@ function getCurrentTask(_context, componentIdx, taskID) {
 }
 function createNewCurrentImplicitThread(_context, args) {
 	DEBUG: debugLog("[createNewCurrentImplicitThread()] args", args);
-	const { componentIdx, isAsync, isManualAsync, preserveFutureResult, entryFnName, callbackFnName, getCallbackFn, stringEncoding, errHandling, getCalleeParamsFn, resultPtr, callingWasmExport } = args;
+	const { componentIdx, isAsync, isManualAsync, preserveFutureResult, entryFnName, callbackFnName, getCallbackFn, stringEncoding, errHandling, getCalleeParamsFn, resultPtr, callingWasmExport, indexOnEntry } = args;
 	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing/invalid component instance index while starting task");
 	let taskMetas = _context.tasks.get(componentIdx);
 	const callbackFn = getCallbackFn ? getCallbackFn() : null;
@@ -1396,7 +1396,7 @@ function createNewCurrentImplicitThread(_context, args) {
 	const thread = newTask.addThread(new _context.AsyncThread({
 		componentIdx,
 		task: newTask
-	}));
+	}), { indexOnEntry });
 	const newTaskID = newTask.id();
 	const newTaskMeta = {
 		id: newTaskID,
@@ -3648,6 +3648,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 		const params = preparedTask.getCalleeParams();
 		const calleeComponentState = getOrCreateAsyncState(_context.lookup, preparedTask.componentIdx());
 		const { promise: taskReturnPromise, resolve: resolveTaskReturn, reject: rejectTaskReturn } = promiseWithResolvers();
+		taskReturnPromise.catch(emptyFunc);
 		preparedTask.registerOnResolveHandler(() => {
 			const err = preparedTask.isErrored();
 			if (err) rejectTaskReturn(err);
@@ -5361,6 +5362,7 @@ function defineAsyncTask() {
 					});
 				}
 			}
+			this.#indexImplicitThread();
 			this.#beginGuestSyncCall();
 			return true;
 		}
@@ -5373,6 +5375,7 @@ function defineAsyncTask() {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (!this.#isAsyncEntry()) {
 				this.#entered = true;
+				this.#indexImplicitThread();
 				this.#beginGuestSyncCall();
 				return true;
 			}
@@ -5384,6 +5387,7 @@ function defineAsyncTask() {
 				return false;
 			}
 			this.#entered = true;
+			this.#indexImplicitThread();
 			this.#beginGuestSyncCall();
 			return true;
 		}
@@ -5404,6 +5408,7 @@ function defineAsyncTask() {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (!this.#isAsyncEntry()) {
 				this.#entered = true;
+				this.#indexImplicitThread();
 				this.#beginGuestSyncCall();
 				return this.#entered;
 			}
@@ -5472,6 +5477,7 @@ function defineAsyncTask() {
 			cstate.beginEntry(this.#id);
 			this.#holdsEntrySlot = true;
 			this.#entered = true;
+			this.#indexImplicitThread();
 			this.#beginGuestSyncCall();
 			return this.#entered;
 		}
@@ -5851,24 +5857,32 @@ function defineAsyncTask() {
 		removeThread(thread) {
 			this.settleCompletion();
 			const cstate = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
-			cstate?.threads.remove(thread.id());
+			if (cstate && thread.hasIndex()) cstate.threads.remove(thread.id());
 			if (this.#threads[this.#threads.length - 1] === thread) this.#threads.pop();
 			else this.#threads = this.#threads.filter((t) => t !== thread);
 			syncContextSlots(this.#context.registers);
 			if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) cstate.noteUnresolvedExit(this);
 			if (this.#exited && this.#threads.length === 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
 		}
-		addThread(thread) {
+		addThread(thread, opts) {
 			if (this.#componentIdx === -1) {
 				thread.setId(++this.#store.hostThreadID);
 				this.#threads.push(thread);
 				return thread;
 			}
+			this.#threads.push(thread);
+			if (!opts?.indexOnEntry) this.#insertThread(thread);
+			return thread;
+		}
+		#insertThread(thread) {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			thread.setId(cstate.threads.insert(thread));
-			this.#threads.push(thread);
 			syncContextSlots(this.#context.registers);
-			return thread;
+		}
+		#indexImplicitThread() {
+			const thread = this.defaultThread();
+			if (this.#componentIdx === -1 || !thread || thread.hasIndex()) return;
+			this.#insertThread(thread);
 		}
 		calleeIsAsync() {
 			return this.#calleeIsAsync === true;
@@ -6793,6 +6807,10 @@ function defineAsyncThread() {
 		}
 		id() {
 			return this.#id;
+		}
+		/** Whether the thread has been given its index in the instance's thread table. */
+		hasIndex() {
+			return this.#id !== null;
 		}
 		setId(id) {
 			if (this.#id !== null) throw new Error("thread id can only be assigned once");
@@ -9076,9 +9094,40 @@ function initializeFutureValueClass(disposeSymbol) {
 }
 
 //#endregion
+//#region runtime/intrinsics/component/host-wait.js
+/**
+* Count a guest copy that only the host can complete as a host operation.
+*
+* A guest copy pending on a stream or future whose other end the host holds
+* completes whenever the host reads, writes or drops that end, which it may
+* do from code the runtime does not track. While such a copy is pending the
+* deadlock check must not report the guest as waiting on nothing.
+*
+* Call this whenever the pending copy or the host-held flag changes: it starts
+* counting when both hold and stops once either does not.
+*/
+function trackGuestWaitOnHost(context, meta) {
+	if (!(!!meta.buffer && meta.componentIdx !== -1 && meta.componentIdx != null) || !meta.hostHeld) {
+		const endHostWait = meta.endHostWait;
+		meta.endHostWait = null;
+		endHostWait?.();
+		return;
+	}
+	if (meta.endHostWait || context.storeTrap.stopped) return;
+	const { promise, resolve } = promiseWithResolvers();
+	meta.endHostWait = resolve;
+	Promise.resolve(trackHostOperation(context, () => promise)).catch(emptyFunc);
+}
+
+//#endregion
 //#region runtime/intrinsics/future/end.js
-/** Create a base endpoint constructor using the selected event codes. */
-function initializeFutureEndClass(events) {
+/**
+* Create a base endpoint constructor using the selected event codes.
+*
+* With `tracking`, a guest copy that only the host can complete (the other
+* end was lifted to the host) counts as a host operation while it is pending.
+*/
+function initializeFutureEndClass(events, tracking) {
 	var _a;
 	class FutureEnd {
 		static CopyResult = {
@@ -9147,6 +9196,15 @@ function initializeFutureEndClass(events) {
 			this.#pendingBufferMeta.buffer = buffer;
 			this.#pendingBufferMeta.isWrite = isWrite;
 			this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
+			this.#trackHostWait();
+		}
+		/** Record that the host holds an end of this future (it was lifted to the host). */
+		markHostHeld() {
+			this.#pendingBufferMeta.hostHeld = true;
+			this.#trackHostWait();
+		}
+		#trackHostWait() {
+			if (tracking) trackGuestWaitOnHost(tracking, this.#pendingBufferMeta);
 		}
 		resetPendingBufferMeta() {
 			this.setPendingBufferMeta({
@@ -9739,6 +9797,7 @@ function defineHostFuture() {
 			if (!futureEnd) throw new Error(`missing future [${this.#futureEndWaitableIdx}] (table [${this.#futureTableIdx}], component [${this.#componentIdx}]`);
 			if (futureEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift future after previous read succeeded");
 			if (futureEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift future while it's in a waitable set");
+			futureEnd.markHostHeld();
 			return futureEnd.promise();
 		}
 	};
@@ -10127,6 +10186,15 @@ function initializeStreamEndClass(_context) {
 			this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
 			this.#pendingBufferMeta.rejectLength = rejectLength;
 			this.#pendingBufferMeta.dropAfterCopy = dropAfterCopy;
+			this.#trackHostWait();
+		}
+		/** Record that the host holds an end of this stream (it was lifted to the host). */
+		markHostHeld() {
+			this.#pendingBufferMeta.hostHeld = true;
+			this.#trackHostWait();
+		}
+		#trackHostWait() {
+			trackGuestWaitOnHost(_context.tracking, this.#pendingBufferMeta);
 		}
 		resetPendingBufferMeta() {
 			this.setPendingBufferMeta({
@@ -10299,6 +10367,7 @@ function defineHostStream() {
 			});
 			if (streamEnd.isDoneState()) throw new this.#context.RuntimeError("cannot lift stream after being notified that the writable end dropped");
 			if (streamEnd.isInSet()) throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
+			streamEnd.markHostHeld();
 			return new this.#context.Stream({
 				isReadable: streamEnd.isReadable(),
 				isWritable: streamEnd.isWritable(),
