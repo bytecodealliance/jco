@@ -385,6 +385,15 @@ impl ComponentIntrinsic {
                                 const root = task.getRootTask();
                                 if (!root.isResolvedState()) {{ unresolvedRoots.add(root); }}
                             }}
+                            // A task whose threads have all exited unresolved is not pending work:
+                            // it can never run again. Whoever waits on it is blocked for good.
+                            const exitedTasks = new Set();
+                            for (const state of {async_state_map}.values()) {{
+                                for (const task of state.unresolvedExitedTasks()) {{
+                                    exitedTasks.add(task);
+                                    unresolvedRoots.add(task.getRootTask());
+                                }}
+                            }}
                             if (unresolvedRoots.size === 0) {{ return; }}
 
                             const err = new {runtime_error_class}('wasm trap: deadlock detected: event loop cannot make further progress');
@@ -408,7 +417,9 @@ impl ComponentIntrinsic {
                                 root.setErrored(err);
                                 root.reject(err);
                             }}
-                            for (const task of suspendedTasks) {{
+                            // Exited tasks are rejected too: a synchronous caller waits on the
+                            // callee task itself, not on its own root.
+                            for (const task of [...suspendedTasks, ...exitedTasks]) {{
                                 if (!task.isResolvedState() && unresolvedRoots.has(task.getRootTask())) {{
                                     task.setErrored(err);
                                     task.reject(err);
@@ -714,6 +725,8 @@ impl ComponentIntrinsic {
                         // Suspended threads, oldest first (a Map iterates in insertion
                         // order, so no separate queue is kept for them).
                         #suspendedThreadsByRef = new Map();
+                        // Tasks whose threads all exited before they resolved.
+                        #unresolvedExits = new Set();
                         #errored = null;
                         #trapped = false;
                         #trapError = null;
@@ -1149,6 +1162,28 @@ impl ComponentIntrinsic {
                         *suspendedTaskMetas() {{
                             for (const meta of this.#suspendedThreadsByRef.values()) {{
                                 yield {{ ...meta, task: meta.thread.task() }};
+                            }}
+                        }}
+
+                        // Record a task whose last thread exited before it resolved. Nothing
+                        // can resolve it any more, so let the deadlock detector account for
+                        // whoever waits on it.
+                        noteUnresolvedExit(task) {{
+                            this.#unresolvedExits.add(task);
+                            {check_for_deadlock_fn}();
+                        }}
+
+                        // Tasks whose threads all exited unresolved while their root task is
+                        // still unresolved. Tasks under a resolved root are forgotten: no
+                        // caller can be blocked on them any more.
+                        *unresolvedExitedTasks() {{
+                            for (const task of this.#unresolvedExits) {{
+                                const root = task.getRootTask();
+                                if (root.isResolvedState() || root.isRejected()) {{
+                                    this.#unresolvedExits.delete(task);
+                                }} else {{
+                                    yield task;
+                                }}
                             }}
                         }}
 
