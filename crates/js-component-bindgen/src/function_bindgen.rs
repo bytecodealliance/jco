@@ -843,7 +843,8 @@ impl FunctionBindgen<'_> {
               const hostProvided = false;
               {get_component_state}{component_idx_expr}).throwIfTrapped();
 
-              const {{ task, threadID }} = {start_current_task_fn}{{
+              // The implicit thread is indexed once the task enters.
+              const {{ task }} = {start_current_task_fn}{{
                   componentIdx: {component_idx_expr},
                   isAsync: {is_async},
                   isManualAsync: {is_manual_async},
@@ -854,6 +855,7 @@ impl FunctionBindgen<'_> {
                   errHandling: '{err_handling}',
                   callingWasmExport: true,
                   stringEncoding: {string_encoding},
+                  indexOnEntry: true,
               }});
               task.setCalleeIsAsync({canonical_abi_async});
               task.setFuncTypeIsAsync({func_type_async});
@@ -901,7 +903,7 @@ impl FunctionBindgen<'_> {
         }
         uwriteln!(
             self.src,
-            "{current_task_may_block}.value = task.mayBlock() ? 1 : 0;"
+            "const threadID = task.defaultThread().id();\n{current_task_may_block}.value = task.mayBlock() ? 1 : 0;"
         );
 
         if self.callee_resource_dynamic {

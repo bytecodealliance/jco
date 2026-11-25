@@ -1329,6 +1329,12 @@ export interface AsyncTaskOptions {
 
 export interface CreateTaskOptions extends AsyncTaskOptions {
     parentSubtaskID?: bigint;
+    /**
+     * Index the implicit thread in its instance's thread table only once the
+     * task enters (Canonical ABI `Task.enter_implicit_thread`), rather than now.
+     * Until then the thread has no ID.
+     */
+    indexOnEntry?: boolean;
     getCallbackFn?: () => TaskCallback;
     getParamsFn?: () => unknown[];
 }
@@ -1362,6 +1368,8 @@ export interface AsyncThreadOptions {
 export interface AsyncThread extends ComponentThread {
     storage: number[];
     readonly setId: (id: number) => void;
+    /** Whether the thread has been given its index in the instance's thread table. */
+    readonly hasIndex: () => boolean;
     readonly task: () => AsyncTask;
     readonly taskID: () => bigint;
     readonly state: () => 'not-started' | 'running' | 'completed';
@@ -1416,7 +1424,7 @@ export interface AsyncThreadMeta {
 
 export interface AsyncTask extends ComponentTask, WaitableTask {
     readonly calleeIsAsync: () => boolean;
-    readonly addThread: (thread: AsyncThread) => AsyncThread;
+    readonly addThread: (thread: AsyncThread, opts?: { indexOnEntry?: boolean }) => AsyncThread;
     readonly removeThread: (thread: AsyncThread) => void;
     readonly defaultThread: () => AsyncThread;
     readonly enterHost: () => boolean;
