@@ -2862,6 +2862,13 @@ mod tests {
     }
 
     #[test]
+    fn callee_traps_reject_the_blocked_caller() {
+        let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::AsyncStartCall));
+        assert!(source.contains("if (err instanceof WebAssemblyRuntimeError) {"));
+        assert!(source.contains("rootTask.reject(err);"));
+    }
+
+    #[test]
     fn suspend_and_yield_builtins_return_zero() {
         for intrinsic in [
             AsyncTaskIntrinsic::ThreadYield,

@@ -402,6 +402,16 @@ export function asyncStartCall(
 
         subtask.getParentTask().setErrored(err);
 
+        // A trap ends the whole call tree, so a caller blocked on this subtask
+        // must fail with it rather than wait for an event that never comes.
+        if (err instanceof _context.driver.RuntimeError) {
+            const rootTask = subtask.getParentTask().getRootTask();
+            if (!rootTask.isResolvedState()) {
+                rootTask.setErrored(err);
+                rootTask.reject(err);
+            }
+        }
+
         // Release the enter()-acquired per-slice hold: the driver
         // loop that would normally pair it never starts.
         if (preparedTask.needsExclusiveLock()) {
