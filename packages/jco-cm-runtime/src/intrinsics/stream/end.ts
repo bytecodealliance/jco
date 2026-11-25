@@ -16,6 +16,7 @@ import type {
 import { yieldToHost } from '../core/scheduling.js';
 import { debugLog } from '../core/debug.js';
 import { trackHostOperation } from '../component.js';
+import { trackGuestWaitOnHost } from '../component/host-wait.js';
 import { getCurrentTask } from '../async-task/task-operations.js';
 import { asyncBlockedCode } from '../async-task.js';
 import { waitSynchronously } from '../sync-waiter.js';
@@ -593,6 +594,17 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
             this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
             this.#pendingBufferMeta.rejectLength = rejectLength;
             this.#pendingBufferMeta.dropAfterCopy = dropAfterCopy;
+            this.#trackHostWait();
+        }
+
+        /** Record that the host holds an end of this stream (it was lifted to the host). */
+        markHostHeld() {
+            this.#pendingBufferMeta.hostHeld = true;
+            this.#trackHostWait();
+        }
+
+        #trackHostWait() {
+            trackGuestWaitOnHost(_context.tracking, this.#pendingBufferMeta);
         }
 
         resetPendingBufferMeta() {

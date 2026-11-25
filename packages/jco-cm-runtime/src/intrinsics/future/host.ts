@@ -88,6 +88,7 @@ function defineHostFuture() {
             if (futureEnd.isInSet()) {
                 throw new this.#context.RuntimeError("cannot lift future while it's in a waitable set");
             }
+            futureEnd.markHostHeld();
 
             return futureEnd.promise();
         }

@@ -2232,11 +2232,22 @@ export interface FutureCopyStates {
     readonly CANCELLED?: number;
 }
 export type FutureOnCopyDone = (result: number) => void;
+/** The part of a stream or future's pending copy that tells whether it waits on the host. */
+export interface HostWaitMeta {
+    componentIdx?: number | null;
+    buffer?: unknown;
+    /** Set once the host holds one of the channel's ends. */
+    hostHeld?: boolean;
+    /** Stops counting a guest copy that only the host can complete. */
+    endHostWait?: (() => void) | null;
+}
 export interface FuturePendingBufferMeta {
     componentIdx?: number | null;
     buffer?: ManagedBuffer | null;
     isWrite?: boolean | null;
     onCopyDoneFn?: FutureOnCopyDone | null;
+    hostHeld?: boolean;
+    endHostWait?: (() => void) | null;
 }
 export interface FutureEndOptions {
     readonly pendingBufferMeta: FuturePendingBufferMeta;
@@ -2256,6 +2267,8 @@ export interface FutureEndBase {
     readonly isCopying: () => boolean;
     readonly setPendingBufferMeta: (meta: FuturePendingBufferMeta) => void;
     readonly resetPendingBufferMeta: () => void;
+    /** Record that the host holds an end of this future (it was lifted to the host). */
+    readonly markHostHeld: () => void;
     readonly getPendingBufferMeta: () => FuturePendingBufferMeta;
     readonly resetAndNotifyPending: (result: number) => void;
     readonly setPendingEvent: (fn: () => WaitableEvent) => void;
@@ -2534,6 +2547,7 @@ export interface FutureModule {
     readonly initializeFutureValueClass: (disposeSymbol: symbol) => FutureValueConstructor;
     readonly initializeFutureEndClass: (
         events: Pick<AsyncEventCodes, 'FUTURE_READ' | 'FUTURE_WRITE'>,
+        tracking?: ComponentHostOperationContext,
     ) => FutureEndConstructor;
     readonly initializeFutureReadableEndClass: (context: FutureReadableClassContext) => FutureReadableEndConstructor;
     readonly initializeFutureWritableEndClass: (context: FutureEndpointClassContext) => FutureWritableEndConstructor;
@@ -2622,6 +2636,8 @@ export interface StreamPendingBufferMeta {
     onCopyDoneFn?: StreamOnCopyDone | null;
     rejectLength?: number;
     dropAfterCopy?: boolean;
+    hostHeld?: boolean;
+    endHostWait?: (() => void) | null;
 }
 export interface StreamElementMetadata extends FutureElementMetadata {
     typedArray?: new (values: unknown[]) => unknown;
@@ -2720,6 +2736,8 @@ export interface StreamPayloadEnd {
     readonly copy: (args: StreamCopyOptions) => number | Promise<number>;
     readonly setPendingBufferMeta: (args: StreamPendingBufferMeta) => void;
     readonly resetPendingBufferMeta: () => void;
+    /** Record that the host holds an end of this stream (it was lifted to the host). */
+    readonly markHostHeld: () => void;
     readonly getPendingBufferMeta: () => StreamPendingBufferMeta;
     readonly hasPendingBuffer: () => boolean;
     readonly resetAndNotifyPending: (result: number) => void;
