@@ -53,6 +53,7 @@ test.concurrent.each([0, 1, 2])('prepare normalizes encoding %s and captures mem
         expect(child.getCalleeParams()).toEqual([17, 23]);
         expect(child.getReturnMemory()).toBe(memory);
         expect(child.getReturnMemoryIdx()).toBe(3);
+        expect(child.getLiftMemory()).toBe(memory);
         expect(child.returnResultTypeIdx()).toBe(7);
         expect(child.subtaskMeta?.stringEncoding).toBe(['utf8', 'utf16', 'compact-utf16'][encoding]);
         expect(child.getParentSubtask()!.getCallMetadata()).toMatchObject({

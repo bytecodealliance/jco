@@ -155,8 +155,11 @@ export function prepareCall(
     // lowered the call or how the callee was lifted.
     newTask.setFuncTypeIsAsync(calleeIsAsyncInt !== 0);
     newTask.setReturnResultTypeIdx(taskReturnTypeIdx >>> 0);
+    const memory = getMemoryFn();
     newTask.setReturnMemoryIdx(memoryIdx);
-    newTask.setReturnMemory(getMemoryFn());
+    newTask.setReturnMemory(memory);
+    // (the options of a prepared call are the callee's lift options)
+    newTask.setLiftMemory(memory ?? null);
     subtask.setChildTask(newTask);
 
     newTask.subtaskMeta = {

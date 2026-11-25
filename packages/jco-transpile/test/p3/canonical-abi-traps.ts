@@ -821,7 +821,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         { fn: 'taskCancelUndelivered', message: /`task\.cancel` called by task which has not been cancelled/ },
         { fn: 'taskCancelSyncLift', message: /task\.cancel requires an async canonical lift/ },
         { fn: 'taskReturnTwice', message: /task has already resolved/ },
-        { fn: 'taskReturnOtherMemory', message: /task\.return memory \[\d+\] does not match task \[\d+\]/ },
+        { fn: 'taskReturnOtherMemory', message: /task\.return memory does not match the lift memory/ },
         { fn: 'taskReturnUtf16', message: /task\.return string encoding \[utf16\] does not match task \[utf8\]/ },
         { fn: 'waitableSetDropInPostReturn', message: /may leave|cannot leave/ },
         // (raised by the callback loop, after the core function returned)

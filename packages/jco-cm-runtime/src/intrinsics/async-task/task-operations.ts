@@ -209,12 +209,13 @@ export function taskReturn(
     if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {
         throw new _context.RuntimeError('task.return result type does not match the function type');
     }
-    const expectedMemoryIdx = task.getReturnMemoryIdx();
-    if (typeof expectedMemoryIdx === 'number' && typeof memoryIdx === 'number' && expectedMemoryIdx !== memoryIdx) {
-        DEBUG: debugLog('[taskReturn()] mismatched memory indices', { expectedMemoryIdx, memoryIdx });
-        throw new _context.RuntimeError(
-            'task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']',
-        );
+    // `LiftOptions.equal` compares memories as instances: different indices
+    // may name the same memory. A `task.return` naming no memory is accepted,
+    // as the component-model tests (`async/big-interleaving-test.wast`) expect.
+    const liftMemory = task.getLiftMemory();
+    if (memory != null && liftMemory !== undefined && memory !== liftMemory) {
+        DEBUG: debugLog('[taskReturn()] mismatched memories', { memoryIdx, liftMemory });
+        throw new _context.RuntimeError('task.return memory does not match the lift memory');
     }
     const expectedStringEncoding = task.getReturnStringEncoding();
     if (expectedStringEncoding && stringEncoding && expectedStringEncoding !== stringEncoding) {

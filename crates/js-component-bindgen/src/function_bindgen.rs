@@ -951,6 +951,13 @@ impl FunctionBindgen<'_> {
                 "#
             );
         }
+        if self.component_state.is_some() {
+            // The lift's memory, if any, which a memory named by `task.return` must be
+            uwriteln!(
+                self.src,
+                "task.setLiftMemory(({get_memory_fn_expr})() ?? null);"
+            );
+        }
     }
 
     /// Run the full canonical adapter body with the export task installed as

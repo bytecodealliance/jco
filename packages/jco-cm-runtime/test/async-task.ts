@@ -239,10 +239,11 @@ test.concurrent('task.return traps before delivering results to the caller', () 
         subtask.onStart();
         t.setParentSubtask(subtask);
         t.setCalleeIsAsync(true);
-        t.setReturnMemoryIdx(0);
+        const liftMemory = { buffer: new ArrayBuffer(8) };
+        t.setLiftMemory(liftMemory);
         const ctx = {
             componentIdx: 0,
-            getMemoryFn: () => undefined,
+            getMemoryFn: () => liftMemory,
             memoryIdx: 0,
             stringEncoding: 'utf16',
             liftFns: [],
@@ -255,8 +256,11 @@ test.concurrent('task.return traps before delivering results to the caller', () 
                 fn: () => s.asyncTask.taskReturn({ ...ctx, ...overrides }, 42),
             });
 
-        // Canonical ABI `canon_task_return`: the options must equal the lift's.
-        expect(() => taskReturn({ memoryIdx: 1 })).toThrow(s.core.RuntimeError);
+        // Canonical ABI `canon_task_return`: the options must equal the lift's,
+        // with memories compared as instances rather than by index.
+        const otherMemory = { buffer: new ArrayBuffer(8) };
+        expect(() => taskReturn({ getMemoryFn: () => otherMemory })).toThrow('task.return memory');
+        expect(() => taskReturn({ getMemoryFn: () => otherMemory })).toThrow(s.core.RuntimeError);
         expect(() => taskReturn({ stringEncoding: 'utf8' })).toThrow('string encoding');
         expect(() => taskReturn({ stringEncoding: 'utf8' })).toThrow(s.core.RuntimeError);
         const state = s.component.getOrCreateAsyncState(0);
@@ -269,7 +273,8 @@ test.concurrent('task.return traps before delivering results to the caller', () 
         t.removeBorrowedHandle();
         expect(delivered).toEqual([]);
 
-        taskReturn();
+        // (the lift memory named through another index)
+        taskReturn({ memoryIdx: 7 });
         expect(delivered).toEqual([[42, 8]]);
         // `Task.return_`: a task resolves at most once.
         expect(() => taskReturn()).toThrow(s.core.RuntimeError);
