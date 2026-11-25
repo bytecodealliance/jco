@@ -261,6 +261,7 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
             throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
         }
         // A host import that returns a promise blocks the calling thread.
+        const state = getOrCreateAsyncState(context.states, componentIdx);
         if (callsHost && isPromiseLike(started)) {
             savedThread?.task.endFirstSliceOnBlock();
         }
@@ -288,14 +289,19 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
                 return resumption.promise;
             });
 
+        /** Resume once no sync call into another instance holds this stack back. */
+        const release = (deliver: () => ReturnType<typeof fn>): void => {
+            state.resumeWhenNotHeld(savedThread?.task, () => resume(deliver));
+        };
+
         settled.then(
             (result) =>
-                resume(() => {
-                    getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
+                release(() => {
+                    state.throwIfInterrupted();
                     return result as ReturnType<typeof fn>;
                 }),
             (error) =>
-                resume(() => {
+                release(() => {
                     throw error;
                 }),
         );

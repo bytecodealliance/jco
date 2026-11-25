@@ -18,6 +18,7 @@ import type {
     SuspendThreadOptions,
     SuspendTaskOptions,
     ComponentTask,
+    ComponentSyncCall,
     RepTable as RepTableType,
 } from '../runtime.js';
 import { debugLog } from './core/debug.js';
@@ -43,6 +44,7 @@ export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncSta
     hostWakeupScheduled: false,
     idleWaiters: new Set(),
     syncCalls: [],
+    heldResumptions: [],
 });
 export const initializeComponentAsyncStates: ComponentModule['initializeComponentAsyncStates'] = () => new Map();
 export const initializeCoreTrapMessages: ComponentModule['initializeCoreTrapMessages'] = (messages) =>
@@ -186,6 +188,29 @@ export function checkForDeadlock(context: ComponentDeadlockContext) {
             state.runTickLoop();
         }
     }, 0);
+}
+
+/**
+ * Whether a task runs on behalf of a sync call: it belongs to the call's
+ * instance, or the call waits on it through synchronous lowerings (its stack
+ * is part of the call's stack).
+ *
+ * @param task - the task
+ * @param call - the sync call
+ * @returns whether the task is within the call
+ */
+function isWithinSyncCall(task: ComponentTask, call: ComponentSyncCall): boolean {
+    let current = task;
+    for (;;) {
+        if (current === call.task || current.componentIdx() === call.componentIdx) {
+            return true;
+        }
+        const subtask = current.getParentSubtask() as { isAsync?: boolean; getParentTask(): ComponentTask } | null;
+        if (!subtask || subtask.isAsync) {
+            return false;
+        }
+        current = subtask.getParentTask();
+    }
 }
 
 export function trackHostOperation<T>(
@@ -1077,18 +1102,46 @@ function defineComponentAsyncState() {
         }
 
         endSyncCall(task: ComponentTask) {
-            const syncCalls = this.#context.deadlock.storeAsyncState.syncCalls;
+            const storeAsyncState = this.#context.deadlock.storeAsyncState;
+            const syncCalls = storeAsyncState.syncCalls;
             const idx = syncCalls.findIndex((call) => call.task === task);
             if (idx === -1) {
                 return;
             }
             syncCalls.splice(idx, 1);
+            // Stacks held back by the call resume in the order their promises
+            // settled, unless another sync call still holds them back.
+            const top = syncCalls.at(-1);
+            const held = storeAsyncState.heldResumptions;
+            for (let i = 0; i < held.length; ) {
+                const { task: heldTask, resume } = held[i]!;
+                if (top !== undefined && !isWithinSyncCall(heldTask, top)) {
+                    i++;
+                    continue;
+                }
+                held.splice(i, 1);
+                resume();
+            }
             // Instances held back by the call may run again.
             for (const state of this.#context.deadlock.asyncState.values()) {
                 if (state.hasPendingSchedulerWork()) {
                     state.runTickLoop();
                 }
             }
+        }
+
+        // Resume a stack of this instance that waited on a promise of the
+        // host. While a sync call into another instance is in progress, only
+        // that instance runs (Canonical ABI `canon_lift`, `not ft.async_`):
+        // the stack resumes once the call has returned.
+        resumeWhenNotHeld(task: ComponentTask | null | undefined, resume: () => void) {
+            const storeAsyncState = this.#context.deadlock.storeAsyncState;
+            const call = storeAsyncState.syncCalls.at(-1);
+            if (call === undefined || task === null || task === undefined || isWithinSyncCall(task, call)) {
+                resume();
+                return;
+            }
+            storeAsyncState.heldResumptions.push({ task, resume });
         }
 
         // Whether a call of a non-async-typed function into another instance
@@ -1103,6 +1156,16 @@ function defineComponentAsyncState() {
             this.#tickLoop = null;
             this.abandonLockWaiters();
             this.abandonEntrySlotWaiters();
+            // Stacks held back by a sync call resume too, to observe the stop.
+            const held = this.#context.deadlock.storeAsyncState.heldResumptions;
+            for (let i = 0; i < held.length; ) {
+                if (held[i]!.task.componentIdx() !== this.#componentIdx) {
+                    i++;
+                    continue;
+                }
+                const [{ resume }] = held.splice(i, 1);
+                resume();
+            }
             for (const thread of [...this.#suspendedThreadsByRef.keys()]) {
                 this.resumeThread(thread);
             }
