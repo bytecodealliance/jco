@@ -773,6 +773,10 @@ export async function syncStartCall(
             resolve: resolveTaskReturn,
             reject: rejectTaskReturn,
         } = promiseWithResolvers<void>();
+        // The callee may be rejected before it ever starts (e.g. when the store
+        // traps while it waits to enter), and this call then fails without
+        // awaiting the result: that rejection is reported through the call.
+        taskReturnPromise.catch(emptyFunc);
         preparedTask.registerOnResolveHandler(() => {
             const err = preparedTask.isErrored();
             if (err) {

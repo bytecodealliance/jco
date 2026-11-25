@@ -918,6 +918,10 @@ impl HostIntrinsic {
                             resolve: resolveTaskReturn,
                             reject: rejectTaskReturn,
                         }} = {promise_with_resolvers_fn}();
+                        // The callee may be rejected before it ever starts (e.g. when the store
+                        // traps while it waits to enter), and this call then fails without
+                        // awaiting the result: that rejection is reported through the call.
+                        taskReturnPromise.catch(() => {{}});
                         preparedTask.registerOnResolveHandler(() => {{
                             const err = preparedTask.isErrored();
                             if (err) {{
