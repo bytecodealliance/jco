@@ -350,7 +350,7 @@ impl ComponentIntrinsic {
                 let var_name = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
                 uwriteln!(
                     output,
-                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set() }};"#
+                    r#"const {var_name} = {{ deadlockCheck: null, pendingHostOperations: 0, idleWaiters: new Set(), syncCalls: [] }};"#
                 );
             }
 
@@ -394,9 +394,22 @@ impl ComponentIntrinsic {
                                     unresolvedRoots.add(task.getRootTask());
                                 }}
                             }}
+
+                            // With a call of a non-async-typed function in progress, nothing but
+                            // its instance's threads may run until it returns, so running out of
+                            // ready threads is that call blocking with none to switch to (Canonical
+                            // ABI `canon_lift`), rather than a deadlock of the event loop.
+                            const syncCall = {store_async_state}.syncCalls.at(-1);
+                            if (syncCall !== undefined && !syncCall.task.isResolvedState()) {{
+                                unresolvedRoots.add(syncCall.task.getRootTask());
+                            }}
                             if (unresolvedRoots.size === 0) {{ return; }}
 
-                            const err = new {runtime_error_class}('wasm trap: deadlock detected: event loop cannot make further progress');
+                            const err = new {runtime_error_class}(
+                                syncCall === undefined
+                                    ? 'wasm trap: deadlock detected: event loop cannot make further progress'
+                                    : 'cannot block a synchronous task before returning'
+                            );
                             // Which tasks were waiting, and on whose behalf. The message stays
                             // exactly what the Canonical ABI calls for, so this rides alongside
                             // it: a deadlock reported from a real program is otherwise a bare
@@ -698,6 +711,8 @@ impl ComponentIntrinsic {
                 let cannot_enter_component = Trap::CannotEnterComponent.to_string();
                 let report_trap_fn = render_args.require_intrinsic(Self::ReportTrap);
                 let check_idle_fn = render_args.require_intrinsic(Self::CheckIdle);
+                let store_async_state = render_args.require_intrinsic(Self::GlobalStoreAsyncState);
+                let async_state_map = render_args.require_intrinsic(Self::GlobalAsyncStateMap);
 
                 output.push_str(&format!(
                     r#"
@@ -1252,9 +1267,12 @@ impl ComponentIntrinsic {
                             return this.#suspendedThreadsByRef.get(thread)?.suspended ?? false;
                         }}
 
+                        // Readiness as `thread.{{suspend,yield}}-then-promote` sees it: the same
+                        // condition the scheduler uses, including the exclusive lock (Canonical
+                        // ABI `Thread.ready`, whose callback readiness waits for the lock).
                         isThreadReady(thread) {{
                             const meta = this.#suspendedThreadsByRef.get(thread);
-                            return !!meta && !meta.suspended && (meta.thread.isRejected() || meta.readyFn());
+                            return !!meta && !meta.suspended && this.suspendedThreadReady(thread);
                         }}
 
                         suspendedThreadReady(thread) {{
@@ -1265,6 +1283,9 @@ impl ComponentIntrinsic {
                             }}
                             if (this.isTrapped() || meta.thread.isRejected()) {{ return true; }}
                             if (!meta.readyFn()) {{ return false; }}
+                            // Only the implicit thread of a task that takes the exclusive lock
+                            // waits for it; threads made by `thread.new-indirect` never do.
+                            if (!meta.thread.isImplicit()) {{ return true; }}
                             const task = meta.thread.task();
                             return !task.needsExclusiveLock()
                                 || !this.isExclusivelyLocked()
@@ -1277,10 +1298,37 @@ impl ComponentIntrinsic {
                         hasPendingSchedulerWork() {{
                             if (this.#pendingTaskStarts > 0) {{ return true; }}
                             if (this.#lockHandoffScheduled) {{ return true; }}
+                            if (this.#heldBySyncCall()) {{ return false; }}
                             for (const meta of this.#suspendedThreadsByRef.values()) {{
                                 if (this.suspendedThreadReady(meta.thread)) {{ return true; }}
                             }}
                             return false;
+                        }}
+
+                        // Calls of non-async-typed functions (Canonical ABI `canon_lift` with
+                        // `not ft.async_`) are tracked store-wide, innermost last. Until such a
+                        // call's task resolves, the spec resumes only ready threads of the
+                        // callee's instance, and traps if there are none; nothing else in the
+                        // store runs.
+                        beginSyncCall(task) {{
+                            {store_async_state}.syncCalls.push({{ componentIdx: this.#componentIdx, task }});
+                        }}
+
+                        endSyncCall(task) {{
+                            const idx = {store_async_state}.syncCalls.findIndex((call) => call.task === task);
+                            if (idx === -1) {{ return; }}
+                            {store_async_state}.syncCalls.splice(idx, 1);
+                            // Instances held back by the call may run again.
+                            for (const state of {async_state_map}.values()) {{
+                                if (state.hasPendingSchedulerWork()) {{ state.runTickLoop(); }}
+                            }}
+                        }}
+
+                        // Whether a call of a non-async-typed function into another instance
+                        // is in progress, so that this instance's threads may not be resumed.
+                        #heldBySyncCall() {{
+                            const top = {store_async_state}.syncCalls.at(-1);
+                            return top !== undefined && top.componentIdx !== this.#componentIdx;
                         }}
 
                         stop() {{
@@ -1303,6 +1351,10 @@ impl ComponentIntrinsic {
                                     return;
                                 }}
                                 if (result === {component_async_state_class}.TickResult.IDLE) {{
+                                    // While a synchronous call into another instance is in
+                                    // progress, this loop waits for it to end (`endSyncCall`
+                                    // restarts it) instead of polling.
+                                    if (this.#heldBySyncCall()) {{ this.#tickLoop = null; return; }}
                                     {check_for_deadlock_fn}();
                                 }}
                                 // Let resumed microtasks drain before the next slice;
@@ -1317,6 +1369,7 @@ impl ComponentIntrinsic {
                         tick() {{
                             // (resuming returns immediately below, so the map is never
                             // mutated while this loop is still iterating it)
+                            const held = this.#heldBySyncCall();
                             for (const [thread, meta] of this.#suspendedThreadsByRef) {{
                                 if (!meta || !meta.readyFn) {{
                                     throw new Error(`missing/invalid thread meta despite thread [${{thread.id()}}] being present`);
@@ -1328,7 +1381,7 @@ impl ComponentIntrinsic {
                                     return {component_async_state_class}.TickResult.RESUMED;
                                 }}
 
-                                if (!this.suspendedThreadReady(thread)) {{ continue; }}
+                                if (held || !this.suspendedThreadReady(thread)) {{ continue; }}
 
                                 {debug_log_fn}('[{component_async_state_class}#tick()] resuming thread via tick', {{
                                     threadID: thread.id(),
