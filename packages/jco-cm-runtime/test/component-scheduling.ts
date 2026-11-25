@@ -206,6 +206,14 @@ test.concurrent('a task whose threads all exited unresolved deadlocks its unreso
         const error = component.storeTrap.error as Error & { deadlockDetail: ComponentDeadlockDetail };
         expect(error.message).toContain('deadlock detected');
         expect(error.deadlockDetail.unresolvedRootTaskIDs).toEqual([1n]);
+        // (the exited task is what the others wait on, so the detail names it)
+        expect(
+            error.deadlockDetail.exitedTasks.map(({ taskID, componentIdx, rootTaskID }) => ({
+                taskID,
+                componentIdx,
+                rootTaskID,
+            })),
+        ).toEqual([{ taskID: 2n, componentIdx: 0, rootTaskID: 1n }]);
         expect(root.errors).toEqual([error]);
         // A synchronous caller waits on the exited task itself, so it is rejected too.
         expect(child.errors).toEqual([error]);

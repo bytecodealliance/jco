@@ -60,6 +60,50 @@ export function normalizeCoreTrap<T>(context: ComponentNormalizeTrapContext, err
     return err;
 }
 
+/**
+ * Describe a task for a deadlock or blocking trap.
+ *
+ * @param task - the task
+ * @returns what the trap's `deadlockDetail` records about it
+ */
+function describeTask(task: ComponentTask) {
+    return {
+        taskID: task.id(),
+        componentIdx: task.componentIdx(),
+        state: task.taskState(),
+        rootTaskID: task.getRootTask().id(),
+    };
+}
+
+/**
+ * Record which tasks were waiting, and on whose behalf, on a deadlock or
+ * blocking trap. The message stays exactly what the Canonical ABI calls for, so
+ * this rides alongside it: a deadlock reported from a real program is
+ * otherwise a bare sentence, and the state that produced it is gone by the time
+ * anyone reads the failure.
+ *
+ * @param err - the trap
+ * @param pendingHostOperations - the host operations in flight
+ * @param suspendedTasks - the tasks with a suspended thread
+ * @param exitedTasks - the tasks whose threads all exited before they resolved
+ * @param unresolvedRoots - the unresolved root tasks the trap fails
+ */
+function attachDeadlockDetail(
+    err: Error,
+    pendingHostOperations: number,
+    suspendedTasks: Iterable<ComponentTask>,
+    exitedTasks: Iterable<ComponentTask>,
+    unresolvedRoots: Iterable<ComponentTask>,
+) {
+    (err as Error & { deadlockDetail: ComponentDeadlockDetail }).deadlockDetail = {
+        pendingHostOperations,
+        suspendedTasks: [...suspendedTasks].map(describeTask),
+        // (a task whose threads all exited unresolved is often what the others wait on)
+        exitedTasks: [...exitedTasks].map(describeTask),
+        unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id()),
+    };
+}
+
 export function checkForDeadlock(context: ComponentDeadlockContext) {
     const { RuntimeError, storeAsyncState, storeTrap, asyncState } = context;
     if (storeAsyncState.deadlockCheck !== null || storeTrap.error !== null) {
@@ -116,21 +160,7 @@ export function checkForDeadlock(context: ComponentDeadlockContext) {
                 ? 'wasm trap: deadlock detected: event loop cannot make further progress'
                 : 'cannot block a synchronous task before returning',
         );
-        // Which tasks were waiting, and on whose behalf. The message stays
-        // exactly what the Canonical ABI calls for, so this rides alongside
-        // it: a deadlock reported from a real program is otherwise a bare
-        // sentence, and the state that produced it is gone by the time
-        // anyone reads the failure.
-        (err as Error & { deadlockDetail: ComponentDeadlockDetail }).deadlockDetail = {
-            pendingHostOperations: storeAsyncState.pendingHostOperations,
-            suspendedTasks: [...suspendedTasks].map((task) => ({
-                taskID: task.id(),
-                componentIdx: task.componentIdx(),
-                state: task.taskState(),
-                rootTaskID: task.getRootTask().id(),
-            })),
-            unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id()),
-        };
+        attachDeadlockDetail(err, storeAsyncState.pendingHostOperations, suspendedTasks, exitedTasks, unresolvedRoots);
         storeTrap.error = err;
         for (const root of unresolvedRoots) {
             root.setErrored(err);

@@ -420,14 +420,18 @@ impl ComponentIntrinsic {
                             // it: a deadlock reported from a real program is otherwise a bare
                             // sentence, and the state that produced it is gone by the time
                             // anyone reads the failure.
+                            const describeTask = (task) => ({{
+                                taskID: task.id(),
+                                componentIdx: task.componentIdx(),
+                                state: task.taskState(),
+                                rootTaskID: task.getRootTask().id(),
+                            }});
                             err.deadlockDetail = {{
                                 pendingHostOperations: {store_async_state}.pendingHostOperations,
-                                suspendedTasks: [...suspendedTasks].map((task) => ({{
-                                    taskID: task.id(),
-                                    componentIdx: task.componentIdx(),
-                                    state: task.taskState(),
-                                    rootTaskID: task.getRootTask().id(),
-                                }})),
+                                suspendedTasks: [...suspendedTasks].map(describeTask),
+                                // (a task whose threads all exited unresolved is often what the
+                                // others wait on)
+                                exitedTasks: [...exitedTasks].map(describeTask),
                                 unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id()),
                             }};
                             {store_trap}.error = err;
