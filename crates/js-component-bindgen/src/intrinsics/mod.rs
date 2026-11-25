@@ -2082,7 +2082,7 @@ mod tests {
     }
 
     #[test]
-    fn subtask_cancel_drives_only_the_target_callback_slice() {
+    fn subtask_cancel_drives_only_the_target_callback_turn() {
         let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
         assert!(cancel.contains("childTask?.hasCallback()"));
         assert!(cancel.contains("childState.suspendedTaskCancellable(childTask.id())"));
