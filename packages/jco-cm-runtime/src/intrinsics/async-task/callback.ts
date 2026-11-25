@@ -18,8 +18,9 @@ export function unpackValidatedCallbackResult(
     result: number,
 ): ReturnType<AsyncTaskModule['unpackCallbackResult']> {
     const eventCode = result & 0xf;
-    if (eventCode > 3) {
-        throw new context.RuntimeError('invalid async return value [' + eventCode + '], outside callback code range');
+    // Canonical ABI `unpack_callback_result`: EXIT, YIELD and WAIT are the only codes.
+    if (eventCode > 2) {
+        throw new context.RuntimeError('unsupported callback code: ' + eventCode);
     }
     if (result < 0) {
         throw new context.RuntimeError('invalid callback result');

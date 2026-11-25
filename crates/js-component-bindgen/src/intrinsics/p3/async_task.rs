@@ -3394,8 +3394,9 @@ impl AsyncTaskIntrinsic {
                     function {unpack_callback_result_fn}(result) {{
                         if (!({i32_typecheck_fn}(result))) {{ throw new Error('invalid callback return value [' + result + '], not a valid i32'); }}
                         const eventCode = result & 0xF;
-                        if (eventCode < 0 || eventCode > 3) {{
-                            throw new {runtime_error_class}('invalid async return value [' + eventCode + '], outside callback code range');
+                        // Canonical ABI `unpack_callback_result`: EXIT, YIELD and WAIT are the only codes.
+                        if (eventCode > 2) {{
+                            throw new {runtime_error_class}('unsupported callback code: ' + eventCode);
                         }}
                         if (result < 0 || result >= 2**32) {{ throw new {runtime_error_class}('invalid callback result'); }}
                         // TODO: table max length check?
@@ -3462,8 +3463,8 @@ impl AsyncTaskIntrinsic {
                             unpacked = {unpack_callback_result_fn}(value);
                             callbackCode = unpacked[0];
                             waitableSetRep = unpacked[1];
-                            if (callbackCode < 0 || callbackCode > 3) {{
-                                throw new {runtime_error_class}('invalid async return value, outside callback code range');
+                            if (callbackCode > 2) {{
+                                throw new {runtime_error_class}('unsupported callback code: ' + callbackCode);
                             }}
                         }};
 
@@ -3565,7 +3566,7 @@ impl AsyncTaskIntrinsic {
                                         return;
 
                                     default:
-                                        throw new Error(`Unrecognized async function result [${{callbackCode}}]`);
+                                        throw new {runtime_error_class}(`unsupported callback code: ${{callbackCode}}`);
                                 }}
                             }} catch (err) {{
                                 handleError(err);
