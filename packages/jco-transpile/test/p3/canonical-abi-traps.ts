@@ -179,7 +179,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
     // Upstream exit-without-resolving.wast (component-model#767): exiting
     // unresolved traps only a caller that waits on the task.
     test.concurrent.each([
-        { fn: 'syncTypedWait', error: /deadlock detected/ },
+        { fn: 'syncTypedWait', error: /cannot block a synchronous task before returning/ },
         { fn: 'asyncTypedWait', error: /deadlock detected/ },
         { fn: 'noWait', error: null },
     ])('a callee exiting unresolved: $fn', async ({ fn, error }) => {
