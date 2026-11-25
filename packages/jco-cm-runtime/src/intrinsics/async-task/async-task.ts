@@ -87,6 +87,7 @@ function defineAsyncTask() {
         #funcTypeIsAsync = false;
         #syncCall = false;
         #returnResultTypeIdx: number | null = null;
+        #returnStringEncoding: string | null = null;
         #parentSubtask: AsyncSubtaskType | null = null;
         #errHandling: unknown;
         #returnLowerFns: TaskLowerFn[] | null = null;
@@ -168,6 +169,9 @@ function defineAsyncTask() {
             }
             if (opts.errHandling) {
                 this.#errHandling = opts.errHandling;
+            }
+            if (opts.stringEncoding) {
+                this.#returnStringEncoding = opts.stringEncoding;
             }
         }
         taskState() {
@@ -331,6 +335,10 @@ function defineAsyncTask() {
         }
         getReturnMemory() {
             return this.#memory;
+        }
+        /** The string encoding of the lift, which `task.return` must match (null if unknown). */
+        getReturnStringEncoding() {
+            return this.#returnStringEncoding;
         }
         setReturnMemory(m: RuntimeMemory | null | undefined) {
             if (m === null) {

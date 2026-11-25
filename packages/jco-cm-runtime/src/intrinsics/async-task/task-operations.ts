@@ -195,16 +195,36 @@ export function taskReturn(
     if (!task) {
         throw new Error('invalid/missing current task in metadata');
     }
+
+    // Canonical ABI `canon_task_return` and `Task.return_`: every check runs
+    // before any result is delivered to the caller.
+    if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) {
+        throw new _context.RuntimeError('cannot leave component instance');
+    }
     if (!task.calleeIsAsync()) {
         throw new _context.RuntimeError('task.return requires an async canonical lift');
     }
-    task.validateResourceBorrowScope();
-    // Canonical ABI `canon_task_return`: the result type must be the one of
-    // the task's function type.
     const expectedResultType = task.returnResultTypeIdx();
     if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {
         throw new _context.RuntimeError('task.return result type does not match the function type');
     }
+    const expectedMemoryIdx = task.getReturnMemoryIdx();
+    if (typeof expectedMemoryIdx === 'number' && typeof memoryIdx === 'number' && expectedMemoryIdx !== memoryIdx) {
+        DEBUG: debugLog('[taskReturn()] mismatched memory indices', { expectedMemoryIdx, memoryIdx });
+        throw new _context.RuntimeError(
+            'task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']',
+        );
+    }
+    const expectedStringEncoding = task.getReturnStringEncoding();
+    if (expectedStringEncoding && stringEncoding && expectedStringEncoding !== stringEncoding) {
+        throw new _context.RuntimeError(
+            `task.return string encoding [${stringEncoding}] does not match task [${expectedStringEncoding}]`,
+        );
+    }
+    if (task.isResolvedState()) {
+        throw task.isErrored() ?? new _context.RuntimeError(TASK_ALREADY_RESOLVED);
+    }
+    task.validateResourceBorrowScope();
     DEBUG: debugLog('[taskReturn()] args', {
         componentIdx,
         taskID: task.id(),
@@ -241,11 +261,6 @@ export function taskReturn(
         subtaskCallMetadata.returnFnCalled = true;
         task.resolve([]);
         return;
-    }
-    const expectedMemoryIdx = task.getReturnMemoryIdx();
-    if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {
-        DEBUG: debugLog('[taskReturn()] mismatched memory indices', { expectedMemoryIdx, memoryIdx });
-        throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
     }
     task.callbackFnIdx = callbackFnIdx;
     if (!memory && liftFns.length > 4) {

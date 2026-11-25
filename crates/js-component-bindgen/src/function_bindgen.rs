@@ -831,6 +831,12 @@ impl FunctionBindgen<'_> {
             };
 
         let get_callback_fn_property = callback_fn_property(&get_callback_fn_expr);
+        // `task.return` must use the string encoding of the lift (Canonical ABI `LiftOptions.equal`).
+        let string_encoding = match self.encoding {
+            StringEncoding::UTF8 => "'utf8'",
+            StringEncoding::UTF16 => "'utf16'",
+            StringEncoding::CompactUTF16 => "'compact-utf16'",
+        };
         uwriteln!(
             self.src,
             r#"
@@ -847,6 +853,7 @@ impl FunctionBindgen<'_> {
                   callbackFnName: {callback_fn_name},
                   errHandling: '{err_handling}',
                   callingWasmExport: true,
+                  stringEncoding: {string_encoding},
               }});
               task.setCalleeIsAsync({canonical_abi_async});
               task.setFuncTypeIsAsync({func_type_async});

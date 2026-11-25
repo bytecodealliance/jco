@@ -254,11 +254,13 @@ impl TaskContextIntrinsic {
             )],
             Self::TaskReturn => &[
                 Task(Self::GetCurrentTask),
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
             ],
             Self::TaskCancel => &[
                 Task(Self::GetCurrentTask),
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
+                Core(CoreContextIntrinsic::InitializeRuntimeErrorConstructor),
             ],
             Self::SubtaskCancel => &[
                 Task(Self::TaskCancel),
@@ -347,10 +349,10 @@ impl TaskContextIntrinsic {
             }
             Self::UnpackCallbackResult => "RuntimeError: WebAssemblyRuntimeError",
             Self::TaskReturn => {
-                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, RuntimeError: WebAssemblyRuntimeError"
+                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, RuntimeError: WebAssemblyRuntimeError"
             }
             Self::TaskCancel => {
-                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext"
+                "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, RuntimeError: WebAssemblyRuntimeError"
             }
             Self::SubtaskCancel => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, AsyncSubtask, RuntimeError: WebAssembly.RuntimeError"

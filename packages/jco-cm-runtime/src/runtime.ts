@@ -1446,6 +1446,7 @@ export interface AsyncTask extends ComponentTask, WaitableTask {
     readonly getReturnMemoryIdx: () => number | null | undefined;
     readonly setReturnMemoryIdx: (idx: number | null | undefined) => void;
     readonly getReturnMemory: () => RuntimeMemory | null | undefined;
+    readonly getReturnStringEncoding: () => string | null;
     readonly setReturnMemory: (memory: RuntimeMemory | null | undefined) => void;
     readonly setReturnLowerFns: (fns: TaskLowerFn[]) => void;
     readonly getReturnLowerFns: () => TaskLowerFn[] | null;
@@ -1644,11 +1645,13 @@ export interface TaskCreateContext<T extends AsyncTask = AsyncTask> {
     readonly taskIds: bigint[];
     readonly componentIdxs: number[];
 }
-export interface TaskReturnRuntimeContext extends TaskLookupContext, TrapContext {}
-export interface TaskCancelContext extends TaskLookupContext {
+/** Finds the current task and the state of its component instance. */
+export interface TaskStateLookupContext extends TaskLookupContext {
     readonly lookup: ComponentStateLookupContext;
 }
-export interface SubtaskCancelContext extends TaskCancelContext, TrapContext {
+export interface TaskReturnRuntimeContext extends TaskStateLookupContext, TrapContext {}
+export interface TaskCancelContext extends TaskStateLookupContext, TrapContext {}
+export interface SubtaskCancelContext extends TaskCancelContext {
     readonly AsyncSubtask: AsyncSubtaskConstructor;
 }
 export interface TaskDriverContext extends TrapContext {
@@ -1658,17 +1661,17 @@ export interface TaskDriverContext extends TrapContext {
     readonly events: Pick<AsyncEventCodes, 'NONE' | 'TASK_CANCELLED'>;
     readonly strictNumeric: StrictNumericContext;
 }
-export interface TaskLowerImportRuntimeContext extends TaskCancelContext {
+export interface TaskLowerImportRuntimeContext extends TaskStateLookupContext {
     readonly AsyncTask: Pick<AsyncTaskConstructor, 'State'>;
     readonly mayLeave: ComponentMayLeaveContext;
     readonly events: Pick<AsyncEventCodes, 'SUBTASK'>;
 }
-export interface TaskCompatImportRuntimeContext extends TaskCancelContext {
+export interface TaskCompatImportRuntimeContext extends TaskStateLookupContext {
     readonly creation: TaskCreateContext;
     readonly mayLeave: ComponentMayLeaveContext;
     readonly events: Pick<AsyncEventCodes, 'SUBTASK'>;
 }
-export interface TaskSymmetricExitContext extends TaskCancelContext {
+export interface TaskSymmetricExitContext extends TaskStateLookupContext {
     readonly mayBlock: TaskMayBlockGlobal;
     readonly stack: SymmetricSyncGuestCall[];
 }
