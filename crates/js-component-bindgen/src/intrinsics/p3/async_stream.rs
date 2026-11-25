@@ -743,6 +743,8 @@ impl AsyncStreamIntrinsic {
                 let track_host_operation = render_args.intrinsic_call_prefix(Intrinsic::Component(
                     ComponentIntrinsic::TrackHostOperation,
                 ));
+                let store = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
 
                 // Internal helper fn that sets up for a `copy()` call
                 let copy_setup_impl = format!(
@@ -1570,6 +1572,31 @@ impl AsyncStreamIntrinsic {
                             this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
                             this.#pendingBufferMeta.rejectLength = rejectLength;
                             this.#pendingBufferMeta.dropAfterCopy = dropAfterCopy;
+                            this.#trackHostWait();
+                        }}
+
+                        // Record that the host holds an end of this stream (it was lifted to the host).
+                        markHostHeld() {{
+                            this.#pendingBufferMeta.hostHeld = true;
+                            this.#trackHostWait();
+                        }}
+
+                        // A guest copy pending on a stream whose other end the host holds can
+                        // only be completed by the host, whenever it reads, writes or drops
+                        // that end: count it like a host operation, so the deadlock check
+                        // does not report the guest waiting on the host.
+                        #trackHostWait() {{
+                            const meta = this.#pendingBufferMeta;
+                            const guestCopyPending = !!meta.buffer && meta.componentIdx !== -1 && meta.componentIdx != null;
+                            if (!guestCopyPending || !meta.hostHeld) {{
+                                const endHostWait = meta.endHostWait;
+                                meta.endHostWait = null;
+                                endHostWait?.();
+                                return;
+                            }}
+                            if (meta.endHostWait || {store}.stopped) {{ return; }}
+                            const hostWait = new Promise((resolve) => {{ meta.endHostWait = resolve; }});
+                            Promise.resolve({track_host_operation}() => hostWait)).catch(() => {{}});
                         }}
 
                         resetPendingBufferMeta() {{
@@ -1767,6 +1794,7 @@ impl AsyncStreamIntrinsic {
                                throw new {runtime_error_class}('cannot lift stream after being notified that the writable end dropped');
                            }}
                            if (streamEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_STREAM_IN_WAITABLE_SET:?}); }}
+                           streamEnd.markHostHeld();
 
                             return new {external_stream_class}({{
                                 isReadable: streamEnd.isReadable(),

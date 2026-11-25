@@ -722,6 +722,7 @@ impl AsyncFutureIntrinsic {
                                throw new {runtime_error_class}('cannot lift future after previous read succeeded');
                            }}
                            if (futureEnd.isInSet()) {{ throw new {runtime_error_class}({CANNOT_LIFT_FUTURE_IN_WAITABLE_SET:?}); }}
+                           futureEnd.markHostHeld();
 
                             return futureEnd.promise();
                         }}
@@ -735,6 +736,11 @@ impl AsyncFutureIntrinsic {
                 let future_end_class = render_args.require_intrinsic(Self::FutureEndClass);
                 let async_event_code_enum =
                     render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let track_host_operation = render_args.intrinsic_call_prefix(Intrinsic::Component(
+                    ComponentIntrinsic::TrackHostOperation,
+                ));
+                let store = render_args
+                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
 
                 uwriteln!(
                     output,
@@ -813,6 +819,31 @@ impl AsyncFutureIntrinsic {
                             this.#pendingBufferMeta.buffer = buffer;
                             this.#pendingBufferMeta.isWrite = isWrite;
                             this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
+                            this.#trackHostWait();
+                        }}
+
+                        // Record that the host holds an end of this future (it was lifted to the host).
+                        markHostHeld() {{
+                            this.#pendingBufferMeta.hostHeld = true;
+                            this.#trackHostWait();
+                        }}
+
+                        // A guest copy pending on a future whose other end the host holds can
+                        // only be completed by the host, whenever it reads or drops that end:
+                        // count it like a host operation, so the deadlock check does not
+                        // report the guest waiting on the host.
+                        #trackHostWait() {{
+                            const meta = this.#pendingBufferMeta;
+                            const guestCopyPending = !!meta.buffer && meta.componentIdx !== -1 && meta.componentIdx != null;
+                            if (!guestCopyPending || !meta.hostHeld) {{
+                                const endHostWait = meta.endHostWait;
+                                meta.endHostWait = null;
+                                endHostWait?.();
+                                return;
+                            }}
+                            if (meta.endHostWait || {store}.stopped) {{ return; }}
+                            const hostWait = new Promise((resolve) => {{ meta.endHostWait = resolve; }});
+                            Promise.resolve({track_host_operation}() => hostWait)).catch(() => {{}});
                         }}
 
                         resetPendingBufferMeta() {{

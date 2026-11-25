@@ -1893,6 +1893,42 @@ mod tests {
     }
 
     #[test]
+    fn stream_copies_waiting_on_the_host_count_as_host_operations() {
+        for intrinsic in [
+            AsyncStreamIntrinsic::StreamReadableEndClass,
+            AsyncStreamIntrinsic::StreamWritableEndClass,
+        ] {
+            let source = render_intrinsic_body(Intrinsic::AsyncStream(intrinsic));
+            assert!(source.contains("markHostHeld() {"), "{intrinsic:?}");
+            assert!(
+                source.contains("if (!guestCopyPending || !meta.hostHeld) {"),
+                "{intrinsic:?}"
+            );
+            assert!(
+                source.contains("Promise.resolve(_trackHostOperation(() => hostWait))"),
+                "{intrinsic:?}"
+            );
+        }
+        let host_stream = render_intrinsic_body(Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::HostStreamClass,
+        ));
+        assert!(host_stream.contains("streamEnd.markHostHeld();"));
+    }
+
+    #[test]
+    fn future_copies_waiting_on_the_host_count_as_host_operations() {
+        let source =
+            render_intrinsic_body(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass));
+        assert!(source.contains("markHostHeld() {"));
+        assert!(source.contains("if (!guestCopyPending || !meta.hostHeld) {"));
+        assert!(source.contains("Promise.resolve(_trackHostOperation(() => hostWait))"));
+        let host_future = render_intrinsic_body(Intrinsic::AsyncFuture(
+            AsyncFutureIntrinsic::HostFutureClass,
+        ));
+        assert!(host_future.contains("futureEnd.markHostHeld();"));
+    }
+
+    #[test]
     fn maybe_sync_generator_awaits_only_promises() {
         let source =
             render_intrinsic_body(Intrinsic::JsHelper(JsHelperIntrinsic::MaybeSyncGeneratorFn));

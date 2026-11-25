@@ -76,6 +76,7 @@ function defineHostStream() {
             if (streamEnd.isInSet()) {
                 throw new this.#context.RuntimeError("cannot lift stream while it's in a waitable set");
             }
+            streamEnd.markHostHeld();
 
             return new this.#context.Stream({
                 isReadable: streamEnd.isReadable(),

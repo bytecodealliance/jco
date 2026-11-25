@@ -159,9 +159,10 @@ impl FutureContextIntrinsic {
             Self::InitializeFutureValueClass => {
                 &[Core(CoreContextIntrinsic::InitializeSymbolDispose)]
             }
-            Self::InitializeFutureEndClass => {
-                &[Core(CoreContextIntrinsic::InitializeAsyncEventCodes)]
-            }
+            Self::InitializeFutureEndClass => &[
+                Core(CoreContextIntrinsic::InitializeAsyncEventCodes),
+                Component(ComponentContextIntrinsic::TrackHostOperation),
+            ],
             Self::InitializeFutureReadableEndClass => &[
                 Component(ComponentContextIntrinsic::InitializeStoreTrap),
                 Future(Self::InitializeFutureEndClass),
@@ -258,7 +259,9 @@ impl FutureContextIntrinsic {
                 Self::InitializeFutureTables => "",
                 Self::InitializeNestedFutureSymbol => "",
                 Self::InitializeFutureValueClass => "symbolDispose",
-                Self::InitializeFutureEndClass => "ASYNC_EVENT_CODE",
+                Self::InitializeFutureEndClass => {
+                    "ASYNC_EVENT_CODE, _jcoComponentHostOperationContext"
+                }
                 Self::InitializeFutureReadableEndClass => {
                     "{ RuntimeError: WebAssemblyRuntimeError, FutureEnd, FutureValue, buffers: BUFFER_MGR, events: ASYNC_EVENT_CODE, lookup: _jcoComponentStateLookupContext, storeTrap: STORE_TRAP }"
                 }

@@ -6,13 +6,21 @@ import type {
     FutureCopyResults,
     FutureCopyStates,
     ComponentWaitable,
+    ComponentHostOperationContext,
     WaitableEvent,
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
+import { trackGuestWaitOnHost } from '../component/host-wait.js';
 
-/** Create a base endpoint constructor using the selected event codes. */
+/**
+ * Create a base endpoint constructor using the selected event codes.
+ *
+ * With `tracking`, a guest copy that only the host can complete (the other
+ * end was lifted to the host) counts as a host operation while it is pending.
+ */
 export function initializeFutureEndClass(
     events: Pick<AsyncEventCodes, 'FUTURE_READ' | 'FUTURE_WRITE'>,
+    tracking?: ComponentHostOperationContext,
 ): FutureEndConstructor {
     class FutureEnd {
         // Supplied by readable/writable subclasses; declarations emit no properties.
@@ -109,6 +117,19 @@ export function initializeFutureEndClass(
             this.#pendingBufferMeta.buffer = buffer;
             this.#pendingBufferMeta.isWrite = isWrite;
             this.#pendingBufferMeta.onCopyDoneFn = onCopyDoneFn;
+            this.#trackHostWait();
+        }
+
+        /** Record that the host holds an end of this future (it was lifted to the host). */
+        markHostHeld() {
+            this.#pendingBufferMeta.hostHeld = true;
+            this.#trackHostWait();
+        }
+
+        #trackHostWait() {
+            if (tracking) {
+                trackGuestWaitOnHost(tracking, this.#pendingBufferMeta);
+            }
         }
 
         resetPendingBufferMeta() {
