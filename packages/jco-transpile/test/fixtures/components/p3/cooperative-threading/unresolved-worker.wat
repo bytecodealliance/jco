@@ -1,4 +1,5 @@
-;; The last worker must resolve its task before exiting.
+;; A worker that exits without resolving its task leaves it unresolved without
+;; trapping (component-model#767); the host waiting on the task is deadlocked.
 (component
   (core module $T (table (export "table") 2 funcref))
   (core instance $t (instantiate $T))

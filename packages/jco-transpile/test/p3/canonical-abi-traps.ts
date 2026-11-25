@@ -122,7 +122,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
-    test.concurrent('a stackful lift that returns without task.return traps', async () => {
+    test.concurrent('a stackful lift that returns without task.return leaves its caller deadlocked', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
@@ -133,7 +133,54 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         try {
             const err = await rejection(instance.withoutTaskReturn());
             assert.instanceOf(err, WebAssembly.RuntimeError);
-            assert.match((err as Error).message, /without resolution/);
+            assert.match((err as Error).message, /deadlock detected/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('a stackful callee that returns without task.return stays STARTED', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'stackful-callee-exit-without-return',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'stackful-callee-exit-without-return.wat'),
+            },
+        });
+        try {
+            // STARTED (1), not RETURNED (2): the core return only exits the
+            // callee's implicit thread.
+            assert.strictEqual(await instance.run(), 1);
+            assert.strictEqual(await instance.run(), 1);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    // Upstream exit-without-resolving.wast (component-model#767): exiting
+    // unresolved traps only a caller that waits on the task.
+    test.concurrent.each([
+        { fn: 'syncTypedWait', error: /deadlock detected/ },
+        { fn: 'asyncTypedWait', error: /deadlock detected/ },
+        { fn: 'noWait', error: null },
+    ])('a callee exiting unresolved: $fn', async ({ fn, error }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: `exit-without-resolving-${fn}`,
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'exit-without-resolving.wat'),
+            },
+        });
+        try {
+            const call = instance[fn] as () => Promise<number>;
+            if (error) {
+                const err = await rejection(call());
+                assert.instanceOf(err, WebAssembly.RuntimeError);
+                assert.match((err as Error).message, error);
+            } else {
+                assert.strictEqual(await call(), 42);
+                assert.strictEqual(await call(), 42);
+            }
         } finally {
             await cleanup();
         }
@@ -286,7 +333,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
-    test.concurrent('a callee that exits without task.return traps its async-lowered caller', async () => {
+    test.concurrent('a callee that exits without task.return stays STARTED for its async-lowered caller', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
             component: {
@@ -295,17 +342,10 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
             },
         });
         try {
-            // The caller is sync-lifted: the trap surfaces from its call rather
-            // than a RETURN_CANCELLED subtask state the caller would carry on with.
-            let err: unknown;
-            try {
-                const result = instance.run();
-                err = await rejection(Promise.resolve(result));
-            } catch (thrown) {
-                err = thrown;
-            }
-            assert.instanceOf(err, WebAssembly.RuntimeError);
-            assert.match((err as Error).message, /without resolution/);
+            // Exiting unresolved does not trap: the subtask is reported STARTED
+            // (not RETURN_CANCELLED) and the caller carries on.
+            assert.strictEqual((await instance.run()) & 0xf, 1);
+            assert.strictEqual((await instance.run()) & 0xf, 1);
         } finally {
             await cleanup();
         }

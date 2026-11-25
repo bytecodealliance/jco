@@ -22,10 +22,11 @@ fixture, add its filename and full source commit to the manifest, then run the
 synchronization command. The xtask test suite verifies that every vendored
 `.wast` file has a manifest entry.
 
-The manifest covers all 78 WAST paths in upstream `test/` at
-[`c818a1925e1c7e3d3c8bdecf2fba070b4e737b03`](https://github.com/WebAssembly/component-model/tree/c818a1925e1c7e3d3c8bdecf2fba070b4e737b03/test),
+The manifest covers all 79 WAST paths in upstream `test/` at
+[`585526aa1f2c7f76f07557d16e265dede38b3acb`](https://github.com/WebAssembly/component-model/tree/585526aa1f2c7f76f07557d16e265dede38b3acb/test),
 including the async tests added by
-[#761](https://github.com/WebAssembly/component-model/pull/761), as well as
+[#761](https://github.com/WebAssembly/component-model/pull/761) and
+[#767](https://github.com/WebAssembly/component-model/pull/767), as well as
 binary, linking, resource, validation, and value tests. All fixtures use that
 revision except `async/big-interleaving-test.wast`: it retains its earlier pin
 so its existing coverage can run until Jco's parser supports `stream.forward`

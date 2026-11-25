@@ -1,6 +1,7 @@
-;; A callback-lifted callee that exits without `task.return` traps, and the
-;; trap reaches its async-lowered caller during the call (Canonical ABI
-;; `Task.exit_implicit_thread`). It is not reported as RETURN_CANCELLED.
+;; A callback-lifted callee that exits without `task.return` is left
+;; unresolved without trapping (Canonical ABI `Task.exit_implicit_thread`,
+;; component-model#767). Its async-lowered caller sees the subtask as STARTED,
+;; not RETURN_CANCELLED.
 (component
   (component $callee
     (core module $libc (memory (export "mem") 1))

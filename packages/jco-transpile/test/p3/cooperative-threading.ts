@@ -31,7 +31,7 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('cooperative threadin
         { name: 'bad-promote', error: /invalid thread handle/ },
         { name: 'bad-suspend-promote', error: /invalid thread handle/ },
         { name: 'deadlock', error: /deadlock/ },
-        { name: 'unresolved-worker', error: /exited without resolution/ },
+        { name: 'unresolved-worker', error: /deadlock detected/ },
     ])('$name traps', async ({ name, error }) => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
