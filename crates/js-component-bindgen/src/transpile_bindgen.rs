@@ -7734,7 +7734,7 @@ pub fn gen_flat_lift_fn_js_expr(
                                     format!(
                                         r#"
                                       (handle) => {{
-                                          const rep = handleTable{tid}[(handle << 1) + 1] % {rsc_own_flag};
+                                          const rep = handleTable{tid}[handle * 2 + 1] % {rsc_own_flag};
                                           let resourceObj = captureTable{rid}.get(rep);
                                           if (!resourceObj) {{
                                               resourceObj = Object.create({local_name}.prototype);
