@@ -133,7 +133,7 @@ export function driverLoop(
                     task.settleCompletion();
                     return;
                 default:
-                    throw new Error(`Unrecognized async function result [${callbackCode}]`);
+                    throw new _context.RuntimeError(`unsupported callback code: ${callbackCode}`);
             }
         } catch (err) {
             handleError(err);
