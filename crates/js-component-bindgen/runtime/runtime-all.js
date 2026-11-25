@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit c8ae234496f86e896a115c7d436695942ace3359
+// generated from commit 7429e0980c8ded6139b29b1af5db22064cf12cdc
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1470,8 +1470,8 @@ function taskCancel(_context, componentIdx) {
 const RESOURCE_TABLE_FLAG = 1 << 30;
 const RESOURCE_TABLE_OWN = 2 ** 32;
 const tableGet = (context, table, handle) => {
-	const scope = table[handle << 1];
-	const value = table[(handle << 1) + 1];
+	const scope = table[handle * 2];
+	const value = table[handle * 2 + 1];
 	const own = value >= RESOURCE_TABLE_OWN;
 	const rep = own ? value - RESOURCE_TABLE_OWN : value;
 	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError(`unknown handle index ${handle}`);
@@ -1510,31 +1510,31 @@ const getHandleIndexSpace = (spaces, key) => {
 const tableCreateBorrow = (spaces, table, rep, scopeId) => {
 	if (scopeId === void 0) throw new Error("missing scopeId");
 	const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
-	table[handle << 1] = scopeId;
-	table[(handle << 1) + 1] = rep >>> 0;
+	table[handle * 2] = scopeId;
+	table[handle * 2 + 1] = rep >>> 0;
 	return handle;
 };
 const tableCreateOwn = (spaces, table, rep) => {
 	rep >>>= 0;
 	table._createdReps.add(rep);
 	const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
-	table[handle << 1] = 0;
-	table[(handle << 1) + 1] = rep + RESOURCE_TABLE_OWN;
+	table[handle * 2] = 0;
+	table[handle * 2 + 1] = rep + RESOURCE_TABLE_OWN;
 	return handle;
 };
 const tableEnsureBorrowDrop = (table, handle, scope) => {
-	if (table[handle << 1] === scope) throw new TypeError("Resource borrow was not dropped at end of call");
+	if (table[handle * 2] === scope) throw new TypeError("Resource borrow was not dropped at end of call");
 };
 const tableRemove = (context, table, handle) => {
-	const scope = table[handle << 1];
-	const value = table[(handle << 1) + 1];
+	const scope = table[handle * 2];
+	const value = table[handle * 2 + 1];
 	const own = value >= RESOURCE_TABLE_OWN;
 	const rep = own ? value - RESOURCE_TABLE_OWN : value;
 	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError("unknown handle index " + handle);
 	if (own && scope !== 0) throw new context.RuntimeError("cannot remove owned resource while borrowed");
 	const borrowTask = own ? void 0 : context.scopeTasks.get(scope);
-	table[handle << 1] = RESOURCE_TABLE_FLAG;
-	table[(handle << 1) + 1] = 0;
+	table[handle * 2] = RESOURCE_TABLE_FLAG;
+	table[handle * 2 + 1] = 0;
 	getHandleIndexSpace(context.indexSpaces, table._componentIdx ?? table).release(handle);
 	borrowTask?.removeBorrowedHandle();
 	return {
@@ -1559,7 +1559,7 @@ const transferBorrow = (context, handle, fromTid, toTid) => {
 	const meta = componentIdx === void 0 ? void 0 : readTaskRegister(context.taskLookup.registers, componentIdx);
 	const borrowTask = meta ? getCurrentTask(context.taskLookup, componentIdx, meta.taskID)?.task : void 0;
 	if (borrowTask && own) {
-		fromTable[handle << 1]++;
+		fromTable[handle * 2]++;
 		borrowTask.addResourceLender(fromTable, handle);
 	}
 	if (toTable._createdReps.has(rep)) return rep;
@@ -2227,6 +2227,7 @@ const globalThisIdlProxy = (context) => {
 
 //#endregion
 //#region runtime/intrinsics/rep-table.js
+const MAX_LENGTH = 2 ** 28 - 1;
 function defineRepTable() {
 	return class RepTable {
 		#context;
@@ -2244,11 +2245,23 @@ function defineRepTable() {
 		data() {
 			return this.#data;
 		}
+		/**
+		* Find the slot of `rep` in `#data`, or -1 if `rep` is outside the table
+		* (Canonical ABI `Table.get`). `rep << 1` would wrap at 2 ** 31 and alias a live entry.
+		*
+		* @param rep - the index to look up
+		* @returns the index of the entry's value in `#data`, or -1
+		*/
+		#slot(rep) {
+			if (!Number.isInteger(rep) || rep <= 0 || rep > MAX_LENGTH) return -1;
+			const idx = rep * 2;
+			return idx < this.#data.length ? idx : -1;
+		}
 		insert(val) {
 			if (this.#space !== null) {
 				const rep = this.#space.alloc();
-				this.#data[rep << 1] = val;
-				this.#data[(rep << 1) + 1] = null;
+				this.#data[rep * 2] = val;
+				this.#data[rep * 2 + 1] = null;
 				this.#size += 1;
 				return rep;
 			}
@@ -2269,7 +2282,7 @@ function defineRepTable() {
 				this.#size += 1;
 				return rep;
 			}
-			const placementIdx = freeIdx << 1;
+			const placementIdx = freeIdx * 2;
 			SAFETY: if (this.#data[placementIdx] !== this.#store.free) throw new Error("corrupt rep table freelist: head does not point at a freed slot");
 			this.#data[0] = this.#data[placementIdx + 1];
 			this.#data[placementIdx] = val;
@@ -2288,7 +2301,8 @@ function defineRepTable() {
 				target: this.target
 			});
 			if (rep === 0) throw new this.#context.RuntimeError("invalid resource rep during get, (cannot be 0)");
-			const baseIdx = rep << 1;
+			const baseIdx = this.#slot(rep);
+			if (baseIdx < 0) return;
 			const val = this.#data[baseIdx];
 			if (val === this.#store.free) return;
 			return val;
@@ -2299,7 +2313,8 @@ function defineRepTable() {
 				target: this.target
 			});
 			if (rep === 0) throw new Error("invalid resource rep during contains, (cannot be 0)");
-			const baseIdx = rep << 1;
+			const baseIdx = this.#slot(rep);
+			if (baseIdx < 0) return false;
 			const val = this.#data[baseIdx];
 			return val !== this.#store.free && !!val;
 		}
@@ -2309,8 +2324,9 @@ function defineRepTable() {
 				target: this.target
 			});
 			if (rep === 0) throw new Error("invalid resource rep during remove, (cannot be 0)");
+			const baseIdx = this.#slot(rep);
+			if (baseIdx < 0) throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
 			if (this.#space !== null) {
-				const baseIdx = rep << 1;
 				const val = this.#data[baseIdx];
 				if (val === void 0 || val === this.#store.free) throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
 				this.#data[baseIdx] = this.#store.free;
@@ -2319,9 +2335,6 @@ function defineRepTable() {
 				this.#space.release(rep);
 				return val;
 			}
-			if (this.#data.length === 2) throw new Error("invalid");
-			const baseIdx = rep << 1;
-			if (baseIdx >= this.#data.length) throw new Error(`invalid rep [${rep}] during remove, out of range`);
 			const val = this.#data[baseIdx];
 			if (val === this.#store.free) throw new this.#context.RuntimeError(`double removal of rep [${rep}] (already freed)`);
 			this.#data[baseIdx] = this.#store.free;
@@ -2336,7 +2349,7 @@ function defineRepTable() {
 		clear() {
 			DEBUG: debugLog("[RepTable#clear()] args", { target: this.target });
 			if (this.#space) {
-				for (let rep = 1; rep < this.#data.length / 2; rep++) if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== this.#store.free) this.#space.release(rep);
+				for (let rep = 1; rep < this.#data.length / 2; rep++) if (this.#data[rep * 2 + 1] === null && this.#data[rep * 2] !== this.#store.free) this.#space.release(rep);
 			}
 			this.#size = 0;
 			this.#data = [0, null];

@@ -247,8 +247,8 @@ impl ResourceIntrinsic {
                           // (a table's component instance shares one index space between all
                           // its handle kinds; a table without an instance keeps its own)
                           const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
-                          table[handle << 1] = scopeId;
-                          table[(handle << 1) + 1] = rep >>> 0;
+                          table[handle * 2] = scopeId;
+                          table[handle * 2 + 1] = rep >>> 0;
                           return handle;
                       }}
                     "#,
@@ -267,8 +267,8 @@ impl ResourceIntrinsic {
                     rep >>>= 0;
                     table._createdReps.add(rep);
                     const handle = {get_handle_index_space_fn}(table._componentIdx ?? table).alloc();
-                    table[handle << 1] = 0;
-                    table[(handle << 1) + 1] = rep + {own_flag};
+                    table[handle * 2] = 0;
+                    table[handle * 2 + 1] = rep + {own_flag};
                     return handle;
                 }}
             "#
@@ -284,12 +284,13 @@ impl ResourceIntrinsic {
                     output,
                     r#"
                 function rscTableGet(table, handle) {{
-                    const scope = table[handle << 1];
-                    const val = table[(handle << 1) + 1];
+                    const scope = table[handle * 2];
+                    const val = table[handle * 2 + 1];
                     const own = val >= {own_flag};
                     const rep = own ? val - {own_flag} : val;
                     // (a freed or never allocated index has no entry in this table: its
-                    // index may belong to another handle kind of the instance)
+                    // index may belong to another handle kind of the instance; `handle << 1`
+                    // would wrap at 2 ** 31 and alias a live entry)
                     // Zero reps are valid; freed entries are identified by the scope flag.
                     if (val === undefined || (scope & {table_flag}) !== 0) {{
                         throw new {runtime_error}(`unknown handle index ${{handle}}`);
@@ -303,7 +304,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableEnsureBorrowDrop => output.push_str(
                 "
                 function rscTableEnsureBorrowDrop(table, handle, scope) {
-                    if (table[handle << 1] === scope) {
+                    if (table[handle * 2] === scope) {
                         throw new TypeError('Resource borrow was not dropped at end of call');
                     }
                 }
@@ -322,8 +323,8 @@ impl ResourceIntrinsic {
                     output,
                     r#"
                 function rscTableRemove(table, handle) {{
-                    const scope = table[handle << 1];
-                    const val = table[(handle << 1) + 1];
+                    const scope = table[handle * 2];
+                    const val = table[handle * 2 + 1];
                     const own = val >= {own_flag};
                     const rep = own ? val - {own_flag} : val;
                     // A borrowed entry can store zero without being freed.
@@ -335,8 +336,8 @@ impl ResourceIntrinsic {
                     }}
                     const borrowTask = own ? undefined : {resource_scope_tasks}.get(scope);
                     // Mark the slot freed and give its index back to the instance's space.
-                    table[handle << 1] = {table_flag};
-                    table[(handle << 1) + 1] = 0;
+                    table[handle * 2] = {table_flag};
+                    table[handle * 2 + 1] = 0;
                     {get_handle_index_space_fn}(table._componentIdx ?? table).release(handle);
                     borrowTask?.removeBorrowedHandle();
                     return {{ rep, scope, own }};
@@ -384,7 +385,7 @@ impl ResourceIntrinsic {
                             : undefined;
 
                         if (borrowTask && own) {{
-                            fromTable[handle << 1]++;
+                            fromTable[handle * 2]++;
                             borrowTask.addResourceLender(fromTable, handle);
                         }}
 
