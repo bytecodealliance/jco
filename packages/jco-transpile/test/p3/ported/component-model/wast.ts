@@ -92,6 +92,7 @@ const WAST_TESTS: readonly WastTest[] = [
     { relPath: '../jco/entry-follows-callee-lift.wast' },
     { relPath: '../jco/cancel-entry-behind-first-slice.wast' },
     { relPath: '../jco/stackful-entry-behind-blocked-slice.wast' },
+    { relPath: '../jco/thread-index-on-entry.wast' },
 ];
 
 // These tests are ported from the component-model repo

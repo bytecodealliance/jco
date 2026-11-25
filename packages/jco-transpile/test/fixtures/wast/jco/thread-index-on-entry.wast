@@ -1,0 +1,97 @@
+;; A task that waits to enter its instance holds no thread index: the implicit
+;; thread is added to the instance's thread table once the task enters, after
+;; any wait for backpressure (Canonical ABI `Task.enter_implicit_thread`). 'f'
+;; waits behind backpressure while 'probe', which is not async-typed and so not
+;; held back, enters the same instance and takes the first free index.
+(component
+  (component $C
+    (core module $CM
+      (import "" "backpressure.inc" (func $backpressure.inc))
+      (import "" "backpressure.dec" (func $backpressure.dec))
+      (import "" "task.return" (func $task.return (param i32)))
+      (import "" "thread.index" (func $thread.index (result i32)))
+      (func (export "bp-on") (call $backpressure.inc))
+      (func (export "bp-off") (call $backpressure.dec))
+      (func (export "f") (result i32)
+        (call $task.return (i32.const 7))
+        (i32.const 0 (; EXIT ;)))
+      (func (export "unreachable-cb") (param i32 i32 i32) (result i32)
+        unreachable)
+      (func (export "probe") (result i32) (call $thread.index))
+    )
+    (canon backpressure.inc (core func $backpressure.inc))
+    (canon backpressure.dec (core func $backpressure.dec))
+    (canon task.return (result u32) (core func $task.return))
+    (canon thread.index (core func $thread.index))
+    (core instance $cm (instantiate $CM (with "" (instance
+      (export "backpressure.inc" (func $backpressure.inc))
+      (export "backpressure.dec" (func $backpressure.dec))
+      (export "task.return" (func $task.return))
+      (export "thread.index" (func $thread.index))))))
+    (func (export "bp-on") (canon lift (core func $cm "bp-on")))
+    (func (export "bp-off") (canon lift (core func $cm "bp-off")))
+    (func (export "f") async (result u32)
+      (canon lift (core func $cm "f") async (callback (core func $cm "unreachable-cb"))))
+    (func (export "probe") (result u32) (canon lift (core func $cm "probe")))
+  )
+  (instance $c (instantiate $C))
+  (core module $Memory (memory (export "mem") 1))
+  (core instance $memory (instantiate $Memory))
+  (canon lower (func $c "bp-on") (core func $bp-on))
+  (canon lower (func $c "bp-off") (core func $bp-off))
+  (canon lower (func $c "f") async (memory (core memory $memory "mem")) (core func $f))
+  (canon lower (func $c "probe") (core func $probe))
+  (canon subtask.drop (core func $subtask.drop))
+  (canon waitable.join (core func $waitable.join))
+  (canon waitable-set.new (core func $waitable-set.new))
+  (canon waitable-set.wait (memory (core memory $memory "mem")) (core func $waitable-set.wait))
+
+  (core module $Main
+    (import "" "mem" (memory 1))
+    (import "" "bp-on" (func $bp-on))
+    (import "" "bp-off" (func $bp-off))
+    (import "" "f" (func $f (param i32) (result i32)))
+    (import "" "probe" (func $probe (result i32)))
+    (import "" "subtask.drop" (func $subtask.drop (param i32)))
+    (import "" "waitable.join" (func $waitable.join (param i32 i32)))
+    (import "" "waitable-set.new" (func $waitable-set.new (result i32)))
+    (import "" "waitable-set.wait" (func $waitable-set.wait (param i32 i32) (result i32)))
+    (func (export "run") (result i32)
+      (local $packed i32) (local $sub i32) (local $ws i32) (local $index i32)
+      (call $bp-on)
+
+      ;; 'f' waits to enter behind backpressure
+      (local.set $packed (call $f (i32.const 16)))
+      (if (i32.ne (i32.and (local.get $packed) (i32.const 0xf)) (i32.const 0 (; STARTING ;)))
+        (then unreachable))
+      (local.set $sub (i32.shr_u (local.get $packed) (i32.const 4)))
+
+      ;; no thread of the instance holds an index yet
+      (local.set $index (call $probe))
+
+      ;; once let in, 'f' runs to completion
+      (call $bp-off)
+      (local.set $ws (call $waitable-set.new))
+      (call $waitable.join (local.get $sub) (local.get $ws))
+      (if (i32.ne (call $waitable-set.wait (local.get $ws) (i32.const 0))
+                  (i32.const 1 (; SUBTASK ;)))
+        (then unreachable))
+      (if (i32.ne (i32.load (i32.const 4)) (i32.const 2 (; RETURNED ;))) (then unreachable))
+      (if (i32.ne (i32.load (i32.const 16)) (i32.const 7)) (then unreachable))
+      (call $waitable.join (local.get $sub) (i32.const 0))
+      (call $subtask.drop (local.get $sub))
+      (local.get $index))
+  )
+  (core instance $main (instantiate $Main (with "" (instance
+    (export "mem" (memory $memory "mem"))
+    (export "bp-on" (func $bp-on))
+    (export "bp-off" (func $bp-off))
+    (export "f" (func $f))
+    (export "probe" (func $probe))
+    (export "subtask.drop" (func $subtask.drop))
+    (export "waitable.join" (func $waitable.join))
+    (export "waitable-set.new" (func $waitable-set.new))
+    (export "waitable-set.wait" (func $waitable-set.wait))))))
+  (func (export "run") async (result u32) (canon lift (core func $main "run")))
+)
+(assert_return (invoke "run") (u32.const 1))
