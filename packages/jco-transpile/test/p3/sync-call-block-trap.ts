@@ -12,13 +12,15 @@ const CANNOT_BLOCK = /cannot block a synchronous task before returning/;
  * `pending` settles only when the test cleans up.
  *
  * @param name - a name for the transpiled output
- * @returns the instance and its cleanup
+ * @returns the instance, a future value the host writes only at cleanup,
+ *   and the cleanup
  */
 async function setup(name: string) {
     let settlePending!: () => void;
     const pending = new Promise<void>((resolve) => {
         settlePending = resolve;
     });
+    const future = pending.then(() => 0);
     const { instance, cleanup } = await setupAsyncTest({
         asyncMode: 'jspi',
         component: {
@@ -29,6 +31,7 @@ async function setup(name: string) {
     });
     return {
         instance,
+        future,
         cleanup: async () => {
             settlePending();
             await cleanup();
@@ -66,20 +69,26 @@ async function outcome(call: Promise<unknown>, ms: number): Promise<unknown> {
 // blocks. Host work of another instance does not hold the trap back, since
 // that instance may not run until the call returns.
 suite('sync call blocking with no ready thread', () => {
-    test.concurrent.each(['waitEmpty', 'suspendAfterExit'])(
-        '%s traps while another instance waits on the host',
-        async (fn) => {
-            const { instance, cleanup } = await setup(`sync-call-block-trap-${fn}`);
-            try {
-                const started = (instance.start as () => Promise<void>)();
-                started.catch(() => {});
-                const call = (instance[fn] as () => Promise<void>)();
-                const err = await outcome(call, 2000);
-                assert.instanceOf(err, WebAssembly.RuntimeError);
-                assert.match((err as Error).message, CANNOT_BLOCK);
-            } finally {
-                await cleanup();
-            }
-        },
-    );
+    test.concurrent.each([
+        ['waitEmpty', 'a host import'],
+        ['suspendAfterExit', 'a host import'],
+        ['waitEmpty', 'a host future'],
+    ])('%s traps while another instance waits on %s', async (fn, hostWait) => {
+        const byFuture = hostWait === 'a host future';
+        const { instance, future, cleanup } = await setup(`sync-call-block-trap-${fn}${byFuture ? '-future' : ''}`);
+        try {
+            const started = byFuture
+                ? (instance.readFuture as (f: Promise<number>) => Promise<number>)(future)
+                : (instance.start as () => Promise<void>)();
+            started.catch(() => {});
+            // (let the other instance reach its host wait first)
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            const call = (instance[fn] as () => Promise<void>)();
+            const err = await outcome(call, 2000);
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, CANNOT_BLOCK);
+        } finally {
+            await cleanup();
+        }
+    });
 });
