@@ -65,4 +65,39 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('deadlock detection',
             await cleanup();
         }
     });
+
+    // Not concurrent: it watches the whole process for unhandled rejections.
+    test('a synchronous call whose callee never enters fails without unhandled rejections', async () => {
+        const unhandled: unknown[] = [];
+        const onUnhandled = (reason: unknown) => void unhandled.push(reason);
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'sync-call-callee-never-enters',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'sync-call-callee-never-enters.wat'),
+            },
+        });
+        process.on('unhandledRejection', onUnhandled);
+        try {
+            // Takes the callee instance's exclusive lock and keeps it, blocked,
+            // after returning.
+            assert.strictEqual(await instance.hold(), 2);
+
+            let err: unknown;
+            try {
+                await instance.run();
+            } catch (e) {
+                err = e;
+            }
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /deadlock detected/);
+
+            // Give rejections nobody observes the chance to surface.
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            assert.deepEqual(unhandled, []);
+        } finally {
+            process.off('unhandledRejection', onUnhandled);
+            await cleanup();
+        }
+    });
 });
