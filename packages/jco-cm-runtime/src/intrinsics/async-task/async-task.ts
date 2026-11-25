@@ -133,10 +133,10 @@ function defineAsyncTask() {
             this.#isManualAsync = opts.isManualAsync ?? false;
             this.#preserveFutureResult = opts.preserveFutureResult ?? false;
             this.#entryFnName = opts.entryFnName;
-            // Tasks that execute guest slices (export calls, fused
+            // Tasks that execute guest turns (export calls, fused
             // callees) default to true; import-handler tasks pass false
             // explicitly (they run host code nested inside the caller's
-            // already-locked slice).
+            // already-locked turn).
             this.#callingWasmExport = opts.callingWasmExport !== false;
             // Only an async task publishes its result through the completion promise,
             // so only such a task needs the promise, and the handler that records
@@ -149,8 +149,8 @@ function defineAsyncTask() {
                     }
                     this.#completionValue = results;
                     this.#completionReady = true;
-                    // Publish after the current guest slice returns, so a trap
-                    // in that slice can still reject the call. Do not wait for
+                    // Publish after the current guest turn returns, so a trap
+                    // in that turn can still reject the call. Do not wait for
                     // task exit: detached work may require further host calls
                     // or consumption of a returned resource's stream.
                 });
@@ -504,7 +504,7 @@ function defineAsyncTask() {
                     cstate.exclusiveLock(this.#id);
                 } else {
                     // A host-called sync export arriving while another
-                    // task's slice holds the lock: synchronous entry
+                    // task's turn holds the lock: synchronous entry
                     // cannot wait, and historically this entry silently
                     // stole the hold. Run without the lock instead --
                     // the holder's bookkeeping stays intact and its
@@ -582,7 +582,7 @@ function defineAsyncTask() {
             // NOTE: concurrent task lifetimes within one component instance are
             // permitted by the Component Model: entry is governed by the
             // backpressure and exclusive-lock checks below (the lock is held per
-            // execution slice, not for the task's lifetime).
+            // execution turn, not for the task's lifetime).
             //
             // Serializing entire task lifetimes here (the former "execution slot" queue)
             // deadlocks pipelines where a parked long-lived task's progress depends on a
@@ -603,14 +603,14 @@ function defineAsyncTask() {
                 return entered;
             } finally {
                 if (!entered) {
-                    this.endFirstSlice();
+                    this.endInitialInvocation();
                 }
             }
         }
-        // The first slice of this task ended (it returned, blocked or trapped):
+        // The initial invocation of this task ended (it returned, blocked or trapped):
         // the next entry into the instance may be admitted (Canonical ABI
         // `Store.invoke` runs a call until it first blocks or returns).
-        endFirstSlice() {
+        endInitialInvocation() {
             if (!this.#holdsEntrySlot) {
                 return;
             }
@@ -618,16 +618,16 @@ function defineAsyncTask() {
             getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endEntry(this.#id);
         }
         /**
-         * The task's thread blocked: its first slice is over, and so is the
-         * first slice of each caller that waits on it through a synchronous
+         * The task's thread blocked: its initial invocation is over, and so is the
+         * initial invocation of each caller that waits on it through a synchronous
          * lowering, since that caller's thread blocks with it (Canonical ABI
          * `canon_lower`, whose synchronous caller waits once the callee's
          * thread has blocked).
          */
-        endFirstSliceOnBlock() {
+        endInitialInvocationOnBlock() {
             let task: AsyncTaskType = this;
             for (;;) {
-                task.endFirstSlice();
+                task.endInitialInvocation();
                 const subtask = task.getParentSubtask();
                 if (!subtask || subtask.isAsync) {
                     return;
@@ -659,7 +659,7 @@ function defineAsyncTask() {
         async #enterImplicitThread(cstate: ComponentAsyncState) {
             // A task held back only by jco's entry slot is not waiting to
             // enter in the Canonical ABI's sense: the slot stands for the
-            // first slice of an entry the Canonical ABI would have run to
+            // initial invocation of an entry the Canonical ABI would have run to
             // completion already. It waits for its turn at the slot, then
             // checks its own condition like any other entry.
             if (cstate.numWaitingToEnter() === 0 && cstate.entrySlotBusy(this.#id)) {
@@ -727,8 +727,8 @@ function defineAsyncTask() {
                 return false;
             }
 
-            // The first slice runs under this hold, and the driver loop
-            // releases and re-acquires it per slice thereafter.
+            // The initial invocation runs under this hold, and the driver loop
+            // releases and re-acquires it per turn thereafter.
             if (this.needsExclusiveLock()) {
                 cstate.exclusiveLock(this.#id);
             }
@@ -855,7 +855,7 @@ function defineAsyncTask() {
                 throw new Error('invalid current thread for wait');
             }
             // Suspending a core Wasm stack retains the task's exclusive
-            // lock. Only a callback return releases it between slices.
+            // lock. Only a callback return releases it between turns.
             return thread.suspend({ ...opts, releaseLock: false });
         }
         deliverPendingCancel(opts: { cancellable?: boolean }) {
@@ -936,7 +936,7 @@ function defineAsyncTask() {
             this.#endSyncCall();
             // A task cancelled before entry has no driver loop that can
             // report its exit. Entered tasks notify after releasing their
-            // component slice in `exit()`.
+            // component turn in `exit()`.
             if (!this.#entered) {
                 this.notifyProgress();
             }
@@ -1114,7 +1114,7 @@ function defineAsyncTask() {
                 taskID: this.#id,
             });
 
-            this.endFirstSlice();
+            this.endInitialInvocation();
             this.#endSyncCall();
             if (this.#exited) {
                 throw new Error('task has already exited');
@@ -1142,7 +1142,7 @@ function defineAsyncTask() {
             }
 
             // Ownership-checked: releases only this task's own hold (a
-            // task exiting while another task's slice holds the lock no
+            // task exiting while another task's turn holds the lock no
             // longer clears the foreign hold).
             if (state) {
                 state.exclusiveRelease(this.#id);
@@ -1173,8 +1173,8 @@ function defineAsyncTask() {
                 return false;
             }
             // Import-handler tasks (CallInterface) run host code nested
-            // inside the calling guest slice, which already holds the
-            // lock; only tasks that execute guest slices need it.
+            // inside the calling guest turn, which already holds the
+            // lock; only tasks that execute guest turns need it.
             if (!this.#callingWasmExport) {
                 return false;
             }

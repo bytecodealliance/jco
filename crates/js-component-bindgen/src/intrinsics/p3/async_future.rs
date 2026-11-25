@@ -1294,10 +1294,10 @@ impl AsyncFutureIntrinsic {
                                   if (vs.length !== 1) {{ throw new Error('multiple results from future'); }}
 
                                   // The copy event is published from inside the guest's current
-                                  // callback slice.
+                                  // callback turn.
                                   //
                                   // Here we avoid exposing the lifted value to host code
-                                  // until that slice has returned and released the instance lock, because
+                                  // until that turn has returned and released the instance lock, because
                                   // the consumer could immediately make a synchronous call on the lifted value
                                   // (e.g. if it's a resource)
                                   const componentIdx = this.getWaitable().componentIdx();

@@ -193,7 +193,7 @@ export function lowerImportBackwardsCompat(
     // lifting/lowering (async ABI did not exist when JSPI integratiton was
     // initially merged to enable asynchronously returning values from the host)
     //
-    // Call the host in this slice so a synchronous answer stays synchronous.
+    // Call the host in this turn so a synchronous answer stays synchronous.
     // Nonblocking tasks, including destructors, trap only on a returned promise.
     if (!isAsync && !funcTypeIsAsync && isManualAsync) {
         DEBUG: debugLog('[_lowerImportBackwardsCompat()] calling lowered import', { importFn, params });

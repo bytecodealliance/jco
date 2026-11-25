@@ -182,8 +182,8 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                 const transferred = packedResult >> 4;
 
                 // The copy event is published from inside the guest's current
-                // callback slice. Do not expose lifted values to host code until
-                // that slice has returned and released the instance lock: the
+                // callback turn. Do not expose lifted values to host code until
+                // that turn has returned and released the instance lock: the
                 // consumer may immediately make a synchronous call on a lifted
                 // resource, which cannot itself wait for a contended lock.
                 const componentIdx = this.getWaitable().componentIdx();

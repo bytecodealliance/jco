@@ -64,7 +64,7 @@ function defineAsyncSubtask() {
         target: unknown;
         isAsync: boolean | undefined;
         isManualAsync: boolean | undefined;
-        // One execution slice awaited by the conditional cancel trampoline.
+        // One execution turn awaited by the conditional cancel trampoline.
         cancelProgress: Promise<unknown> | null = null;
         constructor(context: AsyncSubtaskClassContext, store: { id: bigint }, args: AsyncSubtaskOptions) {
             this.#context = context;
@@ -280,7 +280,7 @@ function defineAsyncSubtask() {
             // Starting a nested operation is a task execution boundary.
             // In particular, a cancellation handler may synchronously
             // enter an import which then suspends in the host.  Wake a
-            // supertask that is driving one cancellation slice so an
+            // supertask that is driving one cancellation turn so an
             // async `subtask.cancel` can report BLOCKED without waiting
             // for that nested operation to finish.
             this.#parentTask.notifyProgress();

@@ -68,12 +68,12 @@ suite('guest->guest async calls with spilled params', () => {
 
     // The callee parks (awaits a host import) before returning, so its
     // result is delivered by the guest->guest driver loop rather than the
-    // callee's initial synchronous slice. Previously the driver-loop call in
+    // callee's initial synchronous invocation. Previously the driver-loop call in
     // _asyncStartCall referenced undefined `resolve`/`reject` identifiers;
     // the resulting ReferenceError was swallowed by the surrounding catch,
     // so eagerly-resolving callees appeared to work while any callee that
     // parked never resumed.
-    test('multi-slice callee (parks on a host import) through a composition', async () => {
+    test('multi-turn callee (parks on a host import) through a composition', async () => {
         const componentPath = await composeCallerCallee({
             callerPath: join(LOCAL_TEST_COMPONENTS_DIR, 'async-g2g-spillover-caller.wasm'),
             calleePath: join(LOCAL_TEST_COMPONENTS_DIR, 'async-g2g-spillover-callee.wasm'),

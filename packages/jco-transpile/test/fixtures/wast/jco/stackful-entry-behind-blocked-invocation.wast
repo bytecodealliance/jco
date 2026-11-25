@@ -1,15 +1,15 @@
-;; A stackful call enters an instance while another task's first slice is
+;; A stackful call enters an instance while another task's initial invocation is
 ;; blocked in a synchronously lowered call to another component. In the
-;; Canonical ABI that first slice has ended once it blocks (`Store.invoke` runs
+;; Canonical ABI that initial invocation has ended once it blocks (`Store.invoke` runs
 ;; a call until it first blocks or returns), and the stackful call needs neither
 ;; the exclusive lock nor the end of backpressure (`Task.enter_implicit_thread`).
 ;; Here the blocked call waits on the stackful call, so holding the stackful
-;; call back until the first slice returns deadlocks.
+;; call back until the initial invocation returns deadlocks.
 ;;
 ;; $C calls into $A, with async lowerings:
 ;; 1. `set-backpressure` makes `hold` wait to enter; `clear-backpressure` then
 ;;    lets it in.
-;; 2. `hold` (sync-lifted, so holding the lock) enters and, in its first slice,
+;; 2. `hold` (sync-lifted, so holding the lock) enters and, in its initial invocation,
 ;;    makes a sync-lowered call to $D's `block`, which blocks until `release`.
 ;; 3. `unblock` (stackful) calls $D's `release`.
 (component definition $Test
@@ -96,7 +96,7 @@
       (func (export "set-backpressure") (call $backpressure.inc))
       (func (export "clear-backpressure") (call $backpressure.dec))
 
-      ;; Sync-lifted: holds the lock through its first slice, which blocks in
+      ;; Sync-lifted: holds the lock through its initial invocation, which blocks in
       ;; the call to `block`.
       (func (export "hold") (call $block))
 

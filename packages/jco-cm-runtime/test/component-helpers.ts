@@ -83,7 +83,7 @@ export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
     let cancelled = false;
     let locked = true;
     const errors: unknown[] = [];
-    let slices = 0;
+    let initialInvocationEnds = 0;
     let progress = 0;
     const value: ComponentTask = {
         id: () => id,
@@ -97,11 +97,11 @@ export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
         isRejected: () => rejected,
         isCancelled: () => cancelled,
         needsExclusiveLock: () => locked,
-        endFirstSlice: () => {
-            slices++;
+        endInitialInvocation: () => {
+            initialInvocationEnds++;
         },
-        endFirstSliceOnBlock: () => {
-            slices++;
+        endInitialInvocationOnBlock: () => {
+            initialInvocationEnds++;
         },
         notifyProgress: () => {
             progress++;
@@ -129,8 +129,8 @@ export function task(id: bigint, componentIdx = 0, root?: ComponentTask) {
         value,
         thread,
         errors,
-        get slices() {
-            return slices;
+        get initialInvocationEnds() {
+            return initialInvocationEnds;
         },
         get progress() {
             return progress;

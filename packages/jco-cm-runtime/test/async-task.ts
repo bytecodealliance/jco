@@ -329,7 +329,7 @@ test.concurrent('callback execution uses the task register and preserves the syn
     }
 });
 
-test.concurrent('queued async entry waits for backpressure and holds the entry until its first slice ends', async () => {
+test.concurrent('queued async entry waits for backpressure and holds the entry until its initial invocation ends', async () => {
     const s = setup({ asyncDeterminism: 'deterministic' });
     try {
         const state = s.state();
@@ -346,7 +346,7 @@ test.concurrent('queued async entry waits for backpressure and holds the entry u
         expect(await entered).toBe(true);
         expect(state.numWaitingToEnter()).toBe(0);
         expect(state.hasEnteringTask()).toBe(true);
-        t.endFirstSlice();
+        t.endInitialInvocation();
         expect(state.hasEnteringTask()).toBe(false);
         finish(t);
     } finally {
@@ -358,7 +358,7 @@ test.concurrent('a stackful entry is not held behind an entry waiting for the ex
     const s = setup({ asyncDeterminism: 'deterministic' });
     try {
         const state = s.state();
-        // Another task's slice holds the lock while it waits.
+        // Another task's turn holds the lock while it waits.
         state.exclusiveLock(99n);
 
         const [locking] = s.asyncTask.createNewCurrentTask({ componentIdx: 0, isAsync: true });
@@ -383,14 +383,14 @@ test.concurrent('a stackful entry is not held behind an entry waiting for the ex
         expect(await stackfulEntered).toBe(true);
         expect(state.numWaitingToEnter()).toBe(1);
         expect(state.exclusivelyLockedBy(99n)).toBe(true);
-        stackful.endFirstSlice();
+        stackful.endInitialInvocation();
 
         state.exclusiveRelease(99n);
         expect(state.tick()).toBe('resumed');
         expect(await lockingEntered).toBe(true);
         expect(state.numWaitingToEnter()).toBe(0);
         expect(state.exclusivelyLockedBy(locking.id())).toBe(true);
-        locking.endFirstSlice();
+        locking.endInitialInvocation();
         finish(stackful);
         finish(locking);
     } finally {
@@ -417,7 +417,7 @@ test.concurrent('a sync-lowered call into a stackful export waits for backpressu
         state.tick();
         expect(await entered).toBe(true);
         expect(state.isExclusivelyLocked()).toBe(false);
-        t.endFirstSlice();
+        t.endInitialInvocation();
         finish(t);
     } finally {
         s.cleanup();
@@ -469,7 +469,7 @@ test.concurrent('an entry cancelled while waiting for the entry slot never enter
             return t;
         };
 
-        // The holder's first slice has not ended yet.
+        // The holder's initial invocation has not ended yet.
         const holder = asyncTask(false);
         expect(await holder.enter()).toBe(true);
         expect(state.hasEnteringTask()).toBe(true);
@@ -486,11 +486,11 @@ test.concurrent('an entry cancelled while waiting for the entry slot never enter
         expect(cancelled.isCancelled()).toBe(true);
 
         // The cancelled entry passes its turn on without entering.
-        holder.endFirstSlice();
+        holder.endInitialInvocation();
         expect(await cancelledEntered).toBe(false);
         expect(await nextEntered).toBe(true);
         expect(state.hasEnteringTask()).toBe(true);
-        next.endFirstSlice();
+        next.endInitialInvocation();
         expect(state.hasEnteringTask()).toBe(false);
         finish(next);
         finish(holder);

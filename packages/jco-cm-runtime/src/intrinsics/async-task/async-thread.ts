@@ -121,7 +121,7 @@ function defineAsyncThread() {
         async suspend(opts: TaskSuspendOptions & { releaseLock?: boolean }) {
             const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
             const task = this.#task;
-            task.endFirstSliceOnBlock();
+            task.endInitialInvocationOnBlock();
             task.settleCompletion();
             const { cancellable, readyFn, releaseLock = false } = opts;
             if (task.deliverPendingCancel({ cancellable })) {

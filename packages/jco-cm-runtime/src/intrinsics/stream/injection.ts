@@ -64,7 +64,7 @@ export function genStreamHostInjectFn(
         const writeValues = async (writeValues: unknown[], dropAfterCopy = false) => {
             // The previous injected write's completion event is consumed lazily,
             // and consuming it is what returns the write end to idle. A guest
-            // that issues reads back to back within one slice can start the next
+            // that issues reads back to back within one turn can start the next
             // injected write before that happens, which would fail as a
             // concurrent operation and leave the read with no completion.
             resetWriteEndToIdleFn();
