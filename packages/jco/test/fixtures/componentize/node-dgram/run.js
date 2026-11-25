@@ -77,7 +77,7 @@ try {
             Array.from(Buffer.from("hello")),
             [97, 0, 255],
             [],
-            Array.from(Buffer.from("lic")),
+            Array.from(Buffer.from("liv")),
             Array.from(Buffer.from("lia")),
         ],
     );

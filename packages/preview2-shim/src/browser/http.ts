@@ -570,14 +570,14 @@ class IncomingBody extends WasiResource implements TypesNamespace.IncomingBody {
                 return new Uint8Array(0);
             }
             const toRead = Math.min(Number(len), buffer.byteLength - bufferOffset);
-            const slice = buffer.slice(bufferOffset, bufferOffset + toRead);
+            const chunk = buffer.slice(bufferOffset, bufferOffset + toRead);
             bufferOffset += toRead;
             if (bufferOffset >= buffer.byteLength) {
                 buffer = null;
                 bufferOffset = 0;
                 startRead();
             }
-            return slice;
+            return chunk;
         }
 
         function blockingRead(len: bigint): Uint8Array | Promise<Uint8Array> {

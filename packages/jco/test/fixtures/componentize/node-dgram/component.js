@@ -75,7 +75,7 @@ export function start(ipv6) {
 }
 
 export function client(port) {
-    // Hostname resolution, implicit bind, connect, vector/empty/sliced sends and
+    // Hostname resolution, implicit bind, connect, vector/empty/offset sends and
     // byte accounting all run inside the component with ordinary Node imports.
     let received = 0;
     const done = (error, size) => (error ? errors.push({ code: error.code }) : sent.push(size));
@@ -95,7 +95,7 @@ export function client(port) {
         socket.send("hello", done);
         socket.send(["a", new DataView(new Uint8Array([99, 0, 255]).buffer, 1)], done);
         socket.send([], done);
-        socket.send(Buffer.from("slice"), 1, 3, done);
+        socket.send(Buffer.from("olive"), 1, 3, done);
     });
 }
 
