@@ -1587,6 +1587,7 @@ impl AsyncTaskIntrinsic {
                         #calleeIsAsync = null;
                         #admissionTicket = null;
                         #funcTypeIsAsync = false;
+                        #syncCall = false;
                         #returnResultTypeIdx = null;
 
                         #stringEncoding = null;
@@ -1923,13 +1924,35 @@ impl AsyncTaskIntrinsic {
                             return this.#getCalleeParamsFn();
                         }}
 
-                        // Legacy manually-async exports are sync-typed in the component
-                        // but use JSPI precisely so their guest stack may suspend.
-                        // Canonical ABI: only sync-typed callees may not block (`canon_lift`);
-                        // an async-lifted callee may, even when called through a sync lowering.
+                        // Whether this task's stack can suspend at all. Legacy manually-async
+                        // exports are sync-typed in the component but use JSPI precisely so
+                        // their guest stack may suspend. A sync-typed task whose stack can
+                        // suspend decides whether it may block when it blocks: it traps only
+                        // if none of its instance's threads is ready (see `beginSyncCall`).
                         mayBlock() {{ return this.isAsync() || this.isManualAsync() || this.isResolvedState() || this.#funcTypeIsAsync }}
                         // (an async-typed function may block however it was lifted)
                         setFuncTypeIsAsync(v) {{ this.#funcTypeIsAsync = v; }}
+
+                        // Record that this task is a call of a non-async-typed guest function,
+                        // in progress until the task resolves. Until then, only threads of its
+                        // instance are scheduled, and a block with none of them ready traps
+                        // (Canonical ABI `canon_lift`).
+                        beginSyncCall() {{
+                            if (this.#syncCall || this.#funcTypeIsAsync || this.#componentIdx === -1 || this.isResolvedState()) {{
+                                return;
+                            }}
+                            this.#syncCall = true;
+                            {get_or_create_async_state_fn}this.#componentIdx).beginSyncCall(this);
+                        }}
+                        // Tasks entered for host-side import handling are not guest calls.
+                        #beginGuestSyncCall() {{
+                            if (this.#callingWasmExport) {{ this.beginSyncCall(); }}
+                        }}
+                        #endSyncCall() {{
+                            if (!this.#syncCall) {{ return; }}
+                            this.#syncCall = false;
+                            {get_or_create_async_state_fn}this.#componentIdx).endSyncCall(this);
+                        }}
                         // The interned result type of the task's function (checked by `task.return`)
                         setReturnResultTypeIdx(v) {{ this.#returnResultTypeIdx = v; }}
                         returnResultTypeIdx() {{ return this.#returnResultTypeIdx; }}
@@ -1971,6 +1994,7 @@ impl AsyncTaskIntrinsic {
                                     }});
                                 }}
                             }}
+                            this.#beginGuestSyncCall();
                             return true;
                         }}
 
@@ -1987,6 +2011,7 @@ impl AsyncTaskIntrinsic {
                             const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             if (this.isSync()) {{
                                 this.#entered = true;
+                                this.#beginGuestSyncCall();
                                 return true;
                             }}
                             if (cstate.hasBackpressure()) {{ return null; }}
@@ -2004,6 +2029,7 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             this.#entered = true;
+                            this.#beginGuestSyncCall();
                             return true;
                         }}
 
@@ -2073,6 +2099,7 @@ impl AsyncTaskIntrinsic {
                             // tracking and immediately enter.
                             if (this.isSync()) {{
                                 this.#entered = true;
+                                this.#beginGuestSyncCall();
 
                                 // TODO(breaking): remove once manually-specifying async fns is removed
                                 // It is currently possible for an actually sync export to be specified
@@ -2182,6 +2209,7 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             this.#entered = true;
+                            this.#beginGuestSyncCall();
                             return this.#entered;
                         }}
 
@@ -2388,6 +2416,7 @@ impl AsyncTaskIntrinsic {
                             // host-driven rejection path (see `reject()`).
                             this.onResolve(args?.error ?? null);
                             this.#state = {task_class}.State.RESOLVED;
+                            this.#endSyncCall();
                             // A task cancelled before entry has no driver loop that can
                             // report its exit. Entered tasks notify after releasing their
                             // component slice in `exit()`.
@@ -2546,6 +2575,7 @@ impl AsyncTaskIntrinsic {
                             this.validateResourceBorrowScope();
 
                             this.#state = {task_class}.State.RESOLVED;
+                            this.#endSyncCall();
 
                             switch (results.length) {{
                                 case 0:
@@ -2574,6 +2604,7 @@ impl AsyncTaskIntrinsic {
                             }});
 
                             this.endFirstSlice();
+                            this.#endSyncCall();
                             if (this.#exited)  {{ throw new Error("task has already exited"); }}
 
                             // Validate before publishing exit or running its handlers.
@@ -2730,6 +2761,7 @@ impl AsyncTaskIntrinsic {
                         #task;
                         #state;
                         #startFn = null;
+                        #implicit;
                         storage = [0, 0];
 
                         constructor (opts) {{
@@ -2752,7 +2784,11 @@ impl AsyncTaskIntrinsic {
                            }} else {{
                                this.#state = {thread_class}.State.RUNNING;
                            }}
+                           this.#implicit = !opts.startFn;
                         }}
+
+                        // Whether this is its task's implicit thread (not made by `thread.new-indirect`).
+                        isImplicit() {{ return this.#implicit; }}
 
                         id() {{ return this.#id; }}
                         setId(id) {{
@@ -4296,6 +4332,7 @@ impl AsyncTaskIntrinsic {
                                 previousTaskMayBlock: {current_task_may_block}.value,
                             }});
                             {current_task_may_block}.value = newTask.mayBlock() ? 1 : 0;
+                            newTask.beginSyncCall();
 
                             {debug_log_fn}('[{enter_symmetric_sync_guest_call_fn}()] finished preparing', {{
                                 callerComponentIdx,

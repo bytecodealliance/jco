@@ -1480,9 +1480,21 @@ impl Intrinsic {
                                   return result;
                               }}
 
+                              // A built-in that traps before blocking traps the calling stack at
+                              // once, rather than suspending it with a rejected promise that lets
+                              // the caller of a not-yet-blocked callee carry on first.
+                              let started;
+                              try {{
+                                  started = fn.apply(null, args);
+                              }} catch (err) {{
+                                  {global_current_thread_meta_obj}[componentIdx] = saved;
+                                  if (!switchesTask) {{ {global_current_thread_meta_obj}.current = saved; }}
+                                  throw {record_trap_fn}componentIdx, err, convertsRangeErrors);
+                              }}
+
                               return (async () => {{
                                   try {{
-                                      const result = await fn.apply(null, args);
+                                      const result = await started;
                                       // The instance trapped while this stack was suspended: it
                                       // must not resume into guest code (Canonical ABI).
                                       {get_or_create_async_state_fn}componentIdx).throwIfInterrupted();
@@ -1809,7 +1821,8 @@ mod tests {
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
         assert!(source.contains("return (async () => {"));
-        assert!(source.contains("const result = await fn.apply(null, args);"));
+        assert!(source.contains("started = fn.apply(null, args);"));
+        assert!(source.contains("const result = await started;"));
         assert!(source.contains("CURRENT_TASK_META[componentIdx] = saved;"));
     }
 
@@ -2213,12 +2226,37 @@ mod tests {
             state.contains("return this.#suspendedThreadsByRef.get(thread)?.suspended ?? false;")
         );
         assert!(state.contains("isThreadReady(thread)"));
+        // Promotion uses the scheduler's readiness, which includes the exclusive lock.
+        assert!(state.contains("!meta.suspended && this.suspendedThreadReady(thread)"));
+        // Threads made by `thread.new-indirect` never wait for the exclusive lock.
+        assert!(state.contains("if (!meta.thread.isImplicit()) { return true; }"));
 
         let promote = render_intrinsic_body(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::ThreadYieldThenPromote,
         ));
         assert!(promote.contains("cstate.isThreadReady(other)"));
         assert!(promote.contains("cstate.resumeThread(other);"));
+    }
+
+    #[test]
+    fn sync_calls_hold_back_other_instances_and_trap_when_blocked() {
+        let state = render_intrinsic_body(Intrinsic::Component(
+            ComponentIntrinsic::ComponentAsyncStateClass,
+        ));
+        assert!(state.contains("beginSyncCall(task) {"));
+        assert!(state.contains("endSyncCall(task) {"));
+        assert!(
+            state.contains("return top !== undefined && top.componentIdx !== this.#componentIdx;")
+        );
+        assert!(state.contains("if (held || !this.suspendedThreadReady(thread)) { continue; }"));
+
+        let deadlock =
+            render_intrinsic_body(Intrinsic::Component(ComponentIntrinsic::CheckForDeadlock));
+        assert!(deadlock.contains("'cannot block a synchronous task before returning'"));
+
+        let task = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass));
+        assert!(task.contains("beginSyncCall() {"));
+        assert!(task.contains("this.#endSyncCall();"));
     }
 
     #[test]
@@ -2235,9 +2273,11 @@ mod tests {
         assert!(check.contains("for (const state of ASYNC_STATE.values())"));
         assert!(check.contains("STORE_ASYNC_STATE.pendingHostOperations > 0"));
         assert!(check.contains("const root = task.getRootTask();"));
-        assert!(check.contains(
-            "new WebAssemblyRuntimeError('wasm trap: deadlock detected: event loop cannot make further progress')"
-        ));
+        assert!(
+            check.contains(
+                "'wasm trap: deadlock detected: event loop cannot make further progress'"
+            )
+        );
         assert!(check.contains("for (const root of unresolvedRoots)"));
         assert!(check.contains("root.reject(err);"));
         assert!(check.contains("task.reject(err);"));
