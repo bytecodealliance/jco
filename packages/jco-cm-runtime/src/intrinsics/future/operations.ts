@@ -381,8 +381,9 @@ export function futureCancelRead(
         throw new _context.RuntimeError('cannot cancel a copy that a synchronous operation is waiting on');
     }
     // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
-    // a waitable set. That check is held back: guests built with older wit-bindgen
-    // releases, including the prebuilt p3 fixtures, cancel this way.
+    // a waitable set. That check is held back: wit-bindgen releases before 0.59, which
+    // built most of the prebuilt p3 fixtures, cancel their inter-task wakeup stream read
+    // synchronously before removing it from the task's waitable set.
 
     futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 
@@ -458,8 +459,9 @@ export function futureCancelWrite(
         throw new _context.RuntimeError('cannot cancel a copy that a synchronous operation is waiting on');
     }
     // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
-    // a waitable set. That check is held back: guests built with older wit-bindgen
-    // releases, including the prebuilt p3 fixtures, cancel this way.
+    // a waitable set. That check is held back: wit-bindgen releases before 0.59, which
+    // built most of the prebuilt p3 fixtures, cancel their inter-task wakeup stream read
+    // synchronously before removing it from the task's waitable set.
 
     futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 
