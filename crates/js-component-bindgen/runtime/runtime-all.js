@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit ba7d290590b2661a8bfb160ea59e9a03389ef75a
+// generated from commit cf21f9bc134661d7d554602be866997ed2009c0f
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1545,13 +1545,13 @@ function taskReturn(_context, ctx, ...params) {
 	if (!task.calleeIsAsync()) throw new _context.RuntimeError("task.return requires an async canonical lift");
 	const expectedResultType = task.returnResultTypeIdx();
 	if (expectedResultType !== null && ctx.resultTypeIdx !== void 0 && ctx.resultTypeIdx !== expectedResultType) throw new _context.RuntimeError("task.return result type does not match the function type");
-	const expectedMemoryIdx = task.getReturnMemoryIdx();
-	if (typeof expectedMemoryIdx === "number" && typeof memoryIdx === "number" && expectedMemoryIdx !== memoryIdx) {
-		DEBUG: debugLog("[taskReturn()] mismatched memory indices", {
-			expectedMemoryIdx,
-			memoryIdx
+	const liftMemory = task.getLiftMemory();
+	if (memory != null && liftMemory !== void 0 && memory !== liftMemory) {
+		DEBUG: debugLog("[taskReturn()] mismatched memories", {
+			memoryIdx,
+			liftMemory
 		});
-		throw new _context.RuntimeError("task.return memory [" + memoryIdx + "] does not match task [" + expectedMemoryIdx + "]");
+		throw new _context.RuntimeError("task.return memory does not match the lift memory");
 	}
 	const expectedStringEncoding = task.getReturnStringEncoding();
 	if (expectedStringEncoding && stringEncoding && expectedStringEncoding !== stringEncoding) throw new _context.RuntimeError(`task.return string encoding [${stringEncoding}] does not match task [${expectedStringEncoding}]`);
@@ -3383,8 +3383,10 @@ function prepareCall(_context, memoryIdx, getMemoryFn, startFn, returnFn, caller
 	newTask.setParentSubtask(subtask);
 	newTask.setFuncTypeIsAsync(calleeIsAsyncInt !== 0);
 	newTask.setReturnResultTypeIdx(taskReturnTypeIdx >>> 0);
+	const memory = getMemoryFn();
 	newTask.setReturnMemoryIdx(memoryIdx);
-	newTask.setReturnMemory(getMemoryFn());
+	newTask.setReturnMemory(memory);
+	newTask.setLiftMemory(memory ?? null);
 	subtask.setChildTask(newTask);
 	newTask.subtaskMeta = {
 		subtask,
@@ -5155,6 +5157,7 @@ function defineAsyncTask() {
 		#resolveExitPromise;
 		#memoryIdx = null;
 		#memory = null;
+		#liftMemory = void 0;
 		#callbackFn = null;
 		#callbackFnName = null;
 		#postReturnFn = null;
@@ -5346,6 +5349,12 @@ function defineAsyncTask() {
 		/** The string encoding of the lift, which `task.return` must match (null if unknown). */
 		getReturnStringEncoding() {
 			return this.#returnStringEncoding;
+		}
+		getLiftMemory() {
+			return this.#liftMemory;
+		}
+		setLiftMemory(m) {
+			this.#liftMemory = m;
 		}
 		setReturnMemory(m) {
 			if (m === null) return;
