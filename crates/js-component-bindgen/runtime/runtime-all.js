@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 4da7edb9795811336fd49f251b5182f90192d89a
+// generated from commit 38a09793f4b1e039aaa4deb318d8a09dee50b138
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -603,7 +603,8 @@ const initializeStoreAsyncState = () => ({
 	pendingHostOperations: 0,
 	hostWakeupScheduled: false,
 	idleWaiters: /* @__PURE__ */ new Set(),
-	syncCalls: []
+	syncCalls: [],
+	heldResumptions: []
 });
 const initializeComponentAsyncStates = () => /* @__PURE__ */ new Map();
 const initializeCoreTrapMessages = (messages) => new Map(Object.entries(messages));
@@ -613,6 +614,41 @@ function normalizeCoreTrap(context, err) {
 	const message = trapMessages.get(err.message);
 	if (message !== void 0) err.message = message;
 	return err;
+}
+/**
+* Describe a task for a deadlock or blocking trap.
+*
+* @param task - the task
+* @returns what the trap's `deadlockDetail` records about it
+*/
+function describeTask(task) {
+	return {
+		taskID: task.id(),
+		componentIdx: task.componentIdx(),
+		state: task.taskState(),
+		rootTaskID: task.getRootTask().id()
+	};
+}
+/**
+* Record which tasks were waiting, and on whose behalf, on a deadlock or
+* blocking trap. The message stays exactly what the Canonical ABI calls for, so
+* this rides alongside it: a deadlock reported from a real program is
+* otherwise a bare sentence, and the state that produced it is gone by the time
+* anyone reads the failure.
+*
+* @param err - the trap
+* @param pendingHostOperations - the host operations in flight
+* @param suspendedTasks - the tasks with a suspended thread
+* @param exitedTasks - the tasks whose threads all exited before they resolved
+* @param unresolvedRoots - the unresolved root tasks the trap fails
+*/
+function attachDeadlockDetail(err, pendingHostOperations, suspendedTasks, exitedTasks, unresolvedRoots) {
+	err.deadlockDetail = {
+		pendingHostOperations,
+		suspendedTasks: [...suspendedTasks].map(describeTask),
+		exitedTasks: [...exitedTasks].map(describeTask),
+		unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id())
+	};
 }
 function checkForDeadlock(context) {
 	const { RuntimeError, storeAsyncState, storeTrap, asyncState } = context;
@@ -642,16 +678,7 @@ function checkForDeadlock(context) {
 		if (syncCall !== void 0 && !syncCall.task.isResolvedState()) unresolvedRoots.add(syncCall.task.getRootTask());
 		if (unresolvedRoots.size === 0) return;
 		const err = new RuntimeError(syncCall === void 0 ? "wasm trap: deadlock detected: event loop cannot make further progress" : "cannot block a synchronous task before returning");
-		err.deadlockDetail = {
-			pendingHostOperations: storeAsyncState.pendingHostOperations,
-			suspendedTasks: [...suspendedTasks].map((task) => ({
-				taskID: task.id(),
-				componentIdx: task.componentIdx(),
-				state: task.taskState(),
-				rootTaskID: task.getRootTask().id()
-			})),
-			unresolvedRootTaskIDs: [...unresolvedRoots].map((root) => root.id())
-		};
+		attachDeadlockDetail(err, storeAsyncState.pendingHostOperations, suspendedTasks, exitedTasks, unresolvedRoots);
 		storeTrap.error = err;
 		for (const root of unresolvedRoots) {
 			root.setErrored(err);
@@ -668,6 +695,24 @@ function checkForDeadlock(context) {
 		}
 		for (const state of asyncState.values()) state.runTickLoop();
 	}, 0);
+}
+/**
+* Whether a task runs on behalf of a sync call: it belongs to the call's
+* instance, or the call waits on it through synchronous lowerings (its stack
+* is part of the call's stack).
+*
+* @param task - the task
+* @param call - the sync call
+* @returns whether the task is within the call
+*/
+function isWithinSyncCall(task, call) {
+	let current = task;
+	for (;;) {
+		if (current === call.task || current.componentIdx() === call.componentIdx) return true;
+		const subtask = current.getParentSubtask();
+		if (!subtask || subtask.isAsync) return false;
+		current = subtask.getParentTask();
+	}
 }
 function trackHostOperation(context, operation) {
 	const { storeAsyncState, asyncState, symbolDispose, storeTrap } = context;
@@ -1112,7 +1157,7 @@ function defineComponentAsyncState() {
 		}
 		suspendTask(args) {
 			const { task, ...opts } = args;
-			task.endFirstSlice();
+			task.endFirstSliceOnBlock();
 			return this.suspendThread({
 				thread: task.defaultThread(),
 				...opts
@@ -1253,11 +1298,35 @@ function defineComponentAsyncState() {
 			});
 		}
 		endSyncCall(task) {
-			const syncCalls = this.#context.deadlock.storeAsyncState.syncCalls;
+			const storeAsyncState = this.#context.deadlock.storeAsyncState;
+			const syncCalls = storeAsyncState.syncCalls;
 			const idx = syncCalls.findIndex((call) => call.task === task);
 			if (idx === -1) return;
 			syncCalls.splice(idx, 1);
+			const top = syncCalls.at(-1);
+			const held = storeAsyncState.heldResumptions;
+			for (let i = 0; i < held.length;) {
+				const { task: heldTask, resume } = held[i];
+				if (top !== void 0 && !isWithinSyncCall(heldTask, top)) {
+					i++;
+					continue;
+				}
+				held.splice(i, 1);
+				resume();
+			}
 			for (const state of this.#context.deadlock.asyncState.values()) if (state.hasPendingSchedulerWork()) state.runTickLoop();
+		}
+		resumeWhenNotHeld(task, resume) {
+			const storeAsyncState = this.#context.deadlock.storeAsyncState;
+			const call = storeAsyncState.syncCalls.at(-1);
+			if (call === void 0 || task === null || task === void 0 || isWithinSyncCall(task, call)) {
+				resume();
+				return;
+			}
+			storeAsyncState.heldResumptions.push({
+				task,
+				resume
+			});
 		}
 		#heldBySyncCall() {
 			const top = this.#context.deadlock.storeAsyncState.syncCalls.at(-1);
@@ -1268,6 +1337,15 @@ function defineComponentAsyncState() {
 			this.#tickLoop = null;
 			this.abandonLockWaiters();
 			this.abandonEntrySlotWaiters();
+			const held = this.#context.deadlock.storeAsyncState.heldResumptions;
+			for (let i = 0; i < held.length;) {
+				if (held[i].task.componentIdx() !== this.#componentIdx) {
+					i++;
+					continue;
+				}
+				const [{ resume }] = held.splice(i, 1);
+				resume();
+			}
 			for (const thread of [...this.#suspendedThreadsByRef.keys()]) this.resumeThread(thread);
 		}
 		runTickLoop() {
@@ -1566,12 +1644,13 @@ function taskCancel(_context, componentIdx) {
 //#region runtime/intrinsics/resource.js
 const RESOURCE_TABLE_FLAG = 1 << 30;
 const RESOURCE_TABLE_OWN = 2 ** 32;
+const MAX_HANDLE_INDEX = 2 ** 28 - 1;
 const tableGet = (context, table, handle) => {
 	const scope = table[handle * 2];
 	const value = table[handle * 2 + 1];
 	const own = value >= RESOURCE_TABLE_OWN;
 	const rep = own ? value - RESOURCE_TABLE_OWN : value;
-	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError(`unknown handle index ${handle}`);
+	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError(`unknown handle index ${handle >>> 0}`);
 	return {
 		rep,
 		scope,
@@ -1594,7 +1673,9 @@ const getHandleIndexSpace = (spaces, key) => {
 			next: 1,
 			free: [],
 			alloc() {
-				return this.free.length > 0 ? this.free.pop() : this.next++;
+				if (this.free.length > 0) return this.free.pop();
+				if (this.next > MAX_HANDLE_INDEX) throw new WebAssembly.RuntimeError("handle table full");
+				return this.next++;
 			},
 			release(index) {
 				this.free.push(index);
@@ -1627,7 +1708,7 @@ const tableRemove = (context, table, handle) => {
 	const value = table[handle * 2 + 1];
 	const own = value >= RESOURCE_TABLE_OWN;
 	const rep = own ? value - RESOURCE_TABLE_OWN : value;
-	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError("unknown handle index " + handle);
+	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError("unknown handle index " + (handle >>> 0));
 	if (own && scope !== 0) throw new context.RuntimeError("cannot remove owned resource while borrowed");
 	const borrowTask = own ? void 0 : context.scopeTasks.get(scope);
 	table[handle * 2] = RESOURCE_TABLE_FLAG;
@@ -1933,8 +2014,8 @@ function threadResumeLater(_context, ctx, threadHandle) {
 	const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
 	if (!cstate) throw new Error(`missing async state for component idx [${componentIdx}]`);
 	const thread = threadHandle === 0 ? void 0 : cstate.threads.get(threadHandle >>> 0);
-	if (!thread) throw new _context.RuntimeError(`unknown handle index ${threadHandle}`);
-	if (!cstate.markThreadReady(thread)) throw new _context.RuntimeError(`thread [${threadHandle}] is not suspended, cannot resume-later`);
+	if (!thread) throw new _context.RuntimeError(`unknown handle index ${threadHandle >>> 0}`);
+	if (!cstate.markThreadReady(thread)) throw new _context.RuntimeError(`thread [${threadHandle >>> 0}] is not suspended, cannot resume-later`);
 }
 /** Implements `canon thread.suspend-then-resume`. */
 function threadSuspendThenResume(_context, ctx, threadIdx) {
@@ -2365,9 +2446,10 @@ function defineRepTable() {
 			});
 			const freeIdx = this.#data[0];
 			if (freeIdx === 0) {
+				const rep = this.#data.length >> 1;
+				if (rep > MAX_LENGTH) throw new this.#context.RuntimeError("handle table full");
 				this.#data.push(val);
 				this.#data.push(null);
-				const rep = (this.#data.length >> 1) - 1;
 				DEBUG: debugLog("[RepTable#insert()] inserted", {
 					val,
 					target: this.target,
@@ -2406,7 +2488,7 @@ function defineRepTable() {
 				rep,
 				target: this.target
 			});
-			if (rep === 0) throw new Error("invalid resource rep during contains, (cannot be 0)");
+			if (rep === 0) throw new this.#context.RuntimeError("invalid resource rep during contains, (cannot be 0)");
 			const baseIdx = this.#slot(rep);
 			if (baseIdx < 0) return false;
 			const val = this.#data[baseIdx];
@@ -2417,12 +2499,12 @@ function defineRepTable() {
 				rep,
 				target: this.target
 			});
-			if (rep === 0) throw new Error("invalid resource rep during remove, (cannot be 0)");
+			if (rep === 0) throw new this.#context.RuntimeError("invalid resource rep during remove, (cannot be 0)");
 			const baseIdx = this.#slot(rep);
-			if (baseIdx < 0) throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
+			if (baseIdx < 0) throw new this.#context.RuntimeError(`unknown handle index ${rep >>> 0}`);
 			if (this.#space !== null) {
 				const val = this.#data[baseIdx];
-				if (val === void 0 || val === this.#store.free) throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
+				if (val === void 0 || val === this.#store.free) throw new this.#context.RuntimeError(`unknown handle index ${rep >>> 0}`);
 				this.#data[baseIdx] = this.#store.free;
 				this.#data[baseIdx + 1] = null;
 				this.#size -= 1;
@@ -2430,7 +2512,7 @@ function defineRepTable() {
 				return val;
 			}
 			const val = this.#data[baseIdx];
-			if (val === this.#store.free) throw new this.#context.RuntimeError(`double removal of rep [${rep}] (already freed)`);
+			if (val === this.#store.free) throw new this.#context.RuntimeError(`double removal of rep [${rep >>> 0}] (already freed)`);
 			this.#data[baseIdx] = this.#store.free;
 			this.#data[baseIdx + 1] = this.#data[0];
 			this.#data[0] = rep;
@@ -2973,6 +3055,8 @@ const suspendingImport = (context, componentIdx, fn, syncOnly = false, switchesT
 			if (!switchesTask) currentTaskMeta.current = saved;
 			throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
 		}
+		const state = getOrCreateAsyncState(context.states, componentIdx);
+		if (callsHost && isPromiseLike(started)) savedThread?.task.endFirstSliceOnBlock();
 		const settled = (async () => started)();
 		const resumption = promiseWithResolvers();
 		/** Restore this stack's task, then let the stack resume. */
@@ -2986,10 +3070,14 @@ const suspendingImport = (context, componentIdx, fn, syncOnly = false, switchesT
 			}
 			return resumption.promise;
 		});
-		settled.then((result) => resume(() => {
-			getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
+		/** Resume once no sync call into another instance holds this stack back. */
+		const release = (deliver) => {
+			state.resumeWhenNotHeld(savedThread?.task, () => resume(deliver));
+		};
+		settled.then((result) => release(() => {
+			state.throwIfInterrupted();
 			return result;
-		}), (error) => resume(() => {
+		}), (error) => release(() => {
 			throw error;
 		}));
 		return resumption.promise;
@@ -3117,7 +3205,7 @@ function driverLoop(_context, args) {
 					return;
 				case 2:
 					wset = waitableSetRep === 0 ? void 0 : cstate.handles.get(waitableSetRep);
-					if (!(wset instanceof _context.WaitableSet)) throw new _context.RuntimeError(`unknown handle index ${waitableSetRep}`);
+					if (!(wset instanceof _context.WaitableSet)) throw new _context.RuntimeError(`unknown handle index ${waitableSetRep >>> 0}`);
 					DEBUG: debugLog("[_driverLoop()] waiting for event", {
 						fnName,
 						componentIdx,
@@ -3289,7 +3377,8 @@ function prepareCall(_context, memoryIdx, getMemoryFn, startFn, returnFn, caller
 			subtask.id(),
 			"new-prepared-async-task"
 		].join("/"),
-		stringEncoding: encoding
+		stringEncoding: encoding,
+		indexOnEntry: true
 	});
 	newTask.setParentSubtask(subtask);
 	newTask.setFuncTypeIsAsync(calleeIsAsyncInt !== 0);
@@ -3316,7 +3405,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 	const globalTaskMeta = readTaskRegister(_context.registers, componentIdx);
 	if (!globalTaskMeta) throw new Error("missing global current task globalTaskMeta");
 	const taskID = globalTaskMeta.taskID;
-	const threadID = globalTaskMeta.threadID;
+	let threadID = globalTaskMeta.threadID;
 	DEBUG: debugLog("[_asyncStartCall()] args", {
 		args,
 		componentIdx
@@ -3553,6 +3642,12 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 	};
 	const enteredSynchronously = preparedTask.tryEnter();
 	if (enteredSynchronously === true) {
+		threadID = preparedTask.defaultThread().id();
+		setCurrentTaskMeta(_context.registers, {
+			taskID: preparedTask.id(),
+			threadID,
+			componentIdx: preparedTask.componentIdx()
+		});
 		startSubtask();
 		registerSubtaskProgress();
 		if (callee._jcoMaySuspend === false) driveDirectCallee();
@@ -3585,6 +3680,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 					if (preparedTask.isCancelled()) return;
 					throw preparedTask.isErrored() ?? /* @__PURE__ */ new Error("task failed to start");
 				}
+				threadID = preparedTask.defaultThread().id();
 				withCurrentTaskMeta(_context.registers, {
 					taskID: preparedTask.id(),
 					threadID,
@@ -3622,7 +3718,6 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 	const globalTaskMeta = readTaskRegister(_context.registers, componentIdx);
 	if (!globalTaskMeta) throw new Error("missing global current task meta during sync start call");
 	const taskID = globalTaskMeta.taskID;
-	const threadID = globalTaskMeta.threadID;
 	DEBUG: debugLog("[_syncStartCall()] args", {
 		args,
 		paramCount,
@@ -3672,13 +3767,19 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 				subtaskCallMeta.returnFnCalled = true;
 			}
 		});
-		const initialResult = subtask.onStart({ startFnParams: params });
-		const startRes = initialResult === void 0 ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
-		if (startRes.length !== paramCount) throw new Error(`unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`);
 		if (!await preparedTask.enter()) {
 			if (preparedTask.isCancelled()) return;
 			throw new Error("callee task failed to start during sync start call");
 		}
+		const threadID = preparedTask.defaultThread().id();
+		const initialResult = withCurrentTaskMeta(_context.registers, {
+			taskID: preparedTask.id(),
+			threadID,
+			componentIdx: preparedTask.componentIdx(),
+			fn: () => subtask.onStart({ startFnParams: params })
+		});
+		const startRes = initialResult === void 0 ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
+		if (startRes.length !== paramCount) throw new Error(`unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`);
 		let jspiCallee;
 		if (callee._cachedPromising) jspiCallee = callee._cachedPromising;
 		else {
@@ -4097,7 +4198,7 @@ function waitableSetWait(context, ctx, waitableSetRep, resultPtr, syncOnly = fal
 	if (task.componentIdx() !== componentIdx) throw Error(`task component [${task.componentIdx()}] !== executing component [${componentIdx}]`);
 	const memory = getMemoryFn();
 	const wset = getOrCreateAsyncState(context.lookup, componentIdx).handles.get(waitableSetRep);
-	if (!(wset instanceof WaitableSet)) throw new RuntimeError(`non-waitable set returned from component state handles @ [${waitableSetRep}]`);
+	if (!(wset instanceof WaitableSet)) throw new RuntimeError(`non-waitable set returned from component state handles @ [${waitableSetRep >>> 0}]`);
 	const storeEvent = (event) => {
 		return storeEventInComponentMemory({
 			memory,
@@ -4136,7 +4237,7 @@ function waitableSetPoll(context, ctx, waitableSetRep, resultPtr) {
 	if (task.componentIdx() !== componentIdx) throw Error(`task component idx [${task.componentIdx()}] does not match generated [${componentIdx}]`);
 	const cstate = getOrCreateAsyncState(context.lookup, task.componentIdx());
 	const wset = waitableSetRep === 0 ? void 0 : cstate.handles.get(waitableSetRep);
-	if (!(wset instanceof WaitableSet)) throw new RuntimeError(`unknown handle index ${waitableSetRep}`);
+	if (!(wset instanceof WaitableSet)) throw new RuntimeError(`unknown handle index ${waitableSetRep >>> 0}`);
 	let event;
 	if (!wset.hasPendingEvent()) {
 		DEBUG: debugLog("[waitableSetPoll()] no pending event", {
@@ -4187,7 +4288,7 @@ function removeWaitableSet(context, args) {
 	const { state, waitableSetRep } = args;
 	if (!state) throw new TypeError("missing component state");
 	const ws = state.handles.get(waitableSetRep);
-	if (!(ws instanceof WaitableSet)) throw new RuntimeError("cannot remove waitable set: no set present with rep [" + waitableSetRep + "]");
+	if (!(ws instanceof WaitableSet)) throw new RuntimeError("cannot remove waitable set: no set present with rep [" + (waitableSetRep >>> 0) + "]");
 	if (ws.hasPendingEvent()) throw new RuntimeError("waitable set cannot be removed with pending items remaining");
 	if (ws.numWaitables() > 0) throw new RuntimeError("waitable set still contains waitables");
 	if (ws.numWaiting() > 0) throw new RuntimeError("cannot drop waitable set with waiters");
@@ -4206,12 +4307,12 @@ function waitableJoin(context, componentIdx, waitableRep, waitableSetRep) {
 	if (!state) throw new Error(`invalid/missing async state for component instance [${componentIdx}]`);
 	if (!state.mayLeave) throw new RuntimeError("component instance is not marked as may leave, cannot join waitable");
 	const waitableObj = state.handles.get(waitableRep);
-	if (!waitableObj) throw new RuntimeError(`missing waitable obj (rep [${waitableRep}]), component idx [${componentIdx}])`);
+	if (!waitableObj) throw new RuntimeError(`missing waitable obj (rep [${waitableRep >>> 0}]), component idx [${componentIdx}])`);
 	const waitable = waitableObj.getWaitable ? waitableObj.getWaitable() : waitableObj;
 	if (!(waitable instanceof Waitable)) throw new RuntimeError("handle does not name a waitable");
 	if (waitable.hasSyncWaiter()) throw new RuntimeError(WAITABLE_SYNC_IN_SET);
 	const waitableSet = waitableSetRep === 0 ? null : state.handles.get(waitableSetRep);
-	if (waitableSetRep !== 0 && !(waitableSet instanceof WaitableSet)) throw new RuntimeError(`missing waitable set [${waitableSetRep}] in component idx [${componentIdx}]`);
+	if (waitableSetRep !== 0 && !(waitableSet instanceof WaitableSet)) throw new RuntimeError(`missing waitable set [${waitableSetRep >>> 0}] in component idx [${componentIdx}]`);
 	waitable.join(waitableSet ?? null);
 }
 
@@ -5425,6 +5526,22 @@ function defineAsyncTask() {
 			this.#holdsEntrySlot = false;
 			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endEntry(this.#id);
 		}
+		/**
+		* The task's thread blocked: its first slice is over, and so is the
+		* first slice of each caller that waits on it through a synchronous
+		* lowering, since that caller's thread blocks with it (Canonical ABI
+		* `canon_lower`, whose synchronous caller waits once the callee's
+		* thread has blocked).
+		*/
+		endFirstSliceOnBlock() {
+			let task = this;
+			for (;;) {
+				task.endFirstSlice();
+				const subtask = task.getParentSubtask();
+				if (!subtask || subtask.isAsync) return;
+				task = subtask.getParentTask();
+			}
+		}
 		#isAsyncEntry() {
 			return this.#componentIdx !== -1 && this.#callingWasmExport && this.#funcTypeIsAsync;
 		}
@@ -6418,12 +6535,14 @@ function lowerImport(_context, args, ...params) {
 		const { promise, resolve, reject } = promiseWithResolvers();
 		queueMicrotask(async () => {
 			try {
-				await withCurrentTaskMetaAsync(_context.registers, {
+				const pending = withCurrentTaskMetaAsync(_context.registers, {
 					taskID: task.id(),
 					threadID,
 					componentIdx: task.componentIdx(),
 					fn: () => importFn(...params)
 				});
+				if (isPromiseLike(pending)) task.endFirstSliceOnBlock();
+				await pending;
 				if (!subtask.isResolved()) await task.suspendUntil({ readyFn: () => subtask.isResolved() });
 				resolve(subtask.getResult());
 			} catch (err) {
@@ -6846,7 +6965,7 @@ function defineAsyncThread() {
 		async suspend(opts) {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			const task = this.#task;
-			task.endFirstSlice();
+			task.endFirstSliceOnBlock();
 			task.settleCompletion();
 			const { cancellable, readyFn, releaseLock = false } = opts;
 			if (task.deliverPendingCancel({ cancellable })) return false;
@@ -8290,7 +8409,7 @@ function futureCancelRead(_context, ctx, futureEndWaitableIdx) {
 		tableIdx: futureTableIdx,
 		futureEndWaitableIdx
 	});
-	if (!futureEnd) throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx}]`);
+	if (!futureEnd) throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx >>> 0}]`);
 	if (!(futureEnd instanceof _context.FutureEnd)) throw new _context.RuntimeError("invalid future end, expected value of type [FutureReadableEnd]");
 	if (!futureEnd.isCopying()) throw new _context.RuntimeError("future end is not copying, cannot cancel");
 	if (futureEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
@@ -8328,7 +8447,7 @@ function futureCancelWrite(_context, ctx, futureEndWaitableIdx) {
 		tableIdx: futureTableIdx,
 		futureEndWaitableIdx
 	});
-	if (!futureEnd) throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx}]`);
+	if (!futureEnd) throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx >>> 0}]`);
 	if (!(futureEnd instanceof _context.FutureEnd)) throw new _context.RuntimeError("invalid future end, expected value of type [FutureWritableEnd]");
 	if (!futureEnd.isCopying()) throw new _context.RuntimeError("future end is not copying, cannot cancel");
 	if (futureEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
@@ -8900,7 +9019,7 @@ function lowerFlatFuture(_context, meta) {
 		if (globalRep) {
 			const hostFuture = _context.futures.get(globalRep);
 			if (!hostFuture) throw new Error(`missing host future with global rep [${globalRep}]`);
-			waitableIdx = hostFuture.getFutureEndWaitableIdx();
+			waitableIdx = hostFuture.returnToGuest();
 		} else {
 			const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
 			if (!cstate) throw new Error(`missing async state for component [${componentIdx}]`);
@@ -8942,7 +9061,7 @@ function lowerFlatStream(_context, meta) {
 			if (globalRep) {
 				const hostStream = _context.streams.get(globalRep);
 				if (!hostStream) throw new Error(`missing host stream with global rep [${globalRep}]`);
-				waitableIdx = hostStream.getStreamEndWaitableIdx();
+				waitableIdx = hostStream.returnToGuest();
 			} else {
 				const cstate = getOrCreateAsyncState(_context.lookup, componentIdx);
 				if (!cstate) throw new Error(`missing async state for component [${componentIdx}]`);
@@ -9201,6 +9320,11 @@ function initializeFutureEndClass(events, tracking) {
 		/** Record that the host holds an end of this future (it was lifted to the host). */
 		markHostHeld() {
 			this.#pendingBufferMeta.hostHeld = true;
+			this.#trackHostWait();
+		}
+		/** Record that the host no longer holds an end of this future (it was lowered back into a guest). */
+		clearHostHeld() {
+			this.#pendingBufferMeta.hostHeld = false;
 			this.#trackHostWait();
 		}
 		#trackHostWait() {
@@ -9786,6 +9910,19 @@ function defineHostFuture() {
 		getFutureEndWaitableIdx() {
 			return this.#futureEndWaitableIdx;
 		}
+		/**
+		* Hand the end back to the guest it was lifted from: only the guest
+		* can complete a copy on it now.
+		*
+		* @returns the end's waitable index in the guest
+		*/
+		returnToGuest() {
+			getFutureEnd(this.#context.ends, {
+				tableIdx: this.#futureTableIdx,
+				futureEndWaitableIdx: this.#futureEndWaitableIdx
+			})?.clearHostHeld();
+			return this.#futureEndWaitableIdx;
+		}
 		createUserFuture() {
 			if (this.#userFuture) return this.#userFuture;
 			if (this.#rep === null) throw new Error("unexpectedly missing rep for host future");
@@ -10193,6 +10330,11 @@ function initializeStreamEndClass(_context) {
 			this.#pendingBufferMeta.hostHeld = true;
 			this.#trackHostWait();
 		}
+		/** Record that the host no longer holds an end of this stream (it was lowered back into a guest). */
+		clearHostHeld() {
+			this.#pendingBufferMeta.hostHeld = false;
+			this.#trackHostWait();
+		}
 		#trackHostWait() {
 			trackGuestWaitOnHost(_context.tracking, this.#pendingBufferMeta);
 		}
@@ -10357,6 +10499,19 @@ function defineHostStream() {
 			this.#rep = rep;
 		}
 		getStreamEndWaitableIdx() {
+			return this.#streamEndWaitableIdx;
+		}
+		/**
+		* Hand the end back to the guest it was lifted from: only the guest
+		* can complete a copy on it now.
+		*
+		* @returns the end's waitable index in the guest
+		*/
+		returnToGuest() {
+			getStreamEnd(this.#context.ends, {
+				tableIdx: this.#streamTableIdx,
+				streamEndWaitableIdx: this.#streamEndWaitableIdx
+			}).clearHostHeld();
 			return this.#streamEndWaitableIdx;
 		}
 		createUserStream() {
