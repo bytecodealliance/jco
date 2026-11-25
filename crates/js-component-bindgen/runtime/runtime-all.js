@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 38a09793f4b1e039aaa4deb318d8a09dee50b138
+// generated from commit fea389fd153e83230725898283a0378184b14f1c
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1157,7 +1157,7 @@ function defineComponentAsyncState() {
 		}
 		suspendTask(args) {
 			const { task, ...opts } = args;
-			task.endFirstSliceOnBlock();
+			task.endInitialInvocationOnBlock();
 			return this.suspendThread({
 				thread: task.defaultThread(),
 				...opts
@@ -3056,7 +3056,7 @@ const suspendingImport = (context, componentIdx, fn, syncOnly = false, switchesT
 			throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
 		}
 		const state = getOrCreateAsyncState(context.states, componentIdx);
-		if (callsHost && isPromiseLike(started)) savedThread?.task.endFirstSliceOnBlock();
+		if (callsHost && isPromiseLike(started)) savedThread?.task.endInitialInvocationOnBlock();
 		const settled = (async () => started)();
 		const resumption = promiseWithResolvers();
 		/** Restore this stack's task, then let the stack resume. */
@@ -3525,7 +3525,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 		});
 	};
 	const handleCalleeError = (err) => {
-		preparedTask.endFirstSlice();
+		preparedTask.endInitialInvocation();
 		DEBUG: debugLog("[_asyncStartCall()] initial subtask callee run failed", err);
 		_context.driver.reportTrap?.(err);
 		subtask.getParentTask().setErrored(err);
@@ -3600,7 +3600,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 				componentIdx: preparedTask.componentIdx(),
 				fn: () => jspiCallee.apply(null, startRes)
 			});
-			preparedTask.endFirstSlice();
+			preparedTask.endInitialInvocation();
 		} catch (err) {
 			handleCalleeError(err);
 			return;
@@ -3629,7 +3629,7 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 				componentIdx: preparedTask.componentIdx(),
 				fn: () => callee.apply(null, startRes)
 			});
-			preparedTask.endFirstSlice();
+			preparedTask.endInitialInvocation();
 		} catch (err) {
 			handleCalleeError(err);
 			return;
@@ -3648,7 +3648,12 @@ function asyncStartCall(_context, args, callee, paramCount, resultCount, flags) 
 			threadID,
 			componentIdx: preparedTask.componentIdx()
 		});
-		startSubtask();
+		try {
+			startSubtask();
+		} catch (err) {
+			handleCalleeError(err);
+			throw err;
+		}
 		registerSubtaskProgress();
 		if (callee._jcoMaySuspend === false) driveDirectCallee();
 		else driveJspiCallee();
@@ -3767,28 +3772,9 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 				subtaskCallMeta.returnFnCalled = true;
 			}
 		});
-		if (!await preparedTask.enter()) {
-			if (preparedTask.isCancelled()) return;
-			throw new Error("callee task failed to start during sync start call");
-		}
-		const threadID = preparedTask.defaultThread().id();
-		const initialResult = withCurrentTaskMeta(_context.registers, {
-			taskID: preparedTask.id(),
-			threadID,
-			componentIdx: preparedTask.componentIdx(),
-			fn: () => subtask.onStart({ startFnParams: params })
-		});
-		const startRes = initialResult === void 0 ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
-		if (startRes.length !== paramCount) throw new Error(`unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`);
-		let jspiCallee;
-		if (callee._cachedPromising) jspiCallee = callee._cachedPromising;
-		else {
-			callee._cachedPromising = _context.platform.promising(callee);
-			jspiCallee = callee._cachedPromising;
-		}
 		const failCalleeLifecycle = (err) => {
 			DEBUG: debugLog("[_syncStartCall()] callee lifecycle failed", { err });
-			preparedTask.endFirstSlice();
+			preparedTask.endInitialInvocation();
 			if (preparedTask.needsExclusiveLock()) calleeComponentState.exclusiveRelease(preparedTask.id());
 			preparedTask.setErrored(err);
 			if (!preparedTask.isResolvedState()) preparedTask.reject(err);
@@ -3802,6 +3788,30 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 			}
 			throw err;
 		};
+		if (!await preparedTask.enter()) {
+			if (preparedTask.isCancelled()) return;
+			throw new Error("callee task failed to start during sync start call");
+		}
+		const threadID = preparedTask.defaultThread().id();
+		let initialResult;
+		try {
+			initialResult = withCurrentTaskMeta(_context.registers, {
+				taskID: preparedTask.id(),
+				threadID,
+				componentIdx: preparedTask.componentIdx(),
+				fn: () => subtask.onStart({ startFnParams: params })
+			});
+		} catch (err) {
+			failCalleeLifecycle(err);
+		}
+		const startRes = initialResult === void 0 ? [] : Array.isArray(initialResult) ? initialResult : [initialResult];
+		if (startRes.length !== paramCount) throw new Error(`unexpected callee param count [${startRes.length}] after start fn, _syncStartCall invocation expected [${paramCount}]`);
+		let jspiCallee;
+		if (callee._cachedPromising) jspiCallee = callee._cachedPromising;
+		else {
+			callee._cachedPromising = _context.platform.promising(callee);
+			jspiCallee = callee._cachedPromising;
+		}
 		const calleeLifecyclePromise = (async () => {
 			let callbackResult;
 			try {
@@ -3813,7 +3823,7 @@ async function syncStartCall(_context, args, callee, paramCount, resultCount = 0
 						return jspiCallee.apply(null, startRes);
 					}
 				});
-				preparedTask.endFirstSlice();
+				preparedTask.endInitialInvocation();
 				if (!callbackFn) {
 					DEBUG: debugLog("[_syncStartCall()] no callback, callee returned", {
 						taskID: preparedTask.id(),
@@ -5518,25 +5528,33 @@ function defineAsyncTask() {
 				entered = await this.#enterImplicitThread(cstate);
 				return entered;
 			} finally {
-				if (!entered) this.endFirstSlice();
+				if (!entered) this.endInitialInvocation();
 			}
 		}
-		endFirstSlice() {
+		endInitialInvocation() {
 			if (!this.#holdsEntrySlot) return;
 			this.#holdsEntrySlot = false;
 			getOrCreateAsyncState(this.#context.lookup, this.#componentIdx).endEntry(this.#id);
 		}
 		/**
-		* The task's thread blocked: its first slice is over, and so is the
-		* first slice of each caller that waits on it through a synchronous
+		* @deprecated Former name of `endInitialInvocation`, still called by
+		* bindings from jco-transpile 0.24.0 and earlier. Remove in the next
+		* breaking release.
+		*/
+		endFirstSlice() {
+			this.endInitialInvocation();
+		}
+		/**
+		* The task's thread blocked: its initial invocation is over, and so is the
+		* initial invocation of each caller that waits on it through a synchronous
 		* lowering, since that caller's thread blocks with it (Canonical ABI
 		* `canon_lower`, whose synchronous caller waits once the callee's
 		* thread has blocked).
 		*/
-		endFirstSliceOnBlock() {
+		endInitialInvocationOnBlock() {
 			let task = this;
 			for (;;) {
-				task.endFirstSlice();
+				task.endInitialInvocation();
 				const subtask = task.getParentSubtask();
 				if (!subtask || subtask.isAsync) return;
 				task = subtask.getParentTask();
@@ -5881,7 +5899,7 @@ function defineAsyncTask() {
 				componentIdx: this.#componentIdx,
 				taskID: this.#id
 			});
-			this.endFirstSlice();
+			this.endInitialInvocation();
 			this.#endSyncCall();
 			if (this.#exited) throw new Error("task has already exited");
 			this.validateResourceBorrowScope();
@@ -6541,7 +6559,7 @@ function lowerImport(_context, args, ...params) {
 					componentIdx: task.componentIdx(),
 					fn: () => importFn(...params)
 				});
-				if (isPromiseLike(pending)) task.endFirstSliceOnBlock();
+				if (isPromiseLike(pending)) task.endInitialInvocationOnBlock();
 				await pending;
 				if (!subtask.isResolved()) await task.suspendUntil({ readyFn: () => subtask.isResolved() });
 				resolve(subtask.getResult());
@@ -6965,7 +6983,7 @@ function defineAsyncThread() {
 		async suspend(opts) {
 			const cstate = getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			const task = this.#task;
-			task.endFirstSliceOnBlock();
+			task.endInitialInvocationOnBlock();
 			task.settleCompletion();
 			const { cancellable, readyFn, releaseLock = false } = opts;
 			if (task.deliverPendingCancel({ cancellable })) return false;
