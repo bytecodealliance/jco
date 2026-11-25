@@ -909,7 +909,7 @@ impl FunctionBindgen<'_> {
                   task.registerOnResolveHandler(() => {{
                       {scope_id}--;
                       for (const {{ rid, handle }} of {resource_borrows}) {{
-                          const storedScopeId = {handle_tables}[rid][handle << 1]
+                          const storedScopeId = {handle_tables}[rid][handle * 2]
                           if (storedScopeId === {scope_id}) {{
                               throw new TypeError('borrows not dropped for resource call');
                           }}
@@ -3098,9 +3098,6 @@ impl Bindgen for FunctionBindgen<'_> {
                             Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
                             &format!("handleTable{tid}, {handle}"),
                         );
-                        let rsc_own_flag = self.intrinsic(Intrinsic::Resource(
-                            ResourceIntrinsic::ResourceTableOwnFlag,
-                        ));
                         if !imported {
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
@@ -3157,11 +3154,17 @@ impl Bindgen for FunctionBindgen<'_> {
                             let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
                             let symbol_resource_handle =
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
+                            // Canonical ABI `lift_borrow` / `lift_own`: an index with no live
+                            // entry in this table traps before anything is looked up or removed.
+                            let rsc_table_get = self.intrinsic_call(
+                                Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                &format!("handleTable{tid}, {handle}"),
+                            );
 
                             uwriteln!(
                                 self.src,
                                 r#"
-                                  var {rep} = handleTable{tid}[({handle} << 1) + 1] % {rsc_own_flag};
+                                  var {rep} = {rsc_table_get}.rep;
                                   var {rsc} = captureTable{rid}.get({rep});
                                   if (!{rsc}) {{
                                       {rsc} = Object.create({local_name}.prototype);
@@ -3321,10 +3324,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                     self.src,
                                     r#"
                                       var {own_handle} = {op}[{symbol_resource_handle}];
-                                      if (!{own_handle} || !(handleTable{tid}[({own_handle} << 1) + 1] >= {rsc_own_flag})) {{
+                                      if (!{own_handle} || !(handleTable{tid}[{own_handle} * 2 + 1] >= {rsc_own_flag})) {{
                                           throw new TypeError('Resource error: Not a valid \"{class_name}\" resource.');
                                       }}
-                                      var {handle} = handleTable{tid}[({own_handle} << 1) + 1] - {rsc_own_flag};
+                                      var {handle} = handleTable{tid}[{own_handle} * 2 + 1] - {rsc_own_flag};
                                     "#,
                                 );
                             }

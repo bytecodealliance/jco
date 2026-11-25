@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 7429e0980c8ded6139b29b1af5db22064cf12cdc
+// generated from commit 7a2bc912979cf14050863a9515f18b5fd6f88921
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -5000,7 +5000,7 @@ function defineAsyncTask() {
 			}
 			if (this.#resourceBorrowCount !== 0) throw new this.#context.RuntimeError("borrow handles still remain at the end of the call");
 			for (const { table, handle } of this.#resourceLenders ?? NONE$1) {
-				const idx = handle << 1;
+				const idx = handle * 2;
 				const lendCount = table[idx];
 				if (!Number.isInteger(lendCount) || lendCount <= 0 || lendCount >= 2 ** 30) throw new Error("invalid resource lender state at scope exit");
 				table[idx] = lendCount - 1;
