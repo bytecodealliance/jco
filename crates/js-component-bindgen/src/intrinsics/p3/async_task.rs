@@ -989,11 +989,11 @@ impl AsyncTaskIntrinsic {
                         if (!cstate) {{ throw new Error(`missing async state for component idx [${{componentIdx}}]`); }}
                         const thread = threadHandle === 0 ? undefined : cstate.threads.get(threadHandle >>> 0);
                         if (!thread) {{
-                            throw new {runtime_error_class}(`unknown handle index ${{threadHandle}}`);
+                            throw new {runtime_error_class}(`unknown handle index ${{threadHandle >>> 0}}`);
                         }}
 
                         if (!cstate.markThreadReady(thread)) {{
-                            throw new {runtime_error_class}(`thread [${{threadHandle}}] is not suspended, cannot resume-later`);
+                            throw new {runtime_error_class}(`thread [${{threadHandle >>> 0}}] is not suspended, cannot resume-later`);
                         }}
                     }}
                 "
@@ -3578,7 +3578,7 @@ impl AsyncTaskIntrinsic {
                                         // (an invalid index traps, like `waitable-set.wait`)
                                         wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
                                         if (!(wset instanceof {waitable_set_class})) {{
-                                            throw new {runtime_error_class}(`unknown handle index ${{waitableSetRep}}`);
+                                            throw new {runtime_error_class}(`unknown handle index ${{waitableSetRep >>> 0}}`);
                                         }}
 
                                         {debug_log_fn}('[{driver_loop_fn}()] waiting for event', {{

@@ -16,7 +16,7 @@ export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => 
     // belong to another handle kind of the instance, and `value` is undefined
     // past the end of the table.
     if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
-        throw new context.RuntimeError(`unknown handle index ${handle}`);
+        throw new context.RuntimeError(`unknown handle index ${handle >>> 0}`);
     }
     return { rep, scope, own };
 };
@@ -76,7 +76,7 @@ export const tableRemove: ResourceModule['tableRemove'] = (context, table, handl
     const own = value >= RESOURCE_TABLE_OWN;
     const rep = own ? value - RESOURCE_TABLE_OWN : value;
     if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
-        throw new context.RuntimeError('unknown handle index ' + handle);
+        throw new context.RuntimeError('unknown handle index ' + (handle >>> 0));
     }
     if (own && scope !== 0) {
         throw new context.RuntimeError('cannot remove owned resource while borrowed');

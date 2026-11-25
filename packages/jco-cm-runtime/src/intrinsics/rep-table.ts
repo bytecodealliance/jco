@@ -118,12 +118,12 @@ function defineRepTable() {
             }
             const baseIdx = this.#slot(rep);
             if (baseIdx < 0) {
-                throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
+                throw new this.#context.RuntimeError(`unknown handle index ${rep >>> 0}`);
             }
             if (this.#space !== null) {
                 const val = this.#data[baseIdx];
                 if (val === undefined || val === this.#store.free) {
-                    throw new this.#context.RuntimeError(`unknown handle index ${rep}`);
+                    throw new this.#context.RuntimeError(`unknown handle index ${rep >>> 0}`);
                 }
                 this.#data[baseIdx] = this.#store.free;
                 this.#data[baseIdx + 1] = null;
@@ -133,7 +133,7 @@ function defineRepTable() {
             }
             const val = this.#data[baseIdx];
             if (val === this.#store.free) {
-                throw new this.#context.RuntimeError(`double removal of rep [${rep}] (already freed)`);
+                throw new this.#context.RuntimeError(`double removal of rep [${rep >>> 0}] (already freed)`);
             }
 
             this.#data[baseIdx] = this.#store.free;

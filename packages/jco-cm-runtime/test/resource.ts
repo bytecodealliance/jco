@@ -31,14 +31,14 @@ suite('resource intrinsics', () => {
         expect(() => tableGet({ RuntimeError: CustomRuntimeError }, sparseTable, handle)).toThrowError(
             CustomRuntimeError,
         );
-        expect(() => tableGet(context, sparseTable, handle)).toThrow(`unknown handle index ${handle}`);
+        expect(() => tableGet(context, sparseTable, handle)).toThrow(`unknown handle index ${handle >>> 0}`);
     });
 
     test.concurrent.each([0x80000001, 0x80000001 | 0])('removing index %i traps and keeps entry 1', (handle) => {
         const table = Object.assign([TABLE_FLAG, 0, 0, 42 + TABLE_OWN], { _createdReps: new Set<number>() });
         // The trap comes before the index space or scope tasks are touched.
         const removeContext = context as unknown as Parameters<typeof tableRemove>[0];
-        expect(() => tableRemove(removeContext, table, handle)).toThrow(`unknown handle index ${handle}`);
+        expect(() => tableRemove(removeContext, table, handle)).toThrow(`unknown handle index ${handle >>> 0}`);
         expect(tableGet(context, table, 1)).toEqual({ rep: 42, scope: 0, own: true });
     });
 

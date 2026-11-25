@@ -436,7 +436,7 @@ export function waitableSetWait(
     const cstate = getOrCreateAsyncState(context.lookup, componentIdx);
     const wset = cstate.handles.get(waitableSetRep);
     if (!(wset instanceof WaitableSet)) {
-        throw new RuntimeError(`non-waitable set returned from component state handles @ [${waitableSetRep}]`);
+        throw new RuntimeError(`non-waitable set returned from component state handles @ [${waitableSetRep >>> 0}]`);
     }
 
     const storeEvent = (event: WaitableEvent | null) => {
@@ -502,7 +502,7 @@ export function waitableSetPoll(
     // (the index must name a waitable set, as for `waitable-set.wait`)
     const wset = waitableSetRep === 0 ? undefined : cstate.handles.get(waitableSetRep);
     if (!(wset instanceof WaitableSet)) {
-        throw new RuntimeError(`unknown handle index ${waitableSetRep}`);
+        throw new RuntimeError(`unknown handle index ${waitableSetRep >>> 0}`);
     }
 
     let event;
@@ -565,7 +565,7 @@ export function removeWaitableSet(
 
     const ws = state.handles.get(waitableSetRep) as WaitableSetType | undefined;
     if (!(ws instanceof WaitableSet)) {
-        throw new RuntimeError('cannot remove waitable set: no set present with rep [' + waitableSetRep + ']');
+        throw new RuntimeError('cannot remove waitable set: no set present with rep [' + (waitableSetRep >>> 0) + ']');
     }
     if (ws.hasPendingEvent()) {
         throw new RuntimeError('waitable set cannot be removed with pending items remaining');
@@ -609,7 +609,7 @@ export function waitableJoin(
         | (Partial<ComponentWaitable> & { getWaitable?(): Partial<ComponentWaitable> })
         | undefined;
     if (!waitableObj) {
-        throw new RuntimeError(`missing waitable obj (rep [${waitableRep}]), component idx [${componentIdx}])`);
+        throw new RuntimeError(`missing waitable obj (rep [${waitableRep >>> 0}]), component idx [${componentIdx}])`);
     }
     const waitable = waitableObj.getWaitable ? waitableObj.getWaitable() : waitableObj;
     if (!(waitable instanceof Waitable)) {
@@ -623,7 +623,7 @@ export function waitableJoin(
     const waitableSet =
         waitableSetRep === 0 ? null : (state.handles.get(waitableSetRep) as WaitableSetType | undefined);
     if (waitableSetRep !== 0 && !(waitableSet instanceof WaitableSet)) {
-        throw new RuntimeError(`missing waitable set [${waitableSetRep}] in component idx [${componentIdx}]`);
+        throw new RuntimeError(`missing waitable set [${waitableSetRep >>> 0}] in component idx [${componentIdx}]`);
     }
 
     waitable.join(waitableSet ?? null);

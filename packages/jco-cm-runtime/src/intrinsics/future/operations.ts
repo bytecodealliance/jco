@@ -368,7 +368,7 @@ export function futureCancelRead(
 
     const futureEnd = getFutureEnd(_context.ends, { tableIdx: futureTableIdx, futureEndWaitableIdx });
     if (!futureEnd) {
-        throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx}]`);
+        throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx >>> 0}]`);
     }
     if (!(futureEnd instanceof _context.FutureEnd)) {
         throw new _context.RuntimeError('invalid future end, expected value of type [FutureReadableEnd]');
@@ -446,7 +446,7 @@ export function futureCancelWrite(
 
     const futureEnd = getFutureEnd(_context.ends, { tableIdx: futureTableIdx, futureEndWaitableIdx });
     if (!futureEnd) {
-        throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx}]`);
+        throw new _context.RuntimeError(`missing future end with idx [${futureEndWaitableIdx >>> 0}]`);
     }
     if (!(futureEnd instanceof _context.FutureEnd)) {
         throw new _context.RuntimeError('invalid future end, expected value of type [FutureWritableEnd]');

@@ -1843,7 +1843,7 @@ impl AsyncFutureIntrinsic {
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
                         const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
-                        if (!futureEnd) {{ throw new {runtime_error_class}(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
+                        if (!futureEnd) {{ throw new {runtime_error_class}(`missing future end with idx [${{futureEndWaitableIdx >>> 0}}]`); }}
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new {runtime_error_class}('invalid future end, expected value of type [{future_end_class}]');
                         }}

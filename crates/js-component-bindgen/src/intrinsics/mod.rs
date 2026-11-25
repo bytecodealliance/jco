@@ -1076,12 +1076,12 @@ impl Intrinsic {
                             if (rep === 0) {{ throw new Error('invalid resource rep during remove, (cannot be 0)'); }}
                             const baseIdx = this.#slot(rep);
                             if (baseIdx < 0) {{
-                                throw new {runtime_error_class}(`unknown handle index ${{rep}}`);
+                                throw new {runtime_error_class}(`unknown handle index ${{rep >>> 0}}`);
                             }}
                             if (this.#space !== null) {{
                                 const val = this.#data[baseIdx];
                                 if (val === undefined || val === {rep_table_class}.FREE) {{
-                                    throw new {runtime_error_class}(`unknown handle index ${{rep}}`);
+                                    throw new {runtime_error_class}(`unknown handle index ${{rep >>> 0}}`);
                                 }}
                                 this.#data[baseIdx] = {rep_table_class}.FREE;
                                 this.#data[baseIdx + 1] = null;
@@ -1091,7 +1091,7 @@ impl Intrinsic {
                             }}
                             const val = this.#data[baseIdx];
                             if (val === {rep_table_class}.FREE) {{
-                                throw new {runtime_error_class}(`double removal of rep [${{rep}}] (already freed)`);
+                                throw new {runtime_error_class}(`double removal of rep [${{rep >>> 0}}] (already freed)`);
                             }}
 
                             this.#data[baseIdx] = {rep_table_class}.FREE;
@@ -1711,9 +1711,9 @@ mod tests {
 
         assert!(source.contains("function rscTableGet(table, handle)"));
         assert!(!source.contains("_jcoRuntimeProvider"));
-        assert!(
-            source.contains("throw new WebAssemblyRuntimeError(`unknown handle index ${handle}`);")
-        );
+        assert!(source.contains(
+            "throw new WebAssemblyRuntimeError(`unknown handle index ${handle >>> 0}`);"
+        ));
     }
 
     #[test]
@@ -2312,7 +2312,7 @@ mod tests {
         let resume_later =
             render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ThreadResumeLater));
         assert!(resume_later.contains(
-            "throw new WebAssemblyRuntimeError(`unknown handle index ${threadHandle}`);"
+            "throw new WebAssemblyRuntimeError(`unknown handle index ${threadHandle >>> 0}`);"
         ));
         assert!(!resume_later.contains("throw new Error(`invalid/missing thread"));
 
