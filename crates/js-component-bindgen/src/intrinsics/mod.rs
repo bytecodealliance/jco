@@ -2832,8 +2832,8 @@ mod tests {
             Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelWrite),
         ] {
             let source = render_intrinsic_body(intrinsic);
-            // (held back: older wit-bindgen guests cancel synchronously while in a set)
-            assert!(!source.contains(in_set_trap), "{intrinsic:?}");
+            assert!(source.contains("if (!isAsync && "), "{intrinsic:?}");
+            assert!(source.contains(in_set_trap), "{intrinsic:?}");
             assert!(source.contains(sync_waiter_trap), "{intrinsic:?}");
             // The synchronous wait is visible to `waitable.join` until it ends.
             assert!(

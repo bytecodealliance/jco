@@ -266,10 +266,9 @@ function streamCancel(
     if (streamEnd.getWaitable().hasSyncWaiter()) {
         throw new _context.RuntimeError('cannot cancel a copy that a synchronous operation is waiting on');
     }
-    // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
-    // a waitable set. That check is held back: wit-bindgen releases before 0.59, which
-    // built most of the prebuilt p3 fixtures, cancel their inter-task wakeup stream read
-    // synchronously before removing it from the task's waitable set.
+    if (!isAsync && streamEnd.isInSet()) {
+        throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
+    }
 
     streamEnd.setCopyState(_context.StreamEnd.CopyState.CANCELLING_COPY);
 
