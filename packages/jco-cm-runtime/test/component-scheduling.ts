@@ -243,6 +243,47 @@ test.concurrent('a task that exited unresolved under a resolved root is not a de
     }
 });
 
+test.concurrent('an instance held back by a synchronous call keeps polling after the call ends', async () => {
+    const { component } = create();
+    const held = component.getOrCreateAsyncState(0);
+    const callee = component.getOrCreateAsyncState(1);
+    Object.defineProperty(callee, 'runTickLoop', { value: () => {} });
+    try {
+        const sync = task(1n, 1);
+        const local = task(2n, 1);
+        const waiting = task(3n, 0);
+        local.unlock();
+        waiting.unlock();
+        // The callee has work of its own, so the store is not idle during the call.
+        callee.suspendThread({ thread: local.thread, readyFn: () => true, cancellable: false, onResume() {} });
+        let ready = false;
+        let resumed = false;
+        held.suspendThread({
+            thread: waiting.thread,
+            readyFn: () => ready,
+            cancellable: false,
+            onResume: () => {
+                resumed = true;
+            },
+        });
+
+        callee.beginSyncCall(sync.value);
+        held.runTickLoop();
+        // Let the held instance's loop go idle while the call is in progress.
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        callee.resumeThread(local.thread);
+        callee.endSyncCall(sync.value);
+
+        // Readiness that nothing announces is still seen by polling.
+        ready = true;
+        await vi.waitFor(() => expect(resumed).toBe(true), { timeout: 1000, interval: 10 });
+        expect(component.storeTrap.error).toBeNull();
+    } finally {
+        held.stop();
+        clearDeadlockCheck(component);
+    }
+});
+
 test.concurrent('a blocked synchronous call with no ready thread traps instead of deadlocking', async () => {
     const { component } = create();
     const state = component.getOrCreateAsyncState(0);
