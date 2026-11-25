@@ -173,7 +173,7 @@ test.concurrent('a task whose threads all exited unresolved deadlocks its unreso
         const root = task(1n);
         const child = task(2n, 0, root.value);
         state.noteUnresolvedExit(child.value);
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await vi.waitFor(() => expect(component.storeTrap.error).not.toBeNull(), { timeout: 2000, interval: 5 });
         const error = component.storeTrap.error as Error & { deadlockDetail: ComponentDeadlockDetail };
         expect(error.message).toContain('deadlock detected');
         expect(error.deadlockDetail.unresolvedRootTaskIDs).toEqual([1n]);
@@ -235,7 +235,12 @@ test.concurrent('a task that exited unresolved under a resolved root is not a de
         const child = task(2n, 0, root.value);
         root.value.reject(null);
         state.noteUnresolvedExit(child.value);
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        // Wait for the scheduled check to run rather than for a trap that must not come.
+        expect(component.storeAsyncState.deadlockCheck).not.toBeNull();
+        await vi.waitFor(() => expect(component.storeAsyncState.deadlockCheck).toBeNull(), {
+            timeout: 2000,
+            interval: 5,
+        });
         expect(component.storeTrap.error).toBeNull();
         expect([...state.unresolvedExitedTasks()]).toEqual([]);
     } finally {
@@ -298,7 +303,7 @@ test.concurrent('a blocked synchronous call with no ready thread traps instead o
             cancellable: false,
             onResume() {},
         });
-        await new Promise((resolve) => setTimeout(resolve, 5));
+        await vi.waitFor(() => expect(component.storeTrap.error).not.toBeNull(), { timeout: 2000, interval: 5 });
         expect(component.storeTrap.error).toBeInstanceOf(WebAssembly.RuntimeError);
         expect(component.storeTrap.error?.message).toBe('cannot block a synchronous task before returning');
         expect(sync.errors).toEqual([component.storeTrap.error]);
