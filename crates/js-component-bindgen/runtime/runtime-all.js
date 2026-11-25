@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit fea389fd153e83230725898283a0378184b14f1c
+// generated from commit ba7d290590b2661a8bfb160ea59e9a03389ef75a
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -8431,6 +8431,7 @@ function futureCancelRead(_context, ctx, futureEndWaitableIdx) {
 	if (!(futureEnd instanceof _context.FutureEnd)) throw new _context.RuntimeError("invalid future end, expected value of type [FutureReadableEnd]");
 	if (!futureEnd.isCopying()) throw new _context.RuntimeError("future end is not copying, cannot cancel");
 	if (futureEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
+	if (!isAsync && futureEnd.isInSet()) throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
 	futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 	const finishCancel = () => {
 		const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
@@ -8469,6 +8470,7 @@ function futureCancelWrite(_context, ctx, futureEndWaitableIdx) {
 	if (!(futureEnd instanceof _context.FutureEnd)) throw new _context.RuntimeError("invalid future end, expected value of type [FutureWritableEnd]");
 	if (!futureEnd.isCopying()) throw new _context.RuntimeError("future end is not copying, cannot cancel");
 	if (futureEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
+	if (!isAsync && futureEnd.isInSet()) throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
 	futureEnd.setCopyState(_context.FutureEnd.CopyState.CANCELLING_COPY);
 	const finishCancel = () => {
 		const { code, payload0: index, payload1: payload } = futureEnd.getPendingEvent();
@@ -11384,6 +11386,7 @@ function streamCancel(_context, direction, ctx, streamEndWaitableIdx) {
 	if (!(streamEnd instanceof _context.StreamEnd)) throw new Error(`invalid stream end, expected value of type [${direction.end}]`);
 	if (!streamEnd.isCopying()) throw new _context.RuntimeError("stream end is not copying, cannot cancel");
 	if (streamEnd.getWaitable().hasSyncWaiter()) throw new _context.RuntimeError("cannot cancel a copy that a synchronous operation is waiting on");
+	if (!isAsync && streamEnd.isInSet()) throw new _context.RuntimeError(WAITABLE_SYNC_IN_SET);
 	streamEnd.setCopyState(_context.StreamEnd.CopyState.CANCELLING_COPY);
 	const finishCancel = () => {
 		const event = streamEnd.getPendingEvent();
