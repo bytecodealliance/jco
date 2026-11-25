@@ -617,7 +617,7 @@ function defineAsyncTask() {
         // stackful task does not need the exclusive lock, so it does not wait
         // for it.
         #mayEnter(cstate: ComponentAsyncState) {
-            if (cstate.hasEnteringTask() || cstate.hasBackpressure()) {
+            if (cstate.entrySlotBusy(this.#id) || cstate.hasBackpressure()) {
                 return false;
             }
             return !this.needsExclusiveLock() || !cstate.isExclusivelyLocked();
@@ -627,8 +627,27 @@ function defineAsyncTask() {
         // only for its own condition, so it is never held behind a waiting task
         // that needs the exclusive lock when it does not need the lock itself.
         async #enterImplicitThread(cstate: ComponentAsyncState) {
+            // A task held back only by jco's entry slot is not waiting to
+            // enter in the Canonical ABI's sense: the slot stands for the
+            // first slice of an entry the Canonical ABI would have run to
+            // completion already. It waits for its turn at the slot, then
+            // checks its own condition like any other entry.
+            if (cstate.numWaitingToEnter() === 0 && cstate.entrySlotBusy(this.#id)) {
+                await cstate.waitForEntrySlotTurn(this.#id);
+            }
+            try {
+                return await this.#enterImplicitThreadOnTurn(cstate);
+            } finally {
+                // Once entered the turn is used up; otherwise it passes on.
+                cstate.passEntrySlotTurn(this.#id);
+            }
+        }
+        async #enterImplicitThreadOnTurn(cstate: ComponentAsyncState) {
             let keepGoing = true;
             if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) {
+                // This task waits through the scheduler, so other entries
+                // may take the slot meanwhile.
+                cstate.passEntrySlotTurn(this.#id);
                 cstate.addWaitingToEnter();
                 try {
                     // Another entry may run between this task becoming ready and
