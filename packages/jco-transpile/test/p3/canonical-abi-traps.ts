@@ -157,6 +157,25 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a sync-lowered call to a stackful callee that returns without task.return deadlocks', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'stackful-callee-exit-without-return-sync',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'stackful-callee-exit-without-return.wat'),
+            },
+        });
+        try {
+            // The callee's core return does not resolve it, so the caller's
+            // synchronous wait can never finish.
+            const err = await rejection(instance.runSync());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /deadlock detected/);
+        } finally {
+            await cleanup();
+        }
+    });
+
     // Upstream exit-without-resolving.wast (component-model#767): exiting
     // unresolved traps only a caller that waits on the task.
     test.concurrent.each([
