@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { ReadableStream } from 'node:stream/web';
 
 import { assert, suite, test } from 'vitest';
 
@@ -12,8 +13,8 @@ const CANNOT_BLOCK = /cannot block a synchronous task before returning/;
  * `pending` settles only when the test cleans up.
  *
  * @param name - a name for the transpiled output
- * @returns the instance, a future value the host writes only at cleanup,
- *   and the cleanup
+ * @returns the instance, a future value and a stream the host writes only
+ *   at cleanup, and the cleanup
  */
 async function setup(name: string) {
     let settlePending!: () => void;
@@ -21,6 +22,9 @@ async function setup(name: string) {
         settlePending = resolve;
     });
     const future = pending.then(() => 0);
+    const stream = new ReadableStream<number>({
+        start: (controller) => pending.then(() => controller.close()),
+    });
     const { instance, cleanup } = await setupAsyncTest({
         asyncMode: 'jspi',
         component: {
@@ -32,6 +36,7 @@ async function setup(name: string) {
     return {
         instance,
         future,
+        stream,
         cleanup: async () => {
             settlePending();
             await cleanup();
@@ -73,13 +78,19 @@ suite('sync call blocking with no ready thread', () => {
         ['waitEmpty', 'a host import'],
         ['suspendAfterExit', 'a host import'],
         ['waitEmpty', 'a host future'],
+        ['waitEmpty', 'a host stream'],
     ])('%s traps while another instance waits on %s', async (fn, hostWait) => {
-        const byFuture = hostWait === 'a host future';
-        const { instance, future, cleanup } = await setup(`sync-call-block-trap-${fn}${byFuture ? '-future' : ''}`);
+        const suffix = { 'a host import': '', 'a host future': '-future', 'a host stream': '-stream' }[hostWait];
+        const { instance, future, stream, cleanup } = await setup(`sync-call-block-trap-${fn}${suffix}`);
         try {
-            const started = byFuture
-                ? (instance.readFuture as (f: Promise<number>) => Promise<number>)(future)
-                : (instance.start as () => Promise<void>)();
+            let started: Promise<unknown>;
+            if (hostWait === 'a host future') {
+                started = (instance.readFuture as (f: Promise<number>) => Promise<number>)(future);
+            } else if (hostWait === 'a host stream') {
+                started = (instance.readStream as (s: ReadableStream<number>) => Promise<number>)(stream);
+            } else {
+                started = (instance.start as () => Promise<void>)();
+            }
             started.catch(() => {});
             // (let the other instance reach its host wait first)
             await new Promise((resolve) => setTimeout(resolve, 50));

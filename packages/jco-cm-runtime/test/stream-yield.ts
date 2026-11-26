@@ -75,11 +75,11 @@ test.sequential('stopping a store during a stream batch yield releases the pendi
     try {
         // Consume one synchronous batch, then share its deferred continuation.
         for (let index = 0; index < 64; index++) {
-            expect(queue.readSourceOrPromise!()).toBe(1);
+            expect(queue.readSourceOrPromise!(null)).toBe(1);
         }
-        const pending = queue.readSourceOrPromise!();
+        const pending = queue.readSourceOrPromise!(null);
         expect(pending).toBeInstanceOf(Promise);
-        expect(queue.readSourceOrPromise!()).toBe(pending);
+        expect(queue.readSourceOrPromise!(null)).toBe(pending);
         expect(selected.component.storeAsyncState.pendingHostOperations).toBe(1);
 
         // Stop before the scheduled read runs, then drain its host callback.

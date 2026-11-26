@@ -2694,7 +2694,8 @@ export interface StreamElementMetadata extends FutureElementMetadata {
     typedArray?: new (values: unknown[]) => unknown;
 }
 export type StreamCleanup = () => void;
-export type StreamHostInjectFn = (args: { count: number }) => Promise<StreamCleanup>;
+/** `componentIdx` is the instance reading the stream. */
+export type StreamHostInjectFn = (args: { count: number; componentIdx: number }) => Promise<StreamCleanup>;
 /** The host values behind a lowered stream, which a host read takes without a copy through the guest. */
 export interface StreamHostSource {
     readonly values: PendingValueQueue;
@@ -2916,9 +2917,10 @@ export interface PendingValueQueue {
     readonly sourceIsSync: boolean;
     readonly push: (source: StreamChunk) => number;
     readonly appendReadValue: (value: unknown) => number;
-    readonly readSource: () => Promise<number>;
+    /** `componentIdx` is the instance reading the stream, or null for a host read. */
+    readonly readSource: (componentIdx: number | null) => Promise<number>;
     /** Optional synchronous completion capability for ready sources. */
-    readonly readSourceOrPromise?: () => number | Promise<number>;
+    readonly readSourceOrPromise?: (componentIdx: number | null) => number | Promise<number>;
     readonly prepend: (source: StreamChunk) => void;
     readonly drainInto: (target: unknown[], maxCount: number) => number;
     /**

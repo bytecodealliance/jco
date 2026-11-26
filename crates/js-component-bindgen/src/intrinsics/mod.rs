@@ -2492,6 +2492,7 @@ mod tests {
             let end = render_intrinsic_body(Intrinsic::AsyncStream(intrinsic));
             assert!(end.contains("_trackHostOperation(() => new Promise((resolve) => {"));
             assert!(end.contains("try { completeCancel(); } finally { resolve(); }"));
+            assert!(end.contains("}), this.getWaitable().componentIdx());"));
             assert!(!end.contains("setTimeout(completeCancel, 0);"));
         }
     }
@@ -2546,7 +2547,14 @@ mod tests {
         let stream = render_intrinsic_body(Intrinsic::AsyncStream(
             AsyncStreamIntrinsic::PendingValueQueueClass,
         ));
-        assert!(stream.contains("await _trackHostOperation(() => (hostRead = this.#readFn()));"));
+        assert!(stream.contains(
+            "await _trackHostOperation(() => (hostRead = this.#readFn()), componentIdx);"
+        ));
+
+        let inject = render_intrinsic_body(Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::GenStreamHostInjectFn,
+        ));
+        assert!(inject.contains("await pendingValues.readSource(args.componentIdx);"));
     }
 
     #[test]

@@ -72,13 +72,17 @@ function definePendingValueQueue() {
             return this.push([value]);
         }
 
-        /** Preserve the promise-returning API and coalesce concurrent public reads. */
-        readSource(): Promise<number> {
+        /**
+         * Preserve the promise-returning API and coalesce concurrent public reads.
+         *
+         * @param componentIdx - the instance reading the stream, or null for a host read
+         */
+        readSource(componentIdx: number | null): Promise<number> {
             if (this.#sourceReadPromise) {
                 return this.#sourceReadPromise;
             }
             try {
-                const result = this.readSourceOrPromise();
+                const result = this.readSourceOrPromise(componentIdx);
                 if (typeof result !== 'number') {
                     return result;
                 }
@@ -92,27 +96,36 @@ function definePendingValueQueue() {
             }
         }
 
-        /** Keep ready reads synchronous until a bounded batch must yield to the host. */
-        readSourceOrPromise(): number | Promise<number> {
+        /**
+         * Keep ready reads synchronous until a bounded batch must yield to the host.
+         *
+         * @param componentIdx - the instance reading the stream, or null for a host read
+         */
+        readSourceOrPromise(componentIdx: number | null): number | Promise<number> {
             if (this.#sourceReadPromise) {
                 return this.#sourceReadPromise;
             }
             let hostRead: ReturnType<StreamReadFn> | undefined;
             try {
                 // A batch yield is pending host work just like an asynchronous source read.
-                // Track it before suspending so a waiting guest cannot be declared deadlocked.
-                const result = trackHostOperation(this.#tracking, () => {
-                    if (this.#synchronousReads < 64) {
-                        return (hostRead = this.#readFn());
-                    }
-                    return (hostRead = yieldToHost().then(() => {
-                        // Shutdown or disposal can happen while the next read is deferred.
-                        if (this.#tracking.storeTrap.stopped) {
-                            throw this.#tracking.storeTrap.error;
+                // Track it before suspending so a waiting guest cannot be declared deadlocked,
+                // counted for the reading instance, whose threads it may make ready.
+                const result = trackHostOperation(
+                    this.#tracking,
+                    () => {
+                        if (this.#synchronousReads < 64) {
+                            return (hostRead = this.#readFn());
                         }
-                        return this.#readFn.dropped ? { done: true, value: undefined } : this.#readFn();
-                    }));
-                });
+                        return (hostRead = yieldToHost().then(() => {
+                            // Shutdown or disposal can happen while the next read is deferred.
+                            if (this.#tracking.storeTrap.stopped) {
+                                throw this.#tracking.storeTrap.error;
+                            }
+                            return this.#readFn.dropped ? { done: true, value: undefined } : this.#readFn();
+                        }));
+                    },
+                    componentIdx,
+                );
                 if (!isPromiseLike(result)) {
                     this.#synchronousReads++;
                     return this.#acceptRead(result);
