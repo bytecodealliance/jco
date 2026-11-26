@@ -801,8 +801,8 @@ export interface ComponentAsyncState {
     readonly removeWaitingToEnter: () => void;
     readonly hasEnteringTask: () => boolean;
     readonly entrySlotBusy: (taskID: bigint) => boolean;
-    readonly waitForEntrySlotTurn: (taskID: bigint) => Promise<void>;
-    readonly passEntrySlotTurn: (taskID: bigint) => boolean;
+    readonly waitForEntrySlot: (taskID: bigint) => Promise<void>;
+    readonly passEntrySlot: (taskID: bigint) => boolean;
     readonly abandonEntrySlotWaiters: () => void;
     readonly beginEntry: (taskID: bigint) => void;
     readonly endEntry: (taskID: bigint) => boolean;

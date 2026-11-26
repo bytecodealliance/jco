@@ -675,20 +675,20 @@ function defineAsyncTask() {
             // A task held back only by jco's entry slot is not waiting to
             // enter in the Canonical ABI's sense: the slot stands for the
             // initial invocation of an entry the Canonical ABI would have run to
-            // completion already. It waits for its turn at the slot, then
+            // completion already. It waits until the slot is offered to it, then
             // checks its own condition like any other entry.
             if (cstate.numWaitingToEnter() === 0 && cstate.entrySlotBusy(this.#id)) {
-                await cstate.waitForEntrySlotTurn(this.#id);
+                await cstate.waitForEntrySlot(this.#id);
             }
             try {
-                return await this.#enterImplicitThreadOnTurn(cstate);
+                return await this.#enterImplicitThreadAfterSlotWait(cstate);
             } finally {
-                // Once entered the turn is used up; otherwise it passes on.
-                cstate.passEntrySlotTurn(this.#id);
+                // Entering takes up the offer; otherwise the slot passes on.
+                cstate.passEntrySlot(this.#id);
             }
         }
-        async #enterImplicitThreadOnTurn(cstate: ComponentAsyncState) {
-            // Cancelled before it started while it waited for its turn at the
+        async #enterImplicitThreadAfterSlotWait(cstate: ComponentAsyncState) {
+            // Cancelled before it started while it waited to be offered the
             // entry slot: the task was retired already and must not run.
             if (this.isResolvedState() || this.isCancelled()) {
                 return false;
@@ -697,7 +697,7 @@ function defineAsyncTask() {
             if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) {
                 // This task waits through the scheduler, so other entries
                 // may take the slot meanwhile.
-                cstate.passEntrySlotTurn(this.#id);
+                cstate.passEntrySlot(this.#id);
                 cstate.addWaitingToEnter();
                 try {
                     // Another entry may run between this task becoming ready and

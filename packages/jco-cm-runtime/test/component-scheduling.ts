@@ -69,15 +69,15 @@ test.concurrent('the entry slot admits one task at a time and waiting entries ar
 
 test.concurrent('tasks waiting for the entry slot get it in arrival order, ahead of later entries', async () => {
     const state = create().component.getOrCreateAsyncState(0);
-    const turns: bigint[] = [];
+    const order: bigint[] = [];
     expect(state.entrySlotBusy(1n)).toBe(false);
     state.beginEntry(1n);
     expect(state.entrySlotBusy(2n)).toBe(true);
-    const second = state.waitForEntrySlotTurn(2n).then(() => turns.push(2n));
-    const third = state.waitForEntrySlotTurn(3n).then(() => turns.push(3n));
+    const second = state.waitForEntrySlot(2n).then(() => order.push(2n));
+    const third = state.waitForEntrySlot(3n).then(() => order.push(3n));
     state.endEntry(1n);
     // The slot is handed to the first waiter at once: a new entry and the
-    // waiter behind it find it busy, the waiter holding the turn does not.
+    // waiter behind it find it busy, the waiter offered it does not.
     expect(state.entrySlotBusy(4n)).toBe(true);
     expect(state.entrySlotBusy(3n)).toBe(true);
     expect(state.entrySlotBusy(2n)).toBe(false);
@@ -85,17 +85,17 @@ test.concurrent('tasks waiting for the entry slot get it in arrival order, ahead
     state.beginEntry(2n);
     state.endEntry(2n);
     await third;
-    expect(turns).toEqual([2n, 3n]);
-    // A task that does not enter on its turn passes it on.
-    expect(state.passEntrySlotTurn(4n)).toBe(false);
-    expect(state.passEntrySlotTurn(3n)).toBe(true);
+    expect(order).toEqual([2n, 3n]);
+    // A task that does not enter when offered the slot passes it on.
+    expect(state.passEntrySlot(4n)).toBe(false);
+    expect(state.passEntrySlot(3n)).toBe(true);
     expect(state.entrySlotBusy(4n)).toBe(false);
 });
 
 test.concurrent('abandoned entry slot waiters resume without the slot', async () => {
     const state = create().component.getOrCreateAsyncState(0);
     state.beginEntry(1n);
-    const waiter = state.waitForEntrySlotTurn(2n);
+    const waiter = state.waitForEntrySlot(2n);
     state.abandonEntrySlotWaiters();
     await waiter;
     expect(state.hasEnteringTask()).toBe(true);

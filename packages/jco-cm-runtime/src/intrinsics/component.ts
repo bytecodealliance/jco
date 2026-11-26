@@ -505,7 +505,7 @@ function defineComponentAsyncState() {
         #numWaitingToEnter = 0;
         #enteringTaskID: bigint | null = null;
         #entrySlotWaiters: { taskID: bigint; resolve(): void }[] = [];
-        #entrySlotTurnTaskID: bigint | null = null;
+        #entrySlotOfferedTo: bigint | null = null;
         #lockHandoffScheduled = false;
         #pendingTaskStarts = 0;
 
@@ -846,8 +846,8 @@ function defineComponentAsyncState() {
             if (this.#enteringTaskID !== null) {
                 return true;
             }
-            if (this.#entrySlotTurnTaskID !== null) {
-                return this.#entrySlotTurnTaskID !== taskID;
+            if (this.#entrySlotOfferedTo !== null) {
+                return this.#entrySlotOfferedTo !== taskID;
             }
             return this.#entrySlotWaiters.length > 0;
         }
@@ -856,23 +856,23 @@ function defineComponentAsyncState() {
         // instance. Tasks waiting only for the slot therefore get it in
         // arrival order as soon as it is free, without going through the
         // scheduler, which could resume other threads of the instance first.
-        // The returned promise resolves when it is the task's turn; the task
-        // then enters (`beginEntry`) or passes the turn on (`passEntrySlotTurn`).
-        waitForEntrySlotTurn(taskID: bigint) {
+        // The returned promise resolves once the slot is offered to the task, which
+        // then enters (`beginEntry`) or passes the slot on (`passEntrySlot`).
+        waitForEntrySlot(taskID: bigint) {
             return new Promise<void>((resolve) => {
                 this.#entrySlotWaiters.push({ taskID, resolve });
             });
         }
-        passEntrySlotTurn(taskID: bigint) {
-            if (this.#entrySlotTurnTaskID !== taskID) {
+        passEntrySlot(taskID: bigint) {
+            if (this.#entrySlotOfferedTo !== taskID) {
                 return false;
             }
-            this.#entrySlotTurnTaskID = null;
+            this.#entrySlotOfferedTo = null;
             this.#handOffEntrySlot();
             return true;
         }
         #handOffEntrySlot() {
-            if (this.#enteringTaskID !== null || this.#entrySlotTurnTaskID !== null) {
+            if (this.#enteringTaskID !== null || this.#entrySlotOfferedTo !== null) {
                 return;
             }
             const next = this.#entrySlotWaiters.shift();
@@ -883,11 +883,11 @@ function defineComponentAsyncState() {
                 }
                 return;
             }
-            this.#entrySlotTurnTaskID = next.taskID;
+            this.#entrySlotOfferedTo = next.taskID;
             next.resolve();
         }
         abandonEntrySlotWaiters() {
-            this.#entrySlotTurnTaskID = null;
+            this.#entrySlotOfferedTo = null;
             for (const waiter of this.#entrySlotWaiters.splice(0)) {
                 waiter.resolve();
             }
@@ -898,8 +898,8 @@ function defineComponentAsyncState() {
                     `task [${taskID}] cannot enter component [${this.#componentIdx}] while task [${this.#enteringTaskID}] is entering`,
                 );
             }
-            if (this.#entrySlotTurnTaskID === taskID) {
-                this.#entrySlotTurnTaskID = null;
+            if (this.#entrySlotOfferedTo === taskID) {
+                this.#entrySlotOfferedTo = null;
             }
             this.#enteringTaskID = taskID;
         }
