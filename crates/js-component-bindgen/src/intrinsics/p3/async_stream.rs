@@ -1149,7 +1149,7 @@ impl AsyncStreamIntrinsic {
 
                              let injectedWritePromise;
                              if (injectHostWrite) {{
-                                 injectedWritePromise = this.#hostInjectFn({{ count }});
+                                 injectedWritePromise = this.#hostInjectFn({{ count, componentIdx }});
                              }}
 
                              const finishCopy = () => {{
@@ -1639,12 +1639,13 @@ impl AsyncStreamIntrinsic {
                                 // The deferral is runtime work the guest is waiting on: a task
                                 // suspended in a synchronous cancel resumes only when it runs.
                                 // Count it like a host operation so a deadlock check scheduled
-                                // before this timer does not report the wait as a deadlock.
+                                // before this timer does not report the wait as a deadlock. It
+                                // counts for the cancelling instance, whose thread it makes ready.
                                 {track_host_operation}() => new Promise((resolve) => {{
                                     setTimeout(() => {{
                                         try {{ completeCancel(); }} finally {{ resolve(); }}
                                     }}, 0);
-                                }}));
+                                }}), this.getWaitable().componentIdx());
                             }} else {{
                                 completeCancel();
                             }}
@@ -1884,13 +1885,15 @@ impl AsyncStreamIntrinsic {
                               return this.push([value]);
                           }}
 
-                          async readSource() {{
+                          // `componentIdx` is the instance reading the stream.
+                          async readSource(componentIdx) {{
                               if (!this.#sourceReadPromise) {{
                                   this.#sourceReadPromise = (async () => {{
                                       let hostRead;
                                       let res;
                                       try {{
-                                          res = await {track_host_operation}() => (hostRead = this.#readFn()));
+                                          // (counted for the reading instance, whose threads it may make ready)
+                                          res = await {track_host_operation}() => (hostRead = this.#readFn()), componentIdx);
                                       }} catch (err) {{
                                           if (!{store}.stopped) {{ throw err; }}
                                           // Stopping settled this wait, but not the host's read.
@@ -2665,7 +2668,7 @@ impl AsyncStreamIntrinsic {
                               if (!hasPendingReadBuffer()) {{ return doNothingFn; }}
                               if (count === 0) {{
                                   if (pendingValues.length === 0 && !pendingValues.done) {{
-                                      await pendingValues.readSource();
+                                      await pendingValues.readSource(args.componentIdx);
                                       if (readEnd.hasPendingEvent() || !hasPendingReadBuffer()) {{ return doNothingFn; }}
                                   }}
                                   if (pendingValues.length > 0) {{
@@ -2686,7 +2689,7 @@ impl AsyncStreamIntrinsic {
                               // once: waiting on the source for more would hold them until it produces
                               // again, and a read cancelled meanwhile would strand them
                               while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {{
-                                  const appended = await pendingValues.readSource();
+                                  const appended = await pendingValues.readSource(args.componentIdx);
                                   if (readEnd.hasPendingEvent()) {{ return bail(); }}
                                   if (!hasPendingReadBuffer()) {{ return bail(); }}
                                   drainPendingValues();

@@ -41,7 +41,7 @@ export function genStreamHostInjectFn(
         },
     });
 
-    return async function generatedStreamHostInject(args: { count: number }) {
+    return async function generatedStreamHostInject(args: Parameters<StreamHostInjectFn>[0]) {
         let { count } = args;
         if (count < 0) {
             throw new Error('invalid count');
@@ -115,7 +115,9 @@ export function genStreamHostInjectFn(
         }
         if (count === 0) {
             if (pendingValues.length === 0 && !pendingValues.done) {
-                const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+                const result =
+                    pendingValues.readSourceOrPromise?.(args.componentIdx) ??
+                    pendingValues.readSource(args.componentIdx);
                 if (typeof result !== 'number') {
                     await result;
                 }
@@ -143,7 +145,8 @@ export function genStreamHostInjectFn(
         // once: waiting on the source for more would hold them until it produces
         // again, and a read cancelled meanwhile would strand them
         while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {
-            const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+            const result =
+                pendingValues.readSourceOrPromise?.(args.componentIdx) ?? pendingValues.readSource(args.componentIdx);
             const appended = typeof result === 'number' ? result : await result;
             if (readEnd.hasPendingEvent()) {
                 return bail();

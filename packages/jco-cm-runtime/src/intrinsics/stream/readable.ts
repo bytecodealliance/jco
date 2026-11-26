@@ -290,7 +290,8 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                         break;
                     }
 
-                    const appended = queue.readSourceOrPromise?.() ?? queue.readSource();
+                    // (a host read: no instance waits on it)
+                    const appended = queue.readSourceOrPromise?.(null) ?? queue.readSource(null);
                     if (typeof appended === 'number') {
                         // A synchronous source must not keep the host from running.
                         if (++synchronousReads >= 64) {

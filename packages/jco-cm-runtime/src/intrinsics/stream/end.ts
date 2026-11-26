@@ -476,7 +476,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
 
             let injectedWritePromise: Promise<StreamCleanup> | undefined;
             if (injectHostWrite) {
-                injectedWritePromise = this.#hostInjectFn!({ count });
+                injectedWritePromise = this.#hostInjectFn!({ count, componentIdx });
             }
 
             const finishCopy = () => {
@@ -667,7 +667,8 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
                 // The deferral is runtime work the guest is waiting on: a task
                 // suspended in a synchronous cancel resumes only when it runs.
                 // Count it like a host operation so a deadlock check scheduled
-                // before this timer does not report the wait as a deadlock.
+                // before this timer does not report the wait as a deadlock. It
+                // counts for the cancelling instance, whose thread it makes ready.
                 trackHostOperation(
                     _context.tracking,
                     () =>
@@ -680,6 +681,7 @@ export function initializeStreamEndClass(_context: StreamEndClassContext): Strea
                                 }
                             }, 0);
                         }),
+                    this.#waitable.componentIdx(),
                 );
             } else {
                 completeCancel();

@@ -52,10 +52,10 @@ test.concurrent('ready reads avoid promises while the public API coalesces reads
     const s = create();
     let calls = 0;
     const queue = new s.PendingValueQueue(() => ({ done: false, value: ++calls }), { align32: 1 });
-    expect(queue.readSourceOrPromise!()).toBe(1);
+    expect(queue.readSourceOrPromise!(null)).toBe(1);
     expect(queue.length).toBe(1);
-    const first = queue.readSource();
-    const second = queue.readSource();
+    const first = queue.readSource(null);
+    const second = queue.readSource(null);
     expect(first).toBeInstanceOf(Promise);
     expect(calls).toBe(2);
     expect(await first).toBe(1);
@@ -67,8 +67,8 @@ test.concurrent('ready reads avoid promises while the public API coalesces reads
         },
         { align32: 1 },
     );
-    await expect(failing.readSource()).rejects.toBe(error);
-    expect(() => failing.readSourceOrPromise!()).toThrow(error);
+    await expect(failing.readSource(null)).rejects.toBe(error);
+    expect(() => failing.readSourceOrPromise!(null)).toThrow(error);
 });
 
 test.concurrent('large synchronous streams yield between bounded batches', async () => {

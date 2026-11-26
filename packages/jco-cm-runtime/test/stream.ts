@@ -251,7 +251,7 @@ suite.concurrent('instance stop', () => {
         const s = create();
         const late = lateValue(s.core.symbolDispose);
         const queue = new s.PendingValueQueue(late.next, scalar);
-        const read = queue.readSource();
+        const read = queue.readSource(null);
         stopStore(s.component, new s.core.RuntimeError('stopped'));
         expect(await read).toBe(0);
         expect(queue.done).toBe(true);
@@ -267,7 +267,7 @@ suite.concurrent('instance stop', () => {
         const source = { [Symbol.asyncIterator]: () => ({ next: late.next }) };
         const readFn = stream.genReadFnFromLowerableStream(s.source, source);
         const queue = new s.PendingValueQueue(readFn, scalar);
-        const read = queue.readSource();
+        const read = queue.readSource(null);
         expect(readFn.dropped).toBeUndefined();
         readFn.drop!();
         expect(readFn.dropped).toBe(true);
@@ -330,8 +330,8 @@ suite.concurrent('host streams', () => {
             calls++;
             return chunk.promise;
         }, scalar);
-        const a = queue.readSource(),
-            b = queue.readSource();
+        const a = queue.readSource(null),
+            b = queue.readSource(null);
         expect(calls).toBe(1);
         chunk.resolve({ value: new Uint8Array([1, 2, 3, 4]), done: false });
         expect(await a).toBe(4);
@@ -351,7 +351,7 @@ suite.concurrent('host streams', () => {
         const s = create();
         const exhausted = { value: undefined, done: 1 } as unknown as IteratorResult<unknown>;
         const queue = new s.PendingValueQueue(() => exhausted, scalar);
-        expect(await queue.readSource()).toBe(0);
+        expect(await queue.readSource(null)).toBe(0);
         expect(queue.done).toBe(true);
     });
 

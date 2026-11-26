@@ -4,7 +4,8 @@
 ;; instance may not run until the call returns.
 ;;
 ;; $P's `start` waits on the async host import `pending`, and its
-;; `read-future` reads a future the host has yet to write. $Q's sync-typed
+;; `read-future` and `read-stream` read a future and a stream the host has
+;; yet to write. $Q's sync-typed
 ;; exports each block with nothing of $Q left to run:
 ;; - `wait-empty` waits on an empty waitable set;
 ;; - `suspend-after-exit` makes a thread that exits at once, then suspends,
@@ -12,30 +13,39 @@
 (component
   (import "pending" (func $pending async))
   (type $future-u32 (future u32))
+  (type $stream-u8 (stream u8))
 
   (component $P
     (import "pending" (func $pending async))
     (type $future-u32 (future u32))
+    (type $stream-u8 (stream u8))
     (core module $Memory (memory (export "mem") 1))
     (core instance $memory (instantiate $Memory))
     (core func $pending (canon lower (func $pending)))
     (core func $future.read (canon future.read $future-u32 (memory (core memory $memory "mem"))))
+    (core func $stream.read (canon stream.read $stream-u8 (memory (core memory $memory "mem"))))
     (core module $m
       (import "" "pending" (func $pending))
       (import "" "future.read" (func $future.read (param i32 i32) (result i32)))
+      (import "" "stream.read" (func $stream.read (param i32 i32 i32) (result i32)))
       (func (export "start")
         (call $pending))
       (func (export "read-future") (param i32) (result i32)
         (call $future.read (local.get 0) (i32.const 0)))
+      (func (export "read-stream") (param i32) (result i32)
+        (call $stream.read (local.get 0) (i32.const 0) (i32.const 1)))
     )
     (core instance $i (instantiate $m (with "" (instance
       (export "pending" (func $pending))
       (export "future.read" (func $future.read))
+      (export "stream.read" (func $stream.read))
     ))))
     (func (export "start") async
       (canon lift (core func $i "start")))
     (func (export "read-future") async (param "f" $future-u32) (result u32)
       (canon lift (core func $i "read-future") (memory (core memory $memory "mem"))))
+    (func (export "read-stream") async (param "s" $stream-u8) (result u32)
+      (canon lift (core func $i "read-stream") (memory (core memory $memory "mem"))))
   )
 
   (component $Q
@@ -90,6 +100,7 @@
   (instance $q (instantiate $Q))
   (export "start" (func $p "start"))
   (export "read-future" (func $p "read-future"))
+  (export "read-stream" (func $p "read-stream"))
   (export "wait-empty" (func $q "wait-empty"))
   (export "suspend-after-exit" (func $q "suspend-after-exit"))
 )
