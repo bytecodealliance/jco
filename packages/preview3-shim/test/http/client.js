@@ -1,5 +1,6 @@
 import { TextDecoder, TextEncoder } from "node:util";
 import http from "node:http";
+import net from "node:net";
 
 import { describe, test, expect, afterAll, beforeAll } from "vitest";
 
@@ -70,6 +71,13 @@ describe("HttpClient Integration", () => {
         res.writeHead(200, { "Content-Type": "text/plain" });
         res.write("first");
         setTimeout(() => res.end(" rest"), 200);
+        return;
+      }
+
+      if (req.url === "/reset-body") {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.write("first");
+        setTimeout(() => req.socket.resetAndDestroy(), 20);
         return;
       }
 
@@ -366,7 +374,7 @@ describe("HttpClient Integration", () => {
     await expect(client.send(req)).rejects.toThrow("Request.authority must be set");
   });
 
-  async function sendWithOptions(path, configure) {
+  async function sendWithOptions(path, configure, { scheme, target = authority } = {}) {
     const headers = new Fields();
     const { tx: trailersTx, rx: trailersRx } = future();
 
@@ -375,7 +383,10 @@ describe("HttpClient Integration", () => {
 
     const [req] = Request.new(headers, null, trailersRx, opts);
     req.setMethod("GET");
-    req.setAuthority(authority);
+    if (scheme) {
+      req.setScheme(scheme);
+    }
+    req.setAuthority(target);
     req.setPathWithQuery(path);
 
     await trailersTx.write(null);
@@ -420,5 +431,57 @@ describe("HttpClient Integration", () => {
     const { rx } = future();
     const [, trailers] = Response.consumeBody(response, rx);
     await expect(trailers.read()).rejects.toThrow(/connection-read-timeout/);
+  });
+
+  test("the worker keeps serving after a between-bytes timeout", async () => {
+    const stalled = await sendWithOptions("/stalled-body", (opts) => {
+      opts.setBetweenBytesTimeout(20_000_000n); // 20 ms
+    });
+    const { rx } = future();
+    const [, trailers] = Response.consumeBody(stalled, rx);
+    await expect(trailers.read()).rejects.toThrow(/connection-read-timeout/);
+
+    const response = await withTimeout(
+      sendWithOptions("/delayed-first-byte", () => {}),
+      5000,
+    );
+    await expect(readResponseText(response)).resolves.toBe("ok");
+  });
+
+  test("a connection reset in the body fails the body, not the worker", async () => {
+    const reset = await sendWithOptions("/reset-body", () => {});
+    expect(reset.getStatusCode()).toBe(200);
+    const { rx } = future();
+    const [, trailers] = Response.consumeBody(reset, rx);
+    await expect(trailers.read()).rejects.toThrow();
+
+    const response = await withTimeout(
+      sendWithOptions("/delayed-first-byte", () => {}),
+      5000,
+    );
+    await expect(readResponseText(response)).resolves.toBe("ok");
+  });
+
+  test("connect timeout covers the TLS handshake", async () => {
+    // Accepts TCP connections but never answers the TLS handshake.
+    const sockets = new Set();
+    const silent = net.createServer((socket) => sockets.add(socket));
+    await new Promise((resolve) => silent.listen(0, "127.0.0.1", resolve));
+    try {
+      const send = sendWithOptions(
+        "/",
+        (opts) => {
+          opts.setConnectTimeout(50_000_000n); // 50 ms
+          opts.setFirstByteTimeout(10_000_000_000n); // 10 s
+        },
+        { scheme: { tag: "HTTPS" }, target: `127.0.0.1:${silent.address().port}` },
+      );
+      await expect(withTimeout(send, 5000)).rejects.toThrow(/connection-timeout/);
+    } finally {
+      for (const socket of sockets) {
+        socket.destroy();
+      }
+      await new Promise((resolve) => silent.close(resolve));
+    }
   });
 });
