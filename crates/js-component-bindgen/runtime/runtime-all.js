@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit e2ddf1b8c2045e2e375c41f26c1e430a026550eb
+// generated from commit ff23de63d1745e583ad78e2bd8f47e76f4c2d203
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -909,7 +909,7 @@ function defineComponentAsyncState() {
 		#numWaitingToEnter = 0;
 		#enteringTaskID = null;
 		#entrySlotWaiters = [];
-		#entrySlotTurnTaskID = null;
+		#entrySlotOfferedTo = null;
 		#lockHandoffScheduled = false;
 		#pendingTaskStarts = 0;
 		#suspendedThreadsByRef = /* @__PURE__ */ new Map();
@@ -1130,10 +1130,10 @@ function defineComponentAsyncState() {
 		}
 		entrySlotBusy(taskID) {
 			if (this.#enteringTaskID !== null) return true;
-			if (this.#entrySlotTurnTaskID !== null) return this.#entrySlotTurnTaskID !== taskID;
+			if (this.#entrySlotOfferedTo !== null) return this.#entrySlotOfferedTo !== taskID;
 			return this.#entrySlotWaiters.length > 0;
 		}
-		waitForEntrySlotTurn(taskID) {
+		waitForEntrySlot(taskID) {
 			return new Promise((resolve) => {
 				this.#entrySlotWaiters.push({
 					taskID,
@@ -1141,29 +1141,29 @@ function defineComponentAsyncState() {
 				});
 			});
 		}
-		passEntrySlotTurn(taskID) {
-			if (this.#entrySlotTurnTaskID !== taskID) return false;
-			this.#entrySlotTurnTaskID = null;
+		passEntrySlot(taskID) {
+			if (this.#entrySlotOfferedTo !== taskID) return false;
+			this.#entrySlotOfferedTo = null;
 			this.#handOffEntrySlot();
 			return true;
 		}
 		#handOffEntrySlot() {
-			if (this.#enteringTaskID !== null || this.#entrySlotTurnTaskID !== null) return;
+			if (this.#enteringTaskID !== null || this.#entrySlotOfferedTo !== null) return;
 			const next = this.#entrySlotWaiters.shift();
 			if (!next) {
 				if (this.#suspendedThreadsByRef.size > 0) this.runTickLoop();
 				return;
 			}
-			this.#entrySlotTurnTaskID = next.taskID;
+			this.#entrySlotOfferedTo = next.taskID;
 			next.resolve();
 		}
 		abandonEntrySlotWaiters() {
-			this.#entrySlotTurnTaskID = null;
+			this.#entrySlotOfferedTo = null;
 			for (const waiter of this.#entrySlotWaiters.splice(0)) waiter.resolve();
 		}
 		beginEntry(taskID) {
 			if (this.#enteringTaskID !== null) throw new Error(`task [${taskID}] cannot enter component [${this.#componentIdx}] while task [${this.#enteringTaskID}] is entering`);
-			if (this.#entrySlotTurnTaskID === taskID) this.#entrySlotTurnTaskID = null;
+			if (this.#entrySlotOfferedTo === taskID) this.#entrySlotOfferedTo = null;
 			this.#enteringTaskID = taskID;
 		}
 		endEntry(taskID) {
@@ -5691,18 +5691,18 @@ function defineAsyncTask() {
 			return !this.needsExclusiveLock() || !cstate.isExclusivelyLocked();
 		}
 		async #enterImplicitThread(cstate) {
-			if (cstate.numWaitingToEnter() === 0 && cstate.entrySlotBusy(this.#id)) await cstate.waitForEntrySlotTurn(this.#id);
+			if (cstate.numWaitingToEnter() === 0 && cstate.entrySlotBusy(this.#id)) await cstate.waitForEntrySlot(this.#id);
 			try {
-				return await this.#enterImplicitThreadOnTurn(cstate);
+				return await this.#enterImplicitThreadAfterSlotWait(cstate);
 			} finally {
-				cstate.passEntrySlotTurn(this.#id);
+				cstate.passEntrySlot(this.#id);
 			}
 		}
-		async #enterImplicitThreadOnTurn(cstate) {
+		async #enterImplicitThreadAfterSlotWait(cstate) {
 			if (this.isResolvedState() || this.isCancelled()) return false;
 			let keepGoing = true;
 			if (cstate.numWaitingToEnter() > 0 || !this.#mayEnter(cstate)) {
-				cstate.passEntrySlotTurn(this.#id);
+				cstate.passEntrySlot(this.#id);
 				cstate.addWaitingToEnter();
 				try {
 					do
@@ -8351,7 +8351,7 @@ function genStreamHostInjectFn(_context, genArgs) {
 		if (!hasPendingReadBuffer()) return doNothingFn;
 		if (count === 0) {
 			if (pendingValues.length === 0 && !pendingValues.done) {
-				const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+				const result = pendingValues.readSourceOrPromise?.(args.componentIdx) ?? pendingValues.readSource(args.componentIdx);
 				if (typeof result !== "number") await result;
 				if (readEnd.hasPendingEvent() || !hasPendingReadBuffer()) return doNothingFn;
 			}
@@ -8364,7 +8364,7 @@ function genStreamHostInjectFn(_context, genArgs) {
 		}
 		drainPendingValues();
 		while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {
-			const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+			const result = pendingValues.readSourceOrPromise?.(args.componentIdx) ?? pendingValues.readSource(args.componentIdx);
 			const appended = typeof result === "number" ? result : await result;
 			if (readEnd.hasPendingEvent()) return bail();
 			if (!hasPendingReadBuffer()) return bail();
@@ -10408,7 +10408,10 @@ function initializeStreamEndClass(_context) {
 				dropAfterCopy
 			});
 			let injectedWritePromise;
-			if (injectHostWrite) injectedWritePromise = this.#hostInjectFn({ count });
+			if (injectHostWrite) injectedWritePromise = this.#hostInjectFn({
+				count,
+				componentIdx
+			});
 			const finishCopy = () => {
 				const event = this.getPendingEvent();
 				if (!event) throw new Error("unexpectedly missing pending event");
@@ -10539,7 +10542,7 @@ function initializeStreamEndClass(_context) {
 						resolve();
 					}
 				}, 0);
-			}));
+			}), this.#waitable.componentIdx());
 			else completeCancel();
 		}
 		drop(opts = {}) {
@@ -10843,11 +10846,15 @@ function definePendingValueQueue() {
 			}
 			return this.push([value]);
 		}
-		/** Preserve the promise-returning API and coalesce concurrent public reads. */
-		readSource() {
+		/**
+		* Preserve the promise-returning API and coalesce concurrent public reads.
+		*
+		* @param componentIdx - the instance reading the stream, or null for a host read
+		*/
+		readSource(componentIdx) {
 			if (this.#sourceReadPromise) return this.#sourceReadPromise;
 			try {
-				const result = this.readSourceOrPromise();
+				const result = this.readSourceOrPromise(componentIdx);
 				if (typeof result !== "number") return result;
 				return this.#sourceReadPromise = Promise.resolve(result).finally(() => {
 					this.#sourceReadPromise = null;
@@ -10858,8 +10865,12 @@ function definePendingValueQueue() {
 				});
 			}
 		}
-		/** Keep ready reads synchronous until a bounded batch must yield to the host. */
-		readSourceOrPromise() {
+		/**
+		* Keep ready reads synchronous until a bounded batch must yield to the host.
+		*
+		* @param componentIdx - the instance reading the stream, or null for a host read
+		*/
+		readSourceOrPromise(componentIdx) {
 			if (this.#sourceReadPromise) return this.#sourceReadPromise;
 			let hostRead;
 			try {
@@ -10872,7 +10883,7 @@ function definePendingValueQueue() {
 							value: void 0
 						} : this.#readFn();
 					});
-				});
+				}, componentIdx);
 				if (!isPromiseLike(result)) {
 					this.#synchronousReads++;
 					return this.#acceptRead(result);
@@ -11143,7 +11154,7 @@ function initializeStreamReadableEndClass(_context) {
 						if (remaining === 0 || values.length > 0 && !queue.sourceIsSync) break;
 					}
 					if (queue.done) break;
-					const appended = queue.readSourceOrPromise?.() ?? queue.readSource();
+					const appended = queue.readSourceOrPromise?.(null) ?? queue.readSource(null);
 					if (typeof appended === "number") {
 						if (++synchronousReads >= 64) {
 							synchronousReads = 0;
