@@ -175,24 +175,31 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
     port: parsed.port,
     path: parsed.pathname + parsed.search,
     headers: toObject(headers),
-    timeout: connectTimeoutNs ? msecs(connectTimeoutNs) : undefined,
   };
 
   const req = request(reqOpts);
 
-  // Node runs the connect and first-byte phases on one socket idle timer, so
-  // start it with the connect timeout and switch it to the first-byte timeout
-  // (or clear it) once the socket connects.
-  if (connectTimeoutNs || firstByteTimeoutNs) {
-    const firstByteMs = firstByteTimeoutNs ? msecs(firstByteTimeoutNs) : 0;
-    req.once("socket", (socket) => {
-      if (socket.connecting) {
-        socket.once("connect", () => req.setTimeout(firstByteMs));
-      } else {
-        req.setTimeout(firstByteMs);
-      }
-    });
-  }
+  // The connect timeout bounds connecting, including the TLS handshake for
+  // https; the first-byte timeout then bounds the wait for the response head.
+  // Both are one-shot timers rather than the socket's idle timer, which every
+  // write of the request body would restart.
+  let phaseTimer;
+  const startPhaseTimer = (timeoutNs, code) => {
+    clearTimeout(phaseTimer);
+    phaseTimer = timeoutNs
+      ? setTimeout(() => req.emit("phase-timeout", code), msecs(timeoutNs))
+      : undefined;
+  };
+  const stopPhaseTimer = () => clearTimeout(phaseTimer);
+
+  startPhaseTimer(connectTimeoutNs, "connection-timeout");
+  // Each request has its own agent, so its socket is always new and still
+  // connecting here.
+  req.once("socket", (socket) => {
+    socket.once(isHttps ? "secureConnect" : "connect", () =>
+      startPhaseTimer(firstByteTimeoutNs, "connection-read-timeout"),
+    );
+  });
 
   let resStarted = false;
   const response = new Promise((resolve, reject) => {
@@ -210,14 +217,11 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
       cleanup();
       reject(err);
     };
-    const onTimeout = () => {
-      // A timeout before the socket connects is a connect timeout; after it,
-      // no response has arrived, so the first-byte timeout fired.
-      const connected = req.socket != null && !req.socket.connecting;
+    const onTimeout = (code) => {
       cleanup();
       req.on("error", () => {});
       req.destroy();
-      reject(new HttpError(connected ? "connection-read-timeout" : "connection-timeout"));
+      reject(new HttpError(code));
     };
     const onClose = () => {
       cleanup();
@@ -225,17 +229,18 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
     };
 
     const cleanup = () => {
+      stopPhaseTimer();
       req.off("response", onResponse);
       req.off("connect", onConnect);
       req.off("error", onError);
-      req.off("timeout", onTimeout);
+      req.off("phase-timeout", onTimeout);
       req.off("close", onClose);
     };
 
     req.once("response", onResponse);
     req.once("connect", onConnect);
     req.once("error", onError);
-    req.once("timeout", onTimeout);
+    req.once("phase-timeout", onTimeout);
     req.once("close", onClose);
   });
 
@@ -257,16 +262,15 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
     throw err;
   }
 
+  // Any later socket error, such as a reset or a between-bytes timeout, is
+  // re-emitted on `req`, whose response listeners are gone by now; the
+  // pipeline below reports it through the body and trailers instead.
+  req.on("error", () => {});
+
   if (betweenBytesTimeoutNs) {
-    res.once("readable", () =>
-      res.setTimeout(msecs(betweenBytesTimeoutNs), () => {
-        // Destroying the response also destroys the socket, which re-emits
-        // the error on `req`; the response listeners above are gone by now,
-        // and the pipeline below reports the error.
-        req.on("error", () => {});
-        res.destroy(new HttpError("connection-read-timeout"));
-      }),
-    );
+    res.setTimeout(msecs(betweenBytesTimeoutNs), () => {
+      res.destroy(new HttpError("connection-read-timeout"));
+    });
   }
 
   const pass = new PassThrough();
@@ -409,8 +413,9 @@ async function recvTrailers(port) {
   });
 }
 
+// Round up, so a timeout under 1 ms is not 0 (which means no timeout to Node).
 const msecs = (time) => {
-  return typeof time === "bigint" ? Number(time / 1_000_000n) : time / 1e6;
+  return typeof time === "bigint" ? Number((time + 999_999n) / 1_000_000n) : Math.ceil(time / 1e6);
 };
 
 const decoder = new TextDecoder();
