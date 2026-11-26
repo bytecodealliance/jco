@@ -66,6 +66,13 @@ describe("HttpClient Integration", () => {
         return;
       }
 
+      if (req.url === "/stalled-body") {
+        res.writeHead(200, { "Content-Type": "text/plain" });
+        res.write("first");
+        setTimeout(() => res.end(" rest"), 200);
+        return;
+      }
+
       if (req.url === "/early-response") {
         res.writeHead(200, { "Content-Type": "text/plain", "X-Test-Header": "early" });
         res.write("ready");
@@ -359,21 +366,59 @@ describe("HttpClient Integration", () => {
     await expect(client.send(req)).rejects.toThrow("Request.authority must be set");
   });
 
-  test("first-byte timeout triggers HttpError", async () => {
+  async function sendWithOptions(path, configure) {
     const headers = new Fields();
     const { tx: trailersTx, rx: trailersRx } = future();
 
     const opts = new RequestOptions();
-    opts.setFirstByteTimeout(1_000_000n); // 1 ms
-    opts.setBetweenBytesTimeout(1_000_000n); // 1 ms
+    configure(opts);
 
     const [req] = Request.new(headers, null, trailersRx, opts);
     req.setMethod("GET");
     req.setAuthority(authority);
-    req.setPathWithQuery("/delayed-first-byte");
+    req.setPathWithQuery(path);
 
     await trailersTx.write(null);
 
-    await expect(client.send(req)).rejects.toThrow(/connection-timeout/);
+    return client.send(req);
+  }
+
+  test("first-byte timeout reports connection-read-timeout", async () => {
+    const send = sendWithOptions("/delayed-first-byte", (opts) => {
+      opts.setFirstByteTimeout(1_000_000n); // 1 ms
+      opts.setBetweenBytesTimeout(1_000_000n); // 1 ms
+    });
+
+    await expect(send).rejects.toThrow(/connection-read-timeout/);
+  });
+
+  test("first-byte timeout is reported as a read timeout alongside a connect timeout", async () => {
+    const send = sendWithOptions("/delayed-first-byte", (opts) => {
+      opts.setConnectTimeout(10_000_000_000n); // 10 s
+      opts.setFirstByteTimeout(20_000_000n); // 20 ms
+    });
+
+    await expect(send).rejects.toThrow(/connection-read-timeout/);
+  });
+
+  test("connect timeout does not bound the wait for the first byte", async () => {
+    const response = await sendWithOptions("/delayed-first-byte", (opts) => {
+      opts.setConnectTimeout(50_000_000n); // 50 ms, less than the server's 200 ms delay
+    });
+
+    expect(response.getStatusCode()).toBe(200);
+    await expect(readResponseText(response)).resolves.toBe("ok");
+  });
+
+  test("between-bytes timeout reports connection-read-timeout", async () => {
+    const response = await sendWithOptions("/stalled-body", (opts) => {
+      opts.setBetweenBytesTimeout(20_000_000n); // 20 ms
+    });
+
+    expect(response.getStatusCode()).toBe(200);
+
+    const { rx } = future();
+    const [, trailers] = Response.consumeBody(response, rx);
+    await expect(trailers.read()).rejects.toThrow(/connection-read-timeout/);
   });
 });

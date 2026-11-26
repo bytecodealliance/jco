@@ -180,8 +180,18 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
 
   const req = request(reqOpts);
 
-  if (firstByteTimeoutNs) {
-    req.setTimeout(msecs(firstByteTimeoutNs));
+  // Node runs the connect and first-byte phases on one socket idle timer, so
+  // start it with the connect timeout and switch it to the first-byte timeout
+  // (or clear it) once the socket connects.
+  if (connectTimeoutNs || firstByteTimeoutNs) {
+    const firstByteMs = firstByteTimeoutNs ? msecs(firstByteTimeoutNs) : 0;
+    req.once("socket", (socket) => {
+      if (socket.connecting) {
+        socket.once("connect", () => req.setTimeout(firstByteMs));
+      } else {
+        req.setTimeout(firstByteMs);
+      }
+    });
   }
 
   let resStarted = false;
@@ -201,10 +211,13 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
       reject(err);
     };
     const onTimeout = () => {
+      // A timeout before the socket connects is a connect timeout; after it,
+      // no response has arrived, so the first-byte timeout fired.
+      const connected = req.socket != null && !req.socket.connecting;
       cleanup();
       req.on("error", () => {});
       req.destroy();
-      reject(new HttpError("connection-timeout"));
+      reject(new HttpError(connected ? "connection-read-timeout" : "connection-timeout"));
     };
     const onClose = () => {
       cleanup();
@@ -247,7 +260,11 @@ async function doHandleRequest({ url, method, headers, trailers, body, timeouts 
   if (betweenBytesTimeoutNs) {
     res.once("readable", () =>
       res.setTimeout(msecs(betweenBytesTimeoutNs), () => {
-        res.destroy(new HttpError("connection-timeout"));
+        // Destroying the response also destroys the socket, which re-emits
+        // the error on `req`; the response listeners above are gone by now,
+        // and the pipeline below reports the error.
+        req.on("error", () => {});
+        res.destroy(new HttpError("connection-read-timeout"));
       }),
     );
   }
