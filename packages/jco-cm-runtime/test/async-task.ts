@@ -479,7 +479,7 @@ test.concurrent('an entry cancelled while waiting for the entry slot never enter
         expect(await holder.enter()).toBe(true);
         expect(state.hasEnteringTask()).toBe(true);
 
-        // Both wait for their turn at the slot, not through the scheduler.
+        // Both wait to be offered the slot, not through the scheduler.
         const cancelled = asyncTask(true);
         const cancelledEntered = cancelled.enter();
         const next = asyncTask(true);
