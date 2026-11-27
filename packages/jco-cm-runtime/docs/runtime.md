@@ -81,7 +81,10 @@ The checked `@bytecodealliance/jco-cm-runtime` package and the runtime bundled
 by js-component-bindgen share the `intrinsics/sync` entry point. A component
 with one instance and only synchronous calls can reuse its caller's task and
 borrow scope for a host import. Call tracking, asynchronous functions, defined
-guest resources and cross-instance transfers use the general adapter.
+guest resources and cross-instance transfers use the general adapter. A guest
+that can catch Wasm exceptions also uses this adapter. If it catches a host
+error and returns normally, the rejected subtask still fails the export with
+the first host error.
 Suspending adapters and cross-component calls read a mutable Wasm global to
 determine whether the current task may block. A checked synchronous leaf has
 no reader for that global, so its exports can enter their tasks without

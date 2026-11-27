@@ -155,6 +155,25 @@ impl<'a> Translation<'a> {
             .any(|payload| matches!(payload, Ok(Payload::StartSection { .. })))
     }
 
+    /// A guest exception handler can resume after a synchronous host import throws.
+    pub fn can_catch_exceptions(&self) -> bool {
+        let translation = match self {
+            Translation::Normal(translation) => translation,
+            Translation::Augmented { original, .. } => original,
+        };
+        translation.function_body_inputs.values().any(|body| {
+            let Ok(operators) = body.body.get_operators_reader() else {
+                return true;
+            };
+            operators.into_iter().any(|operator| {
+                matches!(
+                    operator,
+                    Ok(Operator::TryTable { .. } | Operator::Try { .. }) | Err(_)
+                )
+            })
+        })
+    }
+
     /// Create a new translation
     pub fn new(translation: ModuleTranslation<'a>, multi_memory: bool) -> Result<Translation<'a>> {
         if multi_memory {
