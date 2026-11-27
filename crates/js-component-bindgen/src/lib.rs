@@ -70,6 +70,9 @@ pub struct Transpiled {
     pub files: Vec<(String, Vec<u8>)>,
     pub imports: Vec<String>,
     pub exports: Vec<(String, transpile_bindgen::ExportKind)>,
+    /// Why the sync fast path is not used, set only when
+    /// [`TranspileConfig::perf_sync_fast_path`] was set and the component is not eligible
+    pub sync_fast_path_blocker: Option<String>,
 }
 
 pub struct ComponentInfo {
@@ -398,6 +401,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         imports,
         exports,
         inferred_async_exports,
+        sync_fast_path_blocker,
     } = transpile_bindgen(
         &name,
         &component,
@@ -453,6 +457,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         files: files_out,
         imports,
         exports,
+        sync_fast_path_blocker,
     })
 }
 

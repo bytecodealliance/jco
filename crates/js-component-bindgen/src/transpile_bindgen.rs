@@ -513,6 +513,8 @@ pub struct TranspileBindgenResult {
     pub imports: Vec<String>,
     pub exports: Vec<(String, ExportKind)>,
     pub inferred_async_exports: HashSet<String>,
+    /// Why the sync fast path is not used, if it was requested
+    pub sync_fast_path_blocker: Option<String>,
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -583,6 +585,8 @@ pub fn transpile_bindgen(
         err_ctx_tables.insert(err_ctx_table_idx, err_ctx_table_ty.instance);
     }
 
+    // Why the sync fast path is not used although it was requested
+    let mut unused_sync_fast_path_reason = None;
     let sync_fast_path = perf_sync_fast_path
         && match sync_fast_path_blocker(
             &component.component,
@@ -597,6 +601,7 @@ pub fn transpile_bindgen(
             }
             Some(blocker) => {
                 log::debug!("component [{name}] does not use the sync fast path: {blocker}");
+                unused_sync_fast_path_reason = Some(blocker.to_string());
                 false
             }
         };
@@ -715,6 +720,7 @@ export_kind,
         imports,
         exports,
         inferred_async_exports,
+        sync_fast_path_blocker: unused_sync_fast_path_reason,
     }
 }
 
