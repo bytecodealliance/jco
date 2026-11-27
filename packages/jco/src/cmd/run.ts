@@ -22,7 +22,7 @@ export interface GetSandboxSetupArgs {
 export interface GetPerformanceSetupArgs {
     /** Operate on regular files with synchronous `node:fs` calls on the main thread. */
     perfMainThreadFilesystem?: boolean;
-    /** Resolve the host path of each preopen and opened directory once. */
+    /** Resolve the host path of each preopen once. */
     perfCacheDirectoryPaths?: boolean;
 }
 
