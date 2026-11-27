@@ -3,7 +3,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 use anyhow::{Context as _, Result};
 
 use js_component_bindgen::source::wit_parser::{Resolve, UnresolvedPackageGroup};
-use js_component_bindgen::{TranspileConfig, transpile_with_config};
+use js_component_bindgen::{TranspileConfig, transpile_with_diagnostics};
 use wit_component::{DecodedWasm, WitPrinter};
 
 /// Calls [`write!`] with the passed arguments and unwraps the result.
@@ -66,20 +66,19 @@ struct JsComponentBindgenComponent;
 impl bindings::Guest for JsComponentBindgenComponent {
     fn generate(component: Vec<u8>, options: GenerateOptions) -> Result<Transpiled, String> {
         let component = wat::parse_bytes(&component).map_err(|e| format!("{e}"))?;
+        let (output, diagnostics) =
+            transpile_with_diagnostics(&component, options.into()).map_err(|e| format!("{e:?}"))?;
         let js_component_bindgen::Transpiled {
             files,
             imports,
-            mut exports,
-            sync_fast_path_blocker,
-        } = transpile_with_config(&component, options.into())
-            .map_err(|e| format!("{e:?}"))
-            .map_err(|e| e.to_string())?;
+            exports,
+        } = output;
 
         Ok(Transpiled {
             files,
             imports,
             exports: exports
-                .drain(..)
+                .into_iter()
                 .map(|(name, expt)| {
                     (
                         name,
@@ -93,7 +92,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
                     )
                 })
                 .collect(),
-            sync_fast_path_blocker,
+            sync_fast_path_blocker: diagnostics.sync_fast_path_blocker,
         })
     }
 

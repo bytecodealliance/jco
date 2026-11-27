@@ -1,8 +1,8 @@
 //! Which components `perf_sync_fast_path` applies to, and what it generates.
 
 use js_component_bindgen::{
-    AsyncMode, BindingsMode, InstantiationMode, TranspileConfig, TranspileOpts, Transpiled,
-    transpile_with_config,
+    AsyncMode, BindingsMode, InstantiationMode, TranspileConfig, TranspileDiagnostics,
+    TranspileOpts, Transpiled, transpile_with_config, transpile_with_diagnostics,
 };
 
 /// One component instance with a synchronous import, a synchronous export that
@@ -155,7 +155,10 @@ const TWO_INSTANCES: &str = r#"
 type Configure<'a> = &'a dyn Fn(&mut TranspileConfig);
 
 /// Transpile a component.
-fn transpile(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> Transpiled {
+fn transpile(
+    wat: &str,
+    configure: impl FnOnce(&mut TranspileConfig),
+) -> (Transpiled, TranspileDiagnostics) {
     let component = wat::parse_str(wat).expect("fixture should be valid WAT");
     let opts = TranspileOpts {
         name: "component".into(),
@@ -167,12 +170,13 @@ fn transpile(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> Transpi
     let mut config = TranspileConfig::builder().opts(opts).build();
     configure(&mut config);
 
-    transpile_with_config(&component, config).expect("fixture should transpile")
+    transpile_with_diagnostics(&component, config).expect("fixture should transpile")
 }
 
 /// Generate the JavaScript bindings of a component.
 fn bindings(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> String {
-    let (_, source) = transpile(wat, configure)
+    let (output, _) = transpile(wat, configure);
+    let (_, source) = output
         .files
         .into_iter()
         .find(|(name, _)| name == "component.js")
@@ -366,9 +370,36 @@ fn jspi_without_async_functions_does_not_block() {
 }
 
 #[test]
+fn diagnostics_preserve_the_transpiled_output() {
+    let component = wat::parse_str(ELIGIBLE).unwrap();
+    let config = TranspileConfig::builder()
+        .call_tracking(true)
+        .perf_sync_fast_path(true)
+        .build();
+    let Transpiled {
+        files,
+        imports,
+        exports,
+    } = transpile_with_config(&component, config.clone()).unwrap();
+    let expected = Transpiled {
+        files,
+        imports,
+        exports,
+    };
+
+    let (output, diagnostics) = transpile_with_diagnostics(&component, config).unwrap();
+    assert_eq!(output.files, expected.files);
+    assert_eq!(output.imports, expected.imports);
+    assert!(output.exports == expected.exports);
+    assert!(diagnostics.sync_fast_path_blocker.is_some());
+}
+
+#[test]
 fn transpilation_reports_why_the_fast_path_is_not_used() {
-    let blocker =
-        |wat: &str, configure: Configure| transpile(wat, configure).sync_fast_path_blocker;
+    let blocker = |wat: &str, configure: Configure| {
+        let (_, diagnostics) = transpile(wat, configure);
+        diagnostics.sync_fast_path_blocker
+    };
     let on = |config: &mut TranspileConfig| config.perf_sync_fast_path = true;
     assert_eq!(blocker(ELIGIBLE, &|_| {}), None, "not requested");
     assert_eq!(blocker(ELIGIBLE, &on), None, "eligible");

@@ -26,8 +26,9 @@ Any other component is generated exactly as without the option, and nothing is p
 default.
 
 When the option was set but did not apply, the transpile result says which of the rules above
-ruled it out: `syncFastPathBlocker` in the JS API, `sync_fast_path_blocker` on the Rust
-`Transpiled` result. It is unset when the option applied or was not set. With `JCO_DEBUG` set,
+ruled it out. The JS API exposes `syncFastPathBlocker`. In Rust, `transpile_with_diagnostics`
+returns the output and a `TranspileDiagnostics` value with a `sync_fast_path_blocker` field.
+The field is unset when the option applied or was not set. With `JCO_DEBUG` set,
 `jco transpile` and `@bytecodealliance/jco-transpile` also log it with `console.debug`, for
 example `component [calls] does not use the sync fast path (perfSyncFastPath): call tracking is
 enabled`.
