@@ -94,14 +94,13 @@ task in that lookup map. Calls still get distinct scope IDs. An export that
 lowers a borrowed host resource keeps the map. Older bindings keep the
 ordinary registration behavior.
 
-For example, when an exported guest function calls a DOM method in a loop,
-each iteration reuses the export task. A core start function can call the same
-import before any export has run. The adapter reuses a task only when the executing register and the
-instance’s innermost task agree. A custom core instantiator can retain the
-lower and call it from JavaScript during another invocation. Such lowers
-run in a separate task and restore the enclosing registers on return or throw. A borrowed
-resource wrapper expires when its host call
-finishes, including when the host throws. See the implementations of
+The adapter reuses a task only when the executing register identifies the
+instance’s innermost task. A core start function can call the import before
+any export has run. A custom core instantiator can retain the lowered import
+and call it from JavaScript during another invocation. Both cases run in a
+separate task and restore the enclosing registers on return or throw.
+A borrowed resource wrapper expires when its host call finishes, including
+when the host throws. See the implementations of
 [task selection](../src/intrinsics/async-task/lower-import-backwards-compat.ts)
 and [resource captures](../src/intrinsics/resource-captures.ts).
 
@@ -194,136 +193,6 @@ with either the bundled runtime or the checked package above. An explicit
 `instantiate()` call can use synchronous loaders, and `--tla-compat` exposes
 a separate `$init`. Those bindings keep a driver that runs synchronously until
 it receives a promise.
-
-A browser loading the checked package directly fetches each imported entry point
-and its shared dependencies. If the application knows its components at build
-time, pass their generated bindings to the same application bundler build and
-include the runtime in the bundle. The named imports let the bundler remove
-unused operations. With code splitting, components can reuse one copy of the
-shared runtime modules. If the application loads additional components later,
-their bindings must also be able to resolve every runtime export they import.
-
-For repeat visits, a versioned deployment can cache the component JS, its
-runtime modules and its core Wasm files with `Cache-Control: public, max-age=31536000, immutable`.
-A new version needs a new URL for each changed asset. Publishing the generated
-files under a versioned directory keeps relative imports and Wasm URLs valid.
-
-For a multi-entry browser build, give each generated component JS file its own
-entry and let the application bundler share the runtime imports. Publish every
-emitted shared chunk. Generated bindings locate their external core Wasm files
-relative to the entry URL. If the bundler preserves those URLs, copy each
-component's `.core.wasm` files beside its output entry, keeping the original
-filenames. Test a cold load of each entry independently so a previously loaded
-component cannot hide a missing dependency.
-
-For example, an application with a query component and a table component can
-use this Rolldown configuration. The input keys keep each entry in its own
-directory. Copy the corresponding core Wasm files into `dist/query/` and
-`dist/table/` after the build. Keep the checked runtime installed so Rolldown
-can resolve and tree-shake its named imports.
-
-```js
-// rolldown.config.mjs
-export default {
-    input: {
-        'query/dom_query': 'generated/query/dom_query.js',
-        'table/table_update': 'generated/table/table_update.js',
-    },
-    platform: 'browser',
-    external: [/^node:/],
-    output: {
-        dir: 'dist',
-        format: 'esm',
-        entryFileNames: '[name].js',
-        chunkFileNames: 'shared/[name]-[hash].js',
-        // Preserve the generated component directive on the two entry modules.
-        banner: (chunk) => (chunk.isEntry ? '"use components";' : ''),
-        minify: true,
-        keepNames: true,
-    },
-};
-```
-
-A page that knows which component it will load can start its guest Wasm fetch
-alongside the entry. For an application bundle, it can also preload the entry's
-shared JavaScript chunk. Otherwise the browser discovers the chunk when it
-reads the entry and starts the Wasm fetch when the bindings execute.
-
-```html
-<link rel="preload" as="fetch" type="application/wasm" crossorigin="anonymous" href="/dist/query/dom_query.core.wasm" />
-<link rel="modulepreload" href="/dist/shared/runtime-BUILD_HASH.js" />
-```
-
-Use the deployed Wasm URL and the chunk filename from the application build.
-The first link also works for an internal bundle or a separately served
-runtime. Use it for a core that the bindings fetch as a separate file.
-
-If the application serves the runtime as separate browser modules, it can start
-fetching them alongside the component entry using `rel="modulepreload"`.
-Generate the links from the component's static imports and their dependencies
-in the deployed runtime. Use the same resolved URLs as the browser's import
-map, including the current build's chunk filenames. For example, an application
-serving the runtime at `/runtime/` can include this link for a synchronous
-adapter that imports the sync entry point.
-
-```html
-<link rel="modulepreload" href="/runtime/intrinsics/sync.js" />
-```
-
-### Loading explicit instantiation bindings in a browser
-
-With `jco transpile --instantiation async`, the application supplies the host
-imports and can compile the emitted core Wasm files while the browser loads
-the generated JS. This works with the internal Oxc bundle and with the external
-runtime. It can save a network round trip when JS dependencies delay discovery
-of the guest Wasm.
-
-For example, the C table demo emits four core files. Obtain the filenames from
-your build output and serve them as `application/wasm`. Here the generated
-adapter maps its host imports to `../../../host/web-host.js`.
-
-```js
-import * as host from './host/web-host.js';
-
-const entry = new URL('./c/table-update/explicit/table_update.js', import.meta.url);
-const names = [
-    'table_update.core.wasm',
-    'table_update.core2.wasm',
-    'table_update.core3.wasm',
-    'table_update.core4.wasm',
-];
-
-// Start both operations now. Waiting for the JS import before fetching the
-// cores would put runtime dependency loading on the critical path again.
-const [bindings, compiled] = await Promise.all([
-    import(entry.href),
-    Promise.all(
-        names.map(async (name) => {
-            const response = await fetch(new URL(name, entry));
-            if (!response.ok) throw new Error(`Failed to load ${name} (HTTP ${response.status})`);
-            return [name, await WebAssembly.compileStreaming(response)];
-        }),
-    ),
-]);
-const cores = new Map(compiled);
-const guest = await bindings.instantiate(
-    (name) => {
-        if (!cores.has(name)) throw new Error(`Missing core module ${name}`);
-        return cores.get(name);
-    },
-    { '../../../host/web-host.js': host },
-);
-guest.run(2000);
-```
-
-When an application bundles several explicit-instantiation entries together,
-copy **every** emitted core beside its entry. The example still uses the
-component's original core filenames. The application bundler can place shared
-runtime code in a separate JS chunk. Use its build manifest to obtain the
-chunk URL for the selected entry and add a `modulepreload` link when starting
-the entry import and core compilation. Otherwise the browser learns the URL
-only after it receives the entry JS. One document can load multiple
-components from the build and reuse that shared module.
 
 ### Building profiles
 
