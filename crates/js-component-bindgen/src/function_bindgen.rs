@@ -3121,6 +3121,8 @@ impl Bindgen for FunctionBindgen<'_> {
                         };
                         // The result goes both to the task and to the caller. Unless it
                         // is already a variable, evaluate it once: it may convert or copy.
+                        // On the sync fast path it is evaluated before the failure check,
+                        // where the task would have received it.
                         let ret_val = if (task_managed || stopped_check.is_some())
                             && !is_js_identifier(&ret_val)
                         {

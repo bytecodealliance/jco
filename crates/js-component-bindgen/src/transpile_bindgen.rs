@@ -1608,6 +1608,10 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         if self.sync_fast_path {
+            uwriteln!(
+                self.src.js,
+                "// Sync fast path: the first error a host function threw in the running export call, boxed, or null."
+            );
             uwriteln!(self.src.js, "let {SYNC_FAST_PATH_CALL_FAILURE} = null;");
         }
 
