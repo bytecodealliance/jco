@@ -59,7 +59,9 @@ export function lowerSyncImport(
     ...params: unknown[]
 ) {
     checkMayLeave(context.mayLeave, componentIdx);
-    if (context.tasks.get(componentIdx)?.length) return importFn(...params);
+    if (context.tasks.get(componentIdx)?.length) {
+        return importFn(...params);
+    }
     const { task } = createImplicitImportTask(context, componentIdx, false);
     return callWithSyncTask(task, importFn, params);
 }

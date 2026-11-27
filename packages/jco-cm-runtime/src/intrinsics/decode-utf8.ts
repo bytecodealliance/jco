@@ -10,7 +10,9 @@ export const decodeUtf8: LiftModule['decodeUtf8'] = (RuntimeError, decoder, inpu
         if (length === 2) {
             const a = input[0],
                 b = input[1];
-            if ((a | b) >= 0x80) break ascii;
+            if ((a | b) >= 0x80) {
+                break ascii;
+            }
             return String.fromCharCode(a, b);
         }
         let text = '';
@@ -20,12 +22,16 @@ export const decodeUtf8: LiftModule['decodeUtf8'] = (RuntimeError, decoder, inpu
                 b = input[i + 1],
                 c = input[i + 2],
                 d = input[i + 3];
-            if ((a | b | c | d) >= 0x80) break ascii;
+            if ((a | b | c | d) >= 0x80) {
+                break ascii;
+            }
             text += String.fromCharCode(a, b, c, d);
         }
         for (; i < length; i++) {
             const byte = input[i];
-            if (byte >= 0x80) break ascii;
+            if (byte >= 0x80) {
+                break ascii;
+            }
             text += String.fromCharCode(byte);
         }
         return text;

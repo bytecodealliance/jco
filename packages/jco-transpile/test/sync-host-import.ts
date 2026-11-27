@@ -61,7 +61,9 @@ describe.each(['bundled', 'external'] as const)('%s checked runtime', (mode) => 
             const instance = await instantiate(undefined, {
                 host: {
                     default(n: number) {
-                        if (n === 0) throw error;
+                        if (n === 0) {
+                            throw error;
+                        }
                         return n + 1;
                     },
                 },
@@ -70,16 +72,16 @@ describe.each(['bundled', 'external'] as const)('%s checked runtime', (mode) => 
             expect(() => instance.run(0)).toThrow(error);
             await instance._util.whenIdle();
 
-            let stop: (() => void) | undefined;
+            const lifecycle: { stop?: () => void } = {};
             const other = await instantiate(undefined, {
                 host: {
                     default(n: number) {
-                        stop?.();
+                        lifecycle.stop?.();
                         return n;
                     },
                 },
             });
-            stop = () => other._util.stop();
+            lifecycle.stop = () => other._util.stop();
             expect(() => other.run(1)).toThrow(/stopped/);
             expect(() => other.run(1)).toThrow(/stopped/);
         } finally {
@@ -104,7 +106,9 @@ describe.each(['bundled', 'external'] as const)('%s checked runtime', (mode) => 
                 {
                     host: {
                         default(n: number) {
-                            if (!n) throw hostError;
+                            if (!n) {
+                                throw hostError;
+                            }
                             return n + 1;
                         },
                     },
@@ -296,7 +300,9 @@ describe.each(['bundled', 'external'] as const)('%s checked runtime', (mode) => 
                 { api: { Item }, get: { default: () => new Item() } },
                 (module: WebAssembly.Module, imports: WebAssembly.Imports) => {
                     const core = new WebAssembly.Instance(module, imports);
-                    if (core.exports.memory instanceof WebAssembly.Memory) memory = core.exports.memory;
+                    if (core.exports.memory instanceof WebAssembly.Memory) {
+                        memory = core.exports.memory;
+                    }
                     return core;
                 },
             );

@@ -66,7 +66,9 @@ const syncProvider: NonNullable<RuntimeModuleContracts['intrinsics/sync']> = syn
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
 const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
 for (const name of Object.keys(syncTask) as (keyof typeof syncTask)[]) {
-    if (syncTask[name] !== defaultTasks[name]) throw new Error(`task operation identity changed: ${name}`);
+    if (syncTask[name] !== defaultTasks[name]) {
+        throw new Error(`task operation identity changed: ${name}`);
+    }
 }
 const defaultHost: RuntimeModuleContracts['intrinsics/host'] = host;
 const eventMemory = { buffer: new ArrayBuffer(8) };

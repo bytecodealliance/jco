@@ -836,14 +836,19 @@ test.concurrent.each([false, true])('direct sync initialization retires its task
                         const task = s.asyncTask.getCurrentTask(0)!.task;
                         expect(s.core.getCurrentTaskMeta(0)?.taskID).toBe(task.id());
                         expect(task.currentSubtask()).toBeUndefined();
-                        if (throws) throw error;
+                        if (throws) {
+                            throw error;
+                        }
                         return value;
                     },
                 },
                 23,
             );
-        if (throws) expect(invoke).toThrow(error);
-        else expect(invoke()).toBe(23);
+        if (throws) {
+            expect(invoke).toThrow(error);
+        } else {
+            expect(invoke()).toBe(23);
+        }
         expect(s.asyncTask.getCurrentTask(0)).toBeUndefined();
         expect(s.core.getCurrentTaskMeta(0)).toBeUndefined();
         expect(Array.from(s.resource.state.scopeTasks.keys())).toEqual([]);
