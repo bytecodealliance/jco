@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-84e9c83f.js";
+            window.path_to_searchindex_js = "searchindex-c45388b6.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-332598f4.js"></script>
+        <script src="toc-fb1b1a5b.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -755,6 +755,9 @@ which may change even in a patch release. See the
 </li>
 <li>
 <p><code>--enum-values-screaming-snake-case</code>: Represents WIT enum values as <code>SCREAMING_SNAKE_CASE</code> strings instead of their original kebab-case names.</p>
+</li>
+<li>
+<p><code>--perf-sync-fast-path</code>: Call synchronous exports and imports without creating a Component Model task for each call. Applies only to a component of one instance that uses no asynchronous function, stream, future, JSPI import or export, call tracking or <code>--js</code>; other components are generated as without the option. Off by default. See <a href="#sync-fast-path">Sync fast path</a>.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
@@ -1610,10 +1613,91 @@ interface needs from the embedding application.</p>
 overhead as possible between a component’s exports and the code that calls them. This section
 records how that is measured.</p>
 <ul>
+<li><a href="#sync-fast-path">Sync fast path</a>: an opt-in that removes the per-call task state of
+components whose functions are all synchronous.</li>
 <li><a href="#benchmarks">Benchmarks</a>: reproducible measurements of Jco tooling and runtime paths.</li>
 </ul>
 <p>For the host-binding optimizations that affect call performance, see
 <a href="#host-bindings">Optimized Host Bindings</a>.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="sync-fast-path"><a class="header" href="#sync-fast-path">Sync fast path</a></h1>
+<p>By default, every call of a component function creates Component Model task state: a task and a
+thread for an export, and a subtask and a host task for an import. Asynchronous functions need that
+state. A component whose functions are all synchronous pays for it without using it.</p>
+<p><code>jco transpile --perf-sync-fast-path</code> (<code>perfSyncFastPath</code> in the JS API) generates the synchronous
+exports and imports of such a component without that state. The option is off by default.</p>
+<h2 id="when-it-applies"><a class="header" href="#when-it-applies">When it applies</a></h2>
+<p>The option takes effect for a whole component, and only when nothing in it can observe the state
+that is skipped:</p>
+<ul>
+<li>one component instance owns every core module, lift and lower (a component composed of several
+instances calls between them through adapters, which run on behalf of the calling task);</li>
+<li>no function is <code>async</code>, and no lift or lower is asynchronous or has a callback;</li>
+<li>no stream, future or error-context type is used;</li>
+<li>no core module imports a canonical built-in other than <code>resource.new</code>, <code>resource.rep</code> and
+<code>resource.drop</code> (this excludes <code>context.get</code>, <code>context.set</code>, and the task, thread, waitable and
+backpressure built-ins);</li>
+<li>no import or export is asynchronous through <code>--async-mode jspi</code>;</li>
+<li><code>--call-tracking</code>, <code>--js</code> and the optimized import bindings are not in use.</li>
+</ul>
+<p>Any other component is generated exactly as without the option, with no warning. To find out
+whether the option applied, compare the output with and without it.</p>
+<p>The <code>js-component-bindgen</code> crate also says whether it used the fast path, and if not which of the
+rules above ruled it out, in a debug message of the Rust <code>log</code> crate. A Rust program that calls
+the crate sees it once it installs a logger. <code>jco</code> and <code>@bytecodealliance/jco-transpile</code> run the
+crate as a WebAssembly component that installs none, so the message does not appear there.</p>
+<h2 id="what-stays-the-same"><a class="header" href="#what-stays-the-same">What stays the same</a></h2>
+<p>A call on the fast path still does everything that a caller, a host function or a guest can
+observe:</p>
+<ul>
+<li>an instance that trapped or was stopped cannot be entered, and a trap is recorded and reported
+to <code>onTrap</code> wherever it happens: in the guest, in post-return, or thrown by a host function;</li>
+<li>stopping the instance from a host function or from the destructor of a resource fails the call
+that is running, and no host function is called for the guest afterwards;</li>
+<li>a host function that throws fails the export that called it with what it threw first, even if
+the guest catches the exception and returns normally;</li>
+<li>a guest may not call an import while it may not leave its instance, for example from <code>realloc</code>;</li>
+<li>borrowed handles are released at the end of their call, and a post-return function runs after
+each call that returned a value, including an error value of a <code>result</code>;</li>
+<li>a promise that a host function returns from a synchronous import is counted as a pending host
+operation until it settles or the instance is stopped. As by default, the guest receives the
+promise object itself, not its value, and <code>whenIdle</code> does not wait for it.</li>
+</ul>
+<p>The tests of the option run the same sequences of calls with and without it and compare every
+return value, thrown error, reported trap and host callback.</p>
+<p>One difference is known. When a host function throws <code>null</code> or <code>undefined</code> and the guest catches
+it, the export fails by default with an internal error that says its task is already resolved;
+on the fast path it fails with the thrown value.</p>
+<h2 id="measured-effect"><a class="header" href="#measured-effect">Measured effect</a></h2>
+<p>Nanoseconds per call, bindings with the runtime bundled in, Node.js 26.13 on Linux x86-64:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>case</th><th style="text-align: right">default</th><th style="text-align: right"><code>--perf-sync-fast-path</code></th><th style="text-align: right">speedup</th></tr>
+</thead>
+<tbody>
+<tr><td>export <code>u32 -&gt; u32</code></td><td style="text-align: right">711</td><td style="text-align: right">18</td><td style="text-align: right">40x</td></tr>
+<tr><td>export <code>f64 -&gt; f64</code></td><td style="text-align: right">735</td><td style="text-align: right">33</td><td style="text-align: right">22x</td></tr>
+<tr><td>export <code>tuple</code> swap</td><td style="text-align: right">905</td><td style="text-align: right">131</td><td style="text-align: right">6.9x</td></tr>
+<tr><td>export <code>record -&gt; record</code></td><td style="text-align: right">1037</td><td style="text-align: right">187</td><td style="text-align: right">5.5x</td></tr>
+<tr><td>export <code>string -&gt; string</code></td><td style="text-align: right">2074</td><td style="text-align: right">1296</td><td style="text-align: right">1.6x</td></tr>
+<tr><td>export <code>list&lt;u8&gt; -&gt; list&lt;u8&gt;</code></td><td style="text-align: right">2967</td><td style="text-align: right">2541</td><td style="text-align: right">1.2x</td></tr>
+<tr><td>one export that calls 39 numeric imports</td><td style="text-align: right">71063</td><td style="text-align: right">5884</td><td style="text-align: right">12x</td></tr>
+<tr><td>one export that calls 2 string imports</td><td style="text-align: right">5435</td><td style="text-align: right">944</td><td style="text-align: right">5.8x</td></tr>
+</tbody>
+</table>
+</div>
+<p>The fixed cost of a call is what is removed, so the gain shrinks as lifting and lowering of the
+values comes to dominate. Components that use asynchronous functions, streams or futures are
+unchanged: their generated bindings are byte for byte the same.</p>
+<p>The numbers come from <code>packages/jco-transpile/bench/perf</code>, which interleaves fresh processes of
+each variant; the table keeps the fastest of four observations per case:</p>
+<pre><code class="language-sh">node gen.mjs base embedded
+node gen.mjs fast embedded --perf-sync-fast-path
+node compare.mjs --runs=4 base fast
+</code></pre>
+<p>They were taken on a shared machine and vary between runs; compare the ratios on your own hardware
+rather than relying on the absolute values.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h1>
 <p>Each page in this section describes one benchmark: what it measures, how to run it, and what the
