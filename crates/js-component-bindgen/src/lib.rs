@@ -70,8 +70,12 @@ pub struct Transpiled {
     pub files: Vec<(String, Vec<u8>)>,
     pub imports: Vec<String>,
     pub exports: Vec<(String, transpile_bindgen::ExportKind)>,
-    /// Why the sync fast path is not used, set only when
-    /// [`TranspileConfig::perf_sync_fast_path`] was set and the component is not eligible
+}
+
+/// Diagnostics collected while transpiling a component.
+#[non_exhaustive]
+pub struct TranspileDiagnostics {
+    /// Why the component was ineligible when [`TranspileConfig::perf_sync_fast_path`] was requested.
     pub sync_fast_path_blocker: Option<String>,
 }
 
@@ -292,7 +296,17 @@ fn is_standard_checked_runtime(base: &str) -> bool {
 /// Transpile a component with additional configuration, including an optional
 /// external Component Model runtime provider.
 #[cfg(feature = "transpile-bindgen")]
-pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> Result<Transpiled> {
+pub fn transpile_with_config(component: &[u8], config: TranspileConfig) -> Result<Transpiled> {
+    Ok(transpile_with_diagnostics(component, config)?.0)
+}
+
+/// Transpile with the same configuration as [`transpile_with_config`] and return
+/// the generated output together with diagnostics about code generation.
+#[cfg(feature = "transpile-bindgen")]
+pub fn transpile_with_diagnostics(
+    component: &[u8],
+    mut config: TranspileConfig,
+) -> Result<(Transpiled, TranspileDiagnostics)> {
     use wasmtime_environ::component::{Component, Translator};
 
     normalize_transpile_config(&mut config)?;
@@ -473,12 +487,16 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         }
         files_out.push((name.to_string(), source.to_vec()));
     }
-    Ok(Transpiled {
-        files: files_out,
-        imports,
-        exports,
-        sync_fast_path_blocker,
-    })
+    Ok((
+        Transpiled {
+            files: files_out,
+            imports,
+            exports,
+        },
+        TranspileDiagnostics {
+            sync_fast_path_blocker,
+        },
+    ))
 }
 
 fn normalize_namespace_object_options(opts: &mut TranspileOpts) -> Result<()> {
