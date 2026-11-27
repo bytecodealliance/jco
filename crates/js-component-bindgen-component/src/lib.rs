@@ -70,6 +70,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             files,
             imports,
             mut exports,
+            sync_fast_path_blocker,
         } = transpile_with_config(&component, options.into())
             .map_err(|e| format!("{e:?}"))
             .map_err(|e| e.to_string())?;
@@ -92,6 +93,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
                     )
                 })
                 .collect(),
+            sync_fast_path_blocker,
         })
     }
 
