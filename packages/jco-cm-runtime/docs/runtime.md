@@ -26,7 +26,8 @@ Root exports the same metadata and types as `runtime`; there is no root factory.
 | `file:///path/dist/`               | `file:///path/dist/intrinsics/resource.js`             | `file:///path/dist/runtime.js`             |
 | `https://example.test/runtime/`    | `https://example.test/runtime/intrinsics/resource.js`  | `https://example.test/runtime/runtime.js`  |
 
-One optional trailing slash is normalized. Relative bases resolve from the
+One optional trailing slash is normalized. Both spellings of the standard checked
+package select the same synchronous adapters and minified diagnostics behavior. Relative bases resolve from the
 **generated bindings**, not the transpilation process's working directory.
 Directory/URL bases use real `.js` files. Use file URLs for Windows paths.
 Control characters, empty bases, unsupported URL schemes and query/fragment
@@ -74,6 +75,76 @@ registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
 
+## Synchronous host imports
+
+The checked `@bytecodealliance/jco-cm-runtime` package and the runtime bundled
+by js-component-bindgen share the `intrinsics/sync` entry point. A component
+with one instance and only synchronous calls can reuse its caller's task and
+borrow scope for a host import. Call tracking, asynchronous functions, defined
+guest resources and cross-instance transfers use the general adapter.
+Suspending adapters and cross-component calls read a mutable Wasm global to
+determine whether the current task may block. A checked synchronous leaf has
+no reader for that global, so its exports can enter their tasks without
+allocating or updating the register.
+
+Removing a borrowed handle uses its scope ID to find the task that owns the
+borrow. If the synchronous leaf also has no binding that creates borrowed
+handles, bindgen tells the runtime it can skip inserting and deleting each
+task in that lookup map. Calls still get distinct scope IDs. An export that
+lowers a borrowed host resource keeps the map. Older bindings keep the
+ordinary registration behavior.
+
+For example, when an exported guest function calls a DOM method in a loop,
+each iteration reuses the export task. A core start function can call the same
+import before any export has run. The adapter creates a task when the stack
+is empty so host code can still observe the instance as busy. A borrowed
+resource wrapper expires when its host call
+finishes, including when the host throws. See the implementations of
+[task selection](../src/intrinsics/async-task/lower-import-backwards-compat.ts)
+and [resource captures](../src/intrinsics/resource-captures.ts).
+
+A custom checked provider or a directory URL can opt into this extension with
+`cmRuntimeSyncImports: true` or `jco transpile --cm-runtime-sync-imports`.
+Implement the operations in `SyncImportsModule`, or re-export the standard
+`intrinsics/sync` module. The default custom-provider path uses the original
+API-v1 contract. When using an older standard package, set
+`cmRuntimeSyncImports: false` or pass `--no-cm-runtime-sync-imports` to retain
+that contract. On the optimized path a provider's task and state factories may receive contexts
+without the subtask, waitable and future constructors. Shutdown can also omit
+the empty stream and future tables. The debug package keeps the general adapter for task diagnostics.
+
+On this path, `tableRep` validates a guest handle and reads its representation
+without allocating an intermediate object on every borrow. `IndexedResourceCaptures`
+stores host objects in slots indexed by handle while one table owns the resource.
+An explicit host representation can alias a different handle. Before inserting
+it, the runtime migrates live slots into a map keyed by representation so a
+subsequent borrow, drop or shutdown observes the same object.
+
+For a checked synchronous host adapter, bindgen imports basic task operations
+from `intrinsics/sync-task` when that entry supplies every requested operation.
+The package re-exports the same functions as `intrinsics/async-task`. This lets
+a browser load the adapter without downloading the scheduler's driver. Custom
+runtime providers continue to supply these functions through `intrinsics/async-task`.
+
+The standard checked runtime also supports calling a flat numeric export of an
+isolated, import-free core module without allocating a task. Bindgen emits the
+same canonical numeric conversions on both paths. The guest cannot call the
+host, and primitive arguments cannot run JavaScript during coercion. A core
+trap still records the instance error for subsequent calls. A reentrant call,
+an object argument, or a factory with custom instantiation or options uses the
+ordinary task lifecycle so host code can observe entry, traps, and shutdown.
+
+### Browser performance
+
+The component-demos study compares the same C, C++ and Rust guests with
+Jco 1.13.0, upstream `326f52ab4` and the compiled JavaScript shims. Across
+12 balanced Chromium rounds, warm DOM tree traversal was 7.2–9.1× faster and
+table creation was 4.4–6.0× faster than that upstream revision across both
+binding modes. Cold import and initialization still took longer than 1.13.0
+on all 21 workloads. The study includes runtime size, first-result timings,
+deployment experiments and reproduction instructions.
+[Benchmark overview](https://github.com/vados-cosmonic/component-demos/blob/2660a7a71f8891c5e67e99aa9633258e12c7bace/README.md) · [Per-workload results and raw samples](https://github.com/vados-cosmonic/component-demos/blob/2660a7a71f8891c5e67e99aa9633258e12c7bace/docs/browser-performance.md#fifo-follow-up-on-pr-65)
+
 ## Runtime profiles
 
 Runtime diagnostic statements carry a `DEBUG` JavaScript label.
@@ -102,7 +173,11 @@ or for bundled runtimes when an instance is created with the `debug` option.
 The `checked` profile omits runtime log calls even when `JCO_DEBUG` is set.
 The exported `debugLog` is an empty function in the checked profile. When a
 bundler includes the checked runtime, it can remove calls to that function
-from the generated bindings as well.
+from the generated bindings as well. With `--minify`, Jco removes labeled
+diagnostic calls and their arguments from generated ES module bindings that name
+`@bytecodealliance/jco-cm-runtime` directly. If an import map selects the
+provider at deployment time and it may log, generate bindings against a custom
+module base or the debug entry point to keep those calls.
 
 ### Bindings that bundle the runtime
 
@@ -121,6 +196,134 @@ jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-run
 
 Modules of different profiles do not share state or private brands,
 so one program should import a single profile.
+
+A normal ES module import waits for core Wasm compilation and instantiation
+before exposing the guest exports. Bindgen uses native `await` for this path
+with either the bundled runtime or the checked package above. An explicit
+`instantiate()` call can use synchronous loaders, and `--tla-compat` exposes
+a separate `$init`. Those bindings keep a driver that runs synchronously until
+it receives a promise.
+
+A browser loading the checked package directly fetches each imported entry point
+and its shared dependencies. If the application knows its components at build
+time, pass their generated bindings to the same application bundler build and
+include the runtime in the bundle. The named imports let the bundler remove
+unused operations. With code splitting, components can reuse one copy of the
+shared runtime modules. If the application loads additional components later,
+their bindings must also be able to resolve every runtime export they import.
+
+For repeat visits, a versioned deployment can cache the component JS, its
+runtime modules and its core Wasm files with `Cache-Control: public, max-age=31536000, immutable`.
+A new version needs a new URL for each changed asset. Publishing the generated
+files under a versioned directory keeps relative imports and Wasm URLs valid.
+
+For a multi-entry browser build, give each generated component JS file its own
+entry and let the application bundler share the runtime imports. Publish every
+emitted shared chunk. Generated bindings locate their external core Wasm files
+relative to the entry URL. If the bundler preserves those URLs, copy each
+component's `.core.wasm` files beside its output entry, keeping the original
+filenames. Test a cold load of each entry independently so a previously loaded
+component cannot hide a missing dependency.
+
+For example, an application with a query component and a table component can
+use this Rolldown configuration. The input keys keep each entry in its own
+directory. Copy the corresponding core Wasm files into `dist/query/` and
+`dist/table/` after the build. Keep the checked runtime installed so Rolldown
+can resolve and tree-shake its named imports.
+
+```js
+// rolldown.config.mjs
+export default {
+    input: {
+        'query/dom_query': 'generated/query/dom_query.js',
+        'table/table_update': 'generated/table/table_update.js',
+    },
+    platform: 'browser',
+    external: [/^node:/],
+    output: {
+        dir: 'dist',
+        format: 'esm',
+        entryFileNames: '[name].js',
+        chunkFileNames: 'shared/[name]-[hash].js',
+        // Preserve the generated component directive on the two entry modules.
+        banner: (chunk) => (chunk.isEntry ? '"use components";' : ''),
+        minify: true,
+        keepNames: true,
+    },
+};
+```
+
+A page that knows which component it will load can start its guest Wasm fetch
+alongside the entry. For an application bundle, it can also preload the entry's
+shared JavaScript chunk. Otherwise the browser discovers the chunk when it
+reads the entry and starts the Wasm fetch when the bindings execute.
+
+```html
+<link rel="preload" as="fetch" type="application/wasm" crossorigin="anonymous" href="/dist/query/dom_query.core.wasm">
+<link rel="modulepreload" href="/dist/shared/runtime-BUILD_HASH.js">
+```
+
+Use the deployed Wasm URL and the chunk filename from the application build.
+The first link also works for an internal bundle or a separately served
+runtime. Use it for a core that the bindings fetch as a separate file.
+
+If the application serves the runtime as separate browser modules, it can start
+fetching them alongside the component entry using `rel="modulepreload"`.
+Generate the links from the component's static imports and their dependencies
+in the deployed runtime. Use the same resolved URLs as the browser's import
+map, including the current build's chunk filenames. For example, an application
+serving the runtime at `/runtime/` can include this link for a synchronous
+adapter that imports the sync entry point.
+
+```html
+<link rel="modulepreload" href="/runtime/intrinsics/sync.js">
+```
+
+### Loading explicit instantiation bindings in a browser
+
+With `jco transpile --instantiation async`, the application supplies the host
+imports and can compile the emitted core Wasm files while the browser loads
+the generated JS. This works with the internal Oxc bundle and with the external
+runtime. It can save a network round trip when JS dependencies delay discovery
+of the guest Wasm.
+
+For example, the C table demo emits four core files. Obtain the filenames from
+your build output and serve them as `application/wasm`. Here the generated
+adapter maps its host imports to `../../../host/web-host.js`.
+
+```js
+import * as host from "./host/web-host.js";
+
+const entry = new URL("./c/table-update/explicit/table_update.js", import.meta.url);
+const names = ["table_update.core.wasm", "table_update.core2.wasm",
+    "table_update.core3.wasm", "table_update.core4.wasm"];
+
+// Start both operations now. Waiting for the JS import before fetching the
+// cores would put runtime dependency loading on the critical path again.
+const [bindings, compiled] = await Promise.all([
+    import(entry.href),
+    Promise.all(names.map(async (name) => {
+        const response = await fetch(new URL(name, entry));
+        if (!response.ok) throw new Error(`Failed to load ${name} (HTTP ${response.status})`);
+        return [name, await WebAssembly.compileStreaming(response)];
+    })),
+]);
+const cores = new Map(compiled);
+const guest = await bindings.instantiate((name) => {
+    if (!cores.has(name)) throw new Error(`Missing core module ${name}`);
+    return cores.get(name);
+}, { "../../../host/web-host.js": host });
+guest.run(2000);
+```
+
+When an application bundles several explicit-instantiation entries together,
+copy **every** emitted core beside its entry. The example still uses the
+component's original core filenames. The application bundler can place shared
+runtime code in a separate JS chunk. Use its build manifest to obtain the
+chunk URL for the selected entry and add a `modulepreload` link when starting
+the entry import and core compilation. Otherwise the browser learns the URL
+only after it receives the entry JS. One document can load multiple
+components from the build and reuse that shared module.
 
 ### Building profiles
 

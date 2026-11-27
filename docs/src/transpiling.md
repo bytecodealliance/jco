@@ -46,6 +46,7 @@ Options include:
 
 * `--name`: Give a custom name for the component JS file in `out-dir/[name].js`
 * `--minify`: Minify the component JS
+* `--eager-compile` adds a file-wide compile hint to the generated JavaScript entry module. Supporting browsers can spend more time importing the module and less time compiling functions during the first call. This can reduce first-interaction latency when an application imports a component ahead of use. If the application imports and calls the component together, measure both steps. The option also works with `--minify`. [V8 compile hints](https://v8.dev/blog/explicit-compile-hints)
 * `--optimize`: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a `-- <binaryen options>` flag separator.
 * `--tla-compat`: Instead of relying on top-level-await, requires an `$init` promise to be imported and awaited first.
 * `--js`: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.
@@ -55,6 +56,7 @@ Options include:
 * `--no-nodejs-compat`: Disables Node.js compat in the output to load core Wasm with FS methods.
 * `--instantiation [mode]`: Instead of a direct ES module, export an `instantiate` function which can take the imports as an argument instead of implicit imports. The `instantiate` function can be async (with `--instantiation` or `--instantiation async`), or sync (with `--instantiation sync`).
 * `--cm-runtime-es-module <base>`: Select an experimental API-v1 Component Model runtime package or directory base. Bindings import named exports from `<base>/runtime` and `<base>/intrinsics/resource`; directory and file/HTTP(S) URL bases append `.js`. Relative bases resolve from the generated bindings. Install the runtime alongside the generated component; omitting this option bundles jco's own runtime into the bindings, which then import no runtime. The current operation is `tableGet(context, table, handle)`. Legacy provider files such as `./provider.js` must migrate to a directory base. See the [runtime contract](../../packages/jco-cm-runtime/docs/runtime.md).
+* `--cm-runtime-sync-imports`: Select the checked synchronous-import extension for a custom runtime package or directory that provides `intrinsics/sync`. The standard checked runtime package enables it automatically.
 * `--valid-lifting-optimization`: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.
 * `--flags-as-bigint`: Represents WIT flags as `bigint` values and exports named flag constants. By default, flags remain objects of booleans for backwards compatibility.
 * `--variants-inline-cases`: Inlines WIT variant cases in their discriminated unions instead of exporting a named interface for every case. The named interfaces remain the default for backwards compatibility.
