@@ -261,6 +261,11 @@ export interface StringMemory {
 export interface StringAllocation {
     ptr: number;
     len: number;
+    /**
+     * @deprecated No longer set or read. Kept so that string providers which
+     * still return it type-check; remove in the next breaking release.
+     */
+    codepoints?: number;
 }
 export interface StringDecoder {
     readonly decode: (input: ArrayBufferLike | ArrayBufferView) => string;
