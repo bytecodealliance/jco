@@ -51,7 +51,7 @@ test.concurrent.each([
         const source = new TextDecoder().decode(files['component.js']);
         assert.strictEqual(importsSelectedRuntime(source), externalRuntime && !optOut);
         // Bindings that import no runtime carry the one built into the transpiler.
-        assert.strictEqual(source.includes('__jcoEmbeddedRuntime$'), !externalRuntime || optOut);
+        assert.strictEqual(source.includes('$cm$'), !externalRuntime || optOut);
         const production = await productionTranspileBytes(component, options);
         assert.isFalse(importsSelectedRuntime(new TextDecoder().decode(production.files['component.js'])));
         await writeFiles(files, { baseDir: outDir });

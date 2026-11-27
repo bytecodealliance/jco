@@ -54,3 +54,28 @@ test('bindings contain diagnostics only with the debug runtime profile', async (
         expect(bindings.includes(assertion), String(runtimeProfile)).toBe(assertions);
     }
 });
+
+test('minification strips external binding diagnostics only for the standard checked package', async () => {
+    const component = await parse(await readFile(fixture, 'utf8'));
+    const checked = '@bytecodealliance/jco-cm-runtime';
+    for (const [base, profile, minify, keepsLogs] of [
+        [checked, undefined, true, false],
+        [checked + '/', undefined, true, false],
+        [checked, 'debug', true, true],
+        [checked, undefined, false, true],
+        [checked + '/debug', undefined, true, true],
+        [checked + '/debug/', undefined, true, true],
+        ['./runtime', undefined, true, true],
+    ] as const) {
+        const { files } = await transpileBytes(component, {
+            name: 'component',
+            instantiation: 'sync',
+            cmRuntimeEsModule: base,
+            runtimeProfile: profile,
+            minify,
+        });
+        const source = new TextDecoder().decode(files['component.js']);
+        expect(source.includes('Instruction::CallWasm'), base).toBe(keepsLogs);
+        expect(source).toContain(base.replace(/\/$/, '') + '/intrinsics/core');
+    }
+});

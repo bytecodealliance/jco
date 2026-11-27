@@ -33,6 +33,7 @@ interface RunComponentOptions extends GetSandboxSetupArgs, GetPerformanceSetupAr
     jcoMap?: string[];
     jcoTrace?: boolean;
     jcoCmRuntimeEsModule?: string;
+    jcoCmRuntimeSyncImports?: boolean;
     jcoRuntimeProfile?: "checked" | "debug";
 }
 
@@ -327,6 +328,7 @@ async function runComponent(
                 outDir,
                 tracing: opts.jcoTrace,
                 cmRuntimeEsModule: opts.jcoCmRuntimeEsModule,
+                cmRuntimeSyncImports: opts.jcoCmRuntimeSyncImports,
                 runtimeProfile: opts.jcoRuntimeProfile,
                 map: opts.jcoMap ? Object.fromEntries(opts.jcoMap.map((mapping) => mapping.split("="))) : undefined,
                 importBindings: opts.jcoImportBindings,

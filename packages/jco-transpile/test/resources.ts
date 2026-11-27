@@ -1,4 +1,4 @@
-import { readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -126,18 +126,24 @@ suite('resources', () => {
         },
     );
 
-    test.each(['inline', 'external', 'custom'] as const)(
+    test.each(['inline', 'checked', 'external', 'custom'] as const)(
         'host resource reps preserve captured identity and disposal (%s runtime)',
         async (runtime) => {
             const providerDir = await getTmpDir();
             let cleanup: (() => Promise<void>) | undefined;
             try {
-                const cmRuntimeEsModule =
-                    runtime === 'custom'
-                        ? (await writeCustomRuntime(providerDir)).href
-                        : runtime === 'external'
-                          ? new URL('../../jco-cm-runtime/dist/', import.meta.url).href
-                          : undefined;
+                const runtimeRoot = new URL('../../jco-cm-runtime/', import.meta.url);
+                let cmRuntimeEsModule: string | undefined;
+                if (runtime === 'checked') {
+                    const scope = join(providerDir, 'node_modules', '@bytecodealliance');
+                    await mkdir(scope, { recursive: true });
+                    await symlink(fileURLToPath(runtimeRoot), join(scope, 'jco-cm-runtime'), 'junction');
+                    cmRuntimeEsModule = '@bytecodealliance/jco-cm-runtime';
+                } else if (runtime === 'external') {
+                    cmRuntimeEsModule = new URL('dist/', runtimeRoot).href;
+                } else if (runtime === 'custom') {
+                    cmRuntimeEsModule = (await writeCustomRuntime(providerDir)).href;
+                }
                 class Thing {
                     #value: number;
                     disposed = 0;
@@ -159,6 +165,7 @@ suite('resources', () => {
                 const setup = await setupAsyncTest({
                     component: {
                         name: 'zero-host-resource-rep',
+                        outputDir: providerDir,
                         path: fileURLToPath(
                             new URL(
                                 './fixtures/components/runtime/zero-host-resource-rep.component.wat',
@@ -170,10 +177,40 @@ suite('resources', () => {
                             observe: { default: (thing: Thing) => thing.getValue() },
                         },
                     },
-                    jco: { transpile: { extraArgs: { cmRuntimeEsModule } } },
+                    jco: {
+                        transpile: {
+                            extraArgs: {
+                                cmRuntimeEsModule,
+                                ...(runtime === 'external' && { cmRuntimeSyncImports: true }),
+                            },
+                        },
+                    },
                 });
                 cleanup = setup.cleanup;
                 const { instance } = setup;
+                const source = await readFile(setup.esModuleOutputPath, 'utf8');
+                const standardLeaf = runtime === 'inline' || runtime === 'checked';
+                assert.equal(source.includes('initializeHandleTables'), !standardLeaf);
+                assert.equal(/\.resourceTables\.push\(\s*[\w$]+\s*\)/.test(source), standardLeaf);
+                assert.equal(/\._createdReps\s*=\s*new Set\b/.test(source), !standardLeaf);
+                // Each owned argument is dropped immediately. A standard sync leaf
+                // has no transfer_borrow that could ever query its representation.
+                const rep = 123456;
+                const owned = new Thing(rep, 7);
+                let recorded = 0;
+                const add = Set.prototype.add;
+                try {
+                    Set.prototype.add = function (value) {
+                        if (value === rep) recorded++;
+                        return add.call(this, value);
+                    };
+                    instance.drop(owned);
+                } finally {
+                    Set.prototype.add = add;
+                }
+                assert.equal(owned.disposed, 1);
+                assert.equal(recorded, standardLeaf ? 0 : 1);
+
                 // Core Wasm returns i32s as signed JS numbers. Both spellings of a rep
                 // must find the captured object when lifting a borrow, an own, or a drop.
                 for (const rep of [0, 0x40000000, 0x80000010, -0x7ffffff0, 0xc0000010, -0x3ffffff0, 0xffffffff, -1]) {
@@ -187,6 +224,14 @@ suite('resources', () => {
                     instance.drop(first);
                     assert.strictEqual(first.disposed, 1);
                 }
+
+                // Shutdown must still find the live handle through its registration.
+                const retained = new Thing(123, 42);
+                instance.retain(retained);
+                assert.equal(retained.disposed, 0);
+                instance._util.stop();
+                instance._util.stop();
+                assert.equal(retained.disposed, 1);
             } finally {
                 await cleanup?.();
                 await rm(providerDir, { recursive: true, force: true });

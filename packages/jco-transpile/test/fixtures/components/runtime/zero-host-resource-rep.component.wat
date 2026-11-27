@@ -13,6 +13,7 @@
       (local.get 0))
     (func (export "inspect") (param i32 i32) (result i32)
       (call $observe (local.get 0)))
+    (func (export "retain") (param i32))
     (func (export "drop") (param i32) (call $drop (local.get 0))))
   (core instance $i (instantiate $m (with "" (instance
     (export "observe" (func $observe))
@@ -21,5 +22,7 @@
     (canon lift (core func $i "roundtrip")))
   (func (export "inspect") (param "first" (borrow $thing)) (param "second" (borrow $thing)) (result u32)
     (canon lift (core func $i "inspect")))
+  (func (export "retain") (param "thing" (own $thing))
+    (canon lift (core func $i "retain")))
   (func (export "drop") (param "thing" (own $thing))
     (canon lift (core func $i "drop"))))

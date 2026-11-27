@@ -142,6 +142,7 @@ program
     .option("--name <name>", "custom output name")
     .requiredOption("-o, --out-dir <out-dir>", "output directory")
     .option("-m, --minify", "minify the JS output (--optimize / opt cmd still required)")
+    .option("--eager-compile", "ask supporting browsers to compile the generated JavaScript functions on load")
     .option("-O, --optimize", `optimize the component first (use -- and arguments to wasm-opt)`)
     .option("--no-typescript", "do not output TypeScript .d.ts types")
     .option(
@@ -225,6 +226,8 @@ program
         "--cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base (named runtime and intrinsics/* subpaths)",
     )
+    .option("--cm-runtime-sync-imports", "use intrinsics/sync from the selected external checked runtime")
+    .option("--no-cm-runtime-sync-imports", "use the original external runtime API-v1 operations")
     .option("--flags-as-bigint", "represent WIT flags as bigint values")
     .option("--variants-inline-cases", "inline WIT variant cases in discriminated unions")
     .addOption(
@@ -350,6 +353,8 @@ program
         "--jco-cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base imported by the transpiled code",
     )
+    .option("--jco-cm-runtime-sync-imports", "use intrinsics/sync from the selected external checked runtime")
+    .option("--no-jco-cm-runtime-sync-imports", "use the original external runtime API-v1 operations")
     .addOption(
         new Option(
             "--jco-runtime-profile <profile>",
@@ -410,6 +415,8 @@ program
         "--jco-cm-runtime-es-module <base>",
         "Experimental Component Model runtime package or directory base imported by the transpiled code",
     )
+    .option("--jco-cm-runtime-sync-imports", "use intrinsics/sync from the selected external checked runtime")
+    .option("--no-jco-cm-runtime-sync-imports", "use the original external runtime API-v1 operations")
     .addOption(
         new Option(
             "--jco-runtime-profile <profile>",
