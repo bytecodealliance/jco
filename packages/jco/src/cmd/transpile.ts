@@ -204,13 +204,14 @@ export async function transpileCmd(componentPath: string, opts: TranspileOpts, p
  *
  * @param {Uint8Array} component
  * @param {TranspileOpts} [opts]
- * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][] }>}
+ * @returns {Promise<{ files: { [filename: string]: Uint8Array }, imports: string[], exports: [string, 'function' | 'instance'][], syncFastPathBlocker?: string }>}
  */
 export async function transpileComponent(component: Uint8Array, opts: TranspileOpts = {}) {
     return transpileBytes(component, prepOpts(opts)) as Promise<{
         files: Record<string, Uint8Array>;
         imports: string[];
         exports: [string, "function" | "instance"][];
+        syncFastPathBlocker?: string;
     }>;
 }
 
