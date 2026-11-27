@@ -707,7 +707,11 @@ pub fn transpile_bindgen(
             && !call_tracking
             && matches!(opts.import_bindings, None | Some(BindingsMode::Js))
             && matches!(opts.async_mode, None | Some(AsyncMode::Sync))
-            && is_sync_import_leaf(component, types),
+            && is_sync_import_leaf(component, types)
+            // A caught host exception must still reject the exporting task, even if a
+            // custom instantiator made the lower callable without a known caller.
+            // Keep the subtask that propagates the first failure in these components.
+            && !modules.values().any(core::Translation::can_catch_exceptions),
         async_analysis: Default::default(),
         sync_fast_path,
     };
