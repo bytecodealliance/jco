@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-e500b771.js";
+            window.path_to_searchindex_js = "searchindex-7fe0ba97.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-384f90e7.js"></script>
@@ -4871,8 +4871,9 @@ backpressure built-ins);</li>
 <p>Any other component is generated exactly as without the option, and nothing is printed by
 default.</p>
 <p>When the option was set but did not apply, the transpile result says which of the rules above
-ruled it out: <code>syncFastPathBlocker</code> in the JS API, <code>sync_fast_path_blocker</code> on the Rust
-<code>Transpiled</code> result. It is unset when the option applied or was not set. With <code>JCO_DEBUG</code> set,
+ruled it out. The JS API exposes <code>syncFastPathBlocker</code>. In Rust, <code>transpile_with_diagnostics</code>
+returns the output and a <code>TranspileDiagnostics</code> value with a <code>sync_fast_path_blocker</code> field.
+The field is unset when the option applied or was not set. With <code>JCO_DEBUG</code> set,
 <code>jco transpile</code> and <code>@bytecodealliance/jco-transpile</code> also log it with <code>console.debug</code>, for
 example <code>component [calls] does not use the sync fast path (perfSyncFastPath): call tracking is enabled</code>.</p>
 <p>The <code>js-component-bindgen</code> crate also logs whether it used the fast path, and if not why, as a
