@@ -239,6 +239,11 @@ interface TranspilationResult {
     files: Record<string, Uint8Array>;
     imports: string[];
     exports: [string, 'function' | 'instance'][];
+    /**
+     * Why the sync fast path is not used, set only when `perfSyncFastPath` was requested
+     * and the component is not eligible. Logged when `JCO_DEBUG` is set.
+     */
+    syncFastPathBlocker?: string;
 }
 
 const SUPPORTED_P3_VERSIONS = ['0.3.0-rc-2026-03-15', '0.3.0'];
@@ -424,6 +429,12 @@ export async function transpileBytes(
     const generated = await callBindgen(() => generate(component, generateOpts));
     const imports = generated.imports;
     const exports = generated.exports;
+    const syncFastPathBlocker = generated.syncFastPathBlocker;
+    if (syncFastPathBlocker !== undefined && process.env.JCO_DEBUG) {
+        console.debug(
+            `component [${generateOpts.name}] does not use the sync fast path (perfSyncFastPath): ${syncFastPathBlocker}`,
+        );
+    }
 
     // Determine the output directory & paths
     let outDir = (opts.outDir ?? '').replace(/\\/g, '/');
@@ -481,5 +492,10 @@ export async function transpileBytes(
         jsFile[1] = new TextEncoder().encode(minified.code);
     }
 
-    return { files: Object.fromEntries(files), imports, exports };
+    return {
+        files: Object.fromEntries(files),
+        imports,
+        exports,
+        ...(syncFastPathBlocker !== undefined && { syncFastPathBlocker }),
+    };
 }
