@@ -191,6 +191,10 @@ pub struct TranspileConfig {
     /// Requires the `external-runtime` Cargo feature.
     #[cfg(feature = "external-runtime")]
     pub cm_runtime_es_module: Option<String>,
+    /// The external provider supports the checked intrinsics/sync contract.
+    /// The standard checked runtime package enables this automatically.
+    #[cfg(feature = "external-runtime")]
+    pub cm_runtime_sync_imports: Option<bool>,
 }
 
 /// Reject accessor functions until JavaScript property bindings are implemented.
@@ -280,6 +284,11 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
     transpile_with_config(component, TranspileConfig::builder().opts(opts).build())
 }
 
+/// Provider selection follows the same optional trailing slash as emitted module specifiers.
+fn is_standard_checked_runtime(base: &str) -> bool {
+    base.strip_suffix('/').unwrap_or(base) == "@bytecodealliance/jco-cm-runtime"
+}
+
 /// Transpile a component with additional configuration, including an optional
 /// external Component Model runtime provider.
 #[cfg(feature = "transpile-bindgen")]
@@ -296,10 +305,18 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         perf_sync_fast_path,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
+        #[cfg(feature = "external-runtime")]
+        cm_runtime_sync_imports,
     } = config;
-    // Only the bundled runtime is reduced to a profile.
-    #[cfg(not(feature = "embedded-cm-runtime"))]
-    let _ = runtime_profile;
+    // A custom provider may implement only the original API-v1 operations.
+    // Request the sync entry point only for the standard checked package or
+    // when the caller confirms that its directory or provider supplies it.
+    #[cfg(feature = "external-runtime")]
+    let provider_supports_sync = cm_runtime_es_module.as_deref().is_some_and(|base| {
+        cm_runtime_sync_imports.unwrap_or_else(|| is_standard_checked_runtime(base))
+    });
+    #[cfg(not(feature = "external-runtime"))]
+    let provider_supports_sync = false;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
     let external_runtime = cm_runtime_es_module.is_some();
@@ -309,6 +326,8 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     // shipped with this crate, which is then bundled into them.
     #[cfg(feature = "embedded-cm-runtime")]
     let bundle_runtime = cm_runtime_es_module.is_none();
+    #[cfg(not(feature = "embedded-cm-runtime"))]
+    let bundle_runtime = false;
     #[cfg(feature = "embedded-cm-runtime")]
     let cm_runtime_es_module =
         cm_runtime_es_module.or_else(|| Some(embedded_runtime::PACKAGE.to_string()));
@@ -412,6 +431,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         world_id,
         opts.clone(),
         cm_runtime_es_module.as_deref(),
+        (bundle_runtime || provider_supports_sync) && runtime_profile == RuntimeProfile::Checked,
         call_tracking,
         type_generation.typed_error_classes,
         perf_sync_fast_path,
@@ -730,6 +750,334 @@ mod tests {
             .unwrap()
     }
 
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn direct_sync_import_requires_a_checked_leaf_and_capable_runtime() {
+        let component = wat::parse_str(
+            r#"(component
+            (import "host" (func $host (param "v" u32) (result u32)))
+            (core func $lower (canon lower (func $host)))
+            (core module $m (import "" "host" (func $host (param i32) (result i32)))
+                (memory (export "memory") 1) (export "run" (func $host)))
+            (core instance $i (instantiate $m (with "" (instance (export "host" (func $lower))))))
+            (func (export "run") (param "v" u32) (result u32) (canon lift (core func $i "run") (memory (core memory $i "memory")))))"#,
+        )
+        .unwrap();
+        for (profile, tracking, provider, provider_sync, direct) in [
+            (RuntimeProfile::Checked, false, None, None, true),
+            (RuntimeProfile::Debug, false, None, None, false),
+            (RuntimeProfile::Checked, true, None, None, false),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@test/provider"),
+                None,
+                false,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@bytecodealliance/jco-cm-runtime"),
+                None,
+                true,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@bytecodealliance/jco-cm-runtime/"),
+                None,
+                true,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@bytecodealliance/jco-cm-runtime"),
+                Some(false),
+                false,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("./custom-runtime"),
+                Some(true),
+                true,
+            ),
+            (
+                RuntimeProfile::Checked,
+                true,
+                Some("./custom-runtime"),
+                Some(true),
+                false,
+            ),
+            (
+                RuntimeProfile::Debug,
+                false,
+                Some("./custom-runtime"),
+                Some(true),
+                false,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@bytecodealliance/jco-cm-runtime/debug"),
+                None,
+                false,
+            ),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts::builder().name("sync".into()).build(),
+                    call_tracking: tracking,
+                    runtime_profile: profile,
+                    cm_runtime_es_module: provider.map(String::from),
+                    cm_runtime_sync_imports: provider_sync,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source = generated_javascript(&result);
+            assert_eq!(source.contains("_lowerSyncImport("), direct);
+            let standard_leaf = direct && provider.is_none_or(is_standard_checked_runtime);
+            assert_eq!(source.contains("CURRENT_TASK_MAY_BLOCK"), !standard_leaf);
+            assert_eq!(source.contains("canCreateBorrowHandles:"), standard_leaf);
+            for setter in [
+                "setCalleeIsAsync",
+                "setFuncTypeIsAsync",
+                "setReturnResultTypeIdx",
+                "setReturnMemoryIdx",
+                "setReturnMemory",
+                "setLiftMemory",
+            ] {
+                assert_eq!(
+                    source.contains(&format!("task.{setter}(")),
+                    !standard_leaf,
+                    "{setter} with provider {provider:?} and profile {profile:?}"
+                );
+            }
+
+            assert_eq!(
+                source.contains("/intrinsics/sync"),
+                direct && provider.is_some()
+            );
+            assert_eq!(
+                source.contains("/intrinsics/sync-task"),
+                direct && provider.is_some_and(is_standard_checked_runtime)
+            );
+            if direct {
+                assert!(!source.contains("_lowerImportBackwardsCompat"));
+                assert!(!source.contains("_getGlobalCurrentThreadMeta"));
+                assert!(!source.contains("_jcoThreadLookupContext"));
+            }
+        }
+    }
+
+    #[cfg(feature = "external-runtime")]
+    #[test]
+    fn lowering_a_borrowed_export_argument_keeps_the_scope_registry() {
+        let component = wat::parse_str(r#"(component
+            (import "api" (instance $api (export "item" (type (sub resource)))))
+            (alias export $api "item" (type $item))
+            (core module $m (func (export "use") (param i32)))
+            (core instance $i (instantiate $m))
+            (func (export "use") (param "item" (borrow $item)) (canon lift (core func $i "use"))))"#).unwrap();
+        let result = transpile_with_config(
+            &component,
+            TranspileConfig {
+                opts: TranspileOpts::builder().name("borrow".into()).build(),
+                cm_runtime_es_module: Some("@bytecodealliance/jco-cm-runtime".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let source = generated_javascript(&result);
+        assert!(source.contains("tableCreateBorrow"));
+        assert!(!source.contains("canCreateBorrowHandles:"));
+    }
+
+    #[cfg(feature = "external-runtime")]
+    #[test]
+    fn retaining_an_imported_handle_does_not_select_a_removal_operation() {
+        let component = wat::parse_str(
+            r#"(component
+              (import "api" (instance $api (export "item" (type (sub resource)))))
+              (alias export $api "item" (type $item))
+              (import "get" (func $get (result (own $item))))
+              (core func $lower (canon lower (func $get)))
+              (core module $m
+                (import "" "get" (func $get (result i32)))
+                (global $saved (mut i32) (i32.const 0))
+                (func (export "save") (global.set $saved (call $get))))
+              (core instance $i (instantiate $m (with "" (instance (export "get" (func $lower))))))
+              (func (export "save") (canon lift (core func $i "save"))))"#,
+        )
+        .unwrap();
+        for sync in [false, true] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts {
+                        name: "retain".into(),
+                        ..Default::default()
+                    },
+                    cm_runtime_es_module: Some("@test/provider".into()),
+                    cm_runtime_sync_imports: Some(sync),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source = generated_javascript(&result);
+            assert!(source.contains("rscTableCreateOwn"));
+            assert!(!source.contains("rscTableRemove"));
+            assert!(!source.contains("_jcoResourceRemoveContext"));
+        }
+    }
+
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn isolated_numeric_exports_require_the_standard_unobserved_runtime() {
+        let component = wat::parse_str(
+            r#"(component
+            (core module $m (func (export "f") (param i32) (result i32) local.get 0))
+            (core instance $i (instantiate $m))
+            (func (export "f") (param "n" u32) (result u32) (canon lift (core func $i "f"))))"#,
+        )
+        .unwrap();
+        for (provider, profile, tracking, tracing, specialized) in [
+            (None, RuntimeProfile::Checked, false, false, true),
+            (
+                Some("@bytecodealliance/jco-cm-runtime"),
+                RuntimeProfile::Checked,
+                false,
+                false,
+                true,
+            ),
+            (
+                Some("@bytecodealliance/jco-cm-runtime/"),
+                RuntimeProfile::Checked,
+                false,
+                false,
+                true,
+            ),
+            (
+                Some("./custom"),
+                RuntimeProfile::Checked,
+                false,
+                false,
+                false,
+            ),
+            (None, RuntimeProfile::Debug, false, false, false),
+            (None, RuntimeProfile::Checked, true, false, false),
+            (None, RuntimeProfile::Checked, false, true, false),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts {
+                        name: "numeric".into(),
+                        instantiation_mode: Some(InstantiationMode::Async),
+                        tracing,
+                        ..Default::default()
+                    },
+                    cm_runtime_es_module: provider.map(String::from),
+                    cm_runtime_sync_imports: Some(true),
+                    runtime_profile: profile,
+                    call_tracking: tracking,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                generated_javascript(&result).contains("nativeNumericExports"),
+                specialized
+            );
+        }
+    }
+
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn numeric_exports_keep_tasks_for_host_calls_and_post_return() {
+        for component in [
+            r#"(component
+                (import "host" (func $host (result u32)))
+                (core func $lower (canon lower (func $host)))
+                (core module $m (import "" "host" (func $f (result i32))) (export "f" (func $f)))
+                (core instance $i (instantiate $m (with "" (instance (export "host" (func $lower))))))
+                (func (export "f") (result u32) (canon lift (core func $i "f"))))"#,
+            r#"(component
+                (core module $m (func (export "f") (result i32) i32.const 0) (func (export "cleanup") (param i32)))
+                (core instance $i (instantiate $m))
+                (func (export "f") (result u32) (canon lift (core func $i "f") (post-return (core func $i "cleanup")))))"#,
+        ] {
+            let result = transpile(
+                &wat::parse_str(component).unwrap(),
+                TranspileOpts {
+                    name: "numeric".into(),
+                    instantiation_mode: Some(InstantiationMode::Async),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert!(!generated_javascript(&result).contains("nativeNumericExports"));
+        }
+    }
+
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn sync_leaf_initializers_only_install_observable_wrappers() {
+        let component = wat::parse_str(r#"(component
+            (import "length" (func $length (param "n" u32) (result u32)))
+            (core func $lower (canon lower (func $length)))
+            (core module $core
+                (import "" "length" (func $length (param i32) (result i32)))
+                (memory (export "mem") 1)
+                (func (export "alloc") (param i32 i32 i32 i32) (result i32) i32.const 64)
+                (func (export "post") (param i32))
+                (func (export "run") (param i32 i32) (result i32) local.get 1 call $length))
+            (core instance $guest (instantiate $core (with "" (instance (export "length" (func $lower))))))
+            (func (export "run") (param "text" string) (result u32)
+                (canon lift (core func $guest "run") (memory (core memory $guest "mem"))
+                    (realloc (core func $guest "alloc")) (post-return (core func $guest "post")))))"#).unwrap();
+        for (profile, instantiation, wrappers, markers) in [
+            (RuntimeProfile::Checked, None, false, false),
+            (
+                RuntimeProfile::Checked,
+                Some(InstantiationMode::Async),
+                false,
+                true,
+            ),
+            (RuntimeProfile::Debug, None, true, true),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts::builder()
+                        .name("sync".into())
+                        .maybe_instantiation_mode(instantiation)
+                        .build(),
+                    runtime_profile: profile,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source = generated_javascript(&result);
+            assert_eq!(
+                source.contains("WebAssembly.promising(exports0.alloc)"),
+                wrappers
+            );
+            assert_eq!(
+                source.contains("WebAssembly.promising(exports0.post)"),
+                wrappers
+            );
+            assert_eq!(source.contains("_jcoMaySuspend:"), markers);
+            assert_eq!(source.contains("initializeAsyncSubtaskClass"), wrappers);
+            assert_eq!(source.contains("initializeFutureValueClass"), wrappers);
+            assert_eq!(source.contains("initializeFutures"), wrappers);
+            assert_eq!(source.contains("initializeStreams"), wrappers);
+            assert_eq!(source.contains("initializeWaitableClass"), wrappers);
+        }
+    }
+
     #[cfg(feature = "transpile-bindgen")]
     #[test]
     fn debug_logger_is_initialized_once_for_a_module_or_an_instance() {
@@ -977,7 +1325,7 @@ mod tests {
         // the shipped runtime when that feature is enabled, and rendered inline otherwise.
         #[cfg(feature = "embedded-cm-runtime")]
         {
-            assert!(direct_source.contains("__jcoEmbeddedRuntime$tableGet"));
+            assert!(direct_source.contains("$cm$tableGet"));
             assert!(!direct_source.contains(crate::embedded_runtime::PACKAGE));
             assert!(!direct_source.contains("\nimport "));
         }

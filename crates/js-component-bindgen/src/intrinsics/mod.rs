@@ -3329,6 +3329,9 @@ pub struct RenderIntrinsicsArgs<'a> {
     /// Emit invocation tracking in host binding glue.
     #[builder(default)]
     pub(crate) call_tracking: bool,
+    /// The bundled runtime can omit capabilities for unreachable subtask operations.
+    #[builder(default)]
+    pub(crate) sync_import_leaf: bool,
     /// The kind of determinism to use
     #[builder(default)]
     pub(crate) determinism_profile: AsyncDeterminismProfile,
@@ -3338,6 +3341,10 @@ pub struct RenderIntrinsicsArgs<'a> {
     #[cfg(feature = "external-runtime")]
     #[builder(default)]
     pub(crate) external_runtime: bool,
+    /// The standard provider's own task bookkeeping can be specialized. Custom
+    /// providers may observe their tasks even when they opt into sync imports.
+    #[builder(default)]
+    pub(crate) standard_runtime: bool,
     /// Intrinsic dependencies discovered while rendering one intrinsic
     #[builder(default)]
     discovered_intrinsics: Mutex<BTreeSet<Intrinsic>>,

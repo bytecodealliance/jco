@@ -7,6 +7,7 @@ pub(crate) fn resource_import(
 ) -> RuntimeImport {
     use crate::intrinsics::resource::ResourceIntrinsic::*;
     let (export, context, kind) = match intrinsic {
+        IndexedResourceCaptures => ("IndexedResourceCaptures", None, RuntimeImportKind::Value),
         ResourceTableFlag => ("tableFlag", None, RuntimeImportKind::Value),
         ResourceTableOwnFlag => ("tableOwn", None, RuntimeImportKind::Value),
         HandleIndexSpaces => (
@@ -27,6 +28,11 @@ pub(crate) fn resource_import(
         ResourceTableCreateOwn => (
             "tableCreateOwn",
             Some(RuntimeContextIntrinsic::InitializeHandleIndexSpaces),
+            RuntimeImportKind::Call,
+        ),
+        ResourceTableRep => (
+            "tableRep",
+            Some(RuntimeContextIntrinsic::ResourceTableGet),
             RuntimeImportKind::Call,
         ),
         ResourceTableGet => (
@@ -88,7 +94,11 @@ pub(crate) fn resource_import(
         ),
     };
     RuntimeImport {
-        suffix: "intrinsics/resource",
+        suffix: if matches!(intrinsic, ResourceTableRep | IndexedResourceCaptures) {
+            "intrinsics/sync"
+        } else {
+            "intrinsics/resource"
+        },
         export,
         context,
         kind,

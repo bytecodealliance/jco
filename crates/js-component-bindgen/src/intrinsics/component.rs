@@ -824,7 +824,7 @@ impl ComponentIntrinsic {
 
                         #componentIdx;
                         #callingAsyncImport = false;
-                        #syncImportWait = {promise_with_resolvers_fn}();
+                        #syncImportWait;
                         #lockHolderTaskID = null;
                         #lockWaiters = [];
                         #numWaitingToEnter = 0;
@@ -879,7 +879,7 @@ impl ComponentIntrinsic {
                             return () => clearTimeout(handle);
                         }}
 
-                        #onExclusiveReleaseHandlers = [];
+                        #onExclusiveReleaseHandlers;
 
                         #mayLeave = true;
 
@@ -963,12 +963,12 @@ impl ComponentIntrinsic {
 
                         #notifySyncImportEnd() {{
                             const existing = this.#syncImportWait;
-                            this.#syncImportWait = {promise_with_resolvers_fn}();
-                            existing.resolve();
+                            this.#syncImportWait = undefined;
+                            existing?.resolve();
                         }}
 
                         async waitForSyncImportCallEnd() {{
-                            await this.#syncImportWait.promise;
+                            await (this.#syncImportWait ??= {promise_with_resolvers_fn}()).promise;
                         }}
 
                         setBackpressure(v) {{
@@ -1236,15 +1236,24 @@ impl ComponentIntrinsic {
                             // lock-free fallback code.
                             this.#lockHolderTaskID = null;
 
-                            this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter(v => !!v);
-                            for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {{
-                                try {{
-                                    this.#onExclusiveReleaseHandlers[idx] = null;
-                                    f();
-                                }} catch (err) {{
-                                    {debug_log_fn}("error while executing handler for next exclusive release", err);
-                                    throw err;
+                            // Ordinary synchronous exits have no callbacks. When a handler releases the lock
+                            // reentrantly, both releases drain the same FIFO. Advance the shared cursor before
+                            // calling the handler so it runs once, even if it reenters or throws.
+                            const handlers = this.#onExclusiveReleaseHandlers;
+                            if (handlers?.callbacks.length) {{
+                                while (handlers.next < handlers.callbacks.length) {{
+                                    const index = handlers.next++;
+                                    const fn = handlers.callbacks[index];
+                                    handlers.callbacks[index] = undefined;
+                                    try {{
+                                        fn();
+                                    }} catch (err) {{
+                                        {debug_log_fn}("error while executing handler for next exclusive release", err);
+                                        throw err;
+                                    }}
                                 }}
+                                handlers.callbacks.length = 0;
+                                handlers.next = 0;
                             }}
                             this.#scheduleLockHandoff();
                             return true;
@@ -1271,7 +1280,8 @@ impl ComponentIntrinsic {
 
                         onNextExclusiveRelease(fn) {{
                             {debug_log_fn}('[{component_async_state_class}#()onNextExclusiveRelease] registering');
-                            this.#onExclusiveReleaseHandlers.push(fn);
+                            const handlers = (this.#onExclusiveReleaseHandlers ??= {{ callbacks: [], next: 0 }});
+                            handlers.callbacks.push(fn);
                         }}
 
                         async waitForExclusiveRelease() {{

@@ -153,6 +153,7 @@ mod tests {
             &mut imports,
             &std::collections::BTreeSet::from([intrinsic]),
             "custom-runtime",
+            false,
         );
         assert!(
             imports

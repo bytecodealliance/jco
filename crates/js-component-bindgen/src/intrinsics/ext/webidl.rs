@@ -37,7 +37,7 @@ mod tests {
                 .build(),
         );
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime", false);
         assert!(
             source
                 .contains("const _jcoWebIdlProxyCacheContext = _jcoInitializeWebIdlProxyCache();")

@@ -377,6 +377,11 @@ pub enum AsyncTaskIntrinsic {
     /// TODO(breaking): remove this when specifying async imports/exports is removed.
     LowerImportBackwardsCompat,
 
+    /// Task setup for a checked synchronous import with no active caller.
+    LowerSyncImport,
+    /// Guard a realloc using the synchronous leaf instance's may-leave flag.
+    GuardSyncRealloc,
+
     /// Global variable that represents whether the *current* task my block
     /// see `CoreDef::TaskMayBlock`
     CurrentTaskMayBlock,
@@ -437,6 +442,8 @@ impl AsyncTaskIntrinsic {
             Self::DriverLoop.name(),
             Self::LowerImport.name(),
             Self::LowerImportBackwardsCompat.name(),
+            Self::LowerSyncImport.name(),
+            Self::GuardSyncRealloc.name(),
             Self::EnterSymmetricSyncGuestCall.name(),
             Self::ExitSymmetricSyncGuestCall.name(),
             Self::SymmetricSyncGuestCallStack.name(),
@@ -481,6 +488,8 @@ impl AsyncTaskIntrinsic {
             Self::DriverLoop => "_driverLoop",
             Self::LowerImport => "_lowerImport",
             Self::LowerImportBackwardsCompat => "_lowerImportBackwardsCompat",
+            Self::LowerSyncImport => "_lowerSyncImport",
+            Self::GuardSyncRealloc => "_guardSyncRealloc",
             Self::EnterSymmetricSyncGuestCall => "_symmetricSyncGuestCallEnter",
             Self::ExitSymmetricSyncGuestCall => "_symmetricSyncGuestCallExit",
             Self::SymmetricSyncGuestCallStack => "SYMMETRIC_SYNC_GUEST_CALL_STACK",
@@ -4054,6 +4063,12 @@ impl AsyncTaskIntrinsic {
             //
             // TODO(breaking): remove when manually specifying async imports/expors is removed.
             //
+            Self::LowerSyncImport => {
+                unreachable!("only selected with a sync-capable Component Model runtime")
+            }
+            Self::GuardSyncRealloc => {
+                unreachable!("only selected with a sync-capable Component Model runtime")
+            }
             Self::LowerImportBackwardsCompat => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_import_backwards_compat_fn =

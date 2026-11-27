@@ -488,6 +488,7 @@ struct JsFunctionBindgenArgs<'a> {
     /// The interned index of the function's result tuple type, for exports
     result_type_idx: Option<u32>,
     tracked_export: Option<u32>,
+    isolated_numeric_export: bool,
     /// The class to throw the error of the function's result as, if the
     /// function has one of its own (see `crate::result_error_class`)
     result_error_class: Option<String>,
@@ -517,6 +518,46 @@ pub struct TranspileBindgenResult {
     pub sync_fast_path_blocker: Option<String>,
 }
 
+/// A sync-only leaf has no guest-visible subtask handle, task-local intrinsic,
+/// or cross-component borrowing scope. The export task owns its lifetime.
+/// Check the translated trampolines as well as the WIT signatures. A synchronous
+/// signature can still call a task intrinsic or transfer a borrow between
+/// instances. New trampoline kinds use the general adapter until reviewed here.
+fn is_sync_import_leaf(component: &ComponentTranslation, types: &ComponentTypes) -> bool {
+    component.component.num_runtime_component_instances == 1
+        && component.component.num_future_tables == 0
+        && component.component.num_stream_tables == 0
+        && component.component.num_error_context_tables == 0
+        && component.component.num_resources as usize
+            == component.component.imported_resources.len()
+        && component
+            .component
+            .unsafe_intrinsics
+            .iter()
+            .all(|ty| ty.is_none())
+        && component
+            .component
+            .export_items
+            .values()
+            .all(|export| match export {
+                Export::LiftedFunction { ty, .. } => !types[*ty].async_,
+                _ => true,
+            })
+        && component
+            .component
+            .options
+            .values()
+            .all(|opts| !opts.async_)
+        && component
+            .trampolines
+            .values()
+            .all(|trampoline| match trampoline {
+                Trampoline::LowerImport { lower_ty, .. } => !types[*lower_ty].async_,
+                Trampoline::ResourceDrop { .. } => true,
+                _ => false,
+            })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn transpile_bindgen(
     name: &str,
@@ -528,6 +569,7 @@ pub fn transpile_bindgen(
     id: WorldId,
     opts: TranspileOpts,
     cm_runtime_es_module: Option<&str>,
+    specialize_sync_imports: bool,
     call_tracking: bool,
     typed_error_classes: bool,
     perf_sync_fast_path: bool,
@@ -658,6 +700,14 @@ pub fn transpile_bindgen(
         err_ctx_tables,
         init_current_module: None,
         context_components: Default::default(),
+        // A taskless export has no caller task for the synchronous lower to reuse.
+        direct_sync_imports: !sync_fast_path
+            && specialize_sync_imports
+            && !opts.guest
+            && !call_tracking
+            && matches!(opts.import_bindings, None | Some(BindingsMode::Js))
+            && matches!(opts.async_mode, None | Some(AsyncMode::Sync))
+            && is_sync_import_leaf(component, types),
         async_analysis: Default::default(),
         sync_fast_path,
     };
@@ -674,9 +724,13 @@ pub fn transpile_bindgen(
     instantiator.bindgen.src.js(&instantiator.src.js);
     instantiator.bindgen.src.js_init(&instantiator.src.js_init);
 
-    instantiator
-        .bindgen
-        .finish_component(name, files, &opts, source::Source::default());
+    instantiator.bindgen.finish_component(
+        name,
+        files,
+        &opts,
+        source::Source::default(),
+        instantiator.direct_sync_imports,
+    );
 
     let exports = instantiator
         .bindgen
@@ -737,6 +791,56 @@ struct InstantiationHelperNames {
     normalize_instantiation_error: String,
     run_next: String,
     maybe_sync_return: String,
+}
+
+impl InstantiationHelperNames {
+    /// Drive a custom or TLA-compatible initializer synchronously until it
+    /// yields a promise. A completed generator's value belongs to the caller.
+    /// In module mode it is undefined, so never try to resume it with .then().
+    fn write_driver(&self, output: &mut source::Source) {
+        uwriteln!(
+            output,
+            "\
+                let {promise}, {resolve}, {reject};
+                function {normalize} (e) {{
+                    // Native JSPI rejects a suspending import called from a
+                    // core start function before entering its JS wrapper.
+                    // At component instantiation time that always means the
+                    // implicit synchronous task attempted to block.
+                    if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                        return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
+                    }}
+                    return e;
+                }}
+                function {run_next} (value) {{
+                    try {{
+                        let done;
+                        do {{
+                            ({{ value, done }} = {gen}.next(value));
+                        }} while (!(value instanceof Promise) && !done);
+                        if (done) {{
+                            return {resolve} ? {resolve}(value) : value;
+                        }}
+                        if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
+                        value.then({run_next}, e => {reject}({normalize}(e)));
+                    }}
+                    catch (e) {{
+                        e = {normalize}(e);
+                        if ({reject}) {reject}(e);
+                        else throw e;
+                    }}
+                }}
+                const {maybe_sync} = {run_next}(null);
+                return {promise} || {maybe_sync};",
+            gen = self.generator,
+            promise = self.promise,
+            resolve = self.resolve,
+            reject = self.reject,
+            normalize = self.normalize_instantiation_error,
+            run_next = self.run_next,
+            maybe_sync = self.maybe_sync_return,
+        );
+    }
 }
 
 impl JsBindgen<'_> {
@@ -800,12 +904,24 @@ impl JsBindgen<'_> {
         }
     }
 
+    /// Ordinary ES modules already wait for native core compilation and
+    /// instantiation. Custom loaders and TLA-compatible modules keep the
+    /// generator so callers can still observe synchronous completion.
+    fn native_module_init(&self) -> bool {
+        self.opts.instantiation_mode.is_none()
+            && !self.opts.tla_compat
+            && self
+                .cm_runtime_es_module
+                .is_none_or(crate::is_standard_checked_runtime)
+    }
+
     fn finish_component(
         &mut self,
         name: &str,
         files: &mut Files,
         opts: &TranspileOpts,
         intrinsic_definitions: source::Source,
+        sync_import_leaf: bool,
     ) {
         // An empty component has no runtime state to stop. Keep its utility a
         // no-op so it does not acquire an otherwise-unused external runtime.
@@ -927,9 +1043,15 @@ impl JsBindgen<'_> {
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
             .determinism_profile(AsyncDeterminismProfile::default())
             .transpile_opts(opts)
-            .call_tracking(self.call_tracking);
+            .call_tracking(self.call_tracking)
+            .sync_import_leaf(sync_import_leaf);
         #[cfg(feature = "external-runtime")]
-        let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
+        let render_args = render_args
+            .external_runtime(self.cm_runtime_es_module.is_some())
+            .standard_runtime(
+                self.cm_runtime_es_module
+                    .is_some_and(crate::is_standard_checked_runtime),
+            );
         let js_intrinsics = render_intrinsics(render_args.build());
         let mut util_members = format!("stop: {stop_instance}, whenIdle: {when_idle},");
         if let Some(tracking) = call_tracking {
@@ -947,7 +1069,12 @@ impl JsBindgen<'_> {
                 .all_intrinsics
                 .contains(&Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy));
         if let Some(base) = self.cm_runtime_es_module {
-            ExternalRuntime.render_imports(&mut output, &self.all_intrinsics, base);
+            ExternalRuntime.render_imports(
+                &mut output,
+                &self.all_intrinsics,
+                base,
+                sync_import_leaf,
+            );
         }
 
         // Write out instantiation
@@ -962,7 +1089,7 @@ impl JsBindgen<'_> {
                 "\
                     export function instantiate(getCoreModule, imports, instantiateCore, options) {{
                         const WebAssembly = options?.shim?.globals?.WebAssembly ?? globalThis.WebAssembly;
-                        if (typeof instantiateCore === 'undefined') {{
+                        {native_numeric_exports}if (typeof instantiateCore === 'undefined') {{
                             if (typeof WebAssembly === 'undefined') throw new Error('no WebAssembly implementation is available: pass instantiateCore or options.shim.globals.WebAssembly');
                             instantiateCore = {};
                         }}
@@ -979,6 +1106,9 @@ impl JsBindgen<'_> {
                 &js_intrinsics as &str,
                 &intrinsic_definitions as &str,
                 &compilation_promises as &str,
+                native_numeric_exports = self.local_names.try_get("native numeric export instantiation")
+                    .map(|name| format!("const {name} = instantiateCore === undefined && options == null;\n"))
+                    .unwrap_or_default(),
             );
         } else if early_webidl_intrinsics {
             // Direct WebIDL import destructuring invokes the contextual proxy.
@@ -1018,132 +1148,65 @@ impl JsBindgen<'_> {
                             {}\
                             {};
                         }})();
-                        let {promise}, {resolve}, {reject};
-                        function {normalize} (e) {{
-                            // Native JSPI rejects a suspending import called from a
-                            // core start function before entering its JS wrapper.
-                            // At component instantiation time that always means the
-                            // implicit synchronous task attempted to block.
-                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
-                                return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
-                            }}
-                            return e;
-                        }}
-                        function {run_next} (value) {{
-                            try {{
-                                let done;
-                                do {{
-                                    ({{ value, done }} = {gen}.next(value));
-                                }} while (!(value instanceof Promise) && !done);
-                                if (done) {{
-                                    if ({resolve}) return {resolve}(value);
-                                    else return value;
-                                }}
-                                if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
-                                value.then(nextVal => done ? {resolve}() : {run_next}(nextVal), e => {reject}({normalize}(e)));
-                            }}
-                            catch (e) {{
-                                e = {normalize}(e);
-                                if ({reject}) {reject}(e);
-                                else throw e;
-                            }}
-                        }}
-                        const {maybe_sync} = {run_next}(null);
-                        return {promise} || {maybe_sync};
-                    }};
                 ",
                 &conditional_suspending_compilations as &str,
                 &self.src.js_init as &str,
                 &self.src.js as &str,
                 gen = helper.generator,
-                promise = helper.promise,
-                resolve = helper.resolve,
-                reject = helper.reject,
-                normalize = helper.normalize_instantiation_error,
-                run_next = helper.run_next,
-                maybe_sync = helper.maybe_sync_return,
             );
+            helper.write_driver(&mut output);
+            uwriteln!(output, "}};");
         } else {
-            let (maybe_init_export, maybe_init) =
-                if self.opts.tla_compat && opts.instantiation_mode.is_none() {
+            if !early_webidl_intrinsics {
+                output.push_str(&js_intrinsics);
+            }
+            output.push_str(&intrinsic_definitions);
+            output.push_str(&self.src.js);
+            if self.native_module_init() {
+                uwrite!(
+                    output,
+                    "await (async () => {{
+                        try {{
+                            {}\
+                            {}\
+                            {}\
+                        }} catch (e) {{
+                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                                throw new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
+                            }}
+                            throw e;
+                        }}
+                    }})();",
+                    &compilation_promises as &str,
+                    &self.src.js_init as &str,
+                    &core_exported_funcs as &str,
+                );
+            } else {
+                let (maybe_init_export, maybe_init) = if self.opts.tla_compat {
                     uwriteln!(self.src.js_init, "_initialized = true;");
-                    (
-                        "\
-                        let _initialized = false;
-                        export ",
-                        "",
-                    )
+                    ("let _initialized = false;\nexport ", "")
                 } else {
-                    (
-                        "",
-                        "
-                        await $init;
-                    ",
-                    )
+                    ("", "await $init;")
                 };
-
-            let helper = self.instantiation_helper_names();
-            uwrite!(
-                output,
-                "\
-                    {}
-                    {}
-                    {}
+                let helper = self.instantiation_helper_names();
+                uwrite!(
+                    output,
+                    "\
                     {maybe_init_export}const $init = (() => {{
                         let {gen} = (function* _initGenerator () {{
                             {}\
                             {}\
                             {}\
                         }})();
-                        let {promise}, {resolve}, {reject};
-                        function {normalize} (e) {{
-                            // Native JSPI rejects a suspending import called from a
-                            // core start function before entering its JS wrapper.
-                            // At component instantiation time that always means the
-                            // implicit synchronous task attempted to block.
-                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
-                                return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
-                            }}
-                            return e;
-                        }}
-                        function {run_next} (value) {{
-                            try {{
-                                let done;
-                                do {{
-                                    ({{ value, done }} = {gen}.next(value));
-                                }} while (!(value instanceof Promise) && !done);
-                                if (done) {{
-                                    if ({resolve}) {resolve}(value);
-                                    else return value;
-                                }}
-                                if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
-                                value.then({run_next}, e => {reject}({normalize}(e)));
-                            }}
-                            catch (e) {{
-                                e = {normalize}(e);
-                                if ({reject}) {reject}(e);
-                                else throw e;
-                            }}
-                        }}
-                        const {maybe_sync} = {run_next}(null);
-                        return {promise} || {maybe_sync};
-                    }})();
-                    {maybe_init}\
-                ",
-                if early_webidl_intrinsics { "" } else { &js_intrinsics as &str },
-                &intrinsic_definitions as &str,
-                &self.src.js as &str,
-                &compilation_promises as &str,
-                &self.src.js_init as &str,
-                &core_exported_funcs as &str,
-                gen = helper.generator,
-                promise = helper.promise,
-                resolve = helper.resolve,
-                reject = helper.reject,
-                normalize = helper.normalize_instantiation_error,
-                run_next = helper.run_next,
-                maybe_sync = helper.maybe_sync_return,
-            );
+                    ",
+                    &compilation_promises as &str,
+                    &self.src.js_init as &str,
+                    &core_exported_funcs as &str,
+                    gen = helper.generator,
+                );
+                helper.write_driver(&mut output);
+                uwriteln!(output, "}})();\n{maybe_init}");
+            }
 
             self.esm_bindgen.render_exports_with_util_members(
                 &mut output,
@@ -1333,7 +1396,8 @@ pub(crate) struct Instantiator<'a, 'b> {
     exports: BTreeMap<String, WorldKey>,
     imports: BTreeMap<String, WorldKey>,
     /// Instance flags which references have been emitted externally at least once.
-    used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
+    /// Maps each flags cell to whether a core module imports it as a Wasm global.
+    used_instance_flags: RefCell<BTreeMap<RuntimeComponentInstanceIndex, bool>>,
     defined_resource_classes: BTreeSet<String>,
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
@@ -1367,6 +1431,7 @@ pub(crate) struct Instantiator<'a, 'b> {
     /// Wasm, including core start functions and resource destructors.
     context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
 
+    direct_sync_imports: bool,
     async_analysis: AsyncAnalysis,
 
     /// Whether synchronous calls are generated without the task machinery
@@ -1381,6 +1446,16 @@ impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
 }
 
 impl<'a> Instantiator<'a, '_> {
+    /// Custom providers can observe export-task operations even when they opt
+    /// into reusing the caller's task for synchronous imports.
+    fn is_standard_sync_leaf(&self) -> bool {
+        self.direct_sync_imports
+            && self
+                .bindgen
+                .cm_runtime_es_module
+                .is_some_and(crate::is_standard_checked_runtime)
+    }
+
     fn stream_elem_meta_js(&mut self, table_idx: TypeStreamTableIndex) -> String {
         let stream_ty = &self.types[self.types[table_idx].ty];
         self.async_payload_meta_js(stream_ty.payload)
@@ -1986,56 +2061,79 @@ impl<'a> Instantiator<'a, '_> {
                 (true, "".into())
             };
 
-        let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
         let rsc_table_flag = self
             .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
         // Create the relevant handle table
         let rtid = resource_table_idx.as_u32();
-        let rsc_table_remove = self.bindgen.intrinsic_call(
-            Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
-            &format!("handleTable{rtid}, handle"),
+        uwriteln!(
+            self.src.js,
+            "const handleTable{rtid} = [{rsc_table_flag}, 0];"
+        );
+        // Only a transfer between instances can look up a previously created rep.
+        // Checked synchronous leaves pass trackRep=false on every owned insertion.
+        // Custom providers can inspect the table, so keep its original shape there.
+        if !self.is_standard_sync_leaf() {
+            uwriteln!(self.src.js, "handleTable{rtid}._createdReps = new Set();");
+        }
+        uwriteln!(
+            self.src.js,
+            "handleTable{rtid}._componentIdx = {component_idx};"
         );
         if is_imported {
-            // imported
-            uwriteln!(
-                self.src.js,
-                r#"
-                  const handleTable{rtid} = [{rsc_table_flag}, 0];
-                  handleTable{rtid}._createdReps = new Set();
-                  handleTable{rtid}._componentIdx = {component_idx};
-                "#,
-            );
-            if !self.resources_initialized.contains_key(&resource_idx) {
-                let ridx = resource_idx.as_u32();
+            let ridx = resource_idx.as_u32();
+            let first_table = !self.resources_initialized.contains_key(&resource_idx);
+            if first_table {
+                let captures = if self.direct_sync_imports {
+                    let class = self.bindgen.intrinsic(Intrinsic::Resource(
+                        ResourceIntrinsic::IndexedResourceCaptures,
+                    ));
+                    format!("new {class}(handleTable{rtid})")
+                } else {
+                    "new Map()".into()
+                };
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const captureTable{ridx} = new Map();
+                      const captureTable{ridx} = {captures};
                       let captureCnt{ridx} = 0;
                     "#
                 );
                 self.resources_initialized.insert(resource_idx, true);
+            } else if self.direct_sync_imports {
+                // Two tables can refer to the same resource. Handles only identify
+                // their own table, while a capture by rep is shared between both.
+                uwriteln!(self.src.js, "captureTable{ridx}.byRep();");
             }
             let store = self
                 .bindgen
                 .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
-            let ridx = resource_idx.as_u32();
-            uwriteln!(
-                self.src.js,
-                "{store}.resourceTables.push({{ handles: handleTable{rtid}, captures: captureTable{ridx} }});"
-            );
+            // The standard capture object already knows its first handle table.
+            // Further tables for the same resource need their own handles entry.
+            // Custom providers only promise byRep(), so keep their original record.
+            let entry = if first_table && self.is_standard_sync_leaf() {
+                format!("captureTable{ridx}")
+            } else if self.direct_sync_imports {
+                format!(
+                    "{{ handles: handleTable{rtid}, get captures() {{ return captureTable{ridx}.byRep(); }} }}"
+                )
+            } else {
+                format!("{{ handles: handleTable{rtid}, captures: captureTable{ridx} }}")
+            };
+            uwriteln!(self.src.js, "{store}.resourceTables.push({entry});");
         } else {
-            // non imported
+            // Only guest-defined resources register a finalizer here. Explicit
+            // resource drops select the removal operation in their own trampoline.
+            let rsc_table_remove = self.bindgen.intrinsic_call(
+                Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+                &format!("handleTable{rtid}, handle"),
+            );
             let finalization_registry_create = self
                 .bindgen
                 .intrinsic(Intrinsic::FinalizationRegistryCreate);
             uwriteln!(
                 self.src.js,
                 r#"
-                   const handleTable{rtid} = [{rsc_table_flag}, 0];
-                   handleTable{rtid}._createdReps = new Set();
-                   handleTable{rtid}._componentIdx = {component_idx};
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
                        const {{ rep }} = {rsc_table_remove};{maybe_dtor}
                    }});
@@ -2043,19 +2141,28 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        // Add the handle table to the global list
-        uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
+        // A checked synchronous leaf addresses each resource table directly. It has
+        // no transfer trampoline or async payload that needs to find a table by ID.
+        // Shutdown has its own list of tables and captures above. Custom providers
+        // can observe the registry and must still receive its entries.
+        if !self.is_standard_sync_leaf() {
+            let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
+            uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
+        }
         self.resource_tables_initialized
             .insert(resource_table_idx, true);
     }
 
+    fn instance_flags_name(&mut self, index: u32) -> String {
+        self.bindgen
+            .local_names
+            .get_or_create(("instance flags", index), &format!("instanceFlags{index}"))
+            .0
+            .to_owned()
+    }
+
     fn instance_flags(&mut self) {
-        let used_instance_flags = self
-            .used_instance_flags
-            .borrow()
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
+        let used_instance_flags = self.used_instance_flags.borrow().clone();
         if used_instance_flags.is_empty() {
             return;
         }
@@ -2064,20 +2171,37 @@ impl<'a> Instantiator<'a, '_> {
             ComponentIntrinsic::GlobalInstanceFlagsMap,
         ));
         let mut instance_flag_defs = String::new();
-        for used in used_instance_flags {
+        for (used, imported_by_wasm) in used_instance_flags {
             let i = used.as_u32();
             // As of wasmtime-environ 47 the per-instance flags global holds a
             // single boolean `may_leave` flag, so initialize it to `1`.
+            let cell = if imported_by_wasm || !self.direct_sync_imports {
+                "new WebAssembly.Global({ value: \"i32\", mutable: true }, 1)"
+            } else {
+                "{ value: 1 }"
+            };
+            let flags = self.instance_flags_name(i);
+            uwriteln!(&mut instance_flag_defs, "const {flags} = {cell};");
             uwriteln!(
                 &mut instance_flag_defs,
-                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, 1);",
+                "{instance_flags_map}.set({i}, {flags});",
             );
-            uwriteln!(
-                &mut instance_flag_defs,
-                "{instance_flags_map}.set({i}, instanceFlags{i});",
-            );
+            if let Some(tasks) = self.bindgen.local_names.try_get(("sync import tasks", i)) {
+                // The runtime pushes and pops the same stack for this instance.
+                let tasks = tasks.to_owned();
+                let task_map = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+                ));
+                uwriteln!(&mut instance_flag_defs, "const {tasks} = [];");
+                uwriteln!(&mut instance_flag_defs, "{task_map}.set({i}, {tasks});");
+            }
         }
-        self.src.js_init.prepend_str(&instance_flag_defs);
+        if self.direct_sync_imports {
+            // Both module and factory trampolines close over these cells.
+            self.src.js.prepend_str(&instance_flag_defs);
+        } else {
+            self.src.js_init.prepend_str(&instance_flag_defs);
+        }
     }
 
     /// Return the component instance whose canonical ABI `may_leave` flag a
@@ -3343,6 +3467,58 @@ impl<'a> Instantiator<'a, '_> {
 
                 let func_ty = self.types.index(*lower_ty);
 
+                if self.direct_sync_imports {
+                    // The generated adapter already produces the core Wasm return value.
+                    let lower = self.bindgen.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                        AsyncTaskIntrinsic::LowerSyncImport,
+                    ));
+                    let tasks = self
+                        .bindgen
+                        .local_names
+                        .get_or_create(
+                            ("sync import tasks", component_idx),
+                            &format!("syncImportTasks{component_idx}"),
+                        )
+                        .0
+                        .to_owned();
+                    let flags = self.instance_flags_name(component_idx);
+                    let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                    let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::RecordTrap,
+                    ));
+                    let arity = self.types[canon_opts.core_type]
+                        .unwrap_func()
+                        .params()
+                        .len();
+                    let params = (0..arity)
+                        .map(|idx| format!("arg{idx}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    // Give the engine a fixed-arity, monomorphic call site. A core
+                    // start function can call imports before the first export task.
+                    self.used_instance_flags
+                        .borrow_mut()
+                        .entry(canon_opts.instance)
+                        .or_insert(false);
+                    uwriteln!(
+                        self.src.js,
+                        r#"
+                        function trampoline{i}({params}) {{
+                            try {{
+                                if ({flags}.value !== 1)
+                                    throw new {runtime_error}('cannot leave component instance');
+                                if ({tasks}.length)
+                                    return _trampoline{i}({params});
+                                return {lower}{component_idx}, _trampoline{i}, {params});
+                            }} catch (err) {{
+                                throw {record}{component_idx}, err, false);
+                            }}
+                        }}
+                    "#
+                    );
+                    return;
+                }
+
                 // Build list of lift functions for the params of the lowered import
                 let param_types = &self.types.index(func_ty.params).types;
                 let param_lift_fns_js =
@@ -3815,6 +3991,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ResourceDrop {
                 ty: resource_table_ty_idx,
+                instance,
                 ..
             } => {
                 self.ensure_resource_table(*resource_table_ty_idx);
@@ -3872,17 +4049,30 @@ impl<'a> Instantiator<'a, '_> {
                     if let Some(imported_resource_local_name) =
                         self.bindgen.local_names.try_get(resource_ty)
                     {
+                        let table = format!("captureTable{rid}");
+                        let mut lookup = format!("{table}.get(handleEntry.rep)");
+                        let mut release = format!("{table}.delete(handleEntry.rep);");
+                        if self.direct_sync_imports {
+                            // Auto-assigned reps use handle-indexed slots. A host-supplied
+                            // rep may have moved all live captures into the map, so the
+                            // drop must consult the current storage just as a borrow does.
+                            lookup = format!("{table}.slots ? {table}.slots[handle] : {lookup}");
+                            release = format!(
+                                "if ({table}.slots) {table}.slots[handle] = undefined; else {release}"
+                            );
+                        }
+                        // Mark the drop before looking up Symbol.dispose. Even its getter
+                        // can stop the store while another handle still owns this object.
                         format!(
-                                            "
-                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                            "const rsc = {lookup};
                             if (rsc) {{
-                                captureTable{rid}.delete(handleEntry.rep);
+                                {release}
                                 {store}.disposed.add(rsc);
                                 if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
                             }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
                                 {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
                             }}"
-                                        )
+                        )
                     } else {
                         // If not, then capture / disposal paths are never called
                         format!(
@@ -3896,16 +4086,35 @@ impl<'a> Instantiator<'a, '_> {
                     Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
                     &format!("handleTable{tid}, handle"),
                 );
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}(handle) {{
-                        const handleEntry = {rsc_table_remove};
-                        if (handleEntry.own) {{
-                            {dtor}
-                        }}
-                    }}
-                    ",
+                // Source adjusts indentation once per line. A destructor can end
+                // in its own closing brace, so close the ownership check on a new line.
+                let drop = format!(
+                    "const handleEntry = {rsc_table_remove};
+                    if (handleEntry.own) {{
+                        {dtor}
+                    }}"
                 );
+                if self.direct_sync_imports {
+                    let idx = instance.as_u32();
+                    let flags = self.instance_flags_name(idx);
+                    let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                    let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::RecordTrap,
+                    ));
+                    uwriteln!(self.src.js, "function trampoline{i}(handle) {{
+                        try {{
+                            if ({flags}.value !== 1) throw new {runtime_error}('cannot leave component instance');
+                            {drop}
+                        }} catch (err) {{ throw {record}{idx}, err, true); }}
+                    }}");
+                } else {
+                    uwriteln!(
+                        self.src.js,
+                        "function trampoline{i}(handle) {{
+                            {drop}
+                        }}"
+                    );
+                }
             }
 
             Trampoline::ResourceTransferOwn => {
@@ -4296,16 +4505,33 @@ impl<'a> Instantiator<'a, '_> {
                 let guard =
                     |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, true);
                 uwriteln!(self.src.js, "let realloc{idx};");
-                uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // Core functions return pointers as signed 32-bit integers, which are negative
                 // for allocations at or above 2GiB, so make them unsigned for use as offsets
-                let realloc = guard(
-                    self,
-                    &format!(
-                        "(oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize) >>> 0"
-                    ),
+                let call = format!(
+                    "(oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize)"
                 );
+                let realloc = if let Some(owner) = owner.filter(|_| self.direct_sync_imports) {
+                    // This leaf cannot access context slots. Every path out of it checks
+                    // the same flag, including adapters that import it as a Wasm global.
+                    self.used_instance_flags
+                        .borrow_mut()
+                        .entry(owner)
+                        .or_insert(false);
+                    let flags = self.instance_flags_name(owner.as_u32());
+                    self.bindgen.intrinsic_call(
+                        AsyncTaskIntrinsic::GuardSyncRealloc.into(),
+                        &format!("{flags}, {call}"),
+                    )
+                } else {
+                    guard(self, &format!("{call} >>> 0"))
+                };
                 uwriteln!(self.src.js_init, "realloc{idx} = {realloc};");
+                // All canonical options and guest functions of this leaf are synchronous.
+                // Only async bindings ever reference the companion allocator.
+                if self.direct_sync_imports {
+                    return;
+                }
+                uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // NOTE: sometimes we may be fed a realloc that isn't a webassembly function at all
                 // but has instead been converted to JS (see 'flavorful' test in test/runtime.js')
                 let realloc_promising = guard(self, &format!("WebAssembly.promising({def})"));
@@ -4330,9 +4556,12 @@ impl<'a> Instantiator<'a, '_> {
                 let guard =
                     |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, false);
                 uwriteln!(self.src.js, "let postReturn{idx};");
-                uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 let post_return = guard(self, &def);
                 uwriteln!(self.src.js_init, "postReturn{idx} = {post_return};");
+                if self.direct_sync_imports {
+                    return;
+                }
+                uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 // NOTE: sometimes we may be fed a post return fn that isn't a webassembly function
                 // at all but has instead been converted to JS (see 'flavorful' test in test/runtime.js)
                 let post_return_promising = guard(self, &format!("WebAssembly.promising({def})"));
@@ -4598,9 +4827,14 @@ impl<'a> Instantiator<'a, '_> {
 
         match self.bindgen.opts.instantiation_mode {
             Some(InstantiationMode::Async) | None => {
+                let wait = if self.bindgen.native_module_init() {
+                    "await"
+                } else {
+                    "yield"
+                };
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = yield {instantiate}yield module{}{imports}));",
+                    "({{ exports: exports{iu32} }} = {wait} {instantiate}{wait} module{}{imports}));",
                     module_idx.as_u32(),
                 )
             }
@@ -5009,6 +5243,7 @@ impl<'a> Instantiator<'a, '_> {
                     for_import: true,
                     result_type_idx: None,
                     tracked_export: None,
+                    isolated_numeric_export: false,
                     result_error_class: None,
                 });
                 uwriteln!(
@@ -5017,11 +5252,16 @@ impl<'a> Instantiator<'a, '_> {
                     if host_import_generator { ");" } else { "" }
                 );
 
-                uwriteln!(
-                    self.src.js,
-                    "_trampoline{trampoline_idx}.fnName = '{}#{callee_name}';",
-                    iface_name.unwrap_or_default(),
-                );
+                // The general lower copies this name onto its subtask for diagnostics.
+                // A checked synchronous leaf never creates that subtask, even when a
+                // detached import needs its own task. Custom providers may read the name.
+                if !self.is_standard_sync_leaf() {
+                    uwriteln!(
+                        self.src.js,
+                        "_trampoline{trampoline_idx}.fnName = '{}#{callee_name}';",
+                        iface_name.unwrap_or_default(),
+                    );
+                }
 
                 // TODO(breaking): remove once support for manually specified async imports is removed
                 if requires_async_porcelain {
@@ -5834,6 +6074,7 @@ impl<'a> Instantiator<'a, '_> {
             for_import,
             result_type_idx,
             tracked_export,
+            isolated_numeric_export,
             result_error_class,
         } = args;
 
@@ -6001,12 +6242,54 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        let direct_export = isolated_numeric_export.then(|| {
+            let mut guards = Vec::new();
+            if self.bindgen.opts.instantiation_mode.is_some() {
+                let (name, _) = self.bindgen.local_names.get_or_create(
+                    "native numeric export instantiation",
+                    "nativeNumericExports",
+                );
+                guards.push(name.to_owned());
+            }
+            // Coercing objects can execute user code before the core call.
+            // Keep a real task on the stack throughout those conversions.
+            for (param, arg) in func.params.iter().zip(&params) {
+                let primitive = if matches!(param.ty, Type::U64 | Type::S64) {
+                    "bigint"
+                } else {
+                    "number"
+                };
+                guards.push(format!("typeof {arg} === '{primitive}'"));
+            }
+            let trap = self
+                .bindgen
+                .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+            guards.push(format!("{trap}.error === null"));
+            // An object argument on an enclosing call may reenter here from
+            // valueOf. Preserve the nested call's task and lock semantics.
+            let tasks = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+                AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+            ));
+            let instance = opts.instance.as_u32();
+            guards.push(format!("!{tasks}.get({instance})?.length"));
+            let lookup = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                ComponentIntrinsic::GetOrCreateAsyncState,
+            ));
+            (
+                guards.join(" && "),
+                format!("{lookup}{instance}).markTrapped(err)"),
+            )
+        });
+
         // Generate function body
+        let standard_sync_leaf = self.is_standard_sync_leaf();
         let mut f = FunctionBindgen {
             resource_map,
             guest_resource_class_names: None,
             skip_fn_call_task_management: false,
             sync_fast_path: self.sync_fast_path,
+            direct_sync_import: for_import && self.direct_sync_imports,
+            standard_sync_leaf,
             track_call: tracked_export.is_some(),
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
@@ -6090,6 +6373,27 @@ impl<'a> Instantiator<'a, '_> {
                 | AbiVariant::GuestExportAsync
                 | AbiVariant::GuestExportAsyncStackful
         );
+        if let Some((guard, mark_trapped)) = direct_export {
+            // Emit the ordinary canonical conversions on both paths. A core
+            // trap still poisons the instance even when it has never had a task.
+            uwriteln!(self.src.js, "if ({guard}) {{ try {{");
+            f.skip_fn_call_task_management = true;
+            abi::call(
+                self.resolve,
+                abi,
+                LiftLower::LowerArgsLiftResults,
+                func,
+                &mut f,
+                false,
+            );
+            self.src.js(&f.src);
+            uwriteln!(
+                self.src.js,
+                "}} catch (err) {{ {mark_trapped}; throw err; }} }}"
+            );
+            f.src = source::Source::default();
+            f.skip_fn_call_task_management = false;
+        }
         if is_guest_export {
             f.start_wasm_export_task();
             f.begin_wasm_export_body();
@@ -6177,10 +6481,16 @@ impl<'a> Instantiator<'a, '_> {
     ) -> String {
         match def {
             core::AugmentedImport::CoreDef(def) => {
-                let is_non_suspending_function =
-                    self.core_def_is_function(def) && !self.core_def_may_suspend(def);
                 let value = self.core_def(def);
-                if is_non_suspending_function {
+                // Only callback dispatch and cross-component calls read the marker. Keep it
+                // on imports exposed to custom core instantiators as well.
+                let mark_functions = !self.direct_sync_imports
+                    || self.bindgen.opts.instantiation_mode.is_some()
+                    || self.bindgen.opts.asmjs;
+                if mark_functions
+                    && self.core_def_is_function(def)
+                    && !self.core_def_may_suspend(def)
+                {
                     format!("Object.assign({value}, {{ _jcoMaySuspend: false }})")
                 } else {
                     value
@@ -6279,9 +6589,20 @@ impl<'a> Instantiator<'a, '_> {
                 let Some(instance) = self.trampoline_may_leave_instance(trampoline) else {
                     return guard_trap(self, name);
                 };
-                self.used_instance_flags.borrow_mut().insert(instance);
-                // (an import on the sync fast path records its traps itself)
+                self.used_instance_flags
+                    .borrow_mut()
+                    .entry(instance)
+                    .or_insert(false);
+                // Taskless imports record their own traps.
                 if self.sync_fast_path && matches!(trampoline, Trampoline::LowerImport { .. }) {
+                    return name;
+                }
+                if self.direct_sync_imports
+                    && matches!(
+                        trampoline,
+                        Trampoline::LowerImport { .. } | Trampoline::ResourceDrop { .. }
+                    )
+                {
                     return name;
                 }
                 if Self::trampoline_checks_may_leave_internally(trampoline) {
@@ -6296,8 +6617,8 @@ impl<'a> Instantiator<'a, '_> {
             }
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
-                self.used_instance_flags.borrow_mut().insert(*i);
-                format!("instanceFlags{}", i.as_u32())
+                self.used_instance_flags.borrow_mut().insert(*i, true);
+                self.instance_flags_name(i.as_u32())
             }
             CoreDef::UnsafeIntrinsic(ui) => {
                 use wasmtime_environ::component::UnsafeIntrinsic;
@@ -6960,6 +7281,45 @@ impl<'a> Instantiator<'a, '_> {
             self.bindgen.tracked_exports += 1;
             id
         });
+        // An import-free core in a single-instance component cannot call a
+        // host function, another adapter, or a task intrinsic. Flat numeric
+        // arguments and results need neither guest memory nor post-return.
+        // Restrict results to full-width numbers: lifting these cannot trap
+        // after the core call. A narrow result has a separate validation step.
+        let isolated_numeric_export = self.is_standard_sync_leaf()
+            && !self.bindgen.opts.tracing
+            && !self.bindgen.opts.asmjs
+            && !requires_async_porcelain
+            && !is_async
+            && matches!(func.kind, FunctionKind::Freestanding)
+            && options.callback.is_none()
+            && options.post_return.is_none()
+            && export_resource_map.is_empty()
+            && self.instances.len() == 1
+            && matches!(def, CoreDef::Export(export)
+                if matches!(&self.modules[self.instances[export.instance]],
+                    core::Translation::Normal(module) if module.module.imports().len() == 0))
+            && func.params.len() <= MAX_FLAT_PARAMS
+            && func.params.iter().all(|param| {
+                matches!(
+                    param.ty,
+                    Type::U8
+                        | Type::S8
+                        | Type::U16
+                        | Type::S16
+                        | Type::U32
+                        | Type::S32
+                        | Type::U64
+                        | Type::S64
+                        | Type::F32
+                        | Type::F64
+                )
+            })
+            && matches!(
+                func.result,
+                None | Some(Type::U32 | Type::S32 | Type::U64 | Type::S64 | Type::F32 | Type::F64)
+            );
+
         // Perform bindgen
         self.bindgen(JsFunctionBindgenArgs {
             nparams: func.params.len(),
@@ -6994,6 +7354,7 @@ impl<'a> Instantiator<'a, '_> {
             for_import: false,
             result_type_idx: Some(self.types[*func_ty_idx].results.as_u32()),
             tracked_export,
+            isolated_numeric_export,
             result_error_class,
         });
         if let Some(target) = wrapped_function_target {

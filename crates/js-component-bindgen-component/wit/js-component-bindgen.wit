@@ -188,6 +188,8 @@ world js-component-bindgen {
     /// Experimental Component Model runtime package or directory base.
     /// Imports named runtime and intrinsics/* subpaths; directory/URL bases use .js files.
     cm-runtime-es-module: option<string>,
+    /// The external checked provider implements the intrinsics/sync operations.
+    cm-runtime-sync-imports: option<bool>,
 
     /// Which diagnostics and assertions the bundled Component Model runtime keeps
     /// (defaults to `checked`).

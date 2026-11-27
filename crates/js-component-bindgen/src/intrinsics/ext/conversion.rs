@@ -89,7 +89,7 @@ mod runtime_tests {
         );
         let mut imports = Source::default();
         if external {
-            ExternalRuntime.render_imports(&mut imports, &intrinsics, "runtime-package");
+            ExternalRuntime.render_imports(&mut imports, &intrinsics, "runtime-package", false);
         }
         (source.to_string(), imports.to_string())
     }

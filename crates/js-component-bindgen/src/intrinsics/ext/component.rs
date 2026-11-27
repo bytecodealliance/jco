@@ -203,8 +203,9 @@ impl ComponentContextIntrinsic {
                 Self::InitializeCoreTrapMessages => core_trap_messages_js(),
                 Self::InitializeCallTracking => "{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, tasks: ASYNC_TASKS_BY_COMPONENT_IDX }".into(),
                 Self::InitializeComponentAsyncStateClass => format!(
-                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable, reportTrap: err => _reportTrap(_jcoComponentReportTrapContext, err), checkIdle: () => _checkIdle(_jcoComponentIdleContext) }}",
-                    Trap::CannotEnterComponent.to_string()
+                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, {}reportTrap: err => _reportTrap(_jcoComponentReportTrapContext, err), checkIdle: () => _checkIdle(_jcoComponentIdleContext) }}",
+                    Trap::CannotEnterComponent.to_string(),
+                    if args.sync_import_leaf { "" } else { "Waitable, " }
                 ),
                 _ => String::new(),
             };
@@ -258,10 +259,17 @@ impl ComponentContextIntrinsic {
                     "const {local} = {{ storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, tasks: ASYNC_TASKS_BY_COMPONENT_IDX{check_calls} }};"
                 )
             }
-            Self::StopInstance => uwriteln!(
-                output,
-                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, asyncState: ASYNC_STATE, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, symbolDispose, RepTable, channels: [STREAMS, FUTURES] }};"
-            ),
+            Self::StopInstance => {
+                let channels = if args.sync_import_leaf {
+                    "[]"
+                } else {
+                    "[STREAMS, FUTURES]"
+                };
+                uwriteln!(
+                    output,
+                    "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, storeTrap: STORE_TRAP, storeAsyncState: STORE_ASYNC_STATE, asyncState: ASYNC_STATE, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, symbolDispose, RepTable, channels: {channels} }};"
+                )
+            }
             _ => unreachable!("other component contexts have selected initializers"),
         }
     }

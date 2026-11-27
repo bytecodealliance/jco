@@ -39,6 +39,8 @@ pub enum StringIntrinsic {
 
     /// Encode a single string to memory
     Utf8Encode,
+    /// Checked synchronous host-to-guest string result in the embedded runtime.
+    EncodeSyncUtf8,
 
     Utf8EncodeAsync,
 
@@ -60,6 +62,7 @@ impl StringIntrinsic {
             Self::GlobalTextDecoderUtf8.name(),
             Self::GlobalTextEncoderUtf8.name(),
             Self::Utf8Encode.name(),
+            Self::EncodeSyncUtf8.name(),
             Self::Utf8EncodeAsync.name(),
             Self::ValidateGuestChar.name(),
             Self::ValidateHostChar.name(),
@@ -78,6 +81,7 @@ impl StringIntrinsic {
             Self::GlobalTextDecoderUtf8 => "TEXT_DECODER_UTF8",
             Self::GlobalTextEncoderUtf8 => "TEXT_ENCODER_UTF8",
             Self::Utf8Encode => "_utf8AllocateAndEncode",
+            Self::EncodeSyncUtf8 => "_encodeSyncUtf8",
             Self::Utf8EncodeAsync => "_utf8AllocateAndEncodeAsync",
             Self::ValidateGuestChar => "validateGuestChar",
             Self::ValidateHostChar => "validateHostChar",
@@ -88,6 +92,9 @@ impl StringIntrinsic {
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         let name = self.name();
         match self {
+            Self::EncodeSyncUtf8 => {
+                unreachable!("only selected with a sync-capable Component Model runtime")
+            }
             // NOTE: strings that are lifted must be passed on exactly as they were provided,
             // so the decoders neither replace invalid sequences nor drop a leading U+FEFF
             Self::Utf16Decoder => uwriteln!(

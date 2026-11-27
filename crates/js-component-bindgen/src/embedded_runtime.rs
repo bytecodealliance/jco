@@ -35,12 +35,16 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 use anyhow::{Context, Result, bail, ensure};
-use oxc_allocator::Allocator;
-use oxc_ast::ast::{BindingPattern, Declaration, Function, ImportDeclarationSpecifier, Statement};
+use oxc_allocator::{Allocator, CloneIn};
+use oxc_ast::AstKind;
+use oxc_ast::ast::{
+    BindingPattern, Declaration, Expression, Function, ImportDeclarationSpecifier,
+    ObjectPropertyKind, Program, Statement,
+};
 use oxc_codegen::{Codegen, CodegenOptions, CommentOptions};
 use oxc_minifier::{CompressOptions, Minifier, MinifierOptions};
 use oxc_parser::Parser;
-use oxc_semantic::SemanticBuilder;
+use oxc_semantic::{Semantic, SemanticBuilder};
 use oxc_span::SourceType;
 use oxc_str::Ident;
 
@@ -54,8 +58,9 @@ const RUNTIME_SOURCE: &str = include_str!("../runtime/runtime-all.js");
 const RUNTIME_EXPORT_MAP: &str = include_str!("../runtime/runtime-export-map.tsv");
 
 /// Prefix given to the runtime's top-level names so they cannot capture or be
-/// captured by names in generated bindings.
-const NAMESPACE: &str = "__jcoEmbeddedRuntime$";
+/// captured by names in generated bindings. Every reference carries this prefix in
+/// unminified modules, so keep it short while preserving each intrinsic’s name.
+const NAMESPACE: &str = "$cm$";
 
 /// Name, within the namespace, of the function that creates a runtime for one logging choice.
 const INSTANCE_RUNTIME: &str = "$instance";
@@ -87,6 +92,76 @@ struct Runtime {
     code: String,
     /// Namespaced local name of each exported alias.
     exports: HashMap<String, String>,
+}
+
+/// Give private data fields short spellings in the checked runtime. Methods, accessors,
+/// and anonymous function/class initializers can expose the field's name via Function.name.
+fn compact_private_fields<'a>(codegen: Codegen<'a>, semantic: &Semantic<'_>) -> Codegen<'a> {
+    if semantic
+        .scoping()
+        .root_unresolved_references()
+        .contains_key("eval")
+    {
+        return codegen;
+    }
+    let classes = &semantic.classes().elements;
+    let mut reserved = BTreeSet::new();
+    let mut fields = BTreeSet::new();
+    for element in classes
+        .iter()
+        .flatten()
+        .filter(|element| element.is_private)
+    {
+        let Some(name) = element.name.as_str() else {
+            continue;
+        };
+        if element.kind.is_property() {
+            fields.insert(name);
+        } else {
+            reserved.insert(name);
+        }
+    }
+    for node in semantic.nodes().iter() {
+        if let AstKind::PropertyDefinition(field) = node.kind()
+            && let Some(name) = field.key.private_name()
+            && field
+                .value
+                .as_ref()
+                .is_some_and(Expression::is_anonymous_function_definition)
+        {
+            reserved.insert(name.as_str());
+        }
+    }
+    // Use the same replacement wherever a spelling occurs, including nested classes.
+    // Reserve existing spellings so a generated name cannot capture an outer field.
+    let mut next = 0;
+    let mut replacements = HashMap::new();
+    for &name in fields.difference(&reserved) {
+        let short = loop {
+            let short = format!("${next:x}");
+            next += 1;
+            if !fields.contains(short.as_str()) && !reserved.contains(short.as_str()) {
+                break short;
+            }
+        };
+        if short.len() < name.len() {
+            replacements.insert(name, short);
+        }
+    }
+    let mappings = classes
+        .iter()
+        .map(|elements| {
+            elements
+                .iter()
+                .filter(|e| e.is_private)
+                .filter_map(|element| {
+                    let name = element.name.as_str()?;
+                    Some((name.to_owned(), replacements.get(name)?.as_str().into()))
+                })
+                .collect()
+        })
+        .collect();
+    codegen.with_private_member_mappings(Some(mappings))
 }
 
 impl Runtime {
@@ -155,13 +230,21 @@ impl Runtime {
             "the shipped runtime does not declare debugLog as a variable"
         );
 
-        let semantics = SemanticBuilder::new().build(&program);
+        let compact_fields = matches!(logging, Logging::Disabled);
+        let semantics = SemanticBuilder::new()
+            .with_build_nodes(compact_fields)
+            .with_class_table(compact_fields)
+            .build(&program);
         ensure!(
             semantics.diagnostics.is_empty(),
             "the shipped runtime is not a valid module: {:?}",
             semantics.diagnostics
         );
 
+        let mut codegen = Codegen::new();
+        if compact_fields {
+            codegen = compact_private_fields(codegen, &semantics.semantic);
+        }
         let mut scoping = semantics.semantic.into_scoping();
         let root = scoping.root_scope_id();
         let symbols: Vec<_> = scoping.get_bindings(root).values().copied().collect();
@@ -205,7 +288,7 @@ impl Runtime {
 
         // Keep the annotations that mark calls as free of side effects: this code is
         // parsed again once linked, and what is unreachable is only removed then.
-        let code = Codegen::new()
+        let code = codegen
             .with_options(CodegenOptions {
                 comments: CommentOptions {
                     annotation: true,
@@ -342,6 +425,7 @@ pub(crate) fn link(
     // Pair each imported name with the runtime's implementation of it.
     let aliases = export_aliases()?;
     let mut imported: Vec<(&str, &str)> = Vec::new();
+    let mut module_initializers = Vec::new();
     for statement in &bindings.body {
         let Some(subpath) = runtime_subpath(statement) else {
             continue;
@@ -364,7 +448,14 @@ pub(crate) fn link(
             let target = runtime.exports.get(*alias).with_context(|| {
                 format!("the shipped runtime does not define {export} of {subpath}")
             })?;
-            imported.push((specifier.local.name.as_str(), target.as_str()));
+            let binding = (specifier.local.name.as_str(), target.as_str());
+            imported.push(binding);
+            if !per_instance
+                && matches!(logging, Logging::Disabled)
+                && export.starts_with("initialize")
+            {
+                module_initializers.push(binding);
+            }
         }
     }
     bindings
@@ -449,6 +540,9 @@ pub(crate) fn link(
         parsed.diagnostics
     );
     let mut program = parsed.program;
+    if !module_initializers.is_empty() {
+        inline_module_initializers(&allocator, &mut program, &module_initializers);
+    }
     // Labeled statements go before what only they reach is looked for, so that
     // the arguments of a removed diagnostic are removed with it.
     let mut compress = CompressOptions::dce();
@@ -475,6 +569,85 @@ pub(crate) fn link(
     Ok(Some(code))
 }
 
+/// Evaluate simple runtime factories directly at module-level initialization sites.
+/// Both expressions live in the same lexical scope. Each use still creates its
+/// own value, in the original order, and nested scopes can keep calling the factory.
+fn inline_module_initializers<'a>(
+    allocator: &'a Allocator,
+    program: &mut Program<'a>,
+    imported: &[(&str, &str)],
+) {
+    let mut factories = HashMap::new();
+    for statement in &program.body {
+        let Statement::VariableDeclaration(vars) = statement else {
+            continue;
+        };
+        if !vars.kind.is_const() {
+            continue;
+        }
+        for var in &vars.declarations {
+            let (
+                BindingPattern::BindingIdentifier(id),
+                Some(Expression::ArrowFunctionExpression(arrow)),
+            ) = (&var.id, &var.init)
+            else {
+                continue;
+            };
+            if arrow.r#async || !arrow.params.items.is_empty() || arrow.params.rest.is_some() {
+                continue;
+            }
+            let Some(value) = arrow.get_expression() else {
+                continue;
+            };
+            if is_initializer_value(value) {
+                factories.insert(id.name.as_str(), value);
+            }
+        }
+    }
+    let initializers: HashMap<_, _> = imported
+        .iter()
+        .filter_map(|&(local, target)| Some((local, factories.get(target)?.clone_in(allocator))))
+        .collect();
+    for statement in &mut program.body {
+        let Statement::VariableDeclaration(vars) = statement else {
+            continue;
+        };
+        for var in &mut vars.declarations {
+            let Some(Expression::CallExpression(call)) = &var.init else {
+                continue;
+            };
+            let Expression::Identifier(callee) = &call.callee else {
+                continue;
+            };
+            if !call.optional
+                && call.arguments.is_empty()
+                && let Some(value) = initializers.get(callee.name.as_str())
+            {
+                var.init = Some(value.clone_in(allocator));
+            }
+        }
+    }
+}
+
+/// Only copy the data expressions used to initialize runtime state. A function or
+/// class, direct eval, or a tagged template can observe its original expression site.
+fn is_initializer_value(value: &Expression<'_>) -> bool {
+    match value.get_inner_expression() {
+        Expression::ArrayExpression(array) => array.elements.iter().all(|e| e.as_expression().is_some_and(is_initializer_value)),
+        Expression::ObjectExpression(object) => object.properties.iter().all(|p| matches!(p,
+            ObjectPropertyKind::ObjectProperty(p) if !p.computed && !p.method && is_initializer_value(&p.value))),
+        Expression::NewExpression(new) => matches!(new.callee, Expression::Identifier(_)) &&
+            new.arguments.iter().all(|a| a.as_expression().is_some_and(is_initializer_value)),
+        Expression::CallExpression(call) => (call.callee.is_specific_id("Symbol") || call.callee.is_specific_member_access("Symbol", "for")) &&
+            call.arguments.iter().all(|a| a.as_expression().is_some_and(is_initializer_value)),
+        Expression::StaticMemberExpression(member) => is_initializer_value(&member.object),
+        Expression::LogicalExpression(logical) => is_initializer_value(&logical.left) && is_initializer_value(&logical.right),
+        Expression::UnaryExpression(unary) => is_initializer_value(&unary.argument),
+        Expression::Identifier(_) => true,
+        literal => literal.is_literal(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{NAMESPACE, PACKAGE, RUNTIME_SOURCE};
@@ -483,6 +656,69 @@ mod tests {
     /// Link with every labeled statement kept, as the tests of linking itself expect.
     fn link(generated: &str, per_instance: bool) -> anyhow::Result<Option<String>> {
         super::link(generated, per_instance, RuntimeProfile::Debug)
+    }
+
+    #[test]
+    fn compact_fields_preserve_brands_and_reflected_names() {
+        use super::{
+            Allocator, Codegen, Parser, SemanticBuilder, SourceType, compact_private_fields,
+        };
+        fn emit(source: &str) -> String {
+            let allocator = Allocator::default();
+            let parsed = Parser::new(&allocator, source, SourceType::mjs()).parse();
+            assert!(parsed.diagnostics.is_empty());
+            let semantics = SemanticBuilder::new()
+                .with_build_nodes(true)
+                .with_class_table(true)
+                .build(&parsed.program);
+            assert!(semantics.diagnostics.is_empty());
+            compact_private_fields(Codegen::new(), &semantics.semantic)
+                .build(&parsed.program)
+                .code
+        }
+        let source = r##"class Outer {
+            #$0; #longOuter; #callback = (() => 1); #klass = class {}; #function = function() {};
+            #method() {} get #getter() { return 2; }
+            test(outer) {
+                return class Inner {
+                    #longInner;
+                    get() { return [this.#longInner, outer.#longOuter, #longOuter in outer]; }
+                };
+            }
+            shadow() { return class Inner { #longOuter; get() { return this.#longOuter; } }; }
+            publicKey() { return "#longInner"; }
+        }"##;
+        let linked = emit(source);
+        for name in [
+            "#$0",
+            "#callback",
+            "#klass",
+            "#function",
+            "#method",
+            "#getter",
+            "publicKey",
+        ] {
+            assert!(linked.contains(name), "{name}: {linked}");
+        }
+        assert_eq!(linked.matches("#longInner").count(), 1); // string literal
+        assert!(!linked.contains("#longOuter"));
+        // Recover the shortened names from declarations to check both the lexical
+        // reference into the outer class and the shadowing field and brand tests.
+        let outer = linked
+            .lines()
+            .map(str::trim)
+            .skip_while(|line| *line != "#$0;")
+            .nth(1)
+            .unwrap()
+            .trim_end_matches(';');
+        assert_ne!(outer, "#$0");
+        assert!(linked.contains(&format!("outer.{outer},")));
+        assert!(linked.contains(&format!("{outer} in outer")));
+        assert!(linked.contains(&format!("return this.{outer};")));
+        assert_eq!(linked.matches(outer).count(), 5);
+        let dynamic =
+            emit("class C { #originalName; read() { return eval('this.#originalName'); } }");
+        assert_eq!(dynamic.matches("#originalName").count(), 2);
     }
 
     #[test]
@@ -534,7 +770,7 @@ mod tests {
             "use components";
             import { toInt8 } from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
             import { consume } from 'consumer';
-            export const __jcoEmbeddedRuntime$toInt8 = 42;
+            export const $cm$toInt8 = 42;
             export function run(value) { return consume(toInt8({ strict: false }, value)); }
             export const location = import.meta.url;
         "#;
@@ -542,8 +778,8 @@ mod tests {
         assert!(!linked.contains("@bytecodealliance/jco-cm-runtime"));
         assert!(linked.contains("consumer"));
         assert!(linked.contains("import.meta.url"));
-        assert!(linked.contains("__jcoEmbeddedRuntime$toInt8 = 42"));
-        assert!(linked.contains("__jcoEmbeddedRuntime$$toInt8"));
+        assert!(linked.contains("$cm$toInt8 = 42"));
+        assert!(linked.contains("$cm$$toInt8"));
         assert!(!linked.contains("TextEncoder"));
         assert!(linked.starts_with("\"use components\";"));
         assert_eq!(linked.matches("use components").count(), 1);
@@ -559,6 +795,46 @@ mod tests {
         assert!(linked.contains("globalThis?.process?.env?.JCO_DEBUG ?"));
         assert_eq!(linked.matches("JCO_DEBUG").count(), 1);
         assert!(!linked.contains(&format!("{NAMESPACE}$")));
+    }
+
+    #[test]
+    fn checked_module_initializers_allocate_at_the_original_site() {
+        let source = r#"
+            import { initializeInstanceFlags as makeFlags } from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
+            import { observe } from 'host';
+            const first = makeFlags();
+            observe(first);
+            const second = makeFlags();
+            const withArgument = makeFlags(observe(second));
+            export function nested(Map) { return [makeFlags(), Map]; }
+            export { first, second, withArgument };
+        "#;
+        let output = super::link(source, false, RuntimeProfile::Checked)
+            .unwrap()
+            .unwrap();
+        let first = output.find("first = new Map()").unwrap();
+        let observation = output.find("observe(first)").unwrap();
+        let second = output.find("second = new Map()").unwrap();
+        assert!(first < observation && observation < second);
+        assert!(output.contains("makeFlags(observe(second))"));
+        assert!(output.contains("[makeFlags(), Map]"));
+    }
+
+    #[test]
+    fn keeps_factories_with_site_sensitive_expressions() {
+        let allocator = super::Allocator::default();
+        for source in [
+            "({ item: tag`value` })",
+            "eval('value')",
+            "class {}",
+            "({ [effect()]: 1 })",
+            "(...args) => args",
+        ] {
+            let value = super::Parser::new(&allocator, source, super::SourceType::mjs())
+                .parse_expression()
+                .unwrap();
+            assert!(!super::is_initializer_value(&value), "{source}");
+        }
     }
 
     #[test]
