@@ -22,13 +22,18 @@ that is skipped:
 - no import or export is asynchronous through `--async-mode jspi`;
 - `--call-tracking`, `--js` and the optimized import bindings are not in use.
 
-Any other component is generated exactly as without the option, with no warning. To find out
-whether the option applied, compare the output with and without it.
+Any other component is generated exactly as without the option, and nothing is printed by
+default.
 
-The `js-component-bindgen` crate also says whether it used the fast path, and if not which of the
-rules above ruled it out, in a debug message of the Rust `log` crate. A Rust program that calls
-the crate sees it once it installs a logger. `jco` and `@bytecodealliance/jco-transpile` run the
-crate as a WebAssembly component that installs none, so the message does not appear there.
+When the option was set but did not apply, the transpile result says which of the rules above
+ruled it out: `syncFastPathBlocker` in the JS API, `sync_fast_path_blocker` on the Rust
+`Transpiled` result. It is unset when the option applied or was not set. With `JCO_DEBUG` set,
+`jco transpile` and `@bytecodealliance/jco-transpile` also log it with `console.debug`, for
+example `component [calls] does not use the sync fast path (perfSyncFastPath): call tracking is
+enabled`.
+
+The `js-component-bindgen` crate also logs whether it used the fast path, and if not why, as a
+debug message of the Rust `log` crate, which a Rust program sees once it installs a logger.
 
 ## What stays the same
 
