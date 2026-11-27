@@ -310,3 +310,16 @@ intrinsics/stream:streamNewFromLift	runtimeExport308
 intrinsics/stream:streamRead	runtimeExport309
 intrinsics/stream:streamTransfer	runtimeExport310
 intrinsics/stream:streamWrite	runtimeExport311
+intrinsics/sync:IndexedResourceCaptures	runtimeExport312
+intrinsics/sync:decodeSyncUtf8	runtimeExport313
+intrinsics/sync:encodeSyncUtf8	runtimeExport314
+intrinsics/sync:guardSyncRealloc	runtimeExport315
+intrinsics/sync:lowerSyncImport	runtimeExport316
+intrinsics/sync:tableRep	runtimeExport317
+intrinsics/sync-task:createNewCurrentImplicitThread	runtimeExport318
+intrinsics/sync-task:getCurrentTask	runtimeExport319
+intrinsics/sync-task:initializeAsyncTaskClass	runtimeExport320
+intrinsics/sync-task:initializeAsyncThreadClass	runtimeExport321
+intrinsics/sync-task:initializeCurrentComponentIdxs	runtimeExport322
+intrinsics/sync-task:initializeCurrentTaskIds	runtimeExport323
+intrinsics/sync-task:initializeTasksByComponent	runtimeExport324

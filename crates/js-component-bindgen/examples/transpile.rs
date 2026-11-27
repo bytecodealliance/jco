@@ -41,6 +41,8 @@ fn main() -> Result<()> {
     let mut async_exports = Vec::new();
     #[cfg(feature = "external-runtime")]
     let mut cm_runtime_es_module = None;
+    #[cfg(feature = "external-runtime")]
+    let mut cm_runtime_sync_imports = None;
 
     for arg in args {
         match arg.split_once('=') {
@@ -51,6 +53,10 @@ fn main() -> Result<()> {
                 opts.instantiation_mode = Some(InstantiationMode::Sync)
             }
             None if arg == "--valid-lifting-optimization" => opts.valid_lifting_optimization = true,
+            None if arg == "--no-nodejs-compat" => opts.nodejs_compat_disabled = true,
+            None if arg == "--namespaced-exports" => opts.no_namespaced_exports = false,
+            Some(("--name", name)) => opts.name = name.to_owned(),
+            Some(("--base64-cutoff", cutoff)) => opts.base64_cutoff = cutoff.parse()?,
             None if arg == "--tracing" => opts.tracing = true,
             None if arg == "--multi-memory" => opts.multi_memory = true,
             None if arg == "--jspi" => jspi = true,
@@ -64,6 +70,8 @@ fn main() -> Result<()> {
                 let (from, to) = mapping.split_once('=').context("--map takes from=to")?;
                 map.insert(from.to_string(), to.to_string());
             }
+            #[cfg(feature = "external-runtime")]
+            None if arg == "--cm-runtime-sync-imports" => cm_runtime_sync_imports = Some(true),
             #[cfg(feature = "external-runtime")]
             Some(("--runtime", base)) => cm_runtime_es_module = Some(base.to_string()),
             _ => bail!("unknown argument [{arg}]"),
@@ -86,7 +94,9 @@ fn main() -> Result<()> {
         .runtime_profile(runtime_profile)
         .perf_sync_fast_path(perf_sync_fast_path);
     #[cfg(feature = "external-runtime")]
-    let config = config.maybe_cm_runtime_es_module(cm_runtime_es_module);
+    let config = config
+        .maybe_cm_runtime_es_module(cm_runtime_es_module)
+        .maybe_cm_runtime_sync_imports(cm_runtime_sync_imports);
     let transpiled = transpile_with_config(&component, config.build())?;
 
     for (path, contents) in transpiled.files {

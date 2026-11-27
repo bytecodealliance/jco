@@ -4,7 +4,10 @@ use super::{
     RuntimeImportKind, RuntimeInitializer, WaitableContextIntrinsic,
 };
 use crate::{
-    intrinsics::{Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic},
+    intrinsics::{
+        Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic,
+        resource::ResourceIntrinsic,
+    },
     source::Source,
     uwriteln,
 };
@@ -196,16 +199,16 @@ impl TaskContextIntrinsic {
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Core(CoreContextIntrinsic::InitializeTaskRegisters),
             ],
+            // The class takes the lookup and registers directly. Selecting the
+            // getCurrentThread operation would also emit its separate context.
             Self::InitializeAsyncThreadClass => &[
-                Task(Self::GetCurrentThread),
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
+                Core(CoreContextIntrinsic::InitializeTaskRegisters),
                 Component(ComponentContextIntrinsic::RecordTrap),
             ],
-            Self::ThreadSuspend => &[
-                Task(Self::GetCurrentThread),
-                Task(Self::InitializeAsyncThreadClass),
-            ],
+            Self::ThreadSuspend => &[Task(Self::InitializeAsyncThreadClass)],
             Self::ThreadNewIndirect => &[
-                Task(Self::ThreadSuspend),
+                Task(Self::InitializeAsyncThreadClass),
                 Task(Self::InitializeThreadStartChecks),
             ],
             Self::SubtaskDrop => &[
@@ -303,8 +306,9 @@ impl TaskContextIntrinsic {
             _ => &[],
         }
     }
-    pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
+    pub(crate) fn render(self, output: &mut Source, args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
+        let task_context;
         let properties = match self {
             Self::GetCurrentThread => {
                 "lookup: _jcoComponentStateLookupContext, registers: CURRENT_TASK_META"
@@ -342,7 +346,28 @@ impl TaskContextIntrinsic {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
             }
             Self::InitializeAsyncTaskClass => {
-                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }"
+                let (subtask_and_waitable, future) = if args.sync_import_leaf {
+                    ("", "")
+                } else {
+                    ("AsyncSubtask, Waitable, ", ", FutureValue")
+                };
+                // A synchronous leaf has no cross-instance transfer trampolines. A
+                // JS export taking a borrowed resource can still create a borrow
+                // handle when lowering its argument, so check the final intrinsic set.
+                let borrow_hint = if args.standard_runtime
+                    && args.sync_import_leaf
+                    && !args
+                        .intrinsics
+                        .contains(&ResourceIntrinsic::ResourceTableCreateBorrow.into())
+                {
+                    "canCreateBorrowHandles: false, "
+                } else {
+                    ""
+                };
+                task_context = format!(
+                    "{{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, {subtask_and_waitable}lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, {borrow_hint}storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META{future} }}"
+                );
+                &task_context
             }
             Self::CreateNewCurrentImplicitThread => {
                 "AsyncTask, AsyncThread, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
@@ -462,6 +487,7 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
             )),
             RuntimeImportKind::Call,
         ),
+        GuardSyncRealloc => ("guardSyncRealloc", None, RuntimeImportKind::Call),
         GuardCannotLeave => (
             "guardCannotLeave",
             Some(RuntimeContextIntrinsic::Task(
@@ -522,6 +548,13 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
             "lowerImport",
             Some(RuntimeContextIntrinsic::Task(
                 TaskContextIntrinsic::LowerImport,
+            )),
+            RuntimeImportKind::Call,
+        ),
+        LowerSyncImport => (
+            "lowerSyncImport",
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::LowerImportBackwardsCompat,
             )),
             RuntimeImportKind::Call,
         ),
@@ -646,7 +679,10 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
         ),
     };
     Some(RuntimeImport {
-        suffix: "intrinsics/async-task",
+        suffix: match intrinsic {
+            LowerSyncImport | GuardSyncRealloc => "intrinsics/sync",
+            _ => "intrinsics/async-task",
+        },
         export,
         context,
         kind,
@@ -659,7 +695,7 @@ pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsic
         && let Some(context) = import.context
     {
         let mut contexts = Vec::new();
-        context.collect(&mut contexts);
+        context.collect(&mut contexts, args.sync_import_leaf);
         if contexts.contains(&RuntimeContextIntrinsic::Task(
             TaskContextIntrinsic::ClearCurrentThread,
         )) {

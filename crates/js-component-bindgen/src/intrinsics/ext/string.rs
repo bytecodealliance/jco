@@ -30,6 +30,11 @@ pub(crate) fn import(intrinsic: StringIntrinsic) -> RuntimeImport {
             Some(RuntimeContextIntrinsic::InitializeUtf16Encoding),
             RuntimeImportKind::Call,
         ),
+        StringIntrinsic::EncodeSyncUtf8 => (
+            "encodeSyncUtf8",
+            Some(RuntimeContextIntrinsic::SyncUtf8Encoding),
+            RuntimeImportKind::Call,
+        ),
         StringIntrinsic::Utf8Encode => (
             "utf8Encode",
             Some(RuntimeContextIntrinsic::InitializeUtf8Encoder),
@@ -57,7 +62,11 @@ pub(crate) fn import(intrinsic: StringIntrinsic) -> RuntimeImport {
         StringIntrinsic::ValidateHostChar => ("validateHostChar", None, RuntimeImportKind::Call),
     };
     RuntimeImport {
-        suffix: "intrinsics/string",
+        suffix: if matches!(intrinsic, StringIntrinsic::EncodeSyncUtf8) {
+            "intrinsics/sync"
+        } else {
+            "intrinsics/string"
+        },
         export,
         context,
         kind,
@@ -131,7 +140,7 @@ mod tests {
                 .build(),
         );
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime", false);
         assert_eq!(
             source
                 .matches("const TEXT_ENCODER_UTF8 = _jcoInitializeUtf8Encoder();")
@@ -181,7 +190,7 @@ mod tests {
                 .build(),
         );
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime", false);
         assert!(!source.contains("Initialize"));
         assert!(!source.contains("new Text"));
         assert!(!source.contains("new Uint"));

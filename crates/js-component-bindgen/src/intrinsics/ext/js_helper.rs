@@ -47,7 +47,7 @@ mod tests {
                     .build(),
             );
             let mut imports = Source::default();
-            ExternalRuntime.render_imports(&mut imports, &intrinsics, "runtime-package");
+            ExternalRuntime.render_imports(&mut imports, &intrinsics, "runtime-package", false);
             assert!(!source.contains("let dv ="));
             assert!(!source.contains("new DataView"));
             assert!(!source.contains("const emptyFunc"));
@@ -87,7 +87,7 @@ mod tests {
                 .build(),
         );
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "runtime-package");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "runtime-package", false);
         assert!(imports.contains("maybeSyncGenerator as _maybeSyncGenerator"));
         assert!(
             imports.contains("conditionalSuspendingHostImport as _conditionalSuspendingHostImport")
