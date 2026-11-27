@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit ff23de63d1745e583ad78e2bd8f47e76f4c2d203
+// generated from commit e67c436928546d100c6575ea3bf639fffadc66b8
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -2258,17 +2258,15 @@ function requireString(value) {
 	if (typeof value !== "string") throw new TypeError("expected a string, received [" + typeof value + "]");
 	return value;
 }
-/** Count UTF-8 bytes and Unicode scalars before allocating guest memory. */
+/**
+* The exact UTF-8 size of a string, where an unpaired surrogate counts as the three bytes
+* of the replacement character that encodes it.
+*/
 function utf8Size(s) {
-	if (s.length >= 256 && !nonAscii.test(s)) return {
-		len: s.length,
-		codepoints: s.length
-	};
+	if (s.length >= 256 && !nonAscii.test(s)) return s.length;
 	let len = 0;
-	let codepoints = 0;
 	for (let i = 0; i < s.length; i++) {
 		const ch = s.charCodeAt(i);
-		codepoints++;
 		if (ch < 128) len += 1;
 		else if (ch < 2048) len += 2;
 		else if (ch >= 55296 && ch <= 56319 && i + 1 < s.length && (s.charCodeAt(i + 1) & 64512) === 56320) {
@@ -2276,10 +2274,7 @@ function utf8Size(s) {
 			i++;
 		} else len += 3;
 	}
-	return {
-		len,
-		codepoints
-	};
+	return len;
 }
 const initializeUtf8Decoder = () => new TextDecoder("utf-8", {
 	fatal: true,
@@ -2294,14 +2289,12 @@ const initializeUtf16Encoding = () => ({ littleEndian: new Uint8Array(new Uint16
 function writeUtf16(context, str, ptr, memory) {
 	const len = str.length;
 	const out = new Uint16Array(memory.buffer, ptr, len);
-	let codepoints = len;
 	for (let i = 0; i < len; i++) {
 		let ch = str.charCodeAt(i);
 		if ((ch & 63488) === 55296) {
 			if (ch < 56320 && i + 1 < len && (str.charCodeAt(i + 1) & 64512) === 56320) {
 				out[i++] = ch;
 				ch = str.charCodeAt(i);
-				codepoints--;
 			} else ch = 65533;
 		}
 		out[i] = ch;
@@ -2309,18 +2302,16 @@ function writeUtf16(context, str, ptr, memory) {
 	if (!context.littleEndian) for (let i = 0; i < len; i++) out[i] = (out[i] & 255) << 8 | out[i] >>> 8;
 	return {
 		ptr,
-		len,
-		codepoints
+		len
 	};
 }
-function writeUtf8(encoder, s, ptr, len, codepoints, memory) {
+function writeUtf8(encoder, s, ptr, len, memory) {
 	const out = new Uint8Array(memory.buffer, ptr, len);
 	const { read, written } = encoder.encodeInto(s, out);
 	if (read !== s.length || written !== len) finishUtf8(s, read, out, written);
 	return {
 		ptr,
-		len,
-		codepoints
+		len
 	};
 }
 /**
@@ -2399,8 +2390,8 @@ const utf8Encode = (encoder, value, realloc, memory) => {
 		ptr: 1,
 		len: 0
 	};
-	const { len, codepoints } = utf8Size(s);
-	return writeUtf8(encoder, s, realloc(0, 0, 1, len), len, codepoints, memory);
+	const len = utf8Size(s);
+	return writeUtf8(encoder, s, realloc(0, 0, 1, len), len, memory);
 };
 const utf8EncodeAsync = async (encoder, value, realloc, memory) => {
 	const s = requireString(value);
@@ -2408,8 +2399,8 @@ const utf8EncodeAsync = async (encoder, value, realloc, memory) => {
 		ptr: 1,
 		len: 0
 	};
-	const { len, codepoints } = utf8Size(s);
-	return writeUtf8(encoder, s, await realloc(0, 0, 1, len), len, codepoints, memory);
+	const len = utf8Size(s);
+	return writeUtf8(encoder, s, await realloc(0, 0, 1, len), len, memory);
 };
 const validateGuestChar = (value) => {
 	if (value > 1114111 || value >= 55296 && value <= 57343) throw new TypeError("not a valid char");
@@ -7932,7 +7923,7 @@ function liftFlatList(_context, meta) {
 		let val;
 		if (typedArray !== void 0 && (_context.littleEndian || elemSize32 === 1)) {
 			ctx.storagePtr = dataPtr + len * elemSize32;
-			val = new typedArray(ctx.memory.buffer.slice(dataPtr, ctx.storagePtr));
+			val = new typedArray(ctx.memory.buffer, dataPtr, len).slice();
 		} else {
 			const values = [];
 			const scalar = scalarLiftValue(elemLiftFn, ctx.useDirectParams);
