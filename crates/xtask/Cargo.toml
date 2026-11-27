@@ -7,7 +7,7 @@ edition = "2024"
 [dependencies]
 anyhow = { workspace = true }
 heck = { workspace = true }
-js-component-bindgen = { workspace = true }
+js-component-bindgen = { workspace = true, features = ["wit-parser-262"] }
 semver = "1.0.23"
 serde = { workspace = true }
 serde_json = { workspace = true }

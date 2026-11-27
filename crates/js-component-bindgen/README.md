@@ -156,3 +156,21 @@ See [LICENSE](LICENSE) for more details.
 Unless you explicitly state otherwise, any contribution intentionally submitted
 for inclusion in this project by you, as defined in the Apache-2.0 license,
 shall be licensed as above, without any additional terms or conditions.
+
+## Rust WIT parser versions
+
+The default feature `wit-parser-259` exposes `js_component_bindgen::wit_parser_259`.
+The crate-root functions and `source::wit_parser` use wit-parser 0.259 even when
+default features are disabled. Callers can pass their own 0.259 `Resolve` and
+`WorldId` to `js_component_bindgen::generate_types`.
+
+Enable `wit-parser-262` to use wit-parser 0.262 through its versioned API.
+
+```rust
+use js_component_bindgen::wit_parser_262::{generate_types, wit_parser::Resolve};
+```
+
+Both APIs can be used in one build with the same `TranspileOpts` and
+`TranspileConfig`. Each module exposes its matching `function_bindgen` and
+`esm_bindgen`. With `wit-parser-262` enabled, binary transpilation uses the newer
+parser.

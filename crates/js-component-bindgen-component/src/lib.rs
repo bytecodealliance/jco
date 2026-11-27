@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 use anyhow::{Context as _, Result};
 
-use js_component_bindgen::source::wit_parser::{Resolve, UnresolvedPackageGroup};
+use js_component_bindgen::wit_parser_262::wit_parser::{Resolve, UnresolvedPackageGroup};
 use js_component_bindgen::{TranspileConfig, transpile_with_diagnostics};
 use wit_component::{DecodedWasm, WitPrinter};
 
@@ -188,7 +188,7 @@ impl bindings::Guest for JsComponentBindgenComponent {
             .asmjs(false)
             .build();
 
-        let files = js_component_bindgen::generate_types_with_config(
+        let files = js_component_bindgen::wit_parser_262::generate_types_with_config(
             &name,
             resolve,
             world,

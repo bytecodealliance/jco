@@ -70,8 +70,8 @@ jobs:
 
       - name: Test bindgen runtime configurations
         run: |
-          cargo test -p js-component-bindgen --lib
-          cargo test -p js-component-bindgen --lib --features embedded-cm-runtime
+          cargo test -p js-component-bindgen --lib --test wit_parser_versions
+          cargo test -p js-component-bindgen --lib --test wit_parser_versions --features embedded-cm-runtime,wit-parser-262
 
       - name: Upload Component Model runtime build output
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

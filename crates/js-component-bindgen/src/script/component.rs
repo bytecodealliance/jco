@@ -1,5 +1,6 @@
 //! Packaging script source as a data-only WebAssembly component.
 
+use crate::engine::{wit_component, wit_parser};
 use anyhow::{Context, Result};
 use wasm_encoder::{
     CodeSection, ConstExpr, DataSection, ExportKind, ExportSection, Function, FunctionSection,
@@ -115,6 +116,7 @@ pub fn script_component(script: &ScriptComponent) -> Result<Vec<u8>> {
         &resolve,
         world,
         StringEncoding::UTF8,
+        #[cfg(feature = "wit-parser-262")]
         false,
     )
     .context("embedding the jco:script world")?;

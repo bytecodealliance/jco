@@ -4,6 +4,7 @@ use std::collections::BTreeMap;
 use std::fmt::Write as _;
 use std::path::PathBuf;
 
+use crate::engine::{wit_component, wit_parser};
 use anyhow::{Context, Result, bail};
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wit_component::WitPrinter;
@@ -435,6 +436,7 @@ fn interface_export(
             format!("resource [{resource_name}] is not defined in [{key_name}]")
         })?;
         match function.kind {
+            #[cfg(feature = "wit-parser-262")]
             FunctionKind::Getter
             | FunctionKind::Setter
             | FunctionKind::MethodGetter(_)

@@ -3,27 +3,28 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::fmt::Write;
 use std::rc::Rc;
 
+use super::wit_parser::{
+    Case, Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, Record, Resolve, Result_,
+    Stability, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant, World, WorldId,
+    WorldItem, WorldKey,
+};
 use anyhow::{Context as _, Result};
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
 use log::debug;
-use wit_bindgen_core::wit_parser::{
-    Case, Docs, Enum, Flags, Function, FunctionKind, Handle, InterfaceId, PackageName, Record,
-    Resolve, Result_, Stability, Tuple, Type, TypeDef, TypeDefKind, TypeId, TypeOwner, Variant,
-    World, WorldId, WorldItem, WorldKey,
-};
 
+use super::function_bindgen::{as_nullable, js_array_ty, maybe_null};
+use super::{
+    ResultErrorClass, dealias, ensure_supported_functions, feature_gate_allowed, get_thrown_type,
+    result_error_class, version_compat_track,
+};
 use crate::files::Files;
-use crate::function_bindgen::{as_nullable, js_array_ty, maybe_null};
 use crate::names::{
     LocalNames, RESERVED_KEYWORDS, is_valid_js_identifier, js_string_literal, maybe_quote_id,
     static_member_name,
 };
 use crate::source::Source;
 use crate::transpile_bindgen::{AsyncMode, InstantiationMode, TranspileOpts, parse_world_key};
-use crate::{
-    FunctionIdentifier, TypeGenerationConfig, dealias, feature_gate_allowed, get_thrown_type,
-    requires_async_porcelain, uwrite, uwriteln,
-};
+use crate::{TypeGenerationConfig, requires_async_porcelain, uwrite, uwriteln};
 
 /// TypeScript declaration for the `Option<T>` helper type alias used to
 /// represent WIT `option<T>` values that cannot be flattened to `T | undefined`.
@@ -283,11 +284,11 @@ struct TsInterface<'a> {
     /// JSDoc tags for the item that is declared next, such as its stability.
     doc_tags: Vec<String>,
     /// The interface whose functions throw the errors of their results as
-    /// classes that the interface exports (see [`crate::result_error_class`]),
+    /// classes that the interface exports (see [`result_error_class`]),
     /// if this declares the side of one that a host calls.
     error_class_interface: Option<InterfaceId>,
     /// The error classes that the declared functions throw, by name.
-    error_classes: BTreeMap<String, crate::ResultErrorClass>,
+    error_classes: BTreeMap<String, ResultErrorClass>,
     /// Whether the bindings throw the error of a result as it is, rather than
     /// as the payload of an error.
     raw_result_errors: bool,
@@ -334,7 +335,7 @@ pub fn ts_bindgen(
     external_runtime: bool,
     files: &mut Files,
 ) -> Result<()> {
-    crate::ensure_supported_functions(resolve)?;
+    ensure_supported_functions(resolve)?;
     let (async_imports, async_exports) = match opts.async_mode.clone() {
         None | Some(AsyncMode::Sync) => (Default::default(), Default::default()),
         Some(AsyncMode::JavaScriptPromiseIntegration { imports, exports }) => {
@@ -1241,11 +1242,8 @@ impl TsBindgen {
         let id_name = &resolve.worlds[world].name;
 
         for (_, func) in funcs {
-            let requires_async_porcelain = requires_async_porcelain(
-                FunctionIdentifier::Fn(func),
-                id_name,
-                &self.async_exports,
-            );
+            let requires_async_porcelain =
+                requires_async_porcelain(&func.name, id_name, &self.async_exports);
 
             // Figure out whether we need ancillary types
             for ty in func.parameter_and_result_types() {
@@ -1445,11 +1443,8 @@ impl TsBindgen {
                     None => func_name,
                 };
 
-                let requires_async_porcelain = requires_async_porcelain(
-                    FunctionIdentifier::CanonFnName(&canonicalized_fn_name),
-                    &id_name,
-                    async_funcs,
-                );
+                let requires_async_porcelain =
+                    requires_async_porcelain(&canonicalized_fn_name, &id_name, async_funcs);
 
                 generator.ts_func(func, false, true, requires_async_porcelain, &type_meta);
             }
@@ -1740,7 +1735,7 @@ impl<'a> TsInterface<'a> {
         }
         let class = self
             .error_class_interface
-            .and_then(|interface| crate::result_error_class(self.resolve, interface, func));
+            .and_then(|interface| result_error_class(self.resolve, interface, func));
         let thrown_ty = match class {
             Some(class) => {
                 let name = class.name.clone();
@@ -2033,14 +2028,6 @@ impl<'a> TsInterface<'a> {
 
         if declaration {
             match func.kind {
-                FunctionKind::Getter
-                | FunctionKind::Setter
-                | FunctionKind::MethodGetter(_)
-                | FunctionKind::MethodSetter(_)
-                | FunctionKind::StaticGetter(_)
-                | FunctionKind::StaticSetter(_) => {
-                    unreachable!("WIT accessors are rejected before binding generation")
-                }
                 FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
                     if let Some(local_name) = &renamed_local_name {
                         // Guest declarations are nested in an ambient `declare module`
@@ -2067,6 +2054,8 @@ impl<'a> TsInterface<'a> {
                 FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
                     iface.src.push_str(&class_member_name(&escaped_name));
                 }
+                #[allow(unreachable_patterns)] // Only 0.262 has accessors.
+                _ => unreachable!("accessors are rejected before generation"),
             }
         } else {
             iface.src.push_str(&escaped_name);
@@ -2074,23 +2063,10 @@ impl<'a> TsInterface<'a> {
 
         iface.src.push_str("(");
 
-        let param_start = match &func.kind {
-            FunctionKind::Getter
-            | FunctionKind::Setter
-            | FunctionKind::MethodGetter(_)
-            | FunctionKind::MethodSetter(_)
-            | FunctionKind::StaticGetter(_)
-            | FunctionKind::StaticSetter(_) => {
-                unreachable!("WIT accessors are rejected before binding generation")
-            }
-            FunctionKind::Freestanding => 0,
-            FunctionKind::Method(_) => 1,
-            FunctionKind::Static(_) => 0,
-            FunctionKind::Constructor(_) => 0,
-            FunctionKind::AsyncFreestanding => 0,
-            FunctionKind::AsyncMethod(_) => 1,
-            FunctionKind::AsyncStatic(_) => 0,
-        };
+        let param_start = usize::from(matches!(
+            func.kind,
+            FunctionKind::Method(_) | FunctionKind::AsyncMethod(_)
+        ));
 
         for (i, p) in func.params[param_start..].iter().enumerate() {
             if i > 0 {
@@ -2620,7 +2596,7 @@ fn interface_export_aliases(resolve: &Resolve, world: &World) -> BTreeMap<String
 /// rather than its version, so that it is the same in every version of the
 /// package that is compatible with this one.
 fn resource_brand(resolve: &Resolve, id: TypeId) -> String {
-    let ty = &resolve.types[crate::dealias(resolve, id)];
+    let ty = &resolve.types[dealias(resolve, id)];
     let resource = ty.name.as_deref().unwrap_or_default();
     let (package, owner) = match ty.owner {
         TypeOwner::Interface(interface_id) => {
@@ -2666,7 +2642,7 @@ fn resource_brand(resolve: &Resolve, id: TypeId) -> String {
     };
     let package = &resolve.packages[package].name;
     let track = match &package.version {
-        Some(version) => format!("@{}", PackageName::version_compat_track_string(version).0),
+        Some(version) => format!("@{}", version_compat_track(version)),
         None => String::new(),
     };
     format!(
