@@ -36,10 +36,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-c45388b6.js";
+            window.path_to_searchindex_js = "searchindex-28b54b9d.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-fb1b1a5b.js"></script>
+        <script src="toc-384f90e7.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -757,7 +757,7 @@ which may change even in a patch release. See the
 <p><code>--enum-values-screaming-snake-case</code>: Represents WIT enum values as <code>SCREAMING_SNAKE_CASE</code> strings instead of their original kebab-case names.</p>
 </li>
 <li>
-<p><code>--perf-sync-fast-path</code>: Call synchronous exports and imports without creating a Component Model task for each call. Applies only to a component of one instance that uses no asynchronous function, stream, future, JSPI import or export, call tracking or <code>--js</code>; other components are generated as without the option. Off by default. See <a href="#sync-fast-path">Sync fast path</a>.</p>
+<p><code>--perf-sync-fast-path</code>: Call synchronous exports and imports without creating a Component Model task for each call. Applies only to a component of one instance that uses no asynchronous function, stream, future, JSPI import or export, call tracking or <code>--js</code>; other components are generated as without the option. Off by default. See <a href="#sync-fast-path-1">Sync fast path</a>.</p>
 </li>
 <li>
 <p><code>--tracing</code>: Emit tracing calls for all function entry and exits.</p>
@@ -1607,201 +1607,6 @@ empty until configured. The same filesystem adapters (<code>InMemoryFilesystemAd
 <code>@bytecodealliance/preview3-shim/filesystem</code>, with descriptors wrapped to expose the 0.3 stream
 based interface. See the <a href="#browsers">Preview 2 shim</a> notes for what each
 interface needs from the embedding application.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="performance"><a class="header" href="#performance">Performance</a></h1>
-<p>Jco aims to make transpiled components run at near-native JavaScript speed, with as little host
-overhead as possible between a component’s exports and the code that calls them. This section
-records how that is measured.</p>
-<ul>
-<li><a href="#sync-fast-path">Sync fast path</a>: an opt-in that removes the per-call task state of
-components whose functions are all synchronous.</li>
-<li><a href="#benchmarks">Benchmarks</a>: reproducible measurements of Jco tooling and runtime paths.</li>
-</ul>
-<p>For the host-binding optimizations that affect call performance, see
-<a href="#host-bindings">Optimized Host Bindings</a>.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="sync-fast-path"><a class="header" href="#sync-fast-path">Sync fast path</a></h1>
-<p>By default, every call of a component function creates Component Model task state: a task and a
-thread for an export, and a subtask and a host task for an import. Asynchronous functions need that
-state. A component whose functions are all synchronous pays for it without using it.</p>
-<p><code>jco transpile --perf-sync-fast-path</code> (<code>perfSyncFastPath</code> in the JS API) generates the synchronous
-exports and imports of such a component without that state. The option is off by default.</p>
-<h2 id="when-it-applies"><a class="header" href="#when-it-applies">When it applies</a></h2>
-<p>The option takes effect for a whole component, and only when nothing in it can observe the state
-that is skipped:</p>
-<ul>
-<li>one component instance owns every core module, lift and lower (a component composed of several
-instances calls between them through adapters, which run on behalf of the calling task);</li>
-<li>no function is <code>async</code>, and no lift or lower is asynchronous or has a callback;</li>
-<li>no stream, future or error-context type is used;</li>
-<li>no core module imports a canonical built-in other than <code>resource.new</code>, <code>resource.rep</code> and
-<code>resource.drop</code> (this excludes <code>context.get</code>, <code>context.set</code>, and the task, thread, waitable and
-backpressure built-ins);</li>
-<li>no import or export is asynchronous through <code>--async-mode jspi</code>;</li>
-<li><code>--call-tracking</code>, <code>--js</code> and the optimized import bindings are not in use.</li>
-</ul>
-<p>Any other component is generated exactly as without the option, with no warning. To find out
-whether the option applied, compare the output with and without it.</p>
-<p>The <code>js-component-bindgen</code> crate also says whether it used the fast path, and if not which of the
-rules above ruled it out, in a debug message of the Rust <code>log</code> crate. A Rust program that calls
-the crate sees it once it installs a logger. <code>jco</code> and <code>@bytecodealliance/jco-transpile</code> run the
-crate as a WebAssembly component that installs none, so the message does not appear there.</p>
-<h2 id="what-stays-the-same"><a class="header" href="#what-stays-the-same">What stays the same</a></h2>
-<p>A call on the fast path still does everything that a caller, a host function or a guest can
-observe:</p>
-<ul>
-<li>an instance that trapped or was stopped cannot be entered, and a trap is recorded and reported
-to <code>onTrap</code> wherever it happens: in the guest, in post-return, or thrown by a host function;</li>
-<li>stopping the instance from a host function or from the destructor of a resource fails the call
-that is running, and no host function is called for the guest afterwards;</li>
-<li>a host function that throws fails the export that called it with what it threw first, even if
-the guest catches the exception and returns normally;</li>
-<li>a guest may not call an import while it may not leave its instance, for example from <code>realloc</code>;</li>
-<li>borrowed handles are released at the end of their call, and a post-return function runs after
-each call that returned a value, including an error value of a <code>result</code>;</li>
-<li>a promise that a host function returns from a synchronous import is counted as a pending host
-operation until it settles or the instance is stopped. As by default, the guest receives the
-promise object itself, not its value, and <code>whenIdle</code> does not wait for it.</li>
-</ul>
-<p>The tests of the option run the same sequences of calls with and without it and compare every
-return value, thrown error, reported trap and host callback.</p>
-<p>One difference is known. When a host function throws <code>null</code> or <code>undefined</code> and the guest catches
-it, the export fails by default with an internal error that says its task is already resolved;
-on the fast path it fails with the thrown value.</p>
-<h2 id="measured-effect"><a class="header" href="#measured-effect">Measured effect</a></h2>
-<p>Nanoseconds per call, bindings with the runtime bundled in, Node.js 26.13 on Linux x86-64:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>case</th><th style="text-align: right">default</th><th style="text-align: right"><code>--perf-sync-fast-path</code></th><th style="text-align: right">speedup</th></tr>
-</thead>
-<tbody>
-<tr><td>export <code>u32 -&gt; u32</code></td><td style="text-align: right">711</td><td style="text-align: right">18</td><td style="text-align: right">40x</td></tr>
-<tr><td>export <code>f64 -&gt; f64</code></td><td style="text-align: right">735</td><td style="text-align: right">33</td><td style="text-align: right">22x</td></tr>
-<tr><td>export <code>tuple</code> swap</td><td style="text-align: right">905</td><td style="text-align: right">131</td><td style="text-align: right">6.9x</td></tr>
-<tr><td>export <code>record -&gt; record</code></td><td style="text-align: right">1037</td><td style="text-align: right">187</td><td style="text-align: right">5.5x</td></tr>
-<tr><td>export <code>string -&gt; string</code></td><td style="text-align: right">2074</td><td style="text-align: right">1296</td><td style="text-align: right">1.6x</td></tr>
-<tr><td>export <code>list&lt;u8&gt; -&gt; list&lt;u8&gt;</code></td><td style="text-align: right">2967</td><td style="text-align: right">2541</td><td style="text-align: right">1.2x</td></tr>
-<tr><td>one export that calls 39 numeric imports</td><td style="text-align: right">71063</td><td style="text-align: right">5884</td><td style="text-align: right">12x</td></tr>
-<tr><td>one export that calls 2 string imports</td><td style="text-align: right">5435</td><td style="text-align: right">944</td><td style="text-align: right">5.8x</td></tr>
-</tbody>
-</table>
-</div>
-<p>The fixed cost of a call is what is removed, so the gain shrinks as lifting and lowering of the
-values comes to dominate. Components that use asynchronous functions, streams or futures are
-unchanged: their generated bindings are byte for byte the same.</p>
-<p>The numbers come from <code>packages/jco-transpile/bench/perf</code>, which interleaves fresh processes of
-each variant; the table keeps the fastest of four observations per case:</p>
-<pre><code class="language-sh">node gen.mjs base embedded
-node gen.mjs fast embedded --perf-sync-fast-path
-node compare.mjs --runs=4 base fast
-</code></pre>
-<p>They were taken on a shared machine and vary between runs; compare the ratios on your own hardware
-rather than relying on the absolute values.</p>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h1>
-<p>Each page in this section describes one benchmark: what it measures, how to run it, and what the
-results mean.</p>
-<ul>
-<li><a href="#development-use-jco-serve">Development-use <code>jco serve</code></a>: throughput and latency of the
-development server.</li>
-</ul>
-<div style="break-before: page; page-break-before: always;"></div>
-<h1 id="development-use-jco-serve"><a class="header" href="#development-use-jco-serve">Development-use <code>jco serve</code></a></h1>
-<p><code>jco serve</code> is a convenient development utility for running Preview 2 HTTP components (in particular
-components that export the <code>wasi:http/incoming-handler</code> interface) in Node.js.</p>
-<blockquote class="blockquote-tag blockquote-tag-warning">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
-<p><code>jco serve</code> is intended for development and testing only.</p>
-<p>It is not production ready, and these benchmarks should not be
-interpreted as production deployment guidance.</p>
-<p><code>jco serve</code> does not yet support Preview 3 HTTP components.</p>
-</blockquote>
-<h2 id="caveats"><a class="header" href="#caveats">Caveats</a></h2>
-<p>Given the “for development” development nature of <code>jco serve</code>, this benchmark measures Jco’s
-Node.js development server, not the general performance of Preview 2 HTTP components.</p>
-<p>A production deployment would typically use <a href="https://wasmtime.dev">Wasmtime</a> or another production-oriented
-component runtime, which is substantially more efficient than <code>jco serve</code>.</p>
-<p>Performance depends on the component, generated bindings, JavaScript runtime, hardware, and workload.
-Measurements from one application or machine should not be treated as production capacity estimates.
-Use this benchmark to compare development-server configurations rather than to estimate production
-capacity.</p>
-<h2 id="request-isolation"><a class="header" href="#request-isolation">Request isolation</a></h2>
-<p>By default, <code>jco serve</code> reuses a single instantiated component across requests.</p>
-<p>The <code>--isolate-requests=instance</code> argument introduces a light (and permeable) layer of isolation:
-a fresh component instance while retaining the same JavaScript isolate and module cache.</p>
-<p>The stronger <code>--isolate-requests=worker</code> mode creates a worker thread with a separate V8
-isolate and module cache for every request.</p>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The <code>--isolate-requests</code> option selects worker isolation by default</p>
-</blockquote>
-<h3 id="worker-mode-efficiency"><a class="header" href="#worker-mode-efficiency">Worker mode efficiency</a></h3>
-<p>Workers are one-shot: each handles exactly one request and is then terminated and replaced, so
-prewarming does not reuse JavaScript globals or module caches across requests.</p>
-<p>As the cost of isolated workers is quite high, Worker mode maintains a pool of 50 prewarmed workers by default.</p>
-<p>The capacity can be adjusted with <code>--isolate-worker-pool-size</code>. Larger pools can hide worker
-startup latency during bursts, at the cost of higher server startup time and memory use.</p>
-<h2 id="running-the-benchmark"><a class="header" href="#running-the-benchmark">Running the benchmark</a></h2>
-<p>Jco includes an opt-in end-to-end benchmark that compares both isolation modes with a shared
-component and a native Node.js HTTP handler:</p>
-<pre><code class="language-console">pnpm --filter @bytecodealliance/jco bench:serve-isolation
-</code></pre>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The benchmark is not part of the normal test suite.</p>
-</blockquote>
-<p>The <code>serve-isolation</code> benchmark suite builds a minimal HTTP component, starts a real
-NodeJS server for each mode, and makes sequential requests to expose per-request overhead. It reports
-requests per second and mean, median, and p95 latency.</p>
-<p>By default, each mode receives 100 warmup requests followed by 10,000 measured requests.</p>
-<p>Worker isolation intentionally creates a worker for every request, so a complete default run can take
-a long time.</p>
-<p>Based on the reference result below, benchmarking all three worker pool sizes may take a while.
-A smaller smoke run can be requested before committing to the full benchmark:</p>
-<pre><code class="language-console">JCO_SERVE_BENCH_WARMUP=5 \
-JCO_SERVE_BENCH_REQUESTS=30 \
-pnpm --filter @bytecodealliance/jco bench:serve-isolation
-</code></pre>
-<p>The reference result recorded below can be reproduced with its original sample sizes:</p>
-<pre><code class="language-console">JCO_SERVE_BENCH_WARMUP=10 \
-JCO_SERVE_BENCH_REQUESTS=100 \
-pnpm --filter @bytecodealliance/jco bench:serve-isolation
-</code></pre>
-<p>Componentization is deliberately excluded from the timed measurements. Because building the fixture
-can still make repeated benchmark runs inconvenient, the generated component can be retained and
-reused:</p>
-<pre><code class="language-console">JCO_SERVE_BENCH_COMPONENT_OUT=/tmp/jco-serve-benchmark.wasm \
-pnpm --filter @bytecodealliance/jco bench:serve-isolation
-
-JCO_SERVE_BENCH_COMPONENT=/tmp/jco-serve-benchmark.wasm \
-pnpm --filter @bytecodealliance/jco bench:serve-isolation
-</code></pre>
-<h3 id="reference-result"><a class="header" href="#reference-result">Reference result</a></h3>
-<p>Using Node.js 24.19.0 on a 6-vCPU Intel Xeon 2.60 GHz virtual machine, the benchmark made 10 warmup requests
-followed by 100 measured sequential requests per mode:</p>
-<div class="table-wrapper">
-<table>
-<thead>
-<tr><th>Mode</th><th style="text-align: right">Requests/s</th><th style="text-align: right">Mean latency</th><th style="text-align: right">Median latency</th><th style="text-align: right">p95 latency</th></tr>
-</thead>
-<tbody>
-<tr><td>Native <code>node:http</code></td><td style="text-align: right">598.13</td><td style="text-align: right">1.67 ms</td><td style="text-align: right">1.69 ms</td><td style="text-align: right">2.03 ms</td></tr>
-<tr><td>Shared component</td><td style="text-align: right">225.07</td><td style="text-align: right">4.44 ms</td><td style="text-align: right">4.31 ms</td><td style="text-align: right">5.40 ms</td></tr>
-<tr><td>Instance isolation</td><td style="text-align: right">22.88</td><td style="text-align: right">43.71 ms</td><td style="text-align: right">43.24 ms</td><td style="text-align: right">47.59 ms</td></tr>
-<tr><td>Worker, pool size 1</td><td style="text-align: right">4.15</td><td style="text-align: right">240.95 ms</td><td style="text-align: right">239.36 ms</td><td style="text-align: right">274.28 ms</td></tr>
-<tr><td>Worker, pool size 50</td><td style="text-align: right">13.55</td><td style="text-align: right">73.82 ms</td><td style="text-align: right">70.14 ms</td><td style="text-align: right">100.00 ms</td></tr>
-<tr><td>Worker, pool size 100</td><td style="text-align: right">14.78</td><td style="text-align: right">67.66 ms</td><td style="text-align: right">65.14 ms</td><td style="text-align: right">95.25 ms</td></tr>
-</tbody>
-</table>
-</div>
-<blockquote class="blockquote-tag blockquote-tag-note">
-<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
-<p>The performance ratios here are likely more improtant than the absoltue numbers.</p>
-</blockquote>
-<p>This result illustrates the relative cost of the isolation mechanisms for a minimal component.</p>
-<p>A larger component, concurrent traffic, different response sizes, pool utilization, or another Node.js
-version can change both the absolute results and the ratios between modes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="javascript-ecosystem-interoperability"><a class="header" href="#javascript-ecosystem-interoperability">JavaScript ecosystem interoperability</a></h1>
 <p>Components transpiled by Jco are ordinary ES modules, and components built with Jco can reuse a
@@ -4968,6 +4773,8 @@ rewritten. Unicode tables come from the pinned compiler dependency.</p>
 <p>These chapters go deeper into how Jco binds components to JavaScript. They assume familiarity with
 the <a href="#transpiling">Transpiling</a> chapter and the <a href="#wasi-support">WASI support</a> section.</p>
 <ul>
+<li><a href="#performance">Performance</a>: opt-in options that trade generality for speed, and
+benchmarks.</li>
 <li><a href="#host-bindings">Optimized Host Bindings</a>: the fast paths Jco generates for host
 calls, and when they apply.</li>
 <li><a href="#wit-type-representations">WIT Type representations</a>: how each WIT type appears in
@@ -4989,6 +4796,237 @@ values a guest discards.</li>
 <li><a href="#script-only-components">Script-only components</a>: building one engine component for many
 scripts, and packaging each script as a component of its own.</li>
 </ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="performance"><a class="header" href="#performance">Performance</a></h1>
+<p>Jco aims to make transpiled components run at near-native JavaScript speed, with as little host
+overhead as possible between a component’s exports and the code that calls them. This section
+covers the options that trade generality for speed, and how that is measured.</p>
+<h2 id="options-1"><a class="header" href="#options-1">Options</a></h2>
+<p>All of these are off by default, except where noted.</p>
+<h3 id="sync-fast-path"><a class="header" href="#sync-fast-path">Sync fast path</a></h3>
+<p>Skips the per-call task state for components whose functions are all synchronous.
+See <a href="#sync-fast-path-1">Sync fast path</a>.</p>
+<pre><code class="language-sh">jco transpile component.wasm -o out --perf-sync-fast-path
+</code></pre>
+<pre><code class="language-js">const result = await transpile(bytes, { perfSyncFastPath: true });
+// Set only when the option could not apply, e.g. "call tracking is enabled"
+console.log(result.syncFastPathBlocker);
+</code></pre>
+<h3 id="multi-memory-for-composed-components"><a class="header" href="#multi-memory-for-composed-components">Multi-memory for composed components</a></h3>
+<p>Keeps the adapters between composed components on Wasm multi-memory instead of a JavaScript call
+per copied value. Needs engine support.
+See <a href="#calls-between-components">Calls between components</a>.</p>
+<pre><code class="language-sh">jco transpile composed.wasm -o out --multi-memory
+</code></pre>
+<h3 id="runtime-diagnostics"><a class="header" href="#runtime-diagnostics">Runtime diagnostics</a></h3>
+<p>The bundled runtime drops its diagnostics by default (<code>checked</code>). Keep them only while debugging.
+See <a href="#debug-logging">Debug logging</a>.</p>
+<pre><code class="language-sh"># Default: diagnostics removed
+jco transpile component.wasm -o out
+# Keep diagnostics, logged when JCO_DEBUG is set
+jco transpile component.wasm -o out --runtime-profile debug
+</code></pre>
+<h3 id="wasi-02-filesystem-on-nodejs"><a class="header" href="#wasi-02-filesystem-on-nodejs">WASI 0.2 filesystem on Node.js</a></h3>
+<p>Lets <code>@bytecodealliance/preview2-shim</code> serve regular files on the main thread, and resolve preopen
+paths once. See <a href="#performance-options">Performance options</a>.</p>
+<pre><code class="language-js">new WASIShim({
+    sandbox: { preopens: { "/data": "/tmp/guest-data" } },
+    // Synchronous node:fs calls instead of an I/O worker round trip
+    performance: { mainThreadFilesystem: true, cacheDirectoryPaths: true },
+});
+</code></pre>
+<pre><code class="language-sh">jco run --perf-main-thread-filesystem --perf-cache-directory-paths component.wasm
+</code></pre>
+<h3 id="optimized-host-bindings"><a class="header" href="#optimized-host-bindings">Optimized host bindings</a></h3>
+<p>See <a href="#host-bindings">Optimized Host Bindings</a>.</p>
+<h2 id="benchmarks"><a class="header" href="#benchmarks">Benchmarks</a></h2>
+<p><a href="#benchmarks-1">Benchmarks</a>: reproducible measurements of Jco tooling and runtime paths.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="sync-fast-path-1"><a class="header" href="#sync-fast-path-1">Sync fast path</a></h1>
+<p>By default, every call of a component function creates Component Model task state: a task and a
+thread for an export, and a subtask and a host task for an import. Asynchronous functions need that
+state. A component whose functions are all synchronous pays for it without using it.</p>
+<p><code>jco transpile --perf-sync-fast-path</code> (<code>perfSyncFastPath</code> in the JS API) generates the synchronous
+exports and imports of such a component without that state. The option is off by default.</p>
+<h2 id="when-it-applies"><a class="header" href="#when-it-applies">When it applies</a></h2>
+<p>The option takes effect for a whole component, and only when nothing in it can observe the state
+that is skipped:</p>
+<ul>
+<li>one component instance owns every core module, lift and lower (a component composed of several
+instances calls between them through adapters, which run on behalf of the calling task);</li>
+<li>no function is <code>async</code>, and no lift or lower is asynchronous or has a callback;</li>
+<li>no stream, future or error-context type is used;</li>
+<li>no core module imports a canonical built-in other than <code>resource.new</code>, <code>resource.rep</code> and
+<code>resource.drop</code> (this excludes <code>context.get</code>, <code>context.set</code>, and the task, thread, waitable and
+backpressure built-ins);</li>
+<li>no import or export is asynchronous through <code>--async-mode jspi</code>;</li>
+<li><code>--call-tracking</code>, <code>--js</code> and the optimized import bindings are not in use.</li>
+</ul>
+<p>Any other component is generated exactly as without the option, and nothing is printed by
+default.</p>
+<p>When the option was set but did not apply, the transpile result says which of the rules above
+ruled it out: <code>syncFastPathBlocker</code> in the JS API, <code>sync_fast_path_blocker</code> on the Rust
+<code>Transpiled</code> result. It is unset when the option applied or was not set. With <code>JCO_DEBUG</code> set,
+<code>jco transpile</code> and <code>@bytecodealliance/jco-transpile</code> also log it with <code>console.debug</code>, for
+example <code>component [calls] does not use the sync fast path (perfSyncFastPath): call tracking is enabled</code>.</p>
+<p>The <code>js-component-bindgen</code> crate also logs whether it used the fast path, and if not why, as a
+debug message of the Rust <code>log</code> crate, which a Rust program sees once it installs a logger.</p>
+<h2 id="what-stays-the-same"><a class="header" href="#what-stays-the-same">What stays the same</a></h2>
+<p>A call on the fast path still does everything that a caller, a host function or a guest can
+observe:</p>
+<ul>
+<li>an instance that trapped or was stopped cannot be entered, and a trap is recorded and reported
+to <code>onTrap</code> wherever it happens: in the guest, in post-return, or thrown by a host function;</li>
+<li>stopping the instance from a host function or from the destructor of a resource fails the call
+that is running, and no host function is called for the guest afterwards;</li>
+<li>a host function that throws fails the export that called it with what it threw first, even if
+the guest catches the exception and returns normally;</li>
+<li>a guest may not call an import while it may not leave its instance, for example from <code>realloc</code>;</li>
+<li>borrowed handles are released at the end of their call, and a post-return function runs after
+each call that returned a value, including an error value of a <code>result</code>;</li>
+<li>a promise that a host function returns from a synchronous import is counted as a pending host
+operation until it settles or the instance is stopped. As by default, the guest receives the
+promise object itself, not its value, and <code>whenIdle</code> does not wait for it.</li>
+</ul>
+<p>The tests of the option run the same sequences of calls with and without it and compare every
+return value, thrown error, reported trap and host callback.</p>
+<p>One difference is known. When a host function throws <code>null</code> or <code>undefined</code> and the guest catches
+it, the export fails by default with an internal error that says its task is already resolved;
+on the fast path it fails with the thrown value.</p>
+<h2 id="measured-effect"><a class="header" href="#measured-effect">Measured effect</a></h2>
+<p>Nanoseconds per call, bindings with the runtime bundled in, Node.js 26.13 on Linux x86-64:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>case</th><th style="text-align: right">default</th><th style="text-align: right"><code>--perf-sync-fast-path</code></th><th style="text-align: right">speedup</th></tr>
+</thead>
+<tbody>
+<tr><td>export <code>u32 -&gt; u32</code></td><td style="text-align: right">711</td><td style="text-align: right">18</td><td style="text-align: right">40x</td></tr>
+<tr><td>export <code>f64 -&gt; f64</code></td><td style="text-align: right">735</td><td style="text-align: right">33</td><td style="text-align: right">22x</td></tr>
+<tr><td>export <code>tuple</code> swap</td><td style="text-align: right">905</td><td style="text-align: right">131</td><td style="text-align: right">6.9x</td></tr>
+<tr><td>export <code>record -&gt; record</code></td><td style="text-align: right">1037</td><td style="text-align: right">187</td><td style="text-align: right">5.5x</td></tr>
+<tr><td>export <code>string -&gt; string</code></td><td style="text-align: right">2074</td><td style="text-align: right">1296</td><td style="text-align: right">1.6x</td></tr>
+<tr><td>export <code>list&lt;u8&gt; -&gt; list&lt;u8&gt;</code></td><td style="text-align: right">2967</td><td style="text-align: right">2541</td><td style="text-align: right">1.2x</td></tr>
+<tr><td>one export that calls 39 numeric imports</td><td style="text-align: right">71063</td><td style="text-align: right">5884</td><td style="text-align: right">12x</td></tr>
+<tr><td>one export that calls 2 string imports</td><td style="text-align: right">5435</td><td style="text-align: right">944</td><td style="text-align: right">5.8x</td></tr>
+</tbody>
+</table>
+</div>
+<p>The fixed cost of a call is what is removed, so the gain shrinks as lifting and lowering of the
+values comes to dominate. Components that use asynchronous functions, streams or futures are
+unchanged: their generated bindings are byte for byte the same.</p>
+<p>The numbers come from <code>packages/jco-transpile/bench/perf</code>, which interleaves fresh processes of
+each variant; the table keeps the fastest of four observations per case:</p>
+<pre><code class="language-sh">node gen.mjs base embedded
+node gen.mjs fast embedded --perf-sync-fast-path
+node compare.mjs --runs=4 base fast
+</code></pre>
+<p>They were taken on a shared machine and vary between runs; compare the ratios on your own hardware
+rather than relying on the absolute values.</p>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="benchmarks-1"><a class="header" href="#benchmarks-1">Benchmarks</a></h1>
+<p>Each page in this section describes one benchmark: what it measures, how to run it, and what the
+results mean.</p>
+<ul>
+<li><a href="#development-use-jco-serve">Development-use <code>jco serve</code></a>: throughput and latency of the
+development server.</li>
+</ul>
+<div style="break-before: page; page-break-before: always;"></div>
+<h1 id="development-use-jco-serve"><a class="header" href="#development-use-jco-serve">Development-use <code>jco serve</code></a></h1>
+<p><code>jco serve</code> is a convenient development utility for running Preview 2 HTTP components (in particular
+components that export the <code>wasi:http/incoming-handler</code> interface) in Node.js.</p>
+<blockquote class="blockquote-tag blockquote-tag-warning">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M6.457 1.047c.659-1.234 2.427-1.234 3.086 0l6.082 11.378A1.75 1.75 0 0 1 14.082 15H1.918a1.75 1.75 0 0 1-1.543-2.575Zm1.763.707a.25.25 0 0 0-.44 0L1.698 13.132a.25.25 0 0 0 .22.368h12.164a.25.25 0 0 0 .22-.368Zm.53 3.996v2.5a.75.75 0 0 1-1.5 0v-2.5a.75.75 0 0 1 1.5 0ZM9 11a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"></path></svg>Warning</p>
+<p><code>jco serve</code> is intended for development and testing only.</p>
+<p>It is not production ready, and these benchmarks should not be
+interpreted as production deployment guidance.</p>
+<p><code>jco serve</code> does not yet support Preview 3 HTTP components.</p>
+</blockquote>
+<h2 id="caveats"><a class="header" href="#caveats">Caveats</a></h2>
+<p>Given the “for development” development nature of <code>jco serve</code>, this benchmark measures Jco’s
+Node.js development server, not the general performance of Preview 2 HTTP components.</p>
+<p>A production deployment would typically use <a href="https://wasmtime.dev">Wasmtime</a> or another production-oriented
+component runtime, which is substantially more efficient than <code>jco serve</code>.</p>
+<p>Performance depends on the component, generated bindings, JavaScript runtime, hardware, and workload.
+Measurements from one application or machine should not be treated as production capacity estimates.
+Use this benchmark to compare development-server configurations rather than to estimate production
+capacity.</p>
+<h2 id="request-isolation"><a class="header" href="#request-isolation">Request isolation</a></h2>
+<p>By default, <code>jco serve</code> reuses a single instantiated component across requests.</p>
+<p>The <code>--isolate-requests=instance</code> argument introduces a light (and permeable) layer of isolation:
+a fresh component instance while retaining the same JavaScript isolate and module cache.</p>
+<p>The stronger <code>--isolate-requests=worker</code> mode creates a worker thread with a separate V8
+isolate and module cache for every request.</p>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The <code>--isolate-requests</code> option selects worker isolation by default</p>
+</blockquote>
+<h3 id="worker-mode-efficiency"><a class="header" href="#worker-mode-efficiency">Worker mode efficiency</a></h3>
+<p>Workers are one-shot: each handles exactly one request and is then terminated and replaced, so
+prewarming does not reuse JavaScript globals or module caches across requests.</p>
+<p>As the cost of isolated workers is quite high, Worker mode maintains a pool of 50 prewarmed workers by default.</p>
+<p>The capacity can be adjusted with <code>--isolate-worker-pool-size</code>. Larger pools can hide worker
+startup latency during bursts, at the cost of higher server startup time and memory use.</p>
+<h2 id="running-the-benchmark"><a class="header" href="#running-the-benchmark">Running the benchmark</a></h2>
+<p>Jco includes an opt-in end-to-end benchmark that compares both isolation modes with a shared
+component and a native Node.js HTTP handler:</p>
+<pre><code class="language-console">pnpm --filter @bytecodealliance/jco bench:serve-isolation
+</code></pre>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The benchmark is not part of the normal test suite.</p>
+</blockquote>
+<p>The <code>serve-isolation</code> benchmark suite builds a minimal HTTP component, starts a real
+NodeJS server for each mode, and makes sequential requests to expose per-request overhead. It reports
+requests per second and mean, median, and p95 latency.</p>
+<p>By default, each mode receives 100 warmup requests followed by 10,000 measured requests.</p>
+<p>Worker isolation intentionally creates a worker for every request, so a complete default run can take
+a long time.</p>
+<p>Based on the reference result below, benchmarking all three worker pool sizes may take a while.
+A smaller smoke run can be requested before committing to the full benchmark:</p>
+<pre><code class="language-console">JCO_SERVE_BENCH_WARMUP=5 \
+JCO_SERVE_BENCH_REQUESTS=30 \
+pnpm --filter @bytecodealliance/jco bench:serve-isolation
+</code></pre>
+<p>The reference result recorded below can be reproduced with its original sample sizes:</p>
+<pre><code class="language-console">JCO_SERVE_BENCH_WARMUP=10 \
+JCO_SERVE_BENCH_REQUESTS=100 \
+pnpm --filter @bytecodealliance/jco bench:serve-isolation
+</code></pre>
+<p>Componentization is deliberately excluded from the timed measurements. Because building the fixture
+can still make repeated benchmark runs inconvenient, the generated component can be retained and
+reused:</p>
+<pre><code class="language-console">JCO_SERVE_BENCH_COMPONENT_OUT=/tmp/jco-serve-benchmark.wasm \
+pnpm --filter @bytecodealliance/jco bench:serve-isolation
+
+JCO_SERVE_BENCH_COMPONENT=/tmp/jco-serve-benchmark.wasm \
+pnpm --filter @bytecodealliance/jco bench:serve-isolation
+</code></pre>
+<h3 id="reference-result"><a class="header" href="#reference-result">Reference result</a></h3>
+<p>Using Node.js 24.19.0 on a 6-vCPU Intel Xeon 2.60 GHz virtual machine, the benchmark made 10 warmup requests
+followed by 100 measured sequential requests per mode:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Mode</th><th style="text-align: right">Requests/s</th><th style="text-align: right">Mean latency</th><th style="text-align: right">Median latency</th><th style="text-align: right">p95 latency</th></tr>
+</thead>
+<tbody>
+<tr><td>Native <code>node:http</code></td><td style="text-align: right">598.13</td><td style="text-align: right">1.67 ms</td><td style="text-align: right">1.69 ms</td><td style="text-align: right">2.03 ms</td></tr>
+<tr><td>Shared component</td><td style="text-align: right">225.07</td><td style="text-align: right">4.44 ms</td><td style="text-align: right">4.31 ms</td><td style="text-align: right">5.40 ms</td></tr>
+<tr><td>Instance isolation</td><td style="text-align: right">22.88</td><td style="text-align: right">43.71 ms</td><td style="text-align: right">43.24 ms</td><td style="text-align: right">47.59 ms</td></tr>
+<tr><td>Worker, pool size 1</td><td style="text-align: right">4.15</td><td style="text-align: right">240.95 ms</td><td style="text-align: right">239.36 ms</td><td style="text-align: right">274.28 ms</td></tr>
+<tr><td>Worker, pool size 50</td><td style="text-align: right">13.55</td><td style="text-align: right">73.82 ms</td><td style="text-align: right">70.14 ms</td><td style="text-align: right">100.00 ms</td></tr>
+<tr><td>Worker, pool size 100</td><td style="text-align: right">14.78</td><td style="text-align: right">67.66 ms</td><td style="text-align: right">65.14 ms</td><td style="text-align: right">95.25 ms</td></tr>
+</tbody>
+</table>
+</div>
+<blockquote class="blockquote-tag blockquote-tag-note">
+<p class="blockquote-tag-title"><svg viewbox="0 0 16 16" width="18" height="18"><path d="M0 8a8 8 0 1 1 16 0A8 8 0 0 1 0 8Zm8-6.5a6.5 6.5 0 1 0 0 13 6.5 6.5 0 0 0 0-13ZM6.5 7.75A.75.75 0 0 1 7.25 7h1a.75.75 0 0 1 .75.75v2.75h.25a.75.75 0 0 1 0 1.5h-2a.75.75 0 0 1 0-1.5h.25v-2h-.25a.75.75 0 0 1-.75-.75ZM8 6a1 1 0 1 1 0-2 1 1 0 0 1 0 2Z"></path></svg>Note</p>
+<p>The performance ratios here are likely more improtant than the absoltue numbers.</p>
+</blockquote>
+<p>This result illustrates the relative cost of the isolation mechanisms for a minimal component.</p>
+<p>A larger component, concurrent traffic, different response sizes, pool utilization, or another Node.js
+version can change both the absolute results and the ratios between modes.</p>
 <div style="break-before: page; page-break-before: always;"></div>
 <h1 id="host-bindings"><a class="header" href="#host-bindings">Host Bindings</a></h1>
 <p>The default mode for host bindings in JS hosts in Jco is through the high-level JS-based bindgen.</p>
