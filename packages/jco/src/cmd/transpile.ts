@@ -160,6 +160,7 @@ export interface TranspileOpts extends TypegenOptions {
     base64Cutoff?: number;
     js?: boolean;
     minify?: boolean;
+    eagerCompile?: boolean;
     optimize?: boolean;
     namespacedExports?: boolean;
     outDir?: string;
@@ -176,6 +177,7 @@ export interface TranspileOpts extends TypegenOptions {
     wasiShim?: boolean;
     /** Optional module specifier imported by generated bindings, never loaded during transpilation. */
     cmRuntimeEsModule?: string;
+    cmRuntimeSyncImports?: boolean;
     /** Whether the bundled Component Model runtime keeps its diagnostics. */
     runtimeProfile?: "checked" | "debug";
     flagsAsBigInt?: boolean;

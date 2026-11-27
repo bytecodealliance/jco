@@ -116,6 +116,9 @@ export interface TranspilationOptions {
     /** Whether to perform minification of the JS */
     minify?: boolean;
 
+    /** Ask supporting browsers to compile the entry module's functions when loading it. */
+    eagerCompile?: boolean;
+
     /** Whether to optimize the WebAssembly binary with wasm-opt */
     optimize?: boolean;
 
@@ -185,6 +188,8 @@ export interface TranspilationOptions {
 
     /** Optional experimental runtime package or directory base. Imports runtime and intrinsics/* subpaths; directory/URL bases use .js files. */
     cmRuntimeEsModule?: string;
+    /** The selected external checked provider implements intrinsics/sync. Implicit for the standard package. */
+    cmRuntimeSyncImports?: boolean;
 
     /**
      * Which removable statements the Component Model runtime bundled into the bindings keeps.
@@ -407,6 +412,7 @@ export async function transpileBytes(
         perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
         perfSyncFastPath: opts.perfSyncFastPath === true,
         cmRuntimeEsModule: opts.cmRuntimeEsModule,
+        cmRuntimeSyncImports: opts.cmRuntimeSyncImports,
         runtimeProfile: opts.runtimeProfile,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
@@ -475,10 +481,18 @@ export async function transpileBytes(
 
     // Perform minification if configured
     if (opts.minify && jsFile) {
+        // The standard checked package exports an empty logger. Drop labeled calls
+        // before Oxc discards their labels, including the work to build log arguments.
+        // A custom provider can log, and asm.js includes code from the guest itself.
+        const stripCheckedDiagnostics =
+            !opts.js &&
+            opts.cmRuntimeEsModule?.replace(/\/$/, '') === '@bytecodealliance/jco-cm-runtime' &&
+            opts.runtimeProfile !== 'debug';
         const minified = await minify('component.js', Buffer.from(jsFile[1]).toString('utf8'), {
             module: true,
             compress: {
                 target: 'es2019',
+                dropLabels: stripCheckedDiagnostics ? ['DEBUG'] : [],
             },
             mangle: {
                 keepNames: true,
@@ -490,6 +504,15 @@ export async function transpileBytes(
             );
         }
         jsFile[1] = new TextEncoder().encode(minified.code);
+    }
+
+    if (opts.eagerCompile) {
+        // A file-wide compile hint must precede every token and survive minification.
+        const hint = new TextEncoder().encode('//# allFunctionsCalledOnLoad\n');
+        const hinted = new Uint8Array(hint.length + jsFile[1].length);
+        hinted.set(hint);
+        hinted.set(jsFile[1], hint.length);
+        jsFile[1] = hinted;
     }
 
     return {

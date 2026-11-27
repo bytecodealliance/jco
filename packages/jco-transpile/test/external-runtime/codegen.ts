@@ -14,6 +14,21 @@ const resourceFixture = fileURLToPath(
 const defaultBase = new URL('../../../jco-cm-runtime/dist/', import.meta.url).href;
 
 suite('external runtime codegen', () => {
+    test.each([false, true])('balances indentation after a resource drop (sync imports=%s)', async (syncImports) => {
+        const fixture = fileURLToPath(
+            new URL('../fixtures/components/runtime/host-resource-handle-high-bit.component.wat', import.meta.url),
+        );
+        const { files } = await transpile(fixture, {
+            name: 'component',
+            cmRuntimeEsModule: defaultBase,
+            cmRuntimeSyncImports: syncImports,
+        });
+        const source = new TextDecoder().decode(files['component.js']);
+        expect(source).toMatch(/^function trampoline\d+\(handle\) \{/m);
+        // Each drop used to indent the rest of the module by another two spaces.
+        expect(source).toMatch(/^const \$init =/m);
+    });
+
     for (const instantiation of ['sync', 'async'] as const) {
         test.concurrent.each([false, true])(
             `uses the selected realm without a platform global (${instantiation}, minify=%s)`,
@@ -182,7 +197,7 @@ suite('external runtime codegen', () => {
         const { files } = await transpile(resourceFixture, { name: 'component', cmRuntimeEsModule: undefined });
         const source = new TextDecoder().decode(files['component.js']);
         // The runtime is bundled in rather than imported.
-        assert.include(source, '__jcoEmbeddedRuntime$tableGet');
+        assert.include(source, '$cm$tableGet');
         assert.notInclude(source, '@bytecodealliance/jco-cm-runtime');
         assert.notMatch(source, /^import /m);
         assert.notInclude(source, '_jcoRuntime');

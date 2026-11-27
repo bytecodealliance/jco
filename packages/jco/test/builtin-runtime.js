@@ -14,13 +14,11 @@ const adder = new URL("../../jco-transpile/test/fixtures/components/runtime/adde
 const RUNTIME_PACKAGE = "@bytecodealliance/jco-cm-runtime";
 
 /** Prefix of the runtime names that the transpiler bundles into bindings. */
-const BUNDLED_RUNTIME_NAMESPACE = "__jcoEmbeddedRuntime$";
+const BUNDLED_RUNTIME_NAMESPACE = "$cm$";
 
 suite("built-in Component Model runtime", () => {
     for (const minify of [false, true]) {
-        // TODO(unskip): Restore after @bytecodealliance/jco-transpile releases bindings that bundle
-        // the Component Model runtime and Jco's published dependency is updated to that release.
-        test.skip(`bindings bundle the runtime and can be bundled again (minify=${minify})`, async () => {
+        test(`bindings bundle the runtime and can be bundled again (minify=${minify})`, async () => {
             const dir = await getTmpDir();
             try {
                 const { files } = await transpileComponent(await readFile(adder), {
@@ -65,9 +63,7 @@ suite("built-in Component Model runtime", () => {
         });
     }
 
-    // TODO(unskip): Restore after @bytecodealliance/jco-transpile releases bindings that bundle
-    // the Component Model runtime and Jco's published dependency is updated to that release.
-    test.skip("jco transpile bundles the runtime unless one is selected", async () => {
+    test("jco transpile bundles the runtime unless one is selected", async () => {
         const dir = await getTmpDir();
         try {
             await exec(

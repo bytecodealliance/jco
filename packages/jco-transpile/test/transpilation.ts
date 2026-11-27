@@ -41,6 +41,9 @@ export function runtimeOptions(options: TranspilationOptions = {}): Transpilatio
     return {
         ...(runtimeBase === undefined ? {} : { cmRuntimeEsModule: runtimeBase }),
         ...(forceSyncFastPath ? { perfSyncFastPath: true } : {}),
+        // The workspace URL points to our checked provider. Explicit overrides may
+        // point to a minimal API-v1 provider, so preserve its advertised capabilities.
+        ...(runtimeMode === 'external' && !('cmRuntimeEsModule' in options) ? { cmRuntimeSyncImports: true } : {}),
         ...options,
     };
 }

@@ -25,7 +25,7 @@ async function run() {
         return {
             files: empty.files.map(([name]) => name),
             sum: instance.add.add(17, 25),
-            embedded: source.includes('__jcoEmbeddedRuntime$'),
+            embedded: source.includes('$cm$'),
         };
     } finally {
         URL.revokeObjectURL(url);

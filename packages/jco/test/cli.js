@@ -150,12 +150,14 @@ suite("CLI", () => {
             "--tla-compat",
             "--optimize",
             "--minify",
+            "--eager-compile",
             "--base64-cutoff=0",
             "-o",
             outDir,
         );
         assert.strictEqual(stderr, "");
         const source = await readFile(`${outDir}/${name}.js`);
+        assert.ok(source.toString().startsWith("//# allFunctionsCalledOnLoad\n"));
         assert.ok(source.toString().includes("as test,"));
 
         await cleanup();
@@ -562,7 +564,7 @@ suite("CLI", () => {
                 [
                     "processed-by",
                     [
-                        ["wit-component", "0.259.0"],
+                        ["wit-component", "0.262.0"],
                         ["dummy-gen", "test"],
                     ],
                 ],
