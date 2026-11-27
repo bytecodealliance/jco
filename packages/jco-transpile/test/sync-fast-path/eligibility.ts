@@ -1,9 +1,10 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { assert, describe, test } from 'vitest';
+import { assert, describe, test, vi } from 'vitest';
 
-import { forceSyncFastPath } from '../transpilation.js';
+import { forceSyncFastPath, transpileBytes } from '../transpilation.js';
+import { parse } from '../../src/wasm-tools.js';
 import { COMPONENT_FIXTURES_DIR } from '../common.js';
 import { generate, generatePair, readFixture, remove } from './helpers.js';
 
@@ -33,6 +34,55 @@ describe('--perf-sync-fast-path: when it applies', () => {
             assert.strictEqual(withOption.source, without.source);
         } finally {
             await remove(without, withOption);
+        }
+    });
+});
+
+describe('--perf-sync-fast-path: why it does not apply', () => {
+    /** Transpile the `calls` fixture with the option on, under further options. */
+    async function transpileCalls(options: Parameters<typeof transpileBytes>[1] = {}) {
+        return transpileBytes(await parse(await readFixture('calls')), {
+            name: 'calls',
+            instantiation: 'async',
+            perfSyncFastPath: true,
+            ...options,
+        });
+    }
+
+    test('the result names no blocker for an eligible component', async () => {
+        const result = await transpileCalls();
+        assert.notProperty(result, 'syncFastPathBlocker');
+    });
+
+    test('the result names the blocker for an ineligible component', async () => {
+        const result = await transpileCalls({ callTracking: true });
+        assert.strictEqual(result.syncFastPathBlocker, 'call tracking is enabled');
+    });
+
+    test('the result names no blocker when the option is off', async () => {
+        const result = await transpileCalls({ callTracking: true, perfSyncFastPath: false });
+        assert.notProperty(result, 'syncFastPathBlocker');
+    });
+
+    test.each([
+        ['logs the blocker with JCO_DEBUG set', '1'],
+        ['does not log without JCO_DEBUG', ''],
+    ])('%s', async (_name, jcoDebug) => {
+        vi.stubEnv('JCO_DEBUG', jcoDebug);
+        const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+        try {
+            await transpileCalls({ callTracking: true });
+            const messages = debug.mock.calls.map((args) => String(args[0]));
+            const expected =
+                'component [calls] does not use the sync fast path (perfSyncFastPath): call tracking is enabled';
+            if (jcoDebug) {
+                assert.include(messages, expected);
+            } else {
+                assert.notInclude(messages, expected);
+            }
+        } finally {
+            debug.mockRestore();
+            vi.unstubAllEnvs();
         }
     });
 });
