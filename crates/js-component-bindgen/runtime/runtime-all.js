@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 6b0414c63ac38513c199a0ac6ccd8c22d9630ef2
+// generated from commit 86ce2867063fb255544839d9e9cb9a00fdc2858f
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -6860,16 +6860,23 @@ function callWithSyncTask(task, importFn, params) {
 	}
 }
 /**
-* A synchronous leaf already has an export task to own the import and its
-* borrows. Avoid allocating a subtask for every host call. A core start
-* function or a host calling a saved lower directly has no such owner, so
-* create a task and finish it on both the return and throw paths.
+* The generated lower calls the adapter directly when the executing guest
+* owns the task. On this fallback a host may be invoking a retained lower.
+* Give it a distinct task and restore the enclosing registers even on throw.
 */
 function lowerSyncImport(context, componentIdx, importFn, ...params) {
 	checkMayLeave(context.mayLeave, componentIdx);
-	if (context.tasks.get(componentIdx)?.length) return importFn(...params);
-	const { task } = createImplicitImportTask(context, componentIdx, false);
-	return callWithSyncTask(task, importFn, params);
+	const { task, taskID, threadID } = createNewCurrentImplicitThread(context.creation, {
+		componentIdx,
+		isAsync: false,
+		callingWasmExport: false
+	});
+	return withCurrentTaskMeta(context.registers, {
+		componentIdx,
+		taskID,
+		threadID,
+		fn: () => callWithSyncTask(task, importFn, params)
+	});
 }
 function lowerImportBackwardsCompat(_context, args, ...params) {
 	DEBUG: debugLog("[_lowerImportBackwardsCompat()] args", {
@@ -6878,7 +6885,14 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 	});
 	const { componentIdx, isAsync, isManualAsync, resultLowerFns, hasResultPointer, funcTypeIsAsync, memoryIdx, getMemoryFn, getReallocFn, importFn, stringEncoding } = args;
 	checkMayLeave(_context.mayLeave, componentIdx);
-	if (args.directSync && _context.tasks.get(componentIdx)?.length) return importFn(...params);
+	if (args.directSync) {
+		const current = readTaskRegister(_context.registers);
+		const owner = _context.tasks.get(componentIdx)?.at(-1);
+		const activeComponent = current ? current.componentIdx : _context.creation.componentIdxs.at(-1);
+		const activeID = current ? current.taskID : _context.creation.taskIds.at(-1);
+		if (owner && activeComponent === componentIdx && owner.id === activeID) return importFn(...params);
+		return lowerSyncImport(_context, componentIdx, importFn, ...params);
+	}
 	const meta = readTaskRegister(_context.registers, componentIdx);
 	let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
 	let createdTask;
@@ -6891,7 +6905,6 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 	if (!taskMeta) throw new Error("invalid/missing async task meta");
 	const task = taskMeta.task;
 	if (!task) throw new Error("invalid/missing async task");
-	if (args.directSync && createdTask) return callWithSyncTask(createdTask, importFn, params);
 	getOrCreateAsyncState(_context.lookup, componentIdx);
 	if (!task.mayBlock() && funcTypeIsAsync && !isAsync) throw new Error("non async exports cannot synchronously call async functions");
 	const memory = getMemoryFn();
