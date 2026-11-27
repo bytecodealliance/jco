@@ -1,5 +1,179 @@
 # Changelog
 
+## [2.20.0] - 2026-11-27
+
+### 🚀 Features
+
+- _(bindgen)_ report why the sync fast path is not used by @vados-cosmonic
+
+- _(bindgen)_ log whether the sync fast path is used by @vados-cosmonic
+
+- _(bindgen)_ add opt-in sync fast path by @vados-cosmonic
+
+- _(bindgen)_ build jco transpile presets with optional overrides by @vados-cosmonic
+
+- _(bindgen)_ expose a preset for jco transpile defaults by @vados-cosmonic
+
+- _(bindgen)_ share the bundled runtime and remove its diagnostics by @vados-cosmonic
+
+
+### 🐛 Bug Fixes
+
+- _(bindgen)_ preserve three-field `Transpiled` literals and expose fast path diagnostics through `transpile_with_diagnostics` by @vados-cosmonic
+
+- _(bindgen)_ preserve host failures caught by the guest by @vados-cosmonic in #2551
+
+- _(bindgen)_ verify ownership before reusing a synchronous task by @vados-cosmonic
+
+- _(bindgen)_ fail sync fast path export when an import throws by @vados-cosmonic
+
+- _(bindgen)_ resume suspended stacks one at a time in inline glue by @vados-cosmonic
+
+- _(bindgen)_ keep entries cancelled at the entry slot from running by @vados-cosmonic
+
+- _(bindgen)_ give the entry slot to its waiters in arrival order by @vados-cosmonic
+
+- _(bindgen)_ admit tasks by the callee's lift options and type by @vados-cosmonic
+
+- _(bindgen)_ reserve the names of remaining trampoline intrinsics by @vados-cosmonic
+
+- _(bindgen)_ keep polling instances held back by a sync call by @vados-cosmonic
+
+- _(bindgen)_ mirror sync-call thread scheduling in generated bindings by @vados-cosmonic
+
+- _(bindgen)_ reserve the names of waitable intrinsics by @vados-cosmonic
+
+- _(bindgen)_ leave a task unresolved when its last thread exits by @vados-cosmonic
+
+- _(bindgen)_ trap on out-of-range host resource handles when lifted by @vados-cosmonic
+
+- _(bindgen)_ trap on handle indices past the end of a table by @vados-cosmonic
+
+- _(bindgen)_ trap on busy future drops in generated bindings by @vados-cosmonic
+
+- _(bindgen)_ isolate generated resource class prototypes by @vados-cosmonic
+
+- _(bindgen)_ emit core import maps with null prototypes by @vados-cosmonic
+
+- _(bindgen)_ ignore stale stream cancellations in generated bindings by @vados-cosmonic
+
+- _(bindgen)_ finish UTF-8 writes that encodeInto leaves short by @vados-cosmonic
+
+- _(bindgen)_ trap on a busy stream copy in the inline runtime by @vados-cosmonic
+
+- _(bindgen)_ guard realloc and post-return where they are extracted by @vados-cosmonic
+
+- _(bindgen)_ run host realloc calls with their own context slots by @keipes
+
+- _(bindgen)_ enforce may_leave in prepareCall by @keipes
+
+- _(bindgen)_ reserve platform globals against local names by @vados-cosmonic
+
+- _(bindgen)_ adapt to wasm-tools 0.263 API changes by @vados-cosmonic
+
+
+### 🚜 Refactor
+
+- _(bindgen)_ drop the code point count of an encoded string by @vados-cosmonic
+
+- _(bindgen)_ reuse the transpile config builder for presets by @vados-cosmonic in #2528
+
+- _(bindgen)_ expose jco transpile under config presets by @vados-cosmonic
+
+
+### ⚡ Performance
+
+- _(bindgen)_ specialize eligible synchronous browser bindings by @vados-cosmonic
+
+- _(bindgen)_ share a view for adapter accesses to a second memory by @vados-cosmonic
+
+- _(bindgen)_ lift typed lists by slicing a view of memory by @vados-cosmonic
+
+- _(bindgen)_ link checked intrinsics directly in module scope by @vados-cosmonic
+
+- _(bindgen)_ import context slot accessors from the runtime by @vados-cosmonic
+
+- _(bindgen)_ [**breaking**] configure debug logging during instantiation by @vados-cosmonic
+
+
+### 🎨 Styling
+
+- _(bindgen)_ format the thread table removal assertion by @vados-cosmonic in #2543
+
+- _(bindgen)_ format the removeThread assertion by @vados-cosmonic
+
+
+### 🧪 Testing
+
+- _(bindgen)_ name a subtask cancel unit test after a turn by @vados-cosmonic
+
+- _(bindgen)_ match the rewritten host-task guard in removeThread by @vados-cosmonic
+
+- _(bindgen)_ compare the Rust preset with CLI options in CI by @vados-cosmonic
+
+
+### ⚙️ Miscellaneous Tasks
+
+- _(bindgen)_ embed scoped synchronous task handling by @vados-cosmonic
+
+- _(bindgen)_ refresh the checked runtime snapshot by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2503
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2549
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2547
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2548
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2546
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2545
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2544
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2541
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2542
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2539
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2540
+
+- _(bindgen)_ bump oxc crates from 0.157.0 to 0.158.0 by @vados-cosmonic in #2530
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2506
+
+- _(bindgen)_ regenerate the embedded stream runtime by @vados-cosmonic in #2498
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic in #2497
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime and export map by @vados-cosmonic in #2495
+
+- _(bindgen)_ regenerate the embedded runtime and export map by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime and export map by @vados-cosmonic
+
+- _(bindgen)_ regenerate the embedded runtime and export map by @keipes
+
+- _(bindgen)_ scope test-only items to the features that use them by @vados-cosmonic
+
+
+
+## New Contributors
+* @keipes made their first contribution
+
+
 ## [2.19.1] - 2026-11-13
 
 ### ⚡ Performance
