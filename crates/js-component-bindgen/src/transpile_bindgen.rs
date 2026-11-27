@@ -4,6 +4,7 @@ use std::fmt::Write;
 use std::mem;
 use std::ops::Index;
 
+use crate::engine::{dealias, result_error_class, wit_bindgen_core, wit_component, wit_parser};
 use base64::Engine as _;
 use base64::engine::general_purpose;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
@@ -29,12 +30,13 @@ use wit_parser::{
     WorldId, WorldItem, WorldKey,
 };
 
-use crate::esm_bindgen::EsmBindgen;
-use crate::files::Files;
-use crate::function_bindgen::{
+use crate::engine::esm_bindgen::EsmBindgen;
+use crate::engine::function_bindgen::{
     ErrHandling, FunctionBindgen, FunctionBindgenComponentState, PayloadTypeMetadata, ResourceData,
     ResourceExtraData, ResourceMap, ResourceTable, SYNC_FAST_PATH_CALL_FAILURE,
 };
+use crate::engine::get_thrown_type;
+use crate::files::Files;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
 use crate::intrinsics::lift::LiftIntrinsic;
@@ -57,8 +59,7 @@ use crate::names::{
     maybe_quote_member, static_member_name,
 };
 use crate::{
-    FunctionIdentifier, ManagesIntrinsics, core, get_thrown_type, is_async_fn,
-    requires_async_porcelain, source, uwrite, uwriteln,
+    ManagesIntrinsics, core, is_async_fn, requires_async_porcelain, source, uwrite, uwriteln,
 };
 
 /// Size of flat parameters that can be sent, for example via the `task.return`
@@ -490,7 +491,7 @@ struct JsFunctionBindgenArgs<'a> {
     tracked_export: Option<u32>,
     isolated_numeric_export: bool,
     /// The class to throw the error of the function's result as, if the
-    /// function has one of its own (see `crate::result_error_class`)
+    /// function has one of its own (see `result_error_class`)
     result_error_class: Option<String>,
 }
 
@@ -1596,7 +1597,7 @@ impl<'a> Instantiator<'a, '_> {
                                 ty: TypeDef::Resource(resource_table_idx),
                                 ..
                             }) => {
-                                let ty = crate::dealias(self.resolve, *ty);
+                                let ty = dealias(self.resolve, *ty);
                                 let resource_table_ty = &self.types[*resource_table_idx];
                                 let concrete_ty = resource_table_ty.unwrap_concrete_ty();
                                 self.imports_resource_types.insert(ty, concrete_ty);
@@ -1616,7 +1617,7 @@ impl<'a> Instantiator<'a, '_> {
                         ty: TypeDef::Resource(resource),
                         ..
                     } => {
-                        let ty = crate::dealias(self.resolve, *id);
+                        let ty = dealias(self.resolve, *id);
                         let resource_table_ty = &self.types[*resource];
                         let concrete_ty = resource_table_ty.unwrap_concrete_ty();
                         self.imports_resource_types.insert(ty, concrete_ty);
@@ -1653,7 +1654,7 @@ impl<'a> Instantiator<'a, '_> {
                             exports.get(ty_name, &NameMapNoIntern).unwrap();
                         match self.component.export_items[*export_idx] {
                             Export::Type(TypeDef::Resource(resource)) => {
-                                let ty = crate::dealias(self.resolve, *ty);
+                                let ty = dealias(self.resolve, *ty);
                                 let resource_table_ty = &self.types[resource];
                                 let concrete_ty = resource_table_ty.unwrap_concrete_ty();
                                 self.exports_resource_types.insert(ty, concrete_ty);
@@ -4904,7 +4905,7 @@ impl<'a> Instantiator<'a, '_> {
         resource: TypeId,
         resource_map: &BTreeMap<TypeId, ResourceIndex>,
     ) -> &'a str {
-        let resource = crate::dealias(resolve, resource);
+        let resource = dealias(resolve, resource);
         local_names
             .get_or_create(
                 resource_map[&resource],
@@ -4931,7 +4932,7 @@ impl<'a> Instantiator<'a, '_> {
         let resolve = self.resolve;
         let types = self.types;
         let component = self.component;
-        let resource = crate::dealias(resolve, resource);
+        let resource = dealias(resolve, resource);
         let resource_wit_name = resolve.types[resource].name.as_ref().unwrap();
         if let (
             _,
@@ -5039,11 +5040,8 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         // Host lifted async import (i.e. JSPI)
-        let requires_async_porcelain = requires_async_porcelain(
-            FunctionIdentifier::Fn(func),
-            import_name,
-            &self.async_imports,
-        );
+        let requires_async_porcelain =
+            requires_async_porcelain(&func.name, import_name, &self.async_imports);
         let host_import_generator = options.async_ || (requires_async_porcelain && !is_async);
         // A canonical async lower returns status without suspending its caller.
         if !options.async_ && (is_async || self.types[func_ty].async_ || requires_async_porcelain) {
@@ -5056,13 +5054,11 @@ impl<'a> Instantiator<'a, '_> {
         // `implements` feature) falls back to a mapping for the implemented
         // interface id when the label itself has no mapping, so that e.g.
         // WASI shim mappings apply to labeled imports as well.
-        let implements = self
-            .resolve
-            .implements_interface(
-                world_key,
-                &self.resolve.worlds[self.world].imports[world_key],
-            )
-            .and_then(|id| self.resolve.id_of(id));
+        let implements = crate::engine::implements(
+            self.resolve,
+            world_key,
+            &self.resolve.worlds[self.world].imports[world_key],
+        );
 
         // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import_with_implements(
@@ -5071,6 +5067,7 @@ impl<'a> Instantiator<'a, '_> {
                 import_name
             } else {
                 match func.kind {
+                    #[cfg(feature = "wit-parser-262")]
                     FunctionKind::Getter
                     | FunctionKind::Setter
                     | FunctionKind::MethodGetter(_)
@@ -5110,6 +5107,7 @@ impl<'a> Instantiator<'a, '_> {
         self.create_resource_fn_map(func, func_ty, &mut import_resource_map);
 
         let (callee_name, call_type) = match func.kind {
+            #[cfg(feature = "wit-parser-262")]
             FunctionKind::Getter
             | FunctionKind::Setter
             | FunctionKind::MethodGetter(_)
@@ -5336,6 +5334,7 @@ impl<'a> Instantiator<'a, '_> {
             };
 
             let callee_name = match func.kind {
+                #[cfg(feature = "wit-parser-262")]
                 FunctionKind::Getter
                 | FunctionKind::Setter
                 | FunctionKind::MethodGetter(_)
@@ -5424,6 +5423,7 @@ impl<'a> Instantiator<'a, '_> {
 
         // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
+            #[cfg(feature = "wit-parser-262")]
             FunctionKind::Getter
             | FunctionKind::Setter
             | FunctionKind::MethodGetter(_)
@@ -5659,7 +5659,7 @@ impl<'a> Instantiator<'a, '_> {
             .is_none();
 
         // Retrieve the resource id for the type definition
-        let resource_id = crate::dealias(self.resolve, t);
+        let resource_id = dealias(self.resolve, t);
         let ty = &self.resolve.types[resource_id];
 
         // If the resource is defined by this component (i.e. exported/used internally, *not* imported),
@@ -5765,11 +5765,7 @@ impl<'a> Instantiator<'a, '_> {
             let implements = self.resolve.worlds[self.world]
                 .imports
                 .get(&world_key)
-                .and_then(|item| {
-                    self.resolve
-                        .implements_interface(&world_key, item)
-                        .and_then(|id| self.resolve.id_of(id))
-                });
+                .and_then(|item| crate::engine::implements(self.resolve, &world_key, item));
             let (local_name, _) = self
                 .bindgen
                 .local_names
@@ -6805,6 +6801,7 @@ impl<'a> Instantiator<'a, '_> {
                     self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
                     let local_name = String::from(match func.kind {
+                        #[cfg(feature = "wit-parser-262")]
                         FunctionKind::Getter
                         | FunctionKind::Setter
                         | FunctionKind::MethodGetter(_)
@@ -6848,6 +6845,7 @@ impl<'a> Instantiator<'a, '_> {
                     );
 
                     let js_binding_name = match func.kind {
+                        #[cfg(feature = "wit-parser-262")]
                         FunctionKind::Getter
                         | FunctionKind::Setter
                         | FunctionKind::MethodGetter(_)
@@ -6893,7 +6891,7 @@ impl<'a> Instantiator<'a, '_> {
                     {
                         let mut namespace_locals = BTreeMap::<TypeId, String>::new();
                         for (type_name, type_id) in &self.resolve.interfaces[iface_id].types {
-                            let type_id = crate::dealias(self.resolve, *type_id);
+                            let type_id = dealias(self.resolve, *type_id);
                             let kind = &self.resolve.types[type_id].kind;
                             let generate = matches!(kind, TypeDefKind::Flags(_))
                                 && self.bindgen.opts.flags_as_bigint
@@ -6987,6 +6985,7 @@ impl<'a> Instantiator<'a, '_> {
                         self.create_resource_fn_map(func, *func_ty, &mut export_resource_map);
 
                         let local_name = String::from(match func.kind {
+                            #[cfg(feature = "wit-parser-262")]
                             FunctionKind::Getter
                             | FunctionKind::Setter
                             | FunctionKind::MethodGetter(_)
@@ -7040,6 +7039,7 @@ impl<'a> Instantiator<'a, '_> {
 
                         // Determine the export func name (this can also be a class name)
                         let export_binding_name = match func.kind {
+                            #[cfg(feature = "wit-parser-262")]
                             FunctionKind::Getter
                             | FunctionKind::Setter
                             | FunctionKind::MethodGetter(_)
@@ -7104,7 +7104,7 @@ impl<'a> Instantiator<'a, '_> {
         if self.bindgen.opts.no_component_error_wrapping || !self.bindgen.typed_error_classes {
             return None;
         }
-        let class = crate::result_error_class(self.resolve, iface_id, func)?;
+        let class = result_error_class(self.resolve, iface_id, func)?;
         if let Some(local_name) = classes.get(&class.name) {
             return Some(local_name.clone());
         }
@@ -7153,11 +7153,7 @@ impl<'a> Instantiator<'a, '_> {
                 });
         }
         let requires_async_porcelain = inferred_async
-            || requires_async_porcelain(
-                FunctionIdentifier::Fn(func),
-                export_name,
-                &self.async_exports,
-            );
+            || requires_async_porcelain(&func.name, export_name, &self.async_exports);
         // If the function is *also* async lifted, it
         if options.async_ {
             assert!(
@@ -7173,7 +7169,7 @@ impl<'a> Instantiator<'a, '_> {
                 func.result.as_ref(),
                 Some(Type::Id(id))
                     if matches!(
-                        self.resolve.types[crate::dealias(self.resolve, *id)].kind,
+                        self.resolve.types[dealias(self.resolve, *id)].kind,
                         TypeDefKind::Future(_)
                     )
             );
@@ -7184,6 +7180,7 @@ impl<'a> Instantiator<'a, '_> {
             ""
         };
         let wrapped_function_target = wrap_async_future_result.then(|| match func.kind {
+            #[cfg(feature = "wit-parser-262")]
             FunctionKind::Getter
             | FunctionKind::Setter
             | FunctionKind::MethodGetter(_)
@@ -7234,6 +7231,7 @@ impl<'a> Instantiator<'a, '_> {
 
         // Write function preamble (everything up to the `(` in `function (...`)
         match func.kind {
+            #[cfg(feature = "wit-parser-262")]
             FunctionKind::Getter
             | FunctionKind::Setter
             | FunctionKind::MethodGetter(_)
@@ -7346,6 +7344,7 @@ impl<'a> Instantiator<'a, '_> {
         self.bindgen(JsFunctionBindgenArgs {
             nparams: func.params.len(),
             call_type: match func.kind {
+                #[cfg(feature = "wit-parser-262")]
                 FunctionKind::Getter
                 | FunctionKind::Setter
                 | FunctionKind::MethodGetter(_)
@@ -7389,6 +7388,7 @@ impl<'a> Instantiator<'a, '_> {
 
         // End the function
         match func.kind {
+            #[cfg(feature = "wit-parser-262")]
             FunctionKind::Getter
             | FunctionKind::Setter
             | FunctionKind::MethodGetter(_)
@@ -7409,6 +7409,7 @@ impl<'a> Instantiator<'a, '_> {
                 .bindgen
                 .intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking));
             let target = match func.kind {
+                #[cfg(feature = "wit-parser-262")]
                 FunctionKind::Getter
                 | FunctionKind::Setter
                 | FunctionKind::MethodGetter(_)
@@ -9001,7 +9002,7 @@ pub fn gen_flat_lower_fn_js_expr(
                 instantiator.exports_resource_index_types.get(&resource_idx),
             ) {
                 (Some(import_ty_id), _) => {
-                    let ty = crate::dealias(instantiator.resolve, *import_ty_id);
+                    let ty = dealias(instantiator.resolve, *import_ty_id);
                     // A type-only import may be used exclusively by exports, so its
                     // table metadata is only populated while processing those exports.
                     let maybe_resource_table = instantiator
@@ -9017,7 +9018,7 @@ pub fn gen_flat_lower_fn_js_expr(
                     )
                 }
                 (_, Some(export_ty_id)) => {
-                    let ty = crate::dealias(instantiator.resolve, *export_ty_id);
+                    let ty = dealias(instantiator.resolve, *export_ty_id);
                     let maybe_resource_table =
                         instantiator.resource_exports.get(&ty).or(extra_resource_map
                             .as_ref()

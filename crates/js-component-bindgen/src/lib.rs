@@ -1,25 +1,33 @@
 use std::collections::HashSet;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
+use engine::{ensure_supported_functions, ts_bindgen::ts_bindgen, wit_component, wit_parser};
 use heck::ToShoutySnakeCase;
-use ts_bindgen::ts_bindgen;
 use wasmtime_environ::component::{CanonicalOptions, ComponentTypesBuilder, StaticModuleIndex};
 use wasmtime_environ::wasmparser::WasmFeatures;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
-use wit_bindgen_core::wit_parser::Function;
 use wit_component::DecodedWasm;
-use wit_parser::{Package, Resolve, Stability, Type, TypeDefKind, TypeId, WorldId};
+use wit_parser::Function;
 
 mod core;
 #[cfg(feature = "embedded-cm-runtime")]
 mod embedded_runtime;
+mod engine;
 mod files;
 mod transpile_bindgen;
-mod ts_bindgen;
+#[cfg(feature = "wit-parser-259")]
+pub mod wit_parser_259;
+#[cfg(not(feature = "wit-parser-259"))]
+mod wit_parser_259;
+#[cfg(feature = "wit-parser-262")]
+pub mod wit_parser_262;
+
+pub use wit_parser_259::{
+    dealias, esm_bindgen, function_bindgen, generate_types, generate_types_with_config,
+    get_thrown_type,
+};
 
 pub mod config;
-pub mod esm_bindgen;
-pub mod function_bindgen;
 pub mod names;
 pub mod script;
 pub mod source;
@@ -199,84 +207,6 @@ pub struct TranspileConfig {
     /// The standard checked runtime package enables this automatically.
     #[cfg(feature = "external-runtime")]
     pub cm_runtime_sync_imports: Option<bool>,
-}
-
-/// Reject accessor functions until JavaScript property bindings are implemented.
-fn ensure_supported_functions(resolve: &Resolve) -> Result<()> {
-    use wit_parser::WorldItem;
-
-    let functions = resolve
-        .interfaces
-        .iter()
-        .flat_map(|(_, interface)| interface.functions.values())
-        .chain(resolve.worlds.iter().flat_map(|(_, world)| {
-            world
-                .imports
-                .values()
-                .chain(world.exports.values())
-                .filter_map(|item| match item {
-                    WorldItem::Function(function) => Some(function),
-                    _ => None,
-                })
-        }));
-    for function in functions {
-        if function.kind.accessor().is_some() {
-            bail!(
-                "WIT accessor functions are not supported: {}",
-                function.name
-            );
-        }
-    }
-    Ok(())
-}
-
-pub fn generate_types(
-    name: &str,
-    resolve: Resolve,
-    world_id: WorldId,
-    opts: TranspileOpts,
-) -> Result<Vec<(String, Vec<u8>)>> {
-    generate_types_with_config(
-        name,
-        resolve,
-        world_id,
-        TranspileConfig::builder().opts(opts).build(),
-    )
-}
-
-/// Generate declarations with optional host embedding features.
-pub fn generate_types_with_config(
-    name: &str,
-    resolve: Resolve,
-    world_id: WorldId,
-    mut config: TranspileConfig,
-) -> Result<Vec<(String, Vec<u8>)>> {
-    #[cfg(feature = "external-runtime")]
-    let external_runtime = config.cm_runtime_es_module.is_some();
-    #[cfg(not(feature = "external-runtime"))]
-    let external_runtime = false;
-    let opts = &mut config.opts;
-    normalize_namespace_object_options(opts)?;
-    let mut files = files::Files::default();
-
-    ts_bindgen(
-        name,
-        &resolve,
-        world_id,
-        opts,
-        config.call_tracking,
-        config.optional_result_payloads,
-        config.type_generation,
-        external_runtime,
-        &mut files,
-    )
-    .context("failed to generate Typescript bindings")?;
-
-    let mut files_out: Vec<(String, Vec<u8>)> = Vec::new();
-    for (name, source) in files.iter() {
-        files_out.push((name.to_string(), source.to_vec()));
-    }
-    Ok(files_out)
 }
 
 /// Generate the JS transpilation bindgen for a given Wasm component binary
@@ -528,118 +458,6 @@ fn core_file_name(name: &str, idx: u32) -> String {
     format!("{name}.core{i_str}.wasm")
 }
 
-pub fn dealias(resolve: &Resolve, mut id: TypeId) -> TypeId {
-    loop {
-        match &resolve.types[id].kind {
-            TypeDefKind::Type(Type::Id(that_id)) => id = *that_id,
-            _ => break id,
-        }
-    }
-}
-
-/// Check if an item (usually some form of [`WorldItem`]) should be allowed through the feature gate
-/// of a given package.
-fn feature_gate_allowed(
-    resolve: &Resolve,
-    package: &Package,
-    stability: &Stability,
-    item_name: &str,
-) -> Result<bool> {
-    Ok(match stability {
-        Stability::Unknown => true,
-        Stability::Stable { since, .. } => {
-            let Some(package_version) = package.name.version.as_ref() else {
-                // If the package version is missing (we're likely dealing with an unresolved package)
-                // and we can't really check much.
-                return Ok(true);
-            };
-
-            ensure!(
-                package_version >= since,
-                "feature gate on [{item_name}] refers to an unreleased (future) package version [{since}] (current package version is [{package_version}])"
-            );
-
-            // Stabilization (@since annotation) overrides features and deprecation
-            true
-        }
-        Stability::Unstable {
-            feature,
-            deprecated: _,
-        } => {
-            // If a @unstable feature is present but the related feature was not enabled
-            // or all features was not selected, exclude
-            resolve.all_features || resolve.features.contains(feature)
-        }
-    })
-}
-
-/// Utility function for deducing whether a type can throw
-pub fn get_thrown_type(
-    resolve: &Resolve,
-    return_type: Option<Type>,
-) -> Option<(Option<&Type>, Option<&Type>)> {
-    match return_type {
-        None => None,
-        Some(Type::Id(id)) => match &resolve.types[id].kind {
-            TypeDefKind::Result(r) => Some((r.ok.as_ref(), r.err.as_ref())),
-            _ => None,
-        },
-        _ => None,
-    }
-}
-
-/// The class of the errors that the bindings throw when a function that an
-/// interface exports returns the error of its `result`.
-///
-/// The bindings export one class per named error type from the interface, so
-/// that a host can tell the errors of the interface apart with `instanceof`.
-/// There is none for an error type without a name, and none where the name of
-/// the class would be that of another declaration of the interface.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ResultErrorClass {
-    /// The name that the interface exports the class under.
-    pub name: String,
-    /// The name of the error type, as declared in WIT.
-    pub payload_type_name: String,
-}
-
-/// Find the [`ResultErrorClass`] of a function of an interface.
-pub(crate) fn result_error_class(
-    resolve: &Resolve,
-    interface: wit_parser::InterfaceId,
-    func: &Function,
-) -> Option<ResultErrorClass> {
-    use heck::ToUpperCamelCase as _;
-
-    let (_, Some(Type::Id(err))) = get_thrown_type(resolve, func.result)? else {
-        return None;
-    };
-    let payload_type_name = resolve.types[*err].name.clone()?;
-    let name = format!("{}Error", payload_type_name.to_upper_camel_case());
-
-    // The declarations of the interface name its types, and name the cases of
-    // its variants after the variant and the case.
-    let is_declared = resolve.interfaces[interface]
-        .types
-        .iter()
-        .any(|(type_name, type_id)| {
-            if type_name.to_upper_camel_case() == name {
-                return true;
-            }
-            let TypeDefKind::Variant(variant) = &resolve.types[*type_id].kind else {
-                return false;
-            };
-            variant
-                .cases
-                .iter()
-                .any(|case| format!("{type_name}_{}", case.name).to_upper_camel_case() == name)
-        });
-    (!is_declared).then_some(ResultErrorClass {
-        name,
-        payload_type_name,
-    })
-}
-
 /// Check whether a given function is an async fn
 ///
 /// Functions that are designated as guest async represent use of
@@ -653,12 +471,6 @@ pub(crate) fn is_async_fn(func: &Function, canon_opts: &CanonicalOptions) -> boo
         return true;
     }
     func.kind.is_async()
-}
-
-/// Identifier for a function used
-enum FunctionIdentifier<'a> {
-    Fn(&'a Function),
-    CanonFnName(&'a str),
 }
 
 /// Check whether a function has been marked or async binding generation
@@ -677,7 +489,7 @@ enum FunctionIdentifier<'a> {
 ///
 /// This function is *not* for detecting WASI P3 asynchronous behavior -- see [`is_guest_async_lifted_fn`].
 pub(crate) fn requires_async_porcelain(
-    func: FunctionIdentifier<'_>,
+    name: &str,
     id: &str,
     async_funcs: &HashSet<String>,
 ) -> bool {
@@ -685,11 +497,7 @@ pub(crate) fn requires_async_porcelain(
         return true;
     }
 
-    let name = match func {
-        FunctionIdentifier::Fn(func) => func.name.as_str(),
-        FunctionIdentifier::CanonFnName(name) => name,
-    }
-    .trim_start_matches("[async]");
+    let name = name.trim_start_matches("[async]");
 
     if async_funcs.contains(name) {
         return true;
@@ -720,7 +528,9 @@ trait ManagesIntrinsics {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::{generate_types, wit_parser::Resolve};
 
+    #[cfg(feature = "wit-parser-262")]
     #[test]
     fn accessors_report_an_error_before_generating_types() {
         let mut resolve = Resolve::default();
@@ -1273,12 +1083,12 @@ mod tests {
     fn wildcard_marks_every_function_async() {
         let async_funcs = HashSet::from(["*".to_string()]);
         assert!(requires_async_porcelain(
-            FunctionIdentifier::CanonFnName("query"),
+            "query",
             "jco:node/dns@0.1.0",
             &async_funcs,
         ));
         assert!(requires_async_porcelain(
-            FunctionIdentifier::CanonFnName("run"),
+            "run",
             "example:component/run@1.0.0",
             &async_funcs,
         ));

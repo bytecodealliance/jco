@@ -16,7 +16,12 @@ wit-bindgen = { workspace = true, features = ["macros"] }
 wit-component = { workspace = true }
 wat = { workspace = true, features = [ "component-model" ]}
 
-js-component-bindgen = { path = "../js-component-bindgen", features = ["external-runtime", "embedded-cm-runtime"] }
+js-component-bindgen = { path = "../js-component-bindgen", features = [
+  "coop-threads",
+  "embedded-cm-runtime",
+  "external-runtime",
+  "wit-parser-262",
+] }
 
 [dev-dependencies]
 serde = { workspace = true }

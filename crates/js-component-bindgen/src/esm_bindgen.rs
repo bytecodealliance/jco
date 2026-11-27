@@ -1,3 +1,4 @@
+use super::wit_parser;
 use std::collections::BTreeMap;
 use std::fmt::Write;
 

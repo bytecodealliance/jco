@@ -18,7 +18,10 @@ edition = { workspace = true }
 crate-type = ["lib"]
 
 [features]
-default = ["transpile-bindgen"]
+default = ["transpile-bindgen", "wit-parser-259"]
+# Also expose the original Rust API under its versioned module name.
+wit-parser-259 = []
+wit-parser-262 = ["dep:wit-component-262", "dep:wit-bindgen-core-063"]
 transpile-bindgen = []
 # Expose cooperative-thread names in the public intrinsic API.
 coop-threads = []
@@ -55,9 +58,13 @@ wasm-encoder = { workspace = true, features = [ "wasmparser" ] }
 wasm-metadata = { workspace = true }
 wasmparser = { workspace = true, features = [ "features", "component-model", "validate" ] }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
-wit-bindgen-core = { workspace = true }
-wit-component = { workspace = true }
-wit-parser = { workspace = true }
+wit-bindgen-core-063 = { package = "wit-bindgen-core", version = "0.63", default-features = false, optional = true }
+wit-component-262 = { package = "wit-component", version = "0.262", optional = true }
+
+# These types occur in the original public API, including without default features.
+wit-component-259 = { package = "wit-component", version = "0.259", default-features = false }
+wit-bindgen-core-062 = { package = "wit-bindgen-core", version = "0.62", default-features = false }
+wasmtime-environ-49 = { package = "wasmtime-environ", version = "49", default-features = false, features = ["component-model"] }
 
 oxc_allocator = { version = "=0.158.0", default-features = false, optional = true }
 oxc_ast = { version = "=0.158.0", default-features = false, optional = true }
@@ -69,4 +76,7 @@ oxc_span = { version = "=0.158.0", default-features = false, optional = true }
 oxc_str = { version = "=0.158.0", default-features = false, optional = true }
 
 [dev-dependencies]
+# Consumer parser versions are independent of the bindgen-core re-exports.
+wit-parser-259 = { package = "wit-parser", version = "0.259", default-features = false }
+wit-parser-262 = { package = "wit-parser", version = "0.262", default-features = false }
 wat = { workspace = true, features = [ "component-model" ] }

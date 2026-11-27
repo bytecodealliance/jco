@@ -2,6 +2,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
 
+use super::{
+    dealias, get_thrown_type, wasmtime_environ, wit_bindgen_core, wit_component, wit_parser,
+};
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
 use wasmtime_environ::component::{
     InterfaceType, ResourceIndex, RuntimeCallbackIndex, RuntimeComponentInstanceIndex,
@@ -26,7 +29,7 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::names::js_string_literal;
-use crate::{ManagesIntrinsics, get_thrown_type, source};
+use crate::{ManagesIntrinsics, source};
 use crate::{uwrite, uwriteln};
 
 /// Variable of bindings on the sync fast path that holds, boxed, what the first
@@ -422,7 +425,7 @@ fn unambiguous_result_wrapper_tags(resolve: &Resolve, ty: Option<&Type>) -> (boo
         return (true, true);
     };
 
-    match &resolve.types[crate::dealias(resolve, *id)].kind {
+    match &resolve.types[dealias(resolve, *id)].kind {
         TypeDefKind::Variant(variant) => (
             !variant.cases.iter().any(|case| case.name == "ok"),
             !variant.cases.iter().any(|case| case.name == "err"),
@@ -660,7 +663,7 @@ impl FunctionBindgen<'_> {
         let Type::Id(id) = self.result_ty? else {
             return None;
         };
-        let type_id = crate::dealias(self.resolve, *id);
+        let type_id = dealias(self.resolve, *id);
         let resource = self.resource_map.get(&type_id)?;
         let (lift_intrinsic, table_idx, table_field) = match resource {
             ResourceTable {
@@ -3308,7 +3311,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::HandleLift { handle, .. } => {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
-                let resource_ty = &crate::dealias(self.resolve, *ty);
+                let resource_ty = &dealias(self.resolve, *ty);
                 let ResourceTable { imported, data } = &self.resource_map[resource_ty];
 
                 let is_own = matches!(handle, Handle::Own(_));
@@ -3520,7 +3523,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (Handle::Own(ty) | Handle::Borrow(ty)) = handle;
                 let is_own = matches!(handle, Handle::Own(_));
                 let ResourceTable { imported, data } =
-                    &self.resource_map[&crate::dealias(self.resolve, *ty)];
+                    &self.resource_map[&dealias(self.resolve, *ty)];
 
                 let class_name = name.to_upper_camel_case();
                 let handle = format!("handle{}", self.tmp());
@@ -3694,7 +3697,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         let prefix = prefix.as_deref().unwrap_or("");
                         let class_name = self
                             .guest_resource_class_names
-                            .and_then(|names| names.get(&crate::dealias(self.resolve, *ty)))
+                            .and_then(|names| names.get(&dealias(self.resolve, *ty)))
                             .map(String::as_str)
                             .unwrap_or(&upper_camel);
 
@@ -3822,7 +3825,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
 
                 // Build the lowering function for the type produced by the future
-                let type_id = &crate::dealias(self.resolve, *ty);
+                let type_id = &dealias(self.resolve, *ty);
                 let ResourceTable {
                     imported: true,
                     data:
@@ -4034,7 +4037,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
 
                 // We must look up the type idx to find the future
-                let type_id = &crate::dealias(self.resolve, *ty);
+                let type_id = &dealias(self.resolve, *ty);
                 let ResourceTable {
                     imported: true,
                     data:
@@ -4194,7 +4197,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // and the below would fail (imported: false)?
 
                 // Build the lowering function for the type produced by the stream
-                let type_id = &crate::dealias(self.resolve, *ty);
+                let type_id = &dealias(self.resolve, *ty);
                 let ResourceTable {
                     imported: true,
                     data:
@@ -4353,7 +4356,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
 
                 // We must look up the type idx to find the stream
-                let type_id = &crate::dealias(self.resolve, *ty);
+                let type_id = &dealias(self.resolve, *ty);
                 let ResourceTable {
                     imported: true,
                     data:
