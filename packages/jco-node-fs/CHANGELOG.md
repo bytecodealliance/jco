@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.3] - 2026-11-27
+
+### 🐛 Bug Fixes
+
+- _(node-fs)_ align napi runtime with derive macros by @vados-cosmonic
+
+
+### 🧪 Testing
+
+- _(node-fs)_ remove redundant test filename suffixes by @vados-cosmonic
+
+
 ## [0.3.2] - 2026-09-07
 
 This release is a re-release of 0.3.1, to make use on some infrastructure fixes,
