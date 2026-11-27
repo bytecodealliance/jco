@@ -90,7 +90,9 @@ function writeUtf8(
     // A UTF-8 string needs at least one byte per UTF-16 code unit, with
     // equality only for ASCII. utf8Size already checked every code unit.
     if (shortAscii && len <= 32 && len === s.length) {
-        for (let i = 0; i < len; i++) out[i] = s.charCodeAt(i);
+        for (let i = 0; i < len; i++) {
+            out[i] = s.charCodeAt(i);
+        }
         return { ptr, len };
     }
     const { read, written } = encoder.encodeInto(s, out);

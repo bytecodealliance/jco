@@ -1,0 +1,20 @@
+name: Restore Jco
+description: Restore the built workspace CLI and the transpiler it imports.
+runs:
+  using: composite
+  steps:
+    - name: Restore CLI
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: jco-build-ts
+        path: packages/jco/dist
+    - name: Restore transpiler
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: jco-transpile-dist
+        path: packages/jco-transpile/dist
+    - name: Restore transpiler bindings
+      uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: jco-transpile-vendor
+        path: packages/jco-transpile/vendor

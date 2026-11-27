@@ -201,7 +201,9 @@ suite('resources', () => {
                 const add = Set.prototype.add;
                 try {
                     Set.prototype.add = function (value) {
-                        if (value === rep) recorded++;
+                        if (value === rep) {
+                            recorded++;
+                        }
                         return add.call(this, value);
                     };
                     instance.drop(owned);

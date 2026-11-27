@@ -48,7 +48,9 @@ suite('canonical ABI list bounds', () => {
             ],
             {
                 get(target, key, receiver) {
-                    if (key === 'length') lengthReads++;
+                    if (key === 'length') {
+                        lengthReads++;
+                    }
                     return Reflect.get(target, key, receiver);
                 },
             },

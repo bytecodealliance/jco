@@ -134,17 +134,6 @@ trap still records the instance error for subsequent calls. A reentrant call,
 an object argument, or a factory with custom instantiation or options uses the
 ordinary task lifecycle so host code can observe entry, traps, and shutdown.
 
-### Browser performance
-
-The component-demos study compares the same C, C++ and Rust guests with
-Jco 1.13.0, upstream `326f52ab4` and the compiled JavaScript shims. Across
-12 balanced Chromium rounds, warm DOM tree traversal was 7.2–9.1× faster and
-table creation was 4.4–6.0× faster than that upstream revision across both
-binding modes. Cold import and initialization still took longer than 1.13.0
-on all 21 workloads. The study includes runtime size, first-result timings,
-deployment experiments and reproduction instructions.
-[Benchmark overview](https://github.com/vados-cosmonic/component-demos/blob/2660a7a71f8891c5e67e99aa9633258e12c7bace/README.md) · [Per-workload results and raw samples](https://github.com/vados-cosmonic/component-demos/blob/2660a7a71f8891c5e67e99aa9633258e12c7bace/docs/browser-performance.md#fifo-follow-up-on-pr-65)
-
 ## Runtime profiles
 
 Runtime diagnostic statements carry a `DEBUG` JavaScript label.
@@ -259,8 +248,8 @@ shared JavaScript chunk. Otherwise the browser discovers the chunk when it
 reads the entry and starts the Wasm fetch when the bindings execute.
 
 ```html
-<link rel="preload" as="fetch" type="application/wasm" crossorigin="anonymous" href="/dist/query/dom_query.core.wasm">
-<link rel="modulepreload" href="/dist/shared/runtime-BUILD_HASH.js">
+<link rel="preload" as="fetch" type="application/wasm" crossorigin="anonymous" href="/dist/query/dom_query.core.wasm" />
+<link rel="modulepreload" href="/dist/shared/runtime-BUILD_HASH.js" />
 ```
 
 Use the deployed Wasm URL and the chunk filename from the application build.
@@ -276,7 +265,7 @@ serving the runtime at `/runtime/` can include this link for a synchronous
 adapter that imports the sync entry point.
 
 ```html
-<link rel="modulepreload" href="/runtime/intrinsics/sync.js">
+<link rel="modulepreload" href="/runtime/intrinsics/sync.js" />
 ```
 
 ### Loading explicit instantiation bindings in a browser
@@ -292,27 +281,36 @@ your build output and serve them as `application/wasm`. Here the generated
 adapter maps its host imports to `../../../host/web-host.js`.
 
 ```js
-import * as host from "./host/web-host.js";
+import * as host from './host/web-host.js';
 
-const entry = new URL("./c/table-update/explicit/table_update.js", import.meta.url);
-const names = ["table_update.core.wasm", "table_update.core2.wasm",
-    "table_update.core3.wasm", "table_update.core4.wasm"];
+const entry = new URL('./c/table-update/explicit/table_update.js', import.meta.url);
+const names = [
+    'table_update.core.wasm',
+    'table_update.core2.wasm',
+    'table_update.core3.wasm',
+    'table_update.core4.wasm',
+];
 
 // Start both operations now. Waiting for the JS import before fetching the
 // cores would put runtime dependency loading on the critical path again.
 const [bindings, compiled] = await Promise.all([
     import(entry.href),
-    Promise.all(names.map(async (name) => {
-        const response = await fetch(new URL(name, entry));
-        if (!response.ok) throw new Error(`Failed to load ${name} (HTTP ${response.status})`);
-        return [name, await WebAssembly.compileStreaming(response)];
-    })),
+    Promise.all(
+        names.map(async (name) => {
+            const response = await fetch(new URL(name, entry));
+            if (!response.ok) throw new Error(`Failed to load ${name} (HTTP ${response.status})`);
+            return [name, await WebAssembly.compileStreaming(response)];
+        }),
+    ),
 ]);
 const cores = new Map(compiled);
-const guest = await bindings.instantiate((name) => {
-    if (!cores.has(name)) throw new Error(`Missing core module ${name}`);
-    return cores.get(name);
-}, { "../../../host/web-host.js": host });
+const guest = await bindings.instantiate(
+    (name) => {
+        if (!cores.has(name)) throw new Error(`Missing core module ${name}`);
+        return cores.get(name);
+    },
+    { '../../../host/web-host.js': host },
+);
 guest.run(2000);
 ```
 
