@@ -3,6 +3,8 @@
 These chapters go deeper into how Jco binds components to JavaScript. They assume familiarity with
 the [Transpiling](../transpiling.md) chapter and the [WASI support](../wasi/index.md) section.
 
+- [Performance](./performance/index.md): opt-in options that trade generality for speed, and
+  benchmarks.
 - [Optimized Host Bindings](./optimized-host-bindings.md): the fast paths Jco generates for host
   calls, and when they apply.
 - [WIT Type representations](./wit-type-representations.md): how each WIT type appears in
