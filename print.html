@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-28b54b9d.js";
+            window.path_to_searchindex_js = "searchindex-e500b771.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-384f90e7.js"></script>
@@ -715,6 +715,9 @@ which may change even in a patch release. See the
 <p><code>--minify</code>: Minify the component JS</p>
 </li>
 <li>
+<p><code>--eager-compile</code> adds a file-wide compile hint to the generated JavaScript entry module. Supporting browsers can spend more time importing the module and less time compiling functions during the first call. This can reduce first-interaction latency when an application imports a component ahead of use. If the application imports and calls the component together, measure both steps. The option also works with <code>--minify</code>. <a href="https://v8.dev/blog/explicit-compile-hints">V8 compile hints</a></p>
+</li>
+<li>
 <p><code>--optimize</code>: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a <code>-- &lt;binaryen options&gt;</code> flag separator.</p>
 </li>
 <li>
@@ -740,6 +743,9 @@ which may change even in a patch release. See the
 </li>
 <li>
 <p><code>--cm-runtime-es-module &lt;base&gt;</code>: Select an experimental API-v1 Component Model runtime package or directory base. Bindings import named exports from <code>&lt;base&gt;/runtime</code> and <code>&lt;base&gt;/intrinsics/resource</code>; directory and file/HTTP(S) URL bases append <code>.js</code>. Relative bases resolve from the generated bindings. Install the runtime alongside the generated component; omitting this option bundles jco’s own runtime into the bindings, which then import no runtime. The current operation is <code>tableGet(context, table, handle)</code>. Legacy provider files such as <code>./provider.js</code> must migrate to a directory base. See the <a href="../../packages/jco-cm-runtime/docs/runtime.html">runtime contract</a>.</p>
+</li>
+<li>
+<p><code>--cm-runtime-sync-imports</code>: Select the checked synchronous-import extension for a custom runtime package or directory that provides <code>intrinsics/sync</code>. The standard checked runtime package enables it automatically.</p>
 </li>
 <li>
 <p><code>--valid-lifting-optimization</code>: Internal validations are removed assuming that core Wasm binaries are valid components, providing a minor output size saving.</p>
