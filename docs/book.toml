@@ -12,3 +12,10 @@ edit-url-template = "https://github.com/bytecodealliance/jco/tree/main/docs/{pat
 [output.html.fold]
 enable = true
 level = 1
+
+# Pages moved under Advanced; keep the old URLs working.
+[output.html.redirect]
+"/performance/index.html" = "../advanced/performance/index.html"
+"/performance/sync-fast-path.html" = "../advanced/performance/sync-fast-path.html"
+"/performance/benchmarks/index.html" = "../../advanced/performance/benchmarks/index.html"
+"/performance/benchmarks/development-use-jco-serve.html" = "../../advanced/performance/benchmarks/development-use-jco-serve.html"
