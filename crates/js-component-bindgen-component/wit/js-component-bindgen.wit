@@ -331,7 +331,10 @@ world js-component-bindgen {
   record transpiled {
     files: files,
     imports: list<string>,
-    exports: list<tuple<string, export-type>>
+    exports: list<tuple<string, export-type>>,
+    /// Why the sync fast path is not used, set only when perf-sync-fast-path
+    /// was set and the component is not eligible.
+    sync-fast-path-blocker: option<string>,
   }
 
   /// Generate the file structure for the transpiled of a component

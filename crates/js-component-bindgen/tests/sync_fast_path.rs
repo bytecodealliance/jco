@@ -1,7 +1,7 @@
 //! Which components `perf_sync_fast_path` applies to, and what it generates.
 
 use js_component_bindgen::{
-    AsyncMode, BindingsMode, InstantiationMode, TranspileConfig, TranspileOpts,
+    AsyncMode, BindingsMode, InstantiationMode, TranspileConfig, TranspileOpts, Transpiled,
     transpile_with_config,
 };
 
@@ -154,8 +154,8 @@ const TWO_INSTANCES: &str = r#"
 /// A change to the configuration of a transpilation.
 type Configure<'a> = &'a dyn Fn(&mut TranspileConfig);
 
-/// Generate the JavaScript bindings of a component.
-fn bindings(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> String {
+/// Transpile a component.
+fn transpile(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> Transpiled {
     let component = wat::parse_str(wat).expect("fixture should be valid WAT");
     let opts = TranspileOpts {
         name: "component".into(),
@@ -167,8 +167,12 @@ fn bindings(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> String {
     let mut config = TranspileConfig::builder().opts(opts).build();
     configure(&mut config);
 
-    let transpiled = transpile_with_config(&component, config).expect("fixture should transpile");
-    let (_, source) = transpiled
+    transpile_with_config(&component, config).expect("fixture should transpile")
+}
+
+/// Generate the JavaScript bindings of a component.
+fn bindings(wat: &str, configure: impl FnOnce(&mut TranspileConfig)) -> String {
+    let (_, source) = transpile(wat, configure)
         .files
         .into_iter()
         .find(|(name, _)| name == "component.js")
@@ -359,4 +363,26 @@ fn jspi_without_async_functions_does_not_block() {
         });
     });
     assert_ne!(off, on);
+}
+
+#[test]
+fn transpilation_reports_why_the_fast_path_is_not_used() {
+    let blocker =
+        |wat: &str, configure: Configure| transpile(wat, configure).sync_fast_path_blocker;
+    let on = |config: &mut TranspileConfig| config.perf_sync_fast_path = true;
+    assert_eq!(blocker(ELIGIBLE, &|_| {}), None, "not requested");
+    assert_eq!(blocker(ELIGIBLE, &on), None, "eligible");
+    assert_eq!(
+        blocker(ELIGIBLE, &|config| {
+            on(config);
+            config.call_tracking = true;
+        })
+        .as_deref(),
+        Some("call tracking is enabled")
+    );
+    assert_eq!(
+        blocker(ELIGIBLE, &|config| config.call_tracking = true),
+        None,
+        "ineligible but not requested"
+    );
 }
