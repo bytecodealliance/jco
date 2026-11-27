@@ -246,6 +246,7 @@ class Descriptor extends WasiResource implements IDescriptor {
         if (this.#hostPreopen || this.#virtualDirectory) {
             return "directory";
         }
+        // The type read at open, saving a worker round trip: an open file keeps its type.
         return this.#file.type;
     }
 

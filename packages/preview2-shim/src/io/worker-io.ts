@@ -522,6 +522,7 @@ function pollList(reps: number[]): Uint32Array {
             workerIndices.push(index);
         }
     }
+    // No ready pollable in the list: let the worker wait, in one call as before.
     if (workerReps.length === reps.length) {
         return ioCall(POLL_POLL_LIST, null, reps);
     }
