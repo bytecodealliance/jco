@@ -25,6 +25,18 @@ import { coinFlip as _coinFlip } from '../core.js';
 import { clearCurrentThread, TASK_ALREADY_RESOLVED } from './task-operations.js';
 import { syncContextSlots } from './context.js';
 
+// A synchronous leaf cannot produce futures or subtasks. Omitting their
+// constructors lets a bundler drop the channel and scheduler implementations.
+type AsyncConstructors = 'AsyncSubtask' | 'FutureValue' | 'Waitable';
+type TaskClassContext = Omit<AsyncTaskClassContext, AsyncConstructors> &
+    Partial<Pick<AsyncTaskClassContext, AsyncConstructors>>;
+
+type TaskStore = {
+    id: bigint;
+    hostThreadID: number;
+    scopeTasks: TaskClassContext['scopeTasks'] | undefined;
+};
+
 /** Stands in for a list that was never allocated. */
 const NONE: readonly never[] = [];
 
@@ -36,9 +48,9 @@ const TASK_RESOLVED = 'resolved';
 
 function defineAsyncTask() {
     return class AsyncTask {
-        #context: AsyncTaskClassContext;
+        #context: TaskClassContext;
         // What one `initializeAsyncTaskClass` call shares between the instances it constructs.
-        #store: { id: bigint; hostThreadID: number };
+        #store: TaskStore;
 
         static State = {
             INITIAL: TASK_INITIAL,
@@ -83,6 +95,9 @@ function defineAsyncTask() {
         #callbackFnName: string | null | undefined = null;
         #postReturnFn: TaskPostReturn | null = null;
         #getCalleeParamsFn: (() => unknown[]) | null = null;
+        // Bindgen leaves the lift metadata at its defaults in checked synchronous
+        // leaves. Their tasks enter and exit normally, but cannot use task.return
+        // or pass memory to a cross-component callee.
         #calleeIsAsync: boolean | null = null;
         #holdsEntrySlot = false;
         #funcTypeIsAsync = false;
@@ -102,7 +117,12 @@ function defineAsyncTask() {
             | null = null;
         #resourceScopeExited = false;
         #subtasks: AsyncSubtaskType[] | null = null;
-        #threads: AsyncThreadType[] = [];
+        // Every export starts with one implicit thread. Store it directly so
+        // that creating and retiring an ordinary task never allocates a thread
+        // array. Once another thread joins, the array keeps insertion order
+        // and its first live entry remains the task's default thread.
+        #firstThread?: AsyncThreadType;
+        #threads?: AsyncThreadType[];
         #entered = false;
         #exited = false;
         #errored: unknown = null;
@@ -115,16 +135,12 @@ function defineAsyncTask() {
         alwaysTaskReturn = false;
         returnCalls = 0;
         tmpRetI64HighBits = 0 | 0;
-        constructor(
-            context: AsyncTaskClassContext,
-            store: { id: bigint; hostThreadID: number },
-            opts: AsyncTaskOptions,
-        ) {
+        constructor(context: TaskClassContext, store: TaskStore, opts: AsyncTaskOptions) {
             this.#context = context;
             this.#store = store;
             this.#id = ++store.id;
             this.#resourceScopeId = ++this.#context.scopeCounter.value;
-            this.#context.scopeTasks.set(this.#resourceScopeId, this);
+            store.scopeTasks?.set(this.#resourceScopeId, this);
             if (opts?.componentIdx === undefined) {
                 throw new TypeError('missing component id during task creation');
             }
@@ -217,7 +233,7 @@ function defineAsyncTask() {
             if (this.#context.storeTrap.stopped) {
                 this.#resourceLenders = null;
                 this.#resourceScopeExited = true;
-                this.#context.scopeTasks.delete(this.#resourceScopeId);
+                this.#store.scopeTasks?.delete(this.#resourceScopeId);
                 return;
             }
             if (this.#resourceBorrowCount !== 0) {
@@ -233,7 +249,7 @@ function defineAsyncTask() {
             }
             this.#resourceLenders = null;
             this.#resourceScopeExited = true;
-            this.#context.scopeTasks.delete(this.#resourceScopeId);
+            this.#store.scopeTasks?.delete(this.#resourceScopeId);
         }
         /**
          * Create the completion promise if it does not exist yet.
@@ -271,7 +287,11 @@ function defineAsyncTask() {
                 reject(this.#errored);
             } else if (this.#rejected) {
                 reject(this.#completionValue);
-            } else if (this.#preserveFutureResult && this.#completionValue instanceof this.#context.FutureValue) {
+            } else if (
+                this.#preserveFutureResult &&
+                this.#context.FutureValue &&
+                this.#completionValue instanceof this.#context.FutureValue
+            ) {
                 this.#completionValue.resolveAsValue(resolve);
             } else {
                 resolve(this.#completionValue);
@@ -366,7 +386,7 @@ function defineAsyncTask() {
             this.#calleeIsAsync = value;
         }
         setParentSubtask(subtask: AsyncSubtaskType | null) {
-            if (!subtask || !(subtask instanceof this.#context.AsyncSubtask)) {
+            if (!subtask || !this.#context.AsyncSubtask || !(subtask instanceof this.#context.AsyncSubtask)) {
                 return;
             }
             if (this.#parentSubtask) {
@@ -1087,7 +1107,7 @@ function defineAsyncTask() {
 
             // A task whose threads all exited unresolved has no thread left to
             // settle its completion on exit, so settle it here.
-            if (this.#exited && this.#threads.length === 0) {
+            if (this.#exited && this.#firstThread === undefined) {
                 this.#settleCompletionPromise();
             }
         }
@@ -1179,7 +1199,7 @@ function defineAsyncTask() {
 
             this.#exited = true;
             this.removeThread(this.defaultThread());
-            if (this.#threads.length > 0) {
+            if (this.#firstThread !== undefined) {
                 clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id, { preserveTask: true });
             }
         }
@@ -1220,11 +1240,15 @@ function defineAsyncTask() {
             if (!cstate) {
                 throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
             }
-            const waitable = new this.#context.Waitable({
+            const { AsyncSubtask, Waitable } = this.#context;
+            if (!AsyncSubtask || !Waitable) {
+                throw new TypeError('this task context does not support subtasks');
+            }
+            const waitable = new Waitable({
                 componentIdx: this.#componentIdx,
                 target: `subtask (internal ID [${this.#id}])`,
             });
-            const newSubtask = new this.#context.AsyncSubtask({
+            const newSubtask = new AsyncSubtask({
                 componentIdx,
                 childTask,
                 parentTask: this,
@@ -1303,7 +1327,7 @@ function defineAsyncTask() {
         }
 
         defaultThread() {
-            return this.#threads[0];
+            return this.#firstThread!;
         }
 
         removeThread(thread: AsyncThreadType) {
@@ -1314,10 +1338,15 @@ function defineAsyncTask() {
             if (cstate && thread.hasIndex()) {
                 cstate.threads.remove(thread.id());
             }
-            if (this.#threads[this.#threads.length - 1] === thread) {
-                this.#threads.pop();
-            } else {
-                this.#threads = this.#threads.filter((t) => t !== thread);
+            if (this.#threads) {
+                if (this.#threads[this.#threads.length - 1] === thread) {
+                    this.#threads.pop();
+                } else {
+                    this.#threads = this.#threads.filter((t) => t !== thread);
+                }
+                this.#firstThread = this.#threads[0];
+            } else if (this.#firstThread === thread) {
+                this.#firstThread = undefined;
             }
             syncContextSlots(this.#context.registers);
 
@@ -1325,14 +1354,14 @@ function defineAsyncTask() {
             // is not a trap (Canonical ABI `Task.exit_implicit_thread`,
             // component-model#767): the task stays unresolved for good, and only
             // a caller that waits on it is affected.
-            if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) {
+            if (cstate && this.#firstThread === undefined && !this.isResolvedState() && !this.isRejected()) {
                 cstate.noteUnresolvedExit(this);
             }
             // A thread exiting returns control to a sync call in progress,
             // which goes on only if it can (Canonical ABI `canon_lift`).
             cstate?.checkSyncCallBlocked();
 
-            if (this.#exited && this.#threads.length === 0) {
+            if (this.#exited && this.#firstThread === undefined) {
                 clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
             }
         }
@@ -1343,11 +1372,14 @@ function defineAsyncTask() {
             // register with (and none may be materialised on their behalf).
             if (this.#componentIdx === -1) {
                 thread.setId(++this.#store.hostThreadID);
-                this.#threads.push(thread);
-                return thread;
             }
-            this.#threads.push(thread);
-            if (!opts?.indexOnEntry) {
+            if (this.#threads) {
+                this.#threads.push(thread);
+            } else if (this.#firstThread) {
+                this.#threads = [this.#firstThread, thread];
+            }
+            this.#firstThread ??= thread;
+            if (this.#componentIdx !== -1 && !opts?.indexOnEntry) {
                 this.#insertThread(thread);
             }
             return thread;
@@ -1378,9 +1410,16 @@ function defineAsyncTask() {
 }
 let sharedAsyncTask: ReturnType<typeof defineAsyncTask>;
 
-export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncTaskConstructor {
+export function initializeAsyncTaskClass(context: TaskClassContext): AsyncTaskConstructor {
     const AsyncTask = (sharedAsyncTask ??= defineAsyncTask());
-    const store: { id: bigint; hostThreadID: number } = { id: 0n, hostThreadID: 0 };
+    // Removing a borrow handle looks up the task by its resource scope. When
+    // the bindings cannot create such a handle, registering and deleting every
+    // call would churn the map without a reader. Older bindings omit the hint.
+    const store: TaskStore = {
+        id: 0n,
+        hostThreadID: 0,
+        scopeTasks: context.canCreateBorrowHandles === false ? undefined : context.scopeTasks,
+    };
 
     /**
      * Construct a task that uses the context.

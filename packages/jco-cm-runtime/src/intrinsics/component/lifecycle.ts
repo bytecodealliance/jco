@@ -127,7 +127,9 @@ export const stopInstance: ComponentModule['stopInstance'] = (context) => {
     }
     storeTrap.resourceTables.length = 0;
     for (const resource of resources) {
-        // A guest holding it twice may have dropped the other handle.
+        // The guest may already have dropped another handle to this object.
+        // Bindgen records the drop before reading the disposal hook because
+        // even its getter can reenter stop() while that first drop is in progress.
         if (storeTrap.disposed.has(resource)) {
             continue;
         }

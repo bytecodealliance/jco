@@ -1,3 +1,5 @@
+import * as syncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/sync-task';
+import * as sync from '@bytecodealliance/jco-cm-runtime/intrinsics/sync';
 import expectedExports from './contract-exports.js';
 import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-runtime';
 import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
@@ -38,6 +40,7 @@ const publicModules: Record<string, Record<string, unknown>> = {
     LowerModule: lower,
     FutureModule: future,
     StreamModule: stream,
+    SyncImportsModule: sync,
 };
 
 const constants = new Set([
@@ -59,8 +62,12 @@ for (const [name, exports] of Object.entries(expectedExports)) {
     }
 }
 const defaultModule: ResourceModule = resource;
+const syncProvider: NonNullable<RuntimeModuleContracts['intrinsics/sync']> = sync;
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
 const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
+for (const name of Object.keys(syncTask) as (keyof typeof syncTask)[]) {
+    if (syncTask[name] !== defaultTasks[name]) throw new Error(`task operation identity changed: ${name}`);
+}
 const defaultHost: RuntimeModuleContracts['intrinsics/host'] = host;
 const eventMemory = { buffer: new ArrayBuffer(8) };
 if (
@@ -296,6 +303,7 @@ const entry = defaultModule.tableGet({ RuntimeError: WebAssembly.RuntimeError },
 if (
     version !== CM_RUNTIME_API_VERSION ||
     entry.rep !== 42 ||
+    syncProvider.tableRep({ RuntimeError: WebAssembly.RuntimeError }, [1 << 30, 0, 7, 42], 1) !== entry.rep ||
     customModule.tableGet({ RuntimeError: Error }, [1 << 30, 0, 7, 24], 1).rep !== 24
 ) {
     throw new Error('consumer failed');

@@ -11,6 +11,59 @@ import { readTaskRegister, clearCurrentTaskMeta, setCurrentTaskMeta } from '../t
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
 import { promiseWithResolvers } from '../core/promises.js';
 
+/** Install the task register for a core start function or a detached host import. */
+function createImplicitImportTask(
+    context: TaskCompatImportRuntimeContext,
+    componentIdx: number,
+    isAsync: boolean,
+    isManualAsync?: boolean,
+) {
+    const created = createNewCurrentImplicitThread(context.creation, {
+        componentIdx,
+        isAsync,
+        isManualAsync,
+        callingWasmExport: false,
+    });
+    const { task, taskID, threadID } = created;
+    task.registerOnResolveHandler(() => {
+        clearCurrentTaskMeta(context.registers, { taskID, threadID, componentIdx: task.componentIdx() });
+    });
+    setCurrentTaskMeta(context.registers, { componentIdx, taskID, threadID });
+    return created;
+}
+
+function callWithSyncTask(task: AsyncTaskType, importFn: TaskLowerImportOptions['importFn'], params: unknown[]) {
+    task.enterSync();
+    try {
+        const result = importFn(...params);
+        task.resolve([result]);
+        return result;
+    } catch (error) {
+        task.reject(error);
+        throw error;
+    } finally {
+        task.exit();
+    }
+}
+
+/**
+ * A synchronous leaf already has an export task to own the import and its
+ * borrows. Avoid allocating a subtask for every host call. A core start
+ * function or a host calling a saved lower directly has no such owner, so
+ * create a task and finish it on both the return and throw paths.
+ */
+export function lowerSyncImport(
+    context: TaskCompatImportRuntimeContext,
+    componentIdx: number,
+    importFn: TaskLowerImportOptions['importFn'],
+    ...params: unknown[]
+) {
+    checkMayLeave(context.mayLeave, componentIdx);
+    if (context.tasks.get(componentIdx)?.length) return importFn(...params);
+    const { task } = createImplicitImportTask(context, componentIdx, false);
+    return callWithSyncTask(task, importFn, params);
+}
+
 // LowerImportBackwardsCompat
 export function lowerImportBackwardsCompat(
     _context: TaskCompatImportRuntimeContext,
@@ -32,6 +85,12 @@ export function lowerImportBackwardsCompat(
         stringEncoding,
     } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
+    // A sync-only adapter returns its lowered value on the JavaScript stack.
+    // During module initialization there may be no guest task yet; install
+    // one below so that lifecycle observers still see the instance as busy.
+    if (args.directSync && _context.tasks.get(componentIdx)?.length) {
+        return importFn(...params);
+    }
     const meta = readTaskRegister(_context.registers, componentIdx);
     let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
     let createdTask: AsyncTaskType | undefined;
@@ -49,31 +108,9 @@ export function lowerImportBackwardsCompat(
         if (funcTypeIsAsync || (isAsync && !isManualAsync)) {
             throw new Error('p3 async wasm exports cannot use backwards compat auto-task init');
         }
-        const {
-            task: newTask,
-            taskID: newTaskID,
-            threadID: newThreadID,
-        } = createNewCurrentImplicitThread(_context.creation, {
-            componentIdx,
-            isAsync,
-            isManualAsync,
-            callingWasmExport: false,
-        });
-        createdTask = newTask;
-        // Since we're managing the task creation ourselves we must clear ourselves
-        createdTask.registerOnResolveHandler(() => {
-            clearCurrentTaskMeta(_context.registers, {
-                taskID: newTaskID,
-                threadID: newThreadID,
-                componentIdx: task.componentIdx(),
-            });
-        });
-        setCurrentTaskMeta(_context.registers, {
-            componentIdx,
-            taskID: newTaskID,
-            threadID: newThreadID,
-        });
-        taskMeta = getCurrentTask(_context, componentIdx, newTaskID);
+        const created = createImplicitImportTask(_context, componentIdx, isAsync, isManualAsync);
+        createdTask = created.task;
+        taskMeta = getCurrentTask(_context, componentIdx, created.taskID);
     }
     if (!taskMeta) {
         throw new Error('invalid/missing async task meta');
@@ -81,6 +118,9 @@ export function lowerImportBackwardsCompat(
     const task = taskMeta.task;
     if (!task) {
         throw new Error('invalid/missing async task');
+    }
+    if (args.directSync && createdTask) {
+        return callWithSyncTask(createdTask, importFn, params);
     }
     getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {

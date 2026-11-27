@@ -84,8 +84,15 @@ function writeUtf8(
     ptr: number,
     len: number,
     memory: StringMemory,
+    shortAscii = false,
 ): StringAllocation {
     const out = new Uint8Array(memory.buffer, ptr, len);
+    // A UTF-8 string needs at least one byte per UTF-16 code unit, with
+    // equality only for ASCII. utf8Size already checked every code unit.
+    if (shortAscii && len <= 32 && len === s.length) {
+        for (let i = 0; i < len; i++) out[i] = s.charCodeAt(i);
+        return { ptr, len };
+    }
     const { read, written } = encoder.encodeInto(s, out);
     if (read !== s.length || written !== len) {
         finishUtf8(s, read, out, written);
@@ -196,7 +203,7 @@ export const utf16ValidatingCopy: StringModule['utf16ValidatingCopy'] = (from, t
     return allLatin1;
 };
 
-export const utf8Encode: StringModule['utf8Encode'] = (encoder, value, realloc, memory) => {
+export const utf8Encode: StringModule['utf8Encode'] = (encoder, value, realloc, memory, shortAscii = false) => {
     const s = requireString(value);
     if (s.length === 0) {
         return { ptr: 1, len: 0 };
@@ -204,7 +211,7 @@ export const utf8Encode: StringModule['utf8Encode'] = (encoder, value, realloc, 
     // Some preview1 allocators cannot shrink, so allocate exactly once.
     const len = utf8Size(s);
     const ptr = realloc(0, 0, 1, len);
-    return writeUtf8(encoder, s, ptr, len, memory);
+    return writeUtf8(encoder, s, ptr, len, memory, shortAscii);
 };
 
 export const utf8EncodeAsync: StringModule['utf8EncodeAsync'] = async (encoder, value, realloc, memory) => {

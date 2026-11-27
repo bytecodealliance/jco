@@ -70,6 +70,41 @@ function finish(task: AsyncTask) {
     }
 }
 
+test.concurrent('bindings without borrow handles keep task scopes distinct without registering them', () => {
+    const store = setup({ canCreateBorrowHandles: false });
+    const [first] = store.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    const [second] = store.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    try {
+        expect(first.resourceScopeId()).not.toBe(second.resourceScopeId());
+        expect([...store.resource.state.scopeTasks.keys()]).toEqual([]);
+    } finally {
+        finish(second);
+        finish(first);
+        store.cleanup();
+    }
+});
+
+test.concurrent('the oldest live thread stays the default when sibling threads exit out of order', () => {
+    const store = setup();
+    const [task] = store.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    const first = task.defaultThread();
+    const spawn = () => task.addThread(new store.asyncTask.AsyncThread({ componentIdx: 0, task }));
+    try {
+        const second = spawn();
+        const third = spawn();
+        task.removeThread(second);
+        expect(task.defaultThread()).toBe(first);
+        task.removeThread(first);
+        expect(task.defaultThread()).toBe(third);
+        task.removeThread(spawn());
+        expect(task.defaultThread()).toBe(third);
+        finish(task);
+        expect(task.defaultThread()).toBeUndefined();
+    } finally {
+        store.cleanup();
+    }
+});
+
 test.concurrent('task constructors retain store-local brands, statics and state', () => {
     const a = setup();
     const b = setup();
@@ -781,6 +816,68 @@ test.concurrent.each([false, true])('initialization import retires its task (man
         expect(s.core.getCurrentTaskMeta(0)).toBeUndefined();
         expect(Array.from(s.resource.state.scopeTasks.keys()).length).toBe(0);
     } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent.each([false, true])('direct sync initialization retires its task (throws=%s)', (throws) => {
+    const s = setup();
+    const error = new Error('initialization failed');
+    try {
+        s.component.instanceFlags.set(0, { value: 1 });
+        const invoke = () =>
+            s.asyncTask.lowerImportBackwardsCompat(
+                {
+                    componentIdx: 0,
+                    directSync: true,
+                    isAsync: false,
+                    getMemoryFn: () => undefined,
+                    importFn(value) {
+                        const task = s.asyncTask.getCurrentTask(0)!.task;
+                        expect(s.core.getCurrentTaskMeta(0)?.taskID).toBe(task.id());
+                        expect(task.currentSubtask()).toBeUndefined();
+                        if (throws) throw error;
+                        return value;
+                    },
+                },
+                23,
+            );
+        if (throws) expect(invoke).toThrow(error);
+        else expect(invoke()).toBe(23);
+        expect(s.asyncTask.getCurrentTask(0)).toBeUndefined();
+        expect(s.core.getCurrentTaskMeta(0)).toBeUndefined();
+        expect(Array.from(s.resource.state.scopeTasks.keys())).toEqual([]);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('a direct sync import reuses its guest task and checks may-leave', () => {
+    const s = setup();
+    const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    try {
+        const flags = { value: 1 };
+        s.component.instanceFlags.set(0, flags);
+        const invoke = () =>
+            s.asyncTask.lowerImportBackwardsCompat(
+                {
+                    componentIdx: 0,
+                    directSync: true,
+                    isAsync: false,
+                    getMemoryFn: () => undefined,
+                    importFn(value) {
+                        expect(s.asyncTask.getCurrentTask(0)!.task).toBe(parent);
+                        expect(parent.currentSubtask()).toBeUndefined();
+                        return value;
+                    },
+                },
+                42,
+            );
+        expect(invoke()).toBe(42);
+        flags.value = 0;
+        expect(invoke).toThrow('cannot leave component instance');
+    } finally {
+        finish(parent);
         s.cleanup();
     }
 });
