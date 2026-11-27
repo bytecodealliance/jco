@@ -1,5 +1,45 @@
 # Changelog
 
+## [0.32.0] - 2026-11-27
+
+### 🚀 Features
+
+- _(p2-shim)_ cache resolved directory paths on request by @vados-cosmonic
+
+- _(p2-shim)_ serve regular files on the main thread on request by @vados-cosmonic
+
+### 🐛 Bug Fixes
+
+- _(p2-shim)_ bound the buffer of a large descriptor read by @vados-cosmonic
+
+- _(p2-shim)_ make splice between worker streams work by @vados-cosmonic
+
+- _(p2-shim)_ read the wall clock once per call by @vados-cosmonic
+
+- _(p2-shim)_ give built-in WASI resources null-rooted prototypes by @vados-cosmonic
+
+- _(p2-shim)_ expose only own properties in WASI import maps by @vados-cosmonic
+
+- _(p2-shim)_ give accepted TCP sockets their own poll state by @miniex
+
+- _(p2-shim)_ reject descriptors whose path now crosses a symlink by @vados-cosmonic
+
+### ⚡ Performance
+
+- _(p2-shim)_ load node:http when HTTP is first used by @vados-cosmonic
+
+- _(p2-shim)_ post only the bytes read out of the io worker by @vados-cosmonic
+
+### 🧪 Testing
+
+- _(p2-shim)_ add a benchmark of the filesystem performance options by @vados-cosmonic
+
+- _(p2-shim)_ exercise TCP connections over loopback by @vados-cosmonic in #2507
+
+### ⚙️ Miscellaneous Tasks
+
+- _(p2-shim)_ update jco-node-fs to v0.3.3 by @vados-cosmonic in #2556
+
 ## [0.31.1] - 2026-11-12
 
 ### 🐛 Bug Fixes
