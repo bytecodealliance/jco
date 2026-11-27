@@ -35,7 +35,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-bc643a27.js";
+            window.path_to_searchindex_js = "searchindex-f7ec39b2.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-332598f4.js"></script>
@@ -272,6 +272,9 @@ which may change even in a patch release. See the
 <p><code>--no-namespaced-exports</code>: Removes exports of the type <code>test as "test:flavorful/test"</code> which are not compatible with typescript</p>
 </li>
 <li>
+<p><code>--multi-memory</code>: Keep the core Wasm that copies values between the components of a composed component as it is, which needs WebAssembly multi-memory in the engine. Calls between components are several times faster with it. See <a href="#calls-between-components">Calls between components</a>.</p>
+</li>
+<li>
 <p><code>--async-mode [mode]</code>: EXPERIMENTAL: For the component imports and exports, functions and methods on resources can be specified as <code>async</code>. The only option is <code>jspi</code> (JavaScript Promise Integration).</p>
 </li>
 <li>
@@ -281,6 +284,24 @@ which may change even in a patch release. See the
 <p><code>--async-exports &lt;exports...&gt;</code>: EXPERIMENTAL: Specify the component exports as <code>async</code>. Used with <code>--async-mode</code>.</p>
 </li>
 </ul>
+<h3 id="calls-between-components"><a class="header" href="#calls-between-components">Calls between components</a></h3>
+<p>A component built from several components keeps one memory per component.
+A value passed from one to another is copied between their memories by an adapter,
+a core Wasm module that uses both memories at once.
+That takes the WebAssembly <a href="https://github.com/WebAssembly/multi-memory">multi-memory</a> feature.</p>
+<p>By default Jco rewrites each adapter to use a single memory, so that the output runs on engines without multi-memory.
+Every load or store on the other memory becomes a call to a JavaScript function,
+one per number copied.
+Lists of numbers and of records pay the most; strings are copied as a whole and are hardly affected.</p>
+<p><code>--multi-memory</code> emits the adapters unchanged, which makes passing a list of numbers between components several times faster,
+and more so the longer the list.
+To measure the difference for an engine, run <code>packages/jco-transpile/bench/perf-experiments/composed.mjs</code>,
+which that directory’s README describes.</p>
+<p>Use the flag when every engine that runs the output supports multi-memory.
+According to the <a href="https://webassembly.org/features/">WebAssembly feature table</a> at the time of writing,
+Chrome 120, Firefox 125, Node.js 22 and Deno 1.38 do, and Safari is not listed.
+Output transpiled with the flag fails to compile on an engine without the feature.
+Components that are not composed of others have no adapter, and the flag changes nothing for them.</p>
 <h2 id="browser-support"><a class="header" href="#browser-support">Browser Support</a></h2>
 <p>Jco itself can be used in the browser, which provides the simpler Jco API that is just exactly the same
 as the internal <a href="https://github.com/bytecodealliance/jco/blob/main/crates/js-component-bindgen-component/wit/js-component-bindgen.wit">Jco component</a> Jco uses to self-host.</p>
