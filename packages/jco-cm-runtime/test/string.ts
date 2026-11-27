@@ -74,6 +74,32 @@ function strings() {
     };
 }
 
+test.concurrent('short UTF-8 writes use the post-realloc memory and preserve encoder fallback', () => {
+    for (const value of ['a\0b', 'a'.repeat(32), 'a'.repeat(33), 'abcé', '🚀', '\ud800']) {
+        const memory = new WebAssembly.Memory({ initial: 1, maximum: 2 });
+        const codec = new TextEncoder();
+        let calls = 0;
+        const result = string.utf8Encode(
+            {
+                encodeInto(s, dst) {
+                    calls++;
+                    return codec.encodeInto(s, dst);
+                },
+            },
+            value,
+            (_old, _oldLen, _align, size) => {
+                expect(size).toBe(codec.encode(value).length);
+                memory.grow(1);
+                return 65536;
+            },
+            memory,
+            true,
+        );
+        expect(new Uint8Array(memory.buffer, result.ptr, result.len)).toEqual(codec.encode(value));
+        expect(calls).toBe(value.length <= 32 && result.len === value.length ? 0 : 1);
+    }
+});
+
 const CASES = [
     { value: '', utf8: [], utf16: [] },
     { value: 'aé中', utf8: [0x61, 0xc3, 0xa9, 0xe4, 0xb8, 0xad], utf16: [0x61, 0, 0xe9, 0, 0x2d, 0x4e] },

@@ -170,9 +170,12 @@ test.concurrent('sync import completion wakes the current generation of waiters'
     const state = create().component.getOrCreateAsyncState(0);
     expect(state.callingSyncImport()).toBe(false);
     state.callingSyncImport(true);
-    const first = state.waitForSyncImportCallEnd();
     state.callingSyncImport(false);
-    await first;
+    const first = state.waitForSyncImportCallEnd();
+    state.callingSyncImport(true);
+    const concurrent = state.waitForSyncImportCallEnd();
+    state.callingSyncImport(false);
+    await Promise.all([first, concurrent]);
     let done = false;
     state.callingSyncImport(true);
     const second = state.waitForSyncImportCallEnd().then(() => {

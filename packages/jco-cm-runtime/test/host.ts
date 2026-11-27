@@ -1,4 +1,5 @@
 import { expect, test, vi } from 'vitest';
+import { guardSyncRealloc } from '../src/intrinsics/async-task/sync-realloc.js';
 import { create } from './host-helpers.js';
 import { clearDeadlockCheck } from './component-helpers.js';
 import type { AsyncTask, StoreEventOptions, ComponentWaitableSet, HostCallee } from '../src/runtime.js';
@@ -93,6 +94,28 @@ test.concurrent('prepare rejects implicit synchronous blocking in the selected r
         s.cleanup();
     }
 });
+
+test.each([() => ({ value: 1 }), () => new WebAssembly.Global({ value: 'i32', mutable: true }, 1)])(
+    'a synchronous realloc restores its instance flag on return and throw',
+    (flagsForInstance) => {
+        const flags = flagsForInstance();
+        const error = new Error('allocation failed');
+        const nested = guardSyncRealloc(flags, () => {
+            expect(flags.value).toBe(0);
+            throw error;
+        });
+        const allocate = guardSyncRealloc(flags, (oldPtr, oldSize, align, newSize) => {
+            expect([oldPtr, oldSize, align, newSize]).toEqual([16, 64, 4, 128]);
+            expect(() => nested(0, 0, 1, 4)).toThrow(error);
+            expect(flags.value).toBe(0);
+            return -16;
+        });
+        expect(allocate(16, 64, 4, 128)).toBe(0xfffffff0);
+        expect(flags.value).toBe(1);
+        expect(() => nested(0, 0, 1, 4)).toThrow(error);
+        expect(flags.value).toBe(1);
+    },
+);
 
 test.concurrent('a guest realloc called by the host cannot start a call out of its component', () => {
     const s = setup();

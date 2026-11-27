@@ -133,6 +133,13 @@ async function emit(compiled, profile, outDir, destination) {
             minify: true,
             sourcemap: true,
             entryFileNames: '[name].js',
+            // Synchronous browser bindings load these helpers together. A shared
+            // chunk saves three requests, at the cost of extra bytes for a caller
+            // importing component state alone. Grouping by importer count would
+            // make even standalone numeric conversions load task and resource code.
+            codeSplitting: {
+                groups: [{ name: 'shared', test: /[/\\]intrinsics[/\\](?:decode-utf8|sync-waiter|js-helper)\.js$/ }],
+            },
             chunkFileNames: 'chunks/[name]-[hash].js',
         });
         for (const item of output) {

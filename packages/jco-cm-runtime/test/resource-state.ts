@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import { create as createTasks } from './async-task-helpers.js';
 
 import * as operations from '../src/intrinsics/resource.js';
+import { IndexedResourceCaptures } from '../src/intrinsics/resource-captures.js';
 import { initializeTaskRegisters } from '../src/intrinsics/task-context.js';
 import type {
     ResourceBorrowTask,
@@ -92,6 +93,37 @@ function createResource(
 function table(componentIdx?: number): ResourceTable {
     return Object.assign([1 << 30, 0], { _componentIdx: componentIdx, _createdReps: new Set<number>() });
 }
+
+test('indexed captures recover live reps across sparse and recycled handles', () => {
+    const resource = createResource();
+    const handles = table(0);
+    const captures = new IndexedResourceCaptures(handles);
+    const first = {};
+    const replaced = {};
+    const last = {};
+    const a = resource.tableCreateOwn(handles, 0xffffffff);
+    captures.slots![a] = first;
+    resource.getHandleIndexSpace(0).alloc();
+    const b = resource.tableCreateOwn(handles, 10);
+    captures.slots![b] = replaced;
+    resource.tableRemove(handles, b);
+    captures.slots![b] = undefined;
+    const c = resource.tableCreateOwn(handles, 0);
+    expect(c).toBe(b);
+    captures.slots![c] = last;
+
+    expect(captures.handles).toBe(handles);
+    expect(captures.slots).toBeDefined();
+    expect(captures.captures.get(0xffffffff)).toBe(first);
+    expect(captures.get(10)).toBeUndefined();
+    expect(captures.get(0)).toBe(last);
+    expect(captures.slots).toBeUndefined();
+    const migrated = captures.captures;
+    captures.set(0xffffffff, last);
+    captures.delete(0);
+    expect(captures.byRep()).toBe(migrated);
+    expect([...migrated]).toEqual([[0xffffffff, last]]);
+});
 
 test.concurrent('component handle kinds share an index space and reuse freed indices LIFO', () => {
     const resource = createResource();

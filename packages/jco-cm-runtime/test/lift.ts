@@ -26,6 +26,25 @@ test.concurrent.each([
     expect(decode).toThrow(message as string);
 });
 
+test.concurrent('short UTF8 byte slices use the same Unicode and trap rules as the full codec', () => {
+    const decoder = initializeUtf8Decoder();
+    const encoder = new TextEncoder();
+    const decode = (view: Uint8Array) => lift.decodeUtf8(WebAssembly.RuntimeError, decoder, view, true);
+    for (const text of ['', '\0', 'id', 'a'.repeat(32), 'b'.repeat(33), 'abcé', '\ufeffx', '🚀']) {
+        const padded = encoder.encode('[' + text + ']');
+        expect(decode(padded.subarray(1, -1))).toBe(text);
+    }
+    for (let offset = 0; offset < 32; offset++) {
+        const prefix = 'a'.repeat(offset);
+        expect(decode(encoder.encode(prefix + 'é'))).toBe(prefix + 'é');
+        expect(() => decode(Uint8Array.of(...encoder.encode(prefix), 0xc2))).toThrow('incomplete utf-8 byte sequence');
+    }
+    expect(() => decode(Uint8Array.of(97, 0xff))).toThrow('invalid utf-8');
+    expect(() => decode(Uint8Array.of(97, 0xc2))).toThrow('incomplete utf-8 byte sequence');
+    const custom = { decode: () => 'provided' };
+    expect(lift.decodeUtf8(WebAssembly.RuntimeError, custom, encoder.encode('id'))).toBe('provided');
+});
+
 test.concurrent('UTF8 decoding preserves the codec receiver and provider errors', () => {
     const codec = initializeUtf8Decoder();
     const providerError = new TypeError('provider failed');

@@ -319,15 +319,31 @@ export function trackHostOperation<T>(
     }
     const result = operation();
     if (!isPromiseLike(result)) {
+        // The host can call stop() before returning, even through a synchronous
+        // binding. Propagate that stop before the caller lowers the result.
         if (storeTrap.stopped) {
             throw storeTrap.error;
         }
         return result;
     }
 
+    return trackHostPromise(context, result, storeTrap, storeAsyncState, asyncState, symbolDispose, componentIdx);
+}
+
+/** Keep settlement callbacks and their captured state off the synchronous host-call path. */
+function trackHostPromise<T>(
+    context: ComponentHostOperationContext,
+    result: T,
+    storeTrap: ComponentHostOperationContext['storeTrap'],
+    storeAsyncState: ComponentHostOperationContext['storeAsyncState'],
+    asyncState: ComponentHostOperationContext['asyncState'],
+    symbolDispose: ComponentHostOperationContext['symbolDispose'],
+    componentIdx?: number | null,
+): Promise<Awaited<T>> {
     storeAsyncState.pendingHostOperations++;
     const owner = componentIdx ?? -1;
-    // (allocated on first use, so a store without host work pays nothing for it)
+    // Only unsettled promises can wake a blocked guest later. Allocate the
+    // ownership map here so synchronous host calls need no scheduler bookkeeping.
     const byComponent = (storeAsyncState.hostOperationsByComponent ??= new Map());
     byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);
     let rejectStopped!: (error: unknown) => void;
@@ -477,6 +493,10 @@ const TICK_IDLE = 'idle';
 
 const IDLE_POLL_MS = 10;
 
+// A synchronous leaf has no stream or future endpoints that could create a waitable.
+type StateClassContext = Omit<ComponentAsyncStateContext, 'Waitable'> &
+    Partial<Pick<ComponentAsyncStateContext, 'Waitable'>>;
+
 function afterDelay(callback: () => void, ms: number): () => void {
     const handle = setTimeout(callback, ms);
     return () => clearTimeout(handle);
@@ -484,7 +504,7 @@ function afterDelay(callback: () => void, ms: number): () => void {
 
 function defineComponentAsyncState() {
     return class ComponentAsyncState {
-        #context: ComponentAsyncStateContext;
+        #context: StateClassContext;
 
         static EVENT_HANDLER_EVENTS = ['backpressure-change'];
 
@@ -499,7 +519,7 @@ function defineComponentAsyncState() {
 
         #componentIdx: number;
         #callingAsyncImport = false;
-        #syncImportWait = promiseWithResolvers<void>();
+        #syncImportWait?: ReturnType<typeof promiseWithResolvers<void>>;
         #lockHolderTaskID: bigint | null = null;
         #lockWaiters: { taskID: bigint; resolve(): void }[] = [];
         #numWaitingToEnter = 0;
@@ -523,7 +543,7 @@ function defineComponentAsyncState() {
         /** Cancels the scheduled tick while the tick loop runs. */
         #tickLoop: (() => void) | null = null;
 
-        #onExclusiveReleaseHandlers: ((() => void) | null)[] = [];
+        #onExclusiveReleaseHandlers?: { callbacks: ((() => void) | undefined)[]; next: number };
 
         #mayLeave = true;
 
@@ -531,7 +551,7 @@ function defineComponentAsyncState() {
         subtasks: RepTableType;
         threads: RepTableType<ComponentThread>;
 
-        constructor(context: ComponentAsyncStateContext, args: { componentIdx: number }) {
+        constructor(context: StateClassContext, args: { componentIdx: number }) {
             this.#context = context;
             this.#componentIdx = args.componentIdx;
             this.handles = new this.#context.RepTable({
@@ -643,12 +663,14 @@ function defineComponentAsyncState() {
 
         #notifySyncImportEnd() {
             const existing = this.#syncImportWait;
-            this.#syncImportWait = promiseWithResolvers<void>();
-            existing.resolve();
+            // A transition with no waiters needs no promise. Clear the current batch
+            // before waking it so a later wait observes the next transition.
+            this.#syncImportWait = undefined;
+            existing?.resolve();
         }
 
         async waitForSyncImportCallEnd() {
-            await this.#syncImportWait.promise;
+            await (this.#syncImportWait ??= promiseWithResolvers<void>()).promise;
         }
 
         setBackpressure(v: number) {
@@ -958,15 +980,24 @@ function defineComponentAsyncState() {
             // lock-free fallback code.
             this.#lockHolderTaskID = null;
 
-            this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter((v) => !!v);
-            for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {
-                try {
-                    this.#onExclusiveReleaseHandlers[idx] = null;
-                    f!();
-                } catch (err) {
-                    DEBUG: debugLog('error while executing handler for next exclusive release', err);
-                    throw err;
+            // Ordinary synchronous exits have no callbacks. When a handler releases the lock
+            // reentrantly, both releases drain the same FIFO. Advance the shared cursor before
+            // calling the handler so it runs once, even if it reenters or throws.
+            const handlers = this.#onExclusiveReleaseHandlers;
+            if (handlers?.callbacks.length) {
+                while (handlers.next < handlers.callbacks.length) {
+                    const index = handlers.next++;
+                    const fn = handlers.callbacks[index]!;
+                    handlers.callbacks[index] = undefined;
+                    try {
+                        fn();
+                    } catch (err) {
+                        DEBUG: debugLog('error while executing handler for next exclusive release', err);
+                        throw err;
+                    }
                 }
+                handlers.callbacks.length = 0;
+                handlers.next = 0;
             }
             this.#scheduleLockHandoff();
             return true;
@@ -999,7 +1030,8 @@ function defineComponentAsyncState() {
 
         onNextExclusiveRelease(fn: () => void) {
             DEBUG: debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
-            this.#onExclusiveReleaseHandlers.push(fn);
+            const handlers = (this.#onExclusiveReleaseHandlers ??= { callbacks: [], next: 0 });
+            handlers.callbacks.push(fn);
         }
 
         async waitForExclusiveRelease() {
@@ -1193,7 +1225,9 @@ function defineComponentAsyncState() {
             if (this.#lockHandoffScheduled) {
                 return true;
             }
-            if (this.#heldBySyncCall()) {
+            // A synchronous export checks at return even in a store that has
+            // never suspended a thread. There is then no thread to wake.
+            if (this.#suspendedThreadsByRef.size === 0 || this.#heldBySyncCall()) {
                 return false;
             }
             for (const meta of this.#suspendedThreadsByRef.values()) {
@@ -1282,11 +1316,18 @@ function defineComponentAsyncState() {
         endSyncCall(task: ComponentTask) {
             const storeAsyncState = this.#context.deadlock.storeAsyncState;
             const syncCalls = storeAsyncState.syncCalls;
-            const idx = syncCalls.findIndex((call) => call.task === task);
-            if (idx === -1) {
-                return;
+            // A JS caller usually has just one guest call in progress. Pop it
+            // without allocating the array of removed calls that splice returns.
+            // Nested or suspended calls can resolve out of order.
+            if (syncCalls.length === 1 && syncCalls[0]!.task === task) {
+                syncCalls.pop();
+            } else {
+                const idx = syncCalls.findIndex((call) => call.task === task);
+                if (idx === -1) {
+                    return;
+                }
+                syncCalls.splice(idx, 1);
             }
-            syncCalls.splice(idx, 1);
             // Stacks held back by the call resume in the order their promises
             // settled, unless another sync call still holds them back.
             const top = syncCalls.at(-1);
@@ -1411,15 +1452,17 @@ function defineComponentAsyncState() {
         }
 
         createWaitable(args?: { target?: unknown }) {
-            return new this.#context.Waitable({ target: args?.target });
+            const Waitable = this.#context.Waitable;
+            if (!Waitable) {
+                throw new TypeError('this component state does not support waitables');
+            }
+            return new Waitable({ target: args?.target });
         }
     };
 }
 let sharedComponentAsyncState: ReturnType<typeof defineComponentAsyncState>;
 
-export function initializeComponentAsyncStateClass(
-    context: ComponentAsyncStateContext,
-): ComponentAsyncStateConstructor {
+export function initializeComponentAsyncStateClass(context: StateClassContext): ComponentAsyncStateConstructor {
     const ComponentAsyncState = (sharedComponentAsyncState ??= defineComponentAsyncState());
     /**
      * Construct a state of a component instance that uses the context.

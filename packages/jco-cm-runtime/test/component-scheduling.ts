@@ -3,6 +3,40 @@ import { create, clearDeadlockCheck, task } from './component-helpers.js';
 import type { ComponentDeadlockDetail } from '../src/index.js';
 import { onNextMacrotask } from '../src/intrinsics/core/scheduling.js';
 
+test.concurrent('reentrant exclusive release consumes each callback registration once', () => {
+    const state = create().component.getOrCreateAsyncState(0);
+    const order: string[] = [];
+    const later = () => order.push('later');
+    state.exclusiveLock(1n);
+    state.onNextExclusiveRelease(() => {
+        order.push('first');
+        state.exclusiveLock(2n);
+        state.exclusiveRelease(2n);
+        order.push('returned');
+        state.onNextExclusiveRelease(() => order.push('added'));
+    });
+    state.onNextExclusiveRelease(later);
+    state.onNextExclusiveRelease(later);
+    state.exclusiveRelease(1n);
+    expect(order).toEqual(['first', 'later', 'later', 'returned', 'added']);
+});
+
+test.concurrent('a throwing release callback leaves later registrations pending', () => {
+    const state = create().component.getOrCreateAsyncState(0);
+    const failed = new Error('release failed');
+    const later = vi.fn();
+    state.exclusiveLock(1n);
+    state.onNextExclusiveRelease(() => {
+        throw failed;
+    });
+    state.onNextExclusiveRelease(later);
+    expect(() => state.exclusiveRelease(1n)).toThrow(failed);
+    expect(later).not.toHaveBeenCalled();
+    state.exclusiveLock(2n);
+    state.exclusiveRelease(2n);
+    expect(later).toHaveBeenCalledTimes(1);
+});
+
 test.concurrent('exclusive locks hand off FIFO and allow synchronous reentry during release', async () => {
     const state = create().component.getOrCreateAsyncState(0);
     state.exclusiveLock(1n);
@@ -221,6 +255,23 @@ test.concurrent('a task whose threads all exited unresolved deadlocks its unreso
     } finally {
         clearDeadlockCheck(component);
     }
+});
+
+test.concurrent('finishing a synchronous call removes only its own scheduler entry', () => {
+    const { component } = create();
+    const state = component.getOrCreateAsyncState(0);
+    const first = task(1n, 0).value;
+    const second = task(2n, 0).value;
+    const active = () => component.storeAsyncState.syncCalls.map((call) => call.task.id());
+
+    state.beginSyncCall(first);
+    state.endSyncCall(second);
+    expect(active()).toEqual([1n]);
+    state.beginSyncCall(second);
+    state.endSyncCall(first);
+    expect(active()).toEqual([2n]);
+    state.endSyncCall(second);
+    expect(active()).toEqual([]);
 });
 
 test.concurrent('a synchronous call holds back threads of other instances until it ends', () => {

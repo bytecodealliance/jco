@@ -1,5 +1,6 @@
 import { expect, suite, test } from 'vitest';
 
+import { tableRep } from '../src/intrinsics/resource-entry.js';
 import * as resource from '../src/intrinsics/resource.js';
 import { CM_RUNTIME_API_VERSION, type ResourceModule } from '../src/runtime.js';
 
@@ -31,6 +32,10 @@ suite('resource intrinsics', () => {
         expect(() => tableGet({ RuntimeError: CustomRuntimeError }, sparseTable, handle)).toThrowError(
             CustomRuntimeError,
         );
+        expect(() => tableRep({ RuntimeError: CustomRuntimeError }, sparseTable, handle)).toThrowError(
+            CustomRuntimeError,
+        );
+        expect(() => tableRep(context, sparseTable, handle)).toThrow(`unknown handle index ${handle >>> 0}`);
         expect(() => tableGet(context, sparseTable, handle)).toThrow(`unknown handle index ${handle >>> 0}`);
     });
 
@@ -62,6 +67,8 @@ suite('resource intrinsics', () => {
         'keeps every bit of owned and borrowed rep %i',
         (rep) => {
             const table = Object.freeze([TABLE_FLAG, 0, 0, rep + TABLE_OWN, 3, rep]);
+            expect(tableRep(context, table, 1)).toBe(rep);
+            expect(tableRep(context, table, 2)).toBe(rep);
             expect(tableGet(context, table, 1)).toEqual({ rep, scope: 0, own: true });
             expect(tableGet(context, table, 2)).toEqual({ rep, scope: 3, own: false });
         },

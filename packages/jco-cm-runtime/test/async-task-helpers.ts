@@ -8,6 +8,7 @@ import { initializeTaskRegisters } from '../src/intrinsics/task-context.js';
 
 type Options = Omit<NonNullable<Parameters<typeof createWaitable>[0]>, 'waitableContext'> & {
     checkIdle?: () => void;
+    canCreateBorrowHandles?: boolean;
     FutureValue?: AsyncTaskClassContext['FutureValue'];
 };
 type Tail<A extends unknown[]> = A extends [unknown, ...infer Rest] ? Rest : never;
@@ -50,6 +51,7 @@ export function create(options: Options = {}) {
         determinism: core.asyncDeterminism,
         scopeCounter,
         scopeTasks,
+        ...(options.canCreateBorrowHandles === false && { canCreateBorrowHandles: false }),
         storeTrap: component.storeTrap,
         clearing,
         registers,
