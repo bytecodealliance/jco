@@ -53,6 +53,30 @@ or implement a new guest stream-completion protocol. Producers must
 stop writing before shutdown begins; new transfers started afterward are not
 covered by that shutdown call.
 
+### Filesystem confinement on Node.js
+
+A directory descriptor owns an open directory handle from
+[`@bytecodealliance/jco-node-fs`][jco-node-fs], and every path a guest passes is
+resolved beneath that handle. `..`, absolute paths and symlinks cannot lead outside
+of a preopened directory, including while the host rearranges the tree, and a
+descriptor keeps referring to the directory it opened when that directory is renamed.
+These operations run on the libuv thread pool and do not block the event loop.
+
+This follows Wasmtime's filesystem semantics:
+
+- A symlink with an absolute target is never followed, even if the target is
+  inside the preopened directory. Following one fails with `not-permitted`.
+- `..` is resolved against the directory tree rather than against the path's
+  text, so `missing/../file` fails with `no-entry`.
+- A preopen refers to the directory found at its host path when it is first
+  used, not to whatever that path refers to later.
+
+The native helper is required. It ships prebuilt for Linux (x64 and arm64, glibc
+and musl), macOS and Windows; on a host where it cannot be loaded, filesystem
+operations throw instead of falling back to unconfined path-based access.
+
+[jco-node-fs]: https://www.npmjs.com/package/@bytecodealliance/jco-node-fs
+
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted

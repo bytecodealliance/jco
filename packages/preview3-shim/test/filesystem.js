@@ -371,7 +371,7 @@ describe("Descriptor with os.tmpdir()", () => {
     dirDesc[Symbol.dispose]?.();
   });
 
-  test("normalizes paths before checking symlink confinement", async () => {
+  test("resolves .. beneath the directory, as the host does", async () => {
     const dirDesc = await rootDescriptor.openAt(
       {},
       relBase,
@@ -384,7 +384,8 @@ describe("Descriptor with os.tmpdir()", () => {
       await fs.writeFile(path.join(outside, "secret.txt"), "outside");
       await dirDesc.symlinkAt(`../${path.basename(outside)}`, "escape.cleanup");
 
-      const escapedPath = "missing/../escape.cleanup/secret.txt";
+      await dirDesc.createDirectoryAt("inside");
+      const escapedPath = "inside/../escape.cleanup/secret.txt";
       await expect(
         dirDesc.openAt({ symlinkFollow: true }, escapedPath, {}, { read: true }),
       ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
@@ -392,18 +393,22 @@ describe("Descriptor with os.tmpdir()", () => {
         payload: { tag: "not-permitted" },
       });
       await expect(
-        dirDesc.createDirectoryAt("missing/../escape.cleanup/created"),
+        dirDesc.createDirectoryAt("inside/../escape.cleanup/created"),
       ).rejects.toMatchObject({ payload: { tag: "not-permitted" } });
       await expect(fs.stat(path.join(outside, "created"))).rejects.toMatchObject({
         code: "ENOENT",
       });
 
-      await dirDesc.createDirectoryAt("inside");
+      // A component that does not exist cannot be stepped back out of
+      await expect(
+        dirDesc.statAt({ symlinkFollow: true }, "missing/../escape.cleanup/secret.txt"),
+      ).rejects.toMatchObject({ payload: { tag: "no-entry" } });
+
       await fs.writeFile(path.join(tmpDir, "inside", "allowed.txt"), "inside");
       await dirDesc.symlinkAt("inside", "inside.cleanup");
       const allowed = await dirDesc.openAt(
         { symlinkFollow: true },
-        "missing/../inside.cleanup/allowed.txt",
+        "inside/../inside.cleanup/allowed.txt",
         {},
         { read: true },
       );
@@ -516,13 +521,23 @@ describe("Descriptor with os.tmpdir()", () => {
     const realPath = path.join(tmpDir, "statat-file.txt");
     const linkSub = `${relBase}/statat-link.txt`;
     const linkPath = path.join(tmpDir, "statat-link.txt");
-    await fs.symlink(realPath, linkPath);
+    await fs.symlink(path.basename(realPath), linkPath);
 
     const stats2 = await rootDescriptor.statAt({ symlinkFollow: false }, linkSub);
     expect(stats2.type).toEqual({ tag: "symbolic-link" });
 
     const stats3 = await rootDescriptor.statAt({ symlinkFollow: true }, linkSub);
     expect(stats3.type).toEqual({ tag: "regular-file" });
+
+    // An absolute target is a host path, which is never followed
+    const absoluteSub = `${relBase}/statat-absolute-link.txt`;
+    await fs.symlink(realPath, path.join(tmpDir, "statat-absolute-link.txt"));
+    await expect(rootDescriptor.statAt({ symlinkFollow: true }, absoluteSub)).rejects.toMatchObject(
+      { payload: { tag: "not-permitted" } },
+    );
+    expect((await rootDescriptor.statAt({ symlinkFollow: false }, absoluteSub)).type).toEqual({
+      tag: "symbolic-link",
+    });
   });
 });
 
@@ -1114,7 +1129,7 @@ describe("Descriptor stream operations", () => {
   preopenTest.concurrent.for(READER_RELEASES)(
     "dropping a readDirectory stream ends the listing when %s",
     async ([_name, iterate], { tmpDir, preopen }) => {
-      // Enough entries that the worker is still listing when the stream is dropped
+      // Enough entries that the listing is unfinished when the stream is dropped
       const listingPath = path.join(tmpDir, "dropped-listing");
       await fs.mkdir(listingPath);
       for (let i = 0; i < 32; i++) {
@@ -1334,6 +1349,7 @@ describe("Descriptor path operations on a symlink that leads outside the directo
 
 describe("Directory descriptors whose path is rearranged after they are opened", () => {
   const DENIED = { payload: { tag: "not-permitted" } };
+  const MISSING = { payload: { tag: "no-entry" } };
 
   // Each test gets a preopen for `pre`, which contains `target.txt`, and a sibling
   // directory `outside` that no descriptor may reach
@@ -1413,14 +1429,20 @@ describe("Directory descriptors whose path is rearranged after they are opened",
    * @returns {Promise<void>}
    */
   async function expectEveryPathOperationDenied(desc, preopen) {
-    const denied = (operation) => expect(operation).rejects.toMatchObject(DENIED);
+    // The descriptor's handle refers to the directory it opened, which was
+    // removed, not to what its path leads to now. A removed directory is empty
+    // and cannot gain entries, so operations fail with `no-entry` instead of
+    // `not-permitted`, and only the directory itself can be opened or listed
+    const denied = (operation) => expect(operation).rejects.toMatchObject(MISSING);
     const now = { tag: "now" };
 
     await denied(desc.openAt({}, "secret.txt", {}, { read: true }));
     await denied(desc.openAt({ symlinkFollow: true }, "secret.txt", {}, { read: true }));
     await denied(desc.openAt({}, "created.txt", { create: true }, { write: true }));
-    await denied(openDirectory(desc, "."));
-    await denied(entryNames(desc));
+    const self = await openDirectory(desc, ".");
+    expect(await entryNames(self)).toEqual([]);
+    self[Symbol.dispose]();
+    expect(await entryNames(desc)).toEqual([]);
     await denied(desc.statAt({}, "secret.txt"));
     await denied(desc.metadataHashAt({}, "secret.txt"));
     await denied(desc.readlinkAt("secret.txt"));
@@ -1436,6 +1458,65 @@ describe("Directory descriptors whose path is rearranged after they are opened",
   }
 
   /**
+   * Assert that path operations on a descriptor whose path now leads elsewhere
+   * act on the directory it opened, which still exists inside the preopen
+   *
+   * The operations are the same as in `expectEveryPathOperationDenied`. Those
+   * aimed at `secret.txt` fail, since only the place the path now leads to has
+   * one, and the entries that are created land in the opened directory
+   *
+   * @param {object} desc The descriptor whose path was rearranged
+   * @param {object} preopen A working descriptor that contains `target.txt`
+   * @param {string} openedDir Host path of the directory the descriptor opened, as it is now
+   * @param {string} preDir Host path of the preopen
+   * @returns {Promise<void>}
+   */
+  async function expectEveryPathOperationInOpenedDirectory(desc, preopen, openedDir, preDir) {
+    const missing = (operation) => expect(operation).rejects.toMatchObject(MISSING);
+    const now = { tag: "now" };
+    const before = (await fs.readdir(openedDir)).sort();
+
+    await missing(desc.openAt({}, "secret.txt", {}, { read: true }));
+    await missing(desc.openAt({ symlinkFollow: true }, "secret.txt", {}, { read: true }));
+    const self = await openDirectory(desc, ".");
+    expect(await entryNames(self)).toEqual(before);
+    self[Symbol.dispose]();
+    expect(await entryNames(desc)).toEqual(before);
+    await missing(desc.statAt({}, "secret.txt"));
+    await missing(desc.metadataHashAt({}, "secret.txt"));
+    await missing(desc.readlinkAt("secret.txt"));
+    await missing(desc.setTimesAt({ symlinkFollow: true }, "secret.txt", now, now));
+    await missing(desc.linkAt({}, "secret.txt", preopen, "linked.txt"));
+    await missing(desc.renameAt("secret.txt", preopen, "renamed.txt"));
+    await missing(desc.unlinkFileAt("secret.txt"));
+    await missing(desc.removeDirectoryAt("empty"));
+
+    (await desc.openAt({}, "created.txt", { create: true }, { write: true }))[Symbol.dispose]();
+    await desc.createDirectoryAt("created-dir");
+    await preopen.linkAt({}, "target.txt", desc, "linked.txt");
+    await preopen.renameAt("target.txt", desc, "renamed.txt");
+    await desc.symlinkAt("secret.txt", "new-link.txt");
+
+    const created = ["created-dir", "created.txt", "linked.txt", "new-link.txt", "renamed.txt"];
+    expect((await fs.readdir(openedDir)).sort()).toEqual([...before, ...created].sort());
+    expect(await fs.readFile(path.join(openedDir, "renamed.txt"), "utf8")).toBe("target contents");
+    const preEntries = await fs.readdir(preDir);
+    expect(preEntries).not.toContain("linked.txt");
+    expect(preEntries).not.toContain("renamed.txt");
+  }
+
+  /**
+   * Assert that the operations did not change the directory they were aimed at
+   *
+   * @param {string} dir Host path of the directory the operations were aimed at
+   * @returns {Promise<void>}
+   */
+  async function expectTargetUntouched(dir) {
+    expect((await fs.readdir(dir)).sort()).toEqual(["empty", "secret.txt"]);
+    expect(await fs.readFile(path.join(dir, "secret.txt"), "utf8")).toBe("outside contents");
+  }
+
+  /**
    * Assert that the denied operations changed neither their target nor the preopen
    *
    * @param {string} dir Host path of the directory the operations were aimed at
@@ -1443,8 +1524,7 @@ describe("Directory descriptors whose path is rearranged after they are opened",
    * @returns {Promise<void>}
    */
   async function expectUntouched(dir, preDir) {
-    expect((await fs.readdir(dir)).sort()).toEqual(["empty", "secret.txt"]);
-    expect(await fs.readFile(path.join(dir, "secret.txt"), "utf8")).toBe("outside contents");
+    await expectTargetUntouched(dir);
     expect(await fs.readFile(path.join(preDir, "target.txt"), "utf8")).toBe("target contents");
     const preEntries = await fs.readdir(preDir);
     expect(preEntries).not.toContain("linked.txt");
@@ -1467,7 +1547,7 @@ describe("Directory descriptors whose path is rearranged after they are opened",
   );
 
   rearrangeTest.concurrent(
-    "a directory below a parent replaced by a symlink that leads outside is rejected",
+    "a directory below a parent replaced by a symlink that leads outside keeps its directory",
     async ({ tmpDir, preopen }) => {
       await populate(path.join(tmpDir, "outside/inner"));
       await fs.mkdir(path.join(tmpDir, "pre/outer/inner"), { recursive: true });
@@ -1476,8 +1556,14 @@ describe("Directory descriptors whose path is rearranged after they are opened",
       await preopen.renameAt("outer", preopen, "moved");
       await preopen.symlinkAt("../outside", "outer");
 
-      await expectEveryPathOperationDenied(inner, preopen);
-      await expectUntouched(path.join(tmpDir, "outside/inner"), path.join(tmpDir, "pre"));
+      // The handle follows the directory to its new place inside the preopen
+      await expectEveryPathOperationInOpenedDirectory(
+        inner,
+        preopen,
+        path.join(tmpDir, "pre/moved/inner"),
+        path.join(tmpDir, "pre"),
+      );
+      await expectTargetUntouched(path.join(tmpDir, "outside/inner"));
       inner[Symbol.dispose]();
     },
   );
@@ -1515,7 +1601,7 @@ describe("Directory descriptors whose path is rearranged after they are opened",
   );
 
   rearrangeTest.concurrent(
-    "a directory opened through a symlink is rejected once the symlink leads elsewhere",
+    "a directory opened through a symlink keeps its directory once the symlink leads elsewhere",
     async ({ tmpDir, preopen }) => {
       await preopen.createDirectoryAt("nested");
       await preopen.symlinkAt("nested", "alias");
@@ -1525,21 +1611,34 @@ describe("Directory descriptors whose path is rearranged after they are opened",
       await preopen.unlinkFileAt("alias");
       await preopen.symlinkAt("../outside", "alias");
 
-      await expectEveryPathOperationDenied(viaAlias, preopen);
-      await expectUntouched(path.join(tmpDir, "outside"), path.join(tmpDir, "pre"));
+      // The handle refers to `nested`, which the symlink led to when it was opened
+      await expectEveryPathOperationInOpenedDirectory(
+        viaAlias,
+        preopen,
+        path.join(tmpDir, "pre/nested"),
+        path.join(tmpDir, "pre"),
+      );
+      await expectTargetUntouched(path.join(tmpDir, "outside"));
       viaAlias[Symbol.dispose]();
     },
   );
 
   rearrangeTest.concurrent(
-    "a descriptor works again once its path leads back to its directory",
+    "a descriptor keeps its directory while its path leads elsewhere and once it leads back",
     async ({ tmpDir, preopen }) => {
       await preopen.createDirectoryAt("held");
       const held = await openDirectory(preopen, "held");
 
       await preopen.renameAt("held", preopen, "moved");
       await preopen.symlinkAt("../outside", "held");
-      await expect(held.statAt({}, "secret.txt")).rejects.toMatchObject(DENIED);
+      // The handle still refers to the directory now at `moved`, which has no
+      // `secret.txt`, and not to what `held` leads to
+      await expect(held.statAt({}, "secret.txt")).rejects.toMatchObject(MISSING);
+      await held.createDirectoryAt("created-while-moved");
+      expect(
+        (await fs.stat(path.join(tmpDir, "pre/moved/created-while-moved"))).isDirectory(),
+      ).toBe(true);
+      await expectTargetUntouched(path.join(tmpDir, "outside"));
 
       await preopen.unlinkFileAt("held");
       await preopen.renameAt("moved", preopen, "held");

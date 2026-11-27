@@ -728,8 +728,8 @@ importers:
   packages/preview3-shim:
     dependencies:
       '@bytecodealliance/jco-node-fs':
-        specifier: 0.3.2
-        version: 0.3.2
+        specifier: workspace:*
+        version: link:../jco-node-fs
       '@bytecodealliance/preview2-shim':
         specifier: ^0.31.1
         version: 0.31.1
