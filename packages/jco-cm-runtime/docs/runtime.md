@@ -96,8 +96,10 @@ ordinary registration behavior.
 
 For example, when an exported guest function calls a DOM method in a loop,
 each iteration reuses the export task. A core start function can call the same
-import before any export has run. The adapter creates a task when the stack
-is empty so host code can still observe the instance as busy. A borrowed
+import before any export has run. The adapter reuses a task only when the executing register and the
+instance’s innermost task agree. A custom core instantiator can retain the
+lower and call it from JavaScript during another invocation. Such lowers
+run in a separate task and restore the enclosing registers on return or throw. A borrowed
 resource wrapper expires when its host call
 finishes, including when the host throws. See the implementations of
 [task selection](../src/intrinsics/async-task/lower-import-backwards-compat.ts)

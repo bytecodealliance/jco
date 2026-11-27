@@ -1089,7 +1089,7 @@ impl JsBindgen<'_> {
                 "\
                     export function instantiate(getCoreModule, imports, instantiateCore, options) {{
                         const WebAssembly = options?.shim?.globals?.WebAssembly ?? globalThis.WebAssembly;
-                        {native_numeric_exports}if (typeof instantiateCore === 'undefined') {{
+                        {native_numeric_exports}{native_sync_imports}if (typeof instantiateCore === 'undefined') {{
                             if (typeof WebAssembly === 'undefined') throw new Error('no WebAssembly implementation is available: pass instantiateCore or options.shim.globals.WebAssembly');
                             instantiateCore = {};
                         }}
@@ -1106,6 +1106,9 @@ impl JsBindgen<'_> {
                 &js_intrinsics as &str,
                 &intrinsic_definitions as &str,
                 &compilation_promises as &str,
+                native_sync_imports = self.local_names.try_get("native sync import instantiation")
+                    .map(|name| format!("const {name} = instantiateCore === undefined && options == null;\n"))
+                    .unwrap_or_default(),
                 native_numeric_exports = self.local_names.try_get("native numeric export instantiation")
                     .map(|name| format!("const {name} = instantiateCore === undefined && options == null;\n"))
                     .unwrap_or_default(),
@@ -3494,6 +3497,19 @@ impl<'a> Instantiator<'a, '_> {
                         .map(|idx| format!("arg{idx}"))
                         .collect::<Vec<_>>()
                         .join(", ");
+                    let registers = self.bindgen.intrinsic(Intrinsic::GlobalCurrentTaskMeta);
+                    // An instantiation hook can retain the raw lower and invoke it from
+                    // host code while an unrelated task is live. Only native instantiation
+                    // guarantees this trampoline is being called by the guest.
+                    let native = if self.bindgen.opts.instantiation_mode.is_some() {
+                        let (name, _) = self
+                            .bindgen
+                            .local_names
+                            .get_or_create("native sync import instantiation", "nativeSyncImports");
+                        format!("{name} && ")
+                    } else {
+                        String::new()
+                    };
                     // Give the engine a fixed-arity, monomorphic call site. A core
                     // start function can call imports before the first export task.
                     self.used_instance_flags
@@ -3507,7 +3523,9 @@ impl<'a> Instantiator<'a, '_> {
                             try {{
                                 if ({flags}.value !== 1)
                                     throw new {runtime_error}('cannot leave component instance');
-                                if ({tasks}.length)
+                                const owner = {registers}.current;
+                                if ({native}owner?.componentIdx === {component_idx} &&
+                                    {tasks}[{tasks}.length - 1]?.id === owner.taskID)
                                     return _trampoline{i}({params});
                                 return {lower}{component_idx}, _trampoline{i}, {params});
                             }} catch (err) {{

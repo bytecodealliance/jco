@@ -7,7 +7,7 @@ import type {
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
 import { checkMayLeave, getOrCreateAsyncState } from '../component.js';
-import { readTaskRegister, clearCurrentTaskMeta, setCurrentTaskMeta } from '../task-context.js';
+import { readTaskRegister, clearCurrentTaskMeta, setCurrentTaskMeta, withCurrentTaskMeta } from '../task-context.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './task-operations.js';
 import { promiseWithResolvers } from '../core/promises.js';
 
@@ -47,10 +47,9 @@ function callWithSyncTask(task: AsyncTaskType, importFn: TaskLowerImportOptions[
 }
 
 /**
- * A synchronous leaf already has an export task to own the import and its
- * borrows. Avoid allocating a subtask for every host call. A core start
- * function or a host calling a saved lower directly has no such owner, so
- * create a task and finish it on both the return and throw paths.
+ * The generated lower calls the adapter directly when the executing guest
+ * owns the task. On this fallback a host may be invoking a retained lower.
+ * Give it a distinct task and restore the enclosing registers even on throw.
  */
 export function lowerSyncImport(
     context: TaskCompatImportRuntimeContext,
@@ -59,11 +58,17 @@ export function lowerSyncImport(
     ...params: unknown[]
 ) {
     checkMayLeave(context.mayLeave, componentIdx);
-    if (context.tasks.get(componentIdx)?.length) {
-        return importFn(...params);
-    }
-    const { task } = createImplicitImportTask(context, componentIdx, false);
-    return callWithSyncTask(task, importFn, params);
+    const { task, taskID, threadID } = createNewCurrentImplicitThread(context.creation, {
+        componentIdx,
+        isAsync: false,
+        callingWasmExport: false,
+    });
+    return withCurrentTaskMeta(context.registers, {
+        componentIdx,
+        taskID,
+        threadID,
+        fn: () => callWithSyncTask(task, importFn, params),
+    });
 }
 
 // LowerImportBackwardsCompat
@@ -87,11 +92,17 @@ export function lowerImportBackwardsCompat(
         stringEncoding,
     } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
-    // A sync-only adapter returns its lowered value on the JavaScript stack.
-    // During module initialization there may be no guest task yet; install
-    // one below so that lifecycle observers still see the instance as busy.
-    if (args.directSync && _context.tasks.get(componentIdx)?.length) {
-        return importFn(...params);
+    if (args.directSync) {
+        const current = readTaskRegister(_context.registers);
+        const owner = _context.tasks.get(componentIdx)?.at(-1);
+        // API callers can explicitly push the current task before installing
+        // registers. In either case match the store's active component and task.
+        const activeComponent = current ? current.componentIdx : _context.creation.componentIdxs.at(-1);
+        const activeID = current ? current.taskID : _context.creation.taskIds.at(-1);
+        if (owner && activeComponent === componentIdx && owner.id === activeID) {
+            return importFn(...params);
+        }
+        return lowerSyncImport(_context, componentIdx, importFn, ...params);
     }
     const meta = readTaskRegister(_context.registers, componentIdx);
     let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
@@ -120,9 +131,6 @@ export function lowerImportBackwardsCompat(
     const task = taskMeta.task;
     if (!task) {
         throw new Error('invalid/missing async task');
-    }
-    if (args.directSync && createdTask) {
-        return callWithSyncTask(createdTask, importFn, params);
     }
     getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {
