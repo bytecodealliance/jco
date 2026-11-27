@@ -35,7 +35,7 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-f7ec39b2.js";
+            window.path_to_searchindex_js = "../searchindex-84e9c83f.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="../toc-332598f4.js"></script>
@@ -228,6 +228,34 @@ const component = await instantiate(loader, shim.getImportObject());
 </code></pre>
 <p>See <a href="../advanced/manual-wasm-instantiation-with-wasi-overrides.html">Manual Wasm instantiation with WASI overrides</a>
 for the full instantiation flow and for replacing individual interfaces.</p>
+<h2 id="performance-options"><a class="header" href="#performance-options">Performance options</a></h2>
+<p>On Node.js the shim runs blocking I/O in a worker thread and waits for each answer. The
+<code>performance</code> options, all off by default, trade a part of that for speed:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Option</th><th>Effect</th></tr>
+</thead>
+<tbody>
+<tr><td><code>mainThreadFilesystem</code></td><td>Operate on regular files and directories on the main thread</td></tr>
+<tr><td><code>cacheDirectoryPaths</code></td><td>Resolve the host path of each preopen only once</td></tr>
+</tbody>
+</table>
+</div>
+<pre><code class="language-js">const performance = { mainThreadFilesystem: true };
+new WASIShim({ sandbox: { preopens: { "/data": "/tmp/guest-data" } }, performance });
+</code></pre>
+<p>The same object is accepted by <code>filesystem.createFilesystem</code>, <code>_setPreopens</code> and <code>_addPreopen</code>,
+<code>filesystem._setPerformance(performance)</code> sets the default for preopens created without it, and
+<code>jco run</code> and <code>jco serve</code> take <code>--perf-main-thread-filesystem</code> and <code>--perf-cache-directory-paths</code>.</p>
+<p><code>WASIShim</code> applies its <code>performance</code> member to <code>sandbox.preopens</code>; the shared preopens take
+theirs from the <code>filesystem</code> functions.</p>
+<p>With <code>mainThreadFilesystem</code>, file I/O blocks the event loop for the duration of each call, as a
+synchronous guest already does while it runs. FIFOs, devices, sockets, standard I/O, HTTP and
+clocks stay in the worker, because their calls can wait indefinitely. The pollables of
+main-thread file streams are always ready and can be mixed with worker pollables in one <code>poll</code>.
+With <code>cacheDirectoryPaths</code>, a later change to a symlink in the host path of a preopen is not
+seen. The <a href="https://github.com/bytecodealliance/jco/blob/main/packages/preview2-shim/README.md">package README</a> lists the observable differences.</p>
 <h2 id="helpers"><a class="header" href="#helpers">Helpers</a></h2>
 <p>Alongside the WASI implementations, the package exports host-side helper functions from <code>helpers/</code>
 subpaths. They build only on the public shim surface and are kept separate from the
