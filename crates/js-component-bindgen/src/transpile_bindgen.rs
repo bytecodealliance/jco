@@ -4180,6 +4180,8 @@ impl<'a> Instantiator<'a, '_> {
         // correspond to the JS wasm embedding API. This is one of the major
         // differences between Wasmtime's and JS's embedding API.
         let mut import_obj = BTreeMap::new();
+        // Accesses to a memory share one cached view per memory (see `augmented_import_def`).
+        // The index of the instance being created keeps the names of those views unique.
         let view_prefix = format!("memoryView{}_", self.instances.len());
         let mut memory_views = Vec::new();
         for (module, name, arg) in self.modules[module_idx].imports(args) {
