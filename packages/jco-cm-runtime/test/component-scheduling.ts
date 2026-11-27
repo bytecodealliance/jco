@@ -1,6 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { create, clearDeadlockCheck, task } from './component-helpers.js';
 import type { ComponentDeadlockDetail } from '../src/index.js';
+import { onNextMacrotask } from '../src/intrinsics/core/scheduling.js';
 
 test.concurrent('exclusive locks hand off FIFO and allow synchronous reentry during release', async () => {
     const state = create().component.getOrCreateAsyncState(0);
@@ -598,6 +599,43 @@ async function drainMacrotasks(count = 5) {
         });
     }
 }
+
+test.concurrent('cancelling a completed turn leaves the next callback scheduled', async () => {
+    await new Promise<void>((resolve) => {
+        const cancel = onNextMacrotask(() => {
+            onNextMacrotask(resolve);
+            cancel();
+        });
+    });
+});
+
+test.sequential('each turn scheduled from a turn waits for the next event loop iteration', async () => {
+    // A recurring immediate counts event loop iterations; no two turns may share one.
+    let iterations = 0;
+    let counting = true;
+    const countIterations = () => {
+        iterations++;
+        if (counting) {
+            setImmediate(countIterations);
+        }
+    };
+    setImmediate(countIterations);
+
+    const seen: number[] = [];
+    await new Promise<void>((resolve) => {
+        const turn = () => {
+            seen.push(iterations);
+            if (seen.length < 20) {
+                onNextMacrotask(turn);
+            } else {
+                resolve();
+            }
+        };
+        onNextMacrotask(turn);
+    });
+    counting = false;
+    expect(new Set(seen).size).toBe(seen.length);
+});
 
 test.sequential('the tick loop starts and resumes on the next macrotask, without a timer', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
