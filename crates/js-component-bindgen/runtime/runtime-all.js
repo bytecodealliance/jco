@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 66d12dee2754d65d629d5c88ec0018368055c818
+// generated from commit 6b0414c63ac38513c199a0ac6ccd8c22d9630ef2
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
