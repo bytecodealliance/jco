@@ -6293,9 +6293,10 @@ impl<'a> Instantiator<'a, '_> {
             let lookup = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
                 ComponentIntrinsic::GetOrCreateAsyncState,
             ));
+            let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
             (
                 guards.join(" && "),
-                format!("{lookup}{instance}).markTrapped(err)"),
+                crate::mark_core_export_trap(&format!("{lookup}{instance})"), &runtime_error),
             )
         });
 
@@ -6407,7 +6408,7 @@ impl<'a> Instantiator<'a, '_> {
             self.src.js(&f.src);
             uwriteln!(
                 self.src.js,
-                "}} catch (err) {{ {mark_trapped}; throw err; }} }}"
+                "}} catch (err) {{ {mark_trapped} throw err; }} }}"
             );
             f.src = source::Source::default();
             f.skip_fn_call_task_management = false;

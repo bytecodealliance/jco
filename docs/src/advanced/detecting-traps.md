@@ -4,9 +4,14 @@ While some errors are represented at the WIT type level and expected, some inter
 may cause a component instance to [trap][wiki-trap]. Jco-generated bindings report the
 component-model traps they detect with the built-in `WebAssembly.RuntimeError` class.
 
-A trap that disables a component instance makes subsequent calls throw the original trap
-without re-entering the component. A trap in a background task can end only that task;
-it does not always disable the entire instance.
+After an exported call traps, later calls on the instance fail with `cannot enter component instance`.
+This also applies to exports selected with `--async-exports`. An uncaught core Wasm exception
+rejects the export's promise with a `WebAssembly.RuntimeError` whose `cause` is the exception.
+
+When a ComponentizeJS guest lets a JavaScript error escape a plain `func() -> string` export,
+StarlingMonkey can write the guest error to stderr and abort inside Wasm. The host receives
+the resulting `unreachable` trap. To let callers handle an application failure and keep using
+the instance, declare a WIT `result` return type and return its `err` case.
 
 ## Catch traps from exported calls
 
