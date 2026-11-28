@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.15.0] - 2026-11-28
+
+### 🐛 Bug Fixes
+
+- _(p3-shim)_ prevent browser stdin from reading ahead by @vados-cosmonic in #2563
+
+- _(p3-shim)_ stop leaking listeners on stdout and stderr by @vados-cosmonic
+
+- _(p3-shim)_ time HTTP connect and first-byte phases with one-shot timers by @vados-cosmonic in #2550
+
+- _(p3-shim)_ report HTTP read timeouts as connection-read-timeout by @vados-cosmonic
+
+- _(p3-shim)_ reject descriptors whose path leads elsewhere by @vados-cosmonic
+
 ## [0.14.1] - 2026-11-13
 
 ### 🐛 Bug Fixes
