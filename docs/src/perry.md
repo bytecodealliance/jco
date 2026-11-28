@@ -143,10 +143,12 @@ so enable it in Jco with `--bindgen-enable-wasm-exnref` and use a Node version t
 supports the instructions emitted by your compiler. This is a transpiler option,
 not an experimental Node flag.
 
-The tested Perry runtime requests the WASI `mutate-directory` descriptor flag
-when opening a regular file for writing. To allow this with
-`preview2-shim@0.32.0`, configure the host before importing the transpiled
-component.
+File writes have a known compatibility limitation with `preview2-shim@0.30.0`:
+the tested Perry runtime requests the WASI `mutate-directory` descriptor flag
+when opening a regular file for writing, which the shim rejects as `unsupported`.
+The workspace shim supports an explicit compatibility option for this behavior
+(not available in `0.30.0`). With a build containing that support, configure the
+host before importing the transpiled component:
 
 ```js
 filesystem._setPreopens({ "/data": resolve("data") }, { enableMutateDirectory: true });
@@ -156,7 +158,8 @@ This gives the preopened directory mutation capability and preserves capability
 checks on its descendants. The flag is accepted and cleared on regular files;
 file writes still require write permission. See the
 [shim's directory mutation options](https://github.com/bytecodealliance/jco/tree/main/packages/preview2-shim#directory-mutation-compatibility-nodejs)
-for details. The example exercises reading and metadata with the default settings.
+for details. The example exercises reading and metadata and remains usable with
+`0.30.0`.
 
 The repository contains a [filesystem example](https://github.com/bytecodealliance/jco/tree/main/examples/components/perry-filesystem)
 with build scripts and a Node.js demo.

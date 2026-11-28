@@ -201,10 +201,10 @@ the same component fails with the default shim settings.
 - **Missing generated output:** run `pnpm run build` and `pnpm run transpile`
   before `pnpm run demo`, or use `pnpm run all`.
 - **File writes:** the tested Perry runtime requests `mutate-directory` when
-  opening regular files for writing. With `preview2-shim@0.32.0`, enable
-  `enableMutateDirectory` on the preopened directory to allow these writes.
-  The example covers reads and metadata with the default settings. See the
-  [backend guide][perry-guide].
+  opening regular files for writing, which `preview2-shim@0.30.0` rejects with
+  `unsupported`. Newer workspace builds support an explicit
+  `enableMutateDirectory` option; see the [backend guide][perry-guide]. This
+  example uses the published shim and covers reads and metadata.
 - **Custom interfaces or Node.js APIs:** Perry supplies its own WASI command
   world and supports a subset of Node-style APIs. Generated guest declarations
   do not add custom-interface support or full Node.js compatibility.
