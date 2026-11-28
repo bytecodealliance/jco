@@ -85,8 +85,8 @@ importers:
         specifier: 0.2.0
         version: 0.2.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.26.0
-        version: 0.26.0
+        specifier: ^0.32.0
+        version: 0.32.0
 
   examples/components/add:
     dependencies:
@@ -103,8 +103,8 @@ importers:
   examples/components/browser-p2-shims:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.27.1
-        version: 0.27.1
+        specifier: ^0.32.0
+        version: 0.32.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.32.1
@@ -125,8 +125,8 @@ importers:
   examples/components/fs-write-file:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.27.1
-        version: 0.27.1
+        specifier: ^0.32.0
+        version: 0.32.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.31.0
@@ -158,7 +158,7 @@ importers:
     dependencies:
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.1)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.32.0)
       hono:
         specifier: ^4.13.7
         version: 4.13.16
@@ -180,7 +180,7 @@ importers:
     dependencies:
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.1)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.32.0)
       hono:
         specifier: ^4.13.7
         version: 4.13.16
@@ -201,8 +201,8 @@ importers:
   examples/components/native-messaging:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.27.1
-        version: 0.27.1
+        specifier: ^0.32.0
+        version: 0.32.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: ^1.32.1
@@ -236,10 +236,10 @@ importers:
         version: 2.14.1
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.1)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.32.0)
       '@bytecodealliance/preview2-shim':
-        specifier: 0.27.1
-        version: 0.27.1
+        specifier: 0.32.0
+        version: 0.32.0
       '@connectrpc/connect':
         specifier: 2.1.2
         version: 2.1.2(@bufbuild/protobuf@2.14.1)
@@ -258,10 +258,10 @@ importers:
     dependencies:
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.1)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.32.0)
       '@bytecodealliance/preview2-shim':
-        specifier: 0.27.1
-        version: 0.27.1
+        specifier: 0.32.0
+        version: 0.32.0
       '@modelcontextprotocol/server':
         specifier: 2.3.0
         version: 2.3.0
@@ -280,10 +280,10 @@ importers:
     dependencies:
       '@bytecodealliance/jco-std':
         specifier: ^0.5.0
-        version: 0.5.0(@bytecodealliance/preview2-shim@0.27.1)
+        version: 0.5.0(@bytecodealliance/preview2-shim@0.32.0)
       '@bytecodealliance/preview2-shim':
-        specifier: 0.27.1
-        version: 0.27.1
+        specifier: 0.32.0
+        version: 0.32.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.40.0
@@ -328,8 +328,8 @@ importers:
   examples/components/perry-filesystem:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.30.0
-        version: 0.30.0
+        specifier: ^0.32.0
+        version: 0.32.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.40.0
@@ -460,8 +460,8 @@ importers:
         specifier: ^0.15.0
         version: 0.15.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.27.1
-        version: 0.27.1
+        specifier: ^0.32.0
+        version: 0.32.0
     devDependencies:
       '@types/node':
         specifier: ^24.12.4
@@ -482,13 +482,13 @@ importers:
         version: '@bytecodealliance/componentize-js@0.19.3'
       '@bytecodealliance/jco-std':
         specifier: ^0.11.0
-        version: 0.11.0(@bytecodealliance/preview2-shim@0.31.1)
+        version: 0.11.0(@bytecodealliance/preview2-shim@0.32.0)
       '@bytecodealliance/jco-transpile':
         specifier: workspace:^
         version: link:../jco-transpile
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.31.1
-        version: 0.31.1
+        specifier: ^0.32.0
+        version: 0.32.0
       binaryen:
         specifier: ^132.0.0
         version: 132.0.0
@@ -618,8 +618,8 @@ importers:
         specifier: ^0.15.0
         version: 0.15.0
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.31.1
-        version: 0.31.1
+        specifier: ^0.32.0
+        version: 0.32.0
       '@types/node':
         specifier: ^24.12.4
         version: 24.19.2
@@ -645,8 +645,8 @@ importers:
   packages/jco-transpile:
     dependencies:
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.31.1
-        version: 0.31.1
+        specifier: ^0.32.0
+        version: 0.32.0
       '@bytecodealliance/preview3-shim':
         specifier: ^0.14.1
         version: 0.14.1
@@ -731,8 +731,8 @@ importers:
         specifier: 0.3.2
         version: 0.3.2
       '@bytecodealliance/preview2-shim':
-        specifier: ^0.31.1
-        version: 0.31.1
+        specifier: ^0.32.0
+        version: 0.32.0
     devDependencies:
       '@bytecodealliance/jco':
         specifier: 1.25.2
@@ -1215,14 +1215,11 @@ packages:
   '@bytecodealliance/preview2-shim@0.26.0':
     resolution: {integrity: sha512-oYekIJYroM1yJygziKpuMGmL2XDKZ4XspkdxfKCQqF/E0tVkCxyRRT+gFP0dFzhrSL8oh6obRCv84bBf1sYmAA==}
 
-  '@bytecodealliance/preview2-shim@0.27.1':
-    resolution: {integrity: sha512-eIYEHwuPG7LlOFEBgP2lnO/+uKrLng8gIZu70WnoeB3bhYp2mvOgZg0vhWmSIYbXW3P8+hj+VNnk2lGXg/1vHQ==}
-
-  '@bytecodealliance/preview2-shim@0.30.0':
-    resolution: {integrity: sha512-Op+uxOJPCnW4jp5Jg3kJvFpB5GZGJGxBMX5PvMffksyonpTciILDDSSJQr1ficHAhm1H6X5+Qwx3q21p7Hjr1Q==}
-
   '@bytecodealliance/preview2-shim@0.31.1':
     resolution: {integrity: sha512-uDVB/IhExDW70TquqVx2l2Q5uwwpH7r5M2ltYccux+0YxXBm4TvqyNHTyYxcoLBsoAar28o7uZSj7GOKVx9uvA==}
+
+  '@bytecodealliance/preview2-shim@0.32.0':
+    resolution: {integrity: sha512-yQJSilILbENZP0iRlqzyizzJAPRsGryyfQELNx0YD3vGaEPjJLLbFMqZyX3Vvo2XPDw4T2X6BeU4wuWyceSY9g==}
 
   '@bytecodealliance/preview3-shim@0.1.2':
     resolution: {integrity: sha512-5twfO5h6zVkJ2QLxrLR21qyLS3jY35XvY0f+jZV4e9FkI6qa2RdPfNDgC50HYhGCtWmbH4TlN1puIyHfEemSNg==}
@@ -5976,7 +5973,7 @@ snapshots:
     optionalDependencies:
       '@bytecodealliance/preview2-shim': 0.31.1
 
-  '@bytecodealliance/jco-std@0.11.0(@bytecodealliance/preview2-shim@0.31.1)':
+  '@bytecodealliance/jco-std@0.11.0(@bytecodealliance/preview2-shim@0.32.0)':
     dependencies:
       '@noble/hashes': 1.8.0
       acorn: 8.17.0
@@ -5988,9 +5985,9 @@ snapshots:
       web-streams-polyfill: 4.2.0
       whatwg-url: 14.2.0
     optionalDependencies:
-      '@bytecodealliance/preview2-shim': 0.31.1
+      '@bytecodealliance/preview2-shim': 0.32.0
 
-  '@bytecodealliance/jco-std@0.5.0(@bytecodealliance/preview2-shim@0.27.1)':
+  '@bytecodealliance/jco-std@0.5.0(@bytecodealliance/preview2-shim@0.32.0)':
     dependencies:
       acorn: 8.17.0
       acorn-walk: 8.3.5
@@ -6000,7 +5997,7 @@ snapshots:
       urlpattern-polyfill: 10.1.0
       whatwg-url: 14.2.0
     optionalDependencies:
-      '@bytecodealliance/preview2-shim': 0.27.1
+      '@bytecodealliance/preview2-shim': 0.32.0
 
   '@bytecodealliance/jco-transpile@0.11.0':
     dependencies:
@@ -6109,17 +6106,13 @@ snapshots:
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.3.2
 
-  '@bytecodealliance/preview2-shim@0.27.1':
-    dependencies:
-      '@bytecodealliance/jco-node-fs': 0.3.2
-
-  '@bytecodealliance/preview2-shim@0.30.0':
-    dependencies:
-      '@bytecodealliance/jco-node-fs': 0.3.2
-
   '@bytecodealliance/preview2-shim@0.31.1':
     dependencies:
       '@bytecodealliance/jco-node-fs': 0.3.2
+
+  '@bytecodealliance/preview2-shim@0.32.0':
+    dependencies:
+      '@bytecodealliance/jco-node-fs': 0.3.3
 
   '@bytecodealliance/preview3-shim@0.1.2':
     dependencies:
