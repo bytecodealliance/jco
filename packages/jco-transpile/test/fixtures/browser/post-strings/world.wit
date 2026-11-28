@@ -1,0 +1,5 @@
+package test:post-strings;
+
+world command {
+    export post-values: func(url: string, values: list<string>) -> string;
+}
