@@ -13,7 +13,7 @@
         "all": "pnpm run build && pnpm run transpile && pnpm run demo"
     },
     "dependencies": {
-        "@bytecodealliance/preview2-shim": "^0.30.0"
+        "@bytecodealliance/preview2-shim": "^0.32.0"
     },
     "devDependencies": {
         "@bytecodealliance/jco": "1.40.0"
