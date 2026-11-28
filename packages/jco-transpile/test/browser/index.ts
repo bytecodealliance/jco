@@ -1,11 +1,13 @@
 import { cp, mkdir, rm } from 'node:fs/promises';
+import { createServer } from 'node:http';
 import { join, resolve } from 'node:path';
 import { env } from 'node:process';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import puppeteer, { type Browser } from 'puppeteer';
 import { afterAll, assert, beforeAll, suite, test } from 'vitest';
 
+import { ASYNC_WASI_IMPORTS } from '../../src/constants.js';
 import { externalRuntime, runtimeBase, transpileBytes, writeFiles } from '../transpilation.js';
 import { WEBIDL_FIXTURES_DIR, COMPONENT_FIXTURES_DIR } from '../common.js';
 import { componentize, getTmpDir, runBrowserCase, setupAsyncTest, startTestWebServer } from '../helpers.js';
@@ -128,6 +130,51 @@ suite('Browser', () => {
             await runBrowserCase({ browser, serverPort, module: `/tmpdir/${fixture}/${fixture}.js` });
         });
     }
+
+    test('a JSPI guest posts the same list of strings with either exnref setting', async () => {
+        const fixture = fileURLToPath(new URL('../fixtures/browser/post-strings/', import.meta.url));
+        const { component } = await componentize({
+            sourcePath: join(fixture, 'guest.js'),
+            witPath: join(fixture, 'world.wit'),
+            disableFeatures: ['fetch-event'],
+        });
+        const echo = createServer((request, response) => {
+            response.setHeader('Access-Control-Allow-Origin', '*');
+            request.pipe(response);
+        });
+        try {
+            await new Promise<void>((resolve, reject) => {
+                echo.once('error', reject);
+                echo.listen(0, '127.0.0.1', resolve);
+            });
+            const address = echo.address();
+            assert.ok(address && typeof address === 'object');
+            const url = `http://127.0.0.1:${address.port}/echo`;
+            const values = ['alpha', '', 'βeta', '🍰'];
+            for (const exnref of [false, true]) {
+                const dir = `post-strings-${exnref}`;
+                const { files } = await transpileBytes(component, {
+                    name: 'command',
+                    asyncMode: 'jspi',
+                    asyncImports: ASYNC_WASI_IMPORTS,
+                    asyncExports: ['postValues'],
+                    bindgenEnableWasmExnref: exnref,
+                    cmRuntimeEsModule: externalRuntime ? '../cm-runtime/' : undefined,
+                });
+                await writeFiles(files, { baseDir: join(tmpDir, dir) });
+                const body = await runBrowserCase({
+                    browser,
+                    serverPort,
+                    module: `/tmpdir/${dir}/command.js`,
+                    exportName: 'postValues',
+                    args: [url, values],
+                });
+                assert.strictEqual(body, JSON.stringify(values));
+            }
+        } finally {
+            await new Promise<void>((resolve) => echo.close(() => resolve()));
+        }
+    });
 
     test('runs an asynchronous component with JSPI', async () => {
         const outputDir = resolve(tmpDir, 'jspi');

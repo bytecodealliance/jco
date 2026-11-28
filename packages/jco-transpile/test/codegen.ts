@@ -336,6 +336,44 @@ suite('Trap detection', () => {
         }
     });
 
+    test.concurrent.each(['sync', 'jspi'] as const)('uncaught core exceptions trap a %s export', async (asyncMode) => {
+        if (asyncMode === 'jspi' && typeof WebAssembly.Suspending !== 'function') {
+            return;
+        }
+        const jspi = asyncMode === 'jspi';
+        const component = await parse(
+            await readFile(join(COMPONENT_FIXTURES_DIR, 'export-traps/guest-exception.wat'), 'utf8'),
+        );
+        const outDir = await getTmpDir();
+        try {
+            const { files } = await transpileBytes(component, {
+                name: 'guest',
+                instantiation: 'async',
+                bindgenEnableWasmExnref: true,
+                asyncMode,
+                asyncImports: jspi ? ['pause'] : [],
+                asyncExports: jspi ? ['runCommand'] : [],
+            });
+            const types = new TextDecoder().decode(files['guest.d.ts']);
+            assert.include(types, `runCommand(escape: boolean): ${jspi ? 'Promise<number>' : 'number'}`);
+            await writeFiles(files, { baseDir: outDir });
+            await writeFile(join(outDir, 'package.json'), JSON.stringify({ type: 'module' }));
+            const { instantiate } = await import(pathToFileURL(join(outDir, 'guest.js')).href);
+            const instance = await instantiate(undefined, { pause: { default: jspi ? async () => {} : () => {} } });
+
+            const caught = instance.runCommand(false);
+            assert.strictEqual(caught instanceof Promise, jspi);
+            assert.strictEqual(await caught, 17);
+
+            const failure = Promise.resolve().then(() => instance.runCommand(true));
+            await expect(failure).rejects.toBeInstanceOf(WebAssembly.RuntimeError);
+            await expect(failure).rejects.toMatchObject({ cause: expect.any(WebAssembly.Exception) });
+            assert.throws(() => instance.ok(), WebAssembly.RuntimeError, /cannot enter component instance/);
+        } finally {
+            await rm(outDir, { recursive: true, force: true });
+        }
+    });
+
     test.concurrent('post-return trap prevents subsequent synchronous calls', testSynchronousPostReturnTrap);
 
     describe.skipIf(typeof WebAssembly.Suspending !== 'function')('post-return traps with JSPI', () => {
