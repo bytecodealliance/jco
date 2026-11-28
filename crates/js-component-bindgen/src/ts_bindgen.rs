@@ -24,7 +24,9 @@ use crate::names::{
 };
 use crate::source::Source;
 use crate::transpile_bindgen::{AsyncMode, InstantiationMode, TranspileOpts, parse_world_key};
-use crate::{TypeGenerationConfig, requires_async_porcelain, uwrite, uwriteln};
+use crate::{
+    TypeGenerationConfig, requires_async_porcelain, requires_async_world_export, uwrite, uwriteln,
+};
 
 /// TypeScript declaration for the `Option<T>` helper type alias used to
 /// represent WIT `option<T>` values that cannot be flattened to `T | undefined`.
@@ -1243,7 +1245,7 @@ impl TsBindgen {
 
         for (_, func) in funcs {
             let requires_async_porcelain =
-                requires_async_porcelain(&func.name, id_name, &self.async_exports);
+                requires_async_world_export(&func.name, id_name, &self.async_exports);
 
             // Figure out whether we need ancillary types
             for ty in func.parameter_and_result_types() {

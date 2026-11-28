@@ -71,7 +71,7 @@ Options include:
 
 * `--async-mode [mode]`: EXPERIMENTAL: For the component imports and exports, functions and methods on resources can be specified as `async`. The only option is `jspi` (JavaScript Promise Integration).
 * `--async-imports <imports...>`: EXPERIMENTAL: Specify the component imports as `async`. Used with `--async-mode`.
-* `--async-exports <exports...>`: EXPERIMENTAL: Specify the component exports as `async`. Used with `--async-mode`.
+* `--async-exports <exports...>`: EXPERIMENTAL: Specify the component exports as `async`. A top-level WIT function such as `run-command` can also be selected by its JavaScript name, `runCommand`. Used with `--async-mode`.
 
 ### Calls between components
 

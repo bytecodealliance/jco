@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use anyhow::{Context as _, Result, anyhow, bail, ensure};
 use engine::{ensure_supported_functions, ts_bindgen::ts_bindgen, wit_component, wit_parser};
-use heck::ToShoutySnakeCase;
+use heck::{ToLowerCamelCase, ToShoutySnakeCase};
 use wasmtime_environ::component::{CanonicalOptions, ComponentTypesBuilder, StaticModuleIndex};
 use wasmtime_environ::wasmparser::WasmFeatures;
 use wasmtime_environ::{PrimaryMap, ScopeVec, Tunables};
@@ -517,6 +517,16 @@ pub(crate) fn requires_async_porcelain(
         }
     }
     false
+}
+
+/// Match a world function by its WIT selector or its top-level JavaScript export name.
+pub(crate) fn requires_async_world_export(
+    name: &str,
+    id: &str,
+    selectors: &HashSet<String>,
+) -> bool {
+    requires_async_porcelain(name, id, selectors)
+        || (!name.starts_with('[') && selectors.contains(&name.to_lower_camel_case()))
 }
 
 /// Record a failure escaping a lifted core function. A Wasm exception becomes a

@@ -59,7 +59,8 @@ use crate::names::{
     maybe_quote_member, static_member_name,
 };
 use crate::{
-    ManagesIntrinsics, core, is_async_fn, requires_async_porcelain, source, uwrite, uwriteln,
+    ManagesIntrinsics, core, is_async_fn, requires_async_porcelain, requires_async_world_export,
+    source, uwrite, uwriteln,
 };
 
 /// Size of flat parameters that can be sent, for example via the `task.return`
@@ -6842,6 +6843,7 @@ impl<'a> Instantiator<'a, '_> {
                         func_ty,
                         &export_name,
                         &export_resource_map,
+                        requires_async_world_export(&func.name, &export_name, &self.async_exports),
                         None,
                     );
 
@@ -7035,6 +7037,7 @@ impl<'a> Instantiator<'a, '_> {
                             func_ty,
                             &export_name,
                             &export_resource_map,
+                            requires_async_porcelain(&func.name, &export_name, &self.async_exports),
                             result_error_class,
                         );
 
@@ -7139,6 +7142,7 @@ impl<'a> Instantiator<'a, '_> {
         func_ty_idx: &TypeFuncIndex,
         export_name: &String,
         export_resource_map: &ResourceMap,
+        selected_async: bool,
         result_error_class: Option<String>,
     ) {
         // Determine whether the function should be generated as async
@@ -7153,8 +7157,7 @@ impl<'a> Instantiator<'a, '_> {
                     format!("{export_name}#{func_name}")
                 });
         }
-        let requires_async_porcelain = inferred_async
-            || requires_async_porcelain(&func.name, export_name, &self.async_exports);
+        let requires_async_porcelain = inferred_async || selected_async;
         // If the function is *also* async lifted, it
         if options.async_ {
             assert!(
