@@ -36,7 +36,7 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-7fe0ba97.js";
+            window.path_to_searchindex_js = "searchindex-eaebffc6.js";
         </script>
         <!-- Start loading toc.js asap -->
         <script src="toc-384f90e7.js"></script>
@@ -787,7 +787,7 @@ which may change even in a patch release. See the
 <p><code>--async-imports &lt;imports...&gt;</code>: EXPERIMENTAL: Specify the component imports as <code>async</code>. Used with <code>--async-mode</code>.</p>
 </li>
 <li>
-<p><code>--async-exports &lt;exports...&gt;</code>: EXPERIMENTAL: Specify the component exports as <code>async</code>. Used with <code>--async-mode</code>.</p>
+<p><code>--async-exports &lt;exports...&gt;</code>: EXPERIMENTAL: Specify the component exports as <code>async</code>. A top-level WIT function such as <code>run-command</code> can also be selected by its JavaScript name, <code>runCommand</code>. Used with <code>--async-mode</code>.</p>
 </li>
 </ul>
 <h3 id="calls-between-components"><a class="header" href="#calls-between-components">Calls between components</a></h3>
@@ -6406,9 +6406,13 @@ do not expose runtime tasks or reproduce Wasmtime’s full hook API.</p>
 <p>While some errors are represented at the WIT type level and expected, some internal errors
 may cause a component instance to <a href="https://en.wikipedia.org/wiki/Interrupt#Terminology">trap</a>. Jco-generated bindings report the
 component-model traps they detect with the built-in <code>WebAssembly.RuntimeError</code> class.</p>
-<p>A trap that disables a component instance makes subsequent calls throw the original trap
-without re-entering the component. A trap in a background task can end only that task;
-it does not always disable the entire instance.</p>
+<p>After an exported call traps, later calls on the instance fail with <code>cannot enter component instance</code>.
+This also applies to exports selected with <code>--async-exports</code>. An uncaught core Wasm exception
+rejects the export’s promise with a <code>WebAssembly.RuntimeError</code> whose <code>cause</code> is the exception.</p>
+<p>When a ComponentizeJS guest lets a JavaScript error escape a plain <code>func() -&gt; string</code> export,
+StarlingMonkey can write the guest error to stderr and abort inside Wasm. The host receives
+the resulting <code>unreachable</code> trap. To let callers handle an application failure and keep using
+the instance, declare a WIT <code>result</code> return type and return its <code>err</code> case.</p>
 <h2 id="catch-traps-from-exported-calls"><a class="header" href="#catch-traps-from-exported-calls">Catch traps from exported calls</a></h2>
 <p>To detect these traps, use the built-in <code>WebAssembly.RuntimeError</code> class. For bindings that
 use <code>ComponentError</code> wrapping, handle declared WIT errors separately with <code>isComponentError()</code>:</p>
