@@ -106,27 +106,31 @@ export function readableFromPreview2Input<E>(
     }
   };
 
-  const readable = new ReadableStream<number>({
-    async pull(controller) {
-      try {
-        const bytes = await input.blockingRead(BigInt(BYTE_CHUNK_SIZE));
-        for (const byte of bytes) {
-          controller.enqueue(byte);
+  const readable = new ReadableStream<number>(
+    {
+      async pull(controller) {
+        try {
+          const bytes = await input.blockingRead(BigInt(BYTE_CHUNK_SIZE));
+          for (const byte of bytes) {
+            controller.enqueue(byte);
+          }
+        } catch (error) {
+          if ((error as { tag?: string })?.tag === "closed") {
+            controller.close();
+            settle({ tag: "ok", val: undefined });
+            return;
+          }
+          settle({ tag: "err", val: errorCode(error) });
+          controller.error(error);
         }
-      } catch (error) {
-        if ((error as { tag?: string })?.tag === "closed") {
-          controller.close();
-          settle({ tag: "ok", val: undefined });
-          return;
-        }
-        settle({ tag: "err", val: errorCode(error) });
-        controller.error(error);
-      }
+      },
+      cancel() {
+        settle({ tag: "ok", val: undefined });
+      },
     },
-    cancel() {
-      settle({ tag: "ok", val: undefined });
-    },
-  });
+    // A blocking host read must wait until the consumer asks for another byte.
+    { highWaterMark: 0 },
+  );
   return [readable, result];
 }
 
