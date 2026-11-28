@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.20.1] - 2026-11-27
+
+### 🚀 Features
+
+- _(bindgen)_ support wit-parser 0.259 and 0.262 side by side by @vados-cosmonic in #2558
+
+
+
+
 ## [2.20.0] - 2026-11-27
 
 ### 🚀 Features
