@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.11.1] - 2026-11-28
+
+### 🐛 Bug Fixes
+
+- _(std)_ use native SQLite database types by @vados-cosmonic
+
 ## [0.11.0] - 2026-11-13
 
 ### 🐛 Bug Fixes
