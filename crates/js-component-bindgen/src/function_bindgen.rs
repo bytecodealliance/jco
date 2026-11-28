@@ -2383,6 +2383,19 @@ impl Bindgen for FunctionBindgen<'_> {
                 let (vars_init, assignment_lhs) =
                     self.generate_result_assignment_lhs(sig_results_length, results, is_async);
 
+                let mark_trapped = if task_managed || self.sync_fast_path {
+                    let state = if self.sync_fast_path {
+                        self.sync_fast_path_component_state()
+                    } else {
+                        format!("{get_component_state}{component_idx_expr})")
+                    };
+                    crate::mark_core_export_trap(
+                        &state,
+                        &self.intrinsic(Intrinsic::WebAssemblyRuntimeError),
+                    )
+                } else {
+                    String::new()
+                };
                 let (call_prefix, call_err_cleanup) =
                     if self.requires_async_porcelain | self.is_async {
                         (
@@ -2393,7 +2406,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   taskID: task.id(),
                                   err,
                               }});
-                              {get_component_state}{component_idx_expr}).markTrapped(err);
+                              {mark_trapped}
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -2410,7 +2423,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   taskID: task.id(),
                                   err,
                               }});
-                              {get_component_state}{component_idx_expr}).markTrapped(err);
+                              {mark_trapped}
                               task.setErrored(err);
                               task.reject(err);
                               task.exit();
@@ -2510,7 +2523,6 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else if self.sync_fast_path {
                     // Without a task to reject, a trap is still recorded against the
                     // instance, which no call may enter afterwards.
-                    let component_state = self.sync_fast_path_component_state();
                     uwriteln!(
                         self.src,
                         r#"
@@ -2518,7 +2530,7 @@ impl Bindgen for FunctionBindgen<'_> {
                       try {{
                            {assignment_lhs} {callee_invoke};
                       }} catch (err) {{
-                          {component_state}.markTrapped(err);
+                          {mark_trapped}
                           throw err;
                       }}
                     "#,

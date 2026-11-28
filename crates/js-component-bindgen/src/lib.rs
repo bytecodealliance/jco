@@ -519,6 +519,18 @@ pub(crate) fn requires_async_porcelain(
     false
 }
 
+/// Record a failure escaping a lifted core function. A Wasm exception becomes a
+/// trap at this boundary (Canonical ABI `call_and_trap_on_throw`).
+fn mark_core_export_trap(state: &str, runtime_error: &str) -> String {
+    let uncaught = wasmtime_environ::Trap::UncaughtException.to_string();
+    format!(
+        "if (typeof WebAssembly.Exception === 'function' && err instanceof WebAssembly.Exception) {{
+            err = new {runtime_error}({uncaught:?}, {{ cause: err }});
+        }}
+        {state}.markTrapped(err);"
+    )
+}
+
 /// Objects that can control the printing/setup of intrinsics (normally in some final codegen output)
 trait ManagesIntrinsics {
     /// Add an intrinsic, supplying it's name afterwards
